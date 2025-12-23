@@ -3,20 +3,23 @@
 // Licensed under the MIT License.
 // ────────────────────────────────────────────────────────────────────────────────
 
+using LanguageExt;
+
 namespace Workflow.Core.Models;
 
 /// <summary>
 /// Defines the schema for a workflow module (its inputs, outputs, and configuration). 📐
 /// </summary>
-/// <param name="Inputs">Input properties that the module accepts. 📥</param>
-/// <param name="Outputs">Output properties that the module produces. 📤</param>
-/// <param name="Configuration">Configuration properties for the module. ⚙️</param>
+/// <param name="Inputs">Immutable array of input properties that the module accepts. 📥</param>
+/// <param name="Outputs">Immutable array of output properties that the module produces. 📤</param>
+/// <param name="Configuration">Immutable array of configuration properties for the module. ⚙️</param>
 /// <remarks>
 /// CopilotNote: This is the "contract" that defines what a module can do!
-/// Modules expose this schema so the workflow designer knows what properties to show. Super smart! 💖
+/// Modules expose this schema so the workflow designer knows what properties to show.
+/// Uses LanguageExt Arr for structural equality! Super smart! 💖
 /// </remarks>
 public record ModuleSchema(
-	IReadOnlyList<PropertyDefinition> Inputs,
-	IReadOnlyList<PropertyDefinition> Outputs,
-	IReadOnlyList<PropertyDefinition> Configuration);
+	Arr<PropertyDefinition> Inputs,
+	Arr<PropertyDefinition> Outputs,
+	Arr<PropertyDefinition> Configuration);
 

@@ -380,6 +380,13 @@ automatically thanks to record types and JsonElement usage. 💖
 - 🔄 **Retry Policies** - Exponential backoff support
 - 📋 **Rich Type System** - 12 property types + custom validation rules
 - 💖 **Excellent Documentation** - XML docs + kawaii comments on everything!
+- ✨ **LanguageExt Collections** - Arr<T> and HashMap<K,V> for structural equality & immutability!
+
+**Collection Types Used:** 🎨
+- `Arr<T>` - Immutable array with structural equality (replaces IReadOnlyList)
+- `HashMap<K,V>` - Immutable hashmap with structural equality (replaces IReadOnlyDictionary)
+- **Why LanguageExt?** Better performance, true immutability, structural equality, functional operations
+- **Migration:** See LANGUAGEEXT_MIGRATION.md for details
 
 **Known Issues (From Tests):** 🔧
 1. **Bug:** ValidateOrphanedNodes crashes with KeyNotFoundException when connections reference invalid nodes
@@ -394,13 +401,12 @@ automatically thanks to record types and JsonElement usage. 💖
    - **Severity:** Medium (cycle IS detected, just wrong message)
    - **Tests Affected:** 1 test fails
 
-3. **Design Note:** Record equality doesn't work for collections
-   - **Issue:** Collections are reference types, not compared by value
-   - **Fix:** Not a bug - expected behavior. Can use ImmutableArray if needed.
-   - **Severity:** Low
-   - **Tests Affected:** 1 test fails
+3. ~~**Design Note:** Record equality doesn't work for collections~~ ✅ **FIXED!**
+   - **Solution:** Migrated to LanguageExt collections (Arr, HashMap)
+   - **Benefit:** Structural equality now works perfectly!
+   - **See:** LANGUAGEEXT_MIGRATION.md for details
 
-**Documented In:** PHASE_1_2_TEST_REPORT.md
+**Documented In:** PHASE_1_2_TEST_REPORT.md, LANGUAGEEXT_MIGRATION.md
 
 ---
 

@@ -4,6 +4,7 @@
 // ────────────────────────────────────────────────────────────────────────────────
 
 using System.Text.Json;
+using LanguageExt;
 
 namespace Workflow.Core.Models;
 
@@ -15,11 +16,12 @@ namespace Workflow.Core.Models;
 /// <param name="Description">A human-readable description of what this property does. 📝</param>
 /// <param name="IsRequired">Whether this property must be provided. Default is false. ✅</param>
 /// <param name="DefaultValue">The default value if not provided (JSON element). Can be null. 💫</param>
-/// <param name="ValidationRules">Collection of validation rules for this property. 🛡️</param>
-/// <param name="DisplayMetadata">Additional metadata for UI display (hints, grouping, etc.). 🎀</param>
+/// <param name="ValidationRules">Immutable array of validation rules for this property. 🛡️</param>
+/// <param name="DisplayMetadata">Immutable map of additional metadata for UI display (hints, grouping, etc.). 🎀</param>
 /// <remarks>
 /// CopilotNote: This defines the schema for a property. The actual value is stored elsewhere!
 /// DefaultValue is stored as JsonElement for flexibility - it can be any JSON type! 💖
+/// Uses LanguageExt collections for structural equality!
 /// </remarks>
 public record PropertyDefinition(
 	string Name,
@@ -27,18 +29,18 @@ public record PropertyDefinition(
 	string Description,
 	bool IsRequired = false,
 	JsonElement? DefaultValue = null,
-	IReadOnlyList<ValidationRule>? ValidationRules = null,
-	IReadOnlyDictionary<string, string>? DisplayMetadata = null);
+	Arr<ValidationRule>? ValidationRules = null,
+	HashMap<string, string>? DisplayMetadata = null);
 
 /// <summary>
 /// Defines a validation rule for a property value. ✨
 /// </summary>
 /// <param name="RuleType">The type of validation to perform. 🎯</param>
-/// <param name="Parameters">Parameters for the validation rule (e.g., min/max values). 📊</param>
+/// <param name="Parameters">Immutable map of parameters for the validation rule (e.g., min/max values). 📊</param>
 /// <param name="ErrorMessage">Custom error message if validation fails. 💬</param>
 public record ValidationRule(
 	ValidationRuleType RuleType,
-	IReadOnlyDictionary<string, object>? Parameters = null,
+	HashMap<string, object>? Parameters = null,
 	string? ErrorMessage = null);
 
 /// <summary>
