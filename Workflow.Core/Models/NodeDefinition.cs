@@ -27,13 +27,13 @@ namespace Workflow.Core.Models;
 /// Each node is an instance of a module, configured with specific property values, nya~! ✨
 /// </remarks>
 public record NodeDefinition(
-	string Id,
-	string ModuleId,
-	string Name,
-	HashMap<string, JsonElement> Properties,
-	Position? Position = null,
-	ErrorHandling? ErrorHandling = null,
-	int? Timeout = null,
-	RetryPolicy? RetryPolicy = null,
-	HashMap<string, string>? Metadata = null);
+    string Id,
+    string ModuleId,
+    string Name,
+    HashMap<string, JsonElement> Properties,
+    Position? Position = null,
+    ErrorHandling? ErrorHandling = null,
+    int? Timeout = null,
+    RetryPolicy? RetryPolicy = null,
+    HashMap<string, string>? Metadata = null);
 

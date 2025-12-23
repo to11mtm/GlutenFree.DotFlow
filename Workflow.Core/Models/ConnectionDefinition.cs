@@ -22,10 +22,10 @@ namespace Workflow.Core.Models;
 /// Conditions are evaluated at runtime to determine if the connection should be followed. 💖
 /// </remarks>
 public record ConnectionDefinition(
-	string SourceNodeId,
-	string SourcePortName,
-	string TargetNodeId,
-	string TargetPortName,
-	string? Condition = null,
-	int Priority = 0);
+    string SourceNodeId,
+    string SourcePortName,
+    string TargetNodeId,
+    string TargetPortName,
+    string? Condition = null,
+    int Priority = 0);
 

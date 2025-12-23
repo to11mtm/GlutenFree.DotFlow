@@ -14,64 +14,64 @@ namespace Workflow.Core.Models;
 /// </remarks>
 public enum PropertyType
 {
-	/// <summary>
-	/// A text string value. 📝
-	/// </summary>
-	String,
+    /// <summary>
+    /// A text string value. 📝
+    /// </summary>
+    String,
 
-	/// <summary>
-	/// A 32-bit integer value. 🔢
-	/// </summary>
-	Int,
+    /// <summary>
+    /// A 32-bit integer value. 🔢
+    /// </summary>
+    Int,
 
-	/// <summary>
-	/// A 64-bit long integer value. 📊
-	/// </summary>
-	Long,
+    /// <summary>
+    /// A 64-bit long integer value. 📊
+    /// </summary>
+    Long,
 
-	/// <summary>
-	/// A decimal number value (for precise calculations). 💰
-	/// </summary>
-	Decimal,
+    /// <summary>
+    /// A decimal number value (for precise calculations). 💰
+    /// </summary>
+    Decimal,
 
-	/// <summary>
-	/// A boolean true/false value. ✅
-	/// </summary>
-	Boolean,
+    /// <summary>
+    /// A boolean true/false value. ✅
+    /// </summary>
+    Boolean,
 
-	/// <summary>
-	/// A date and time value. ⏰
-	/// </summary>
-	DateTime,
+    /// <summary>
+    /// A date and time value. ⏰
+    /// </summary>
+    DateTime,
 
-	/// <summary>
-	/// A time span/duration value. ⌛
-	/// </summary>
-	TimeSpan,
+    /// <summary>
+    /// A time span/duration value. ⌛
+    /// </summary>
+    TimeSpan,
 
-	/// <summary>
-	/// A globally unique identifier (GUID). 🆔
-	/// </summary>
-	Guid,
+    /// <summary>
+    /// A globally unique identifier (GUID). 🆔
+    /// </summary>
+    Guid,
 
-	/// <summary>
-	/// A complex object (JSON). 📦
-	/// </summary>
-	Object,
+    /// <summary>
+    /// A complex object (JSON). 📦
+    /// </summary>
+    Object,
 
-	/// <summary>
-	/// An array/collection of values. 📚
-	/// </summary>
-	Array,
+    /// <summary>
+    /// An array/collection of values. 📚
+    /// </summary>
+    Array,
 
-	/// <summary>
-	/// A reference to another node's output port. 🔗
-	/// </summary>
-	Connection,
+    /// <summary>
+    /// A reference to another node's output port. 🔗
+    /// </summary>
+    Connection,
 
-	/// <summary>
-	/// A reference to a workflow variable. 💾
-	/// </summary>
-	Variable,
+    /// <summary>
+    /// A reference to a workflow variable. 💾
+    /// </summary>
+    Variable,
 }
 

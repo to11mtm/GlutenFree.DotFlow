@@ -16,33 +16,33 @@ namespace Workflow.Core.Models;
 /// Error handler nodes let you build sophisticated error handling workflows, nya~! 💖
 /// </remarks>
 public record ErrorHandling(
-	ErrorBehavior OnErrorBehavior = ErrorBehavior.Fail,
-	string? ErrorNodeId = null,
-	int? MaxConsecutiveErrors = null);
+    ErrorBehavior OnErrorBehavior = ErrorBehavior.Fail,
+    string? ErrorNodeId = null,
+    int? MaxConsecutiveErrors = null);
 
 /// <summary>
 /// Defines what happens when a node encounters an error. 🎭
 /// </summary>
 public enum ErrorBehavior
 {
-	/// <summary>
-	/// Stop workflow execution immediately and mark as failed. ❌
-	/// </summary>
-	Fail,
+    /// <summary>
+    /// Stop workflow execution immediately and mark as failed. ❌
+    /// </summary>
+    Fail,
 
-	/// <summary>
-	/// Continue workflow execution, ignoring the error. ⏭️
-	/// </summary>
-	Continue,
+    /// <summary>
+    /// Continue workflow execution, ignoring the error. ⏭️
+    /// </summary>
+    Continue,
 
-	/// <summary>
-	/// Execute the configured error handler node. 🔧
-	/// </summary>
-	UseErrorHandler,
+    /// <summary>
+    /// Execute the configured error handler node. 🔧
+    /// </summary>
+    UseErrorHandler,
 
-	/// <summary>
-	/// Retry the node according to its retry policy. 🔄
-	/// </summary>
-	Retry,
+    /// <summary>
+    /// Retry the node according to its retry policy. 🔄
+    /// </summary>
+    Retry,
 }
 

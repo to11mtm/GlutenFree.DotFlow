@@ -18,32 +18,32 @@ namespace Workflow.Core.Models;
 /// Uses LanguageExt HashMap for structural equality!
 /// </remarks>
 public record TriggerDefinition(
-	TriggerType Type,
-	HashMap<string, string>? Configuration = null);
+    TriggerType Type,
+    HashMap<string, string>? Configuration = null);
 
 /// <summary>
 /// Types of triggers that can start a workflow. ✨
 /// </summary>
 public enum TriggerType
 {
-	/// <summary>
-	/// Manual trigger - started via API call. 🖱️
-	/// </summary>
-	Manual,
+    /// <summary>
+    /// Manual trigger - started via API call. 🖱️
+    /// </summary>
+    Manual,
 
-	/// <summary>
-	/// Scheduled trigger - runs on a schedule (cron expression). ⏰
-	/// </summary>
-	Scheduled,
+    /// <summary>
+    /// Scheduled trigger - runs on a schedule (cron expression). ⏰
+    /// </summary>
+    Scheduled,
 
-	/// <summary>
-	/// Webhook trigger - started by incoming HTTP request. 🌐
-	/// </summary>
-	Webhook,
+    /// <summary>
+    /// Webhook trigger - started by incoming HTTP request. 🌐
+    /// </summary>
+    Webhook,
 
-	/// <summary>
-	/// Event trigger - started by system events. 📡
-	/// </summary>
-	Event,
+    /// <summary>
+    /// Event trigger - started by system events. 📡
+    /// </summary>
+    Event,
 }
 

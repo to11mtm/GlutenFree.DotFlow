@@ -18,24 +18,24 @@ namespace Workflow.Core.Models;
 /// The delay is capped at MaxDelayMs! Super smart, nya~! 💖
 /// </remarks>
 public record RetryPolicy(
-	int MaxAttempts = 1,
-	int DelayMs = 1000,
-	double BackoffMultiplier = 2.0,
-	int MaxDelayMs = 60000)
+    int MaxAttempts = 1,
+    int DelayMs = 1000,
+    double BackoffMultiplier = 2.0,
+    int MaxDelayMs = 60000)
 {
-	/// <summary>
-	/// Gets a retry policy with no retries (fail immediately). ❌
-	/// </summary>
-	public static RetryPolicy None => new(MaxAttempts: 1);
+    /// <summary>
+    /// Gets a retry policy with no retries (fail immediately). ❌
+    /// </summary>
+    public static RetryPolicy None => new(MaxAttempts: 1);
 
-	/// <summary>
-	/// Gets a retry policy with 3 attempts and exponential backoff. 🎀
-	/// </summary>
-	public static RetryPolicy Default => new(MaxAttempts: 3);
+    /// <summary>
+    /// Gets a retry policy with 3 attempts and exponential backoff. 🎀
+    /// </summary>
+    public static RetryPolicy Default => new(MaxAttempts: 3);
 
-	/// <summary>
-	/// Gets a retry policy with aggressive retries (5 attempts, longer delays). 💪
-	/// </summary>
-	public static RetryPolicy Aggressive => new(MaxAttempts: 5, DelayMs: 2000);
+    /// <summary>
+    /// Gets a retry policy with aggressive retries (5 attempts, longer delays). 💪
+    /// </summary>
+    public static RetryPolicy Aggressive => new(MaxAttempts: 5, DelayMs: 2000);
 }
 

@@ -24,13 +24,13 @@ namespace Workflow.Core.Models;
 /// Uses LanguageExt collections for structural equality!
 /// </remarks>
 public record PropertyDefinition(
-	string Name,
-	PropertyType Type,
-	string Description,
-	bool IsRequired = false,
-	JsonElement? DefaultValue = null,
-	Arr<ValidationRule>? ValidationRules = null,
-	HashMap<string, string>? DisplayMetadata = null);
+    string Name,
+    PropertyType Type,
+    string Description,
+    bool IsRequired = false,
+    JsonElement? DefaultValue = null,
+    Arr<ValidationRule>? ValidationRules = null,
+    HashMap<string, string>? DisplayMetadata = null);
 
 /// <summary>
 /// Defines a validation rule for a property value. ✨
@@ -39,48 +39,48 @@ public record PropertyDefinition(
 /// <param name="Parameters">Immutable map of parameters for the validation rule (e.g., min/max values). 📊</param>
 /// <param name="ErrorMessage">Custom error message if validation fails. 💬</param>
 public record ValidationRule(
-	ValidationRuleType RuleType,
-	HashMap<string, object>? Parameters = null,
-	string? ErrorMessage = null);
+    ValidationRuleType RuleType,
+    HashMap<string, object>? Parameters = null,
+    string? ErrorMessage = null);
 
 /// <summary>
 /// Types of validation rules that can be applied to properties. 🔍
 /// </summary>
 public enum ValidationRuleType
 {
-	/// <summary>
-	/// Minimum length for strings. 📏
-	/// </summary>
-	MinLength,
+    /// <summary>
+    /// Minimum length for strings. 📏
+    /// </summary>
+    MinLength,
 
-	/// <summary>
-	/// Maximum length for strings. 📐
-	/// </summary>
-	MaxLength,
+    /// <summary>
+    /// Maximum length for strings. 📐
+    /// </summary>
+    MaxLength,
 
-	/// <summary>
-	/// Minimum value for numbers. ⬇️
-	/// </summary>
-	Min,
+    /// <summary>
+    /// Minimum value for numbers. ⬇️
+    /// </summary>
+    Min,
 
-	/// <summary>
-	/// Maximum value for numbers. ⬆️
-	/// </summary>
-	Max,
+    /// <summary>
+    /// Maximum value for numbers. ⬆️
+    /// </summary>
+    Max,
 
-	/// <summary>
-	/// Regular expression pattern matching for strings. 🔤
-	/// </summary>
-	Regex,
+    /// <summary>
+    /// Regular expression pattern matching for strings. 🔤
+    /// </summary>
+    Regex,
 
-	/// <summary>
-	/// Must be one of the allowed enum values. 🎭
-	/// </summary>
-	Enum,
+    /// <summary>
+    /// Must be one of the allowed enum values. 🎭
+    /// </summary>
+    Enum,
 
-	/// <summary>
-	/// Custom validation expression. 💫
-	/// </summary>
-	Custom,
+    /// <summary>
+    /// Custom validation expression. 💫
+    /// </summary>
+    Custom,
 }
 

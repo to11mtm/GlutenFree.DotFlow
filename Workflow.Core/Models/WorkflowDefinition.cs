@@ -29,26 +29,26 @@ namespace Workflow.Core.Models;
 /// When executed, an instance is created with its own state, nya~! 💖✨
 /// </remarks>
 public record WorkflowDefinition(
-	Guid Id,
-	string Name,
-	string? Description,
-	Version Version,
-	Arr<NodeDefinition> Nodes,
-	Arr<ConnectionDefinition> Connections,
-	HashMap<string, VariableDefinition> Variables,
-	TriggerDefinition? Trigger = null,
-	ErrorHandling? ErrorHandling = null,
-	DateTimeOffset? CreatedAt = null,
-	DateTimeOffset? UpdatedAt = null,
-	Arr<string>? Tags = null)
+    Guid Id,
+    string Name,
+    string? Description,
+    Version Version,
+    Arr<NodeDefinition> Nodes,
+    Arr<ConnectionDefinition> Connections,
+    HashMap<string, VariableDefinition> Variables,
+    TriggerDefinition? Trigger = null,
+    ErrorHandling? ErrorHandling = null,
+    DateTimeOffset? CreatedAt = null,
+    DateTimeOffset? UpdatedAt = null,
+    Arr<string>? Tags = null)
 {
-	/// <summary>
-	/// Returns a string representation of this workflow definition. 📝
-	/// </summary>
-	/// <returns>A formatted string with workflow details. ✨</returns>
-	public override string ToString()
-	{
-		return $"Workflow '{Name}' v{Version} (ID: {Id}, Nodes: {Nodes.Count}, Connections: {Connections.Count})";
-	}
+    /// <summary>
+    /// Returns a string representation of this workflow definition. 📝
+    /// </summary>
+    /// <returns>A formatted string with workflow details. ✨</returns>
+    public override string ToString()
+    {
+        return $"Workflow '{Name}' v{Version} (ID: {Id}, Nodes: {Nodes.Count}, Connections: {Connections.Count})";
+    }
 }
 

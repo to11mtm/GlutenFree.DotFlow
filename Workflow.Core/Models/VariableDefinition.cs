@@ -19,8 +19,8 @@ namespace Workflow.Core.Models;
 /// Nodes can read and write variables using GetVariable and SetVariable modules. Super useful! 💖
 /// </remarks>
 public record VariableDefinition(
-	string Name,
-	PropertyType Type,
-	JsonElement? InitialValue = null,
-	string? Description = null);
+    string Name,
+    PropertyType Type,
+    JsonElement? InitialValue = null,
+    string? Description = null);
 

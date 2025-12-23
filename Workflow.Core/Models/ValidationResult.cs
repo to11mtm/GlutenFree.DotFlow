@@ -16,32 +16,32 @@ namespace Workflow.Core.Models;
 /// Errors prevent execution, warnings are just helpful hints, nya~! 💖
 /// </remarks>
 public record ValidationResult(
-	bool IsValid,
-	IReadOnlyList<ValidationError> Errors,
-	IReadOnlyList<ValidationWarning> Warnings)
+    bool IsValid,
+    IReadOnlyList<ValidationError> Errors,
+    IReadOnlyList<ValidationWarning> Warnings)
 {
-	/// <summary>
-	/// Creates a successful validation result with no errors or warnings. ✨
-	/// </summary>
-	public static ValidationResult Success() =>
-		new(true, Array.Empty<ValidationError>(), Array.Empty<ValidationWarning>());
+    /// <summary>
+    /// Creates a successful validation result with no errors or warnings. ✨
+    /// </summary>
+    public static ValidationResult Success() =>
+        new(true, Array.Empty<ValidationError>(), Array.Empty<ValidationWarning>());
 
-	/// <summary>
-	/// Creates a failed validation result with the specified errors. 💥
-	/// </summary>
-	/// <param name="errors">Collection of validation errors. ❌</param>
-	public static ValidationResult Failure(params ValidationError[] errors) =>
-		new(false, errors, Array.Empty<ValidationWarning>());
+    /// <summary>
+    /// Creates a failed validation result with the specified errors. 💥
+    /// </summary>
+    /// <param name="errors">Collection of validation errors. ❌</param>
+    public static ValidationResult Failure(params ValidationError[] errors) =>
+        new(false, errors, Array.Empty<ValidationWarning>());
 
-	/// <summary>
-	/// Creates a validation result with both errors and warnings. 📋
-	/// </summary>
-	/// <param name="errors">Collection of validation errors. ❌</param>
-	/// <param name="warnings">Collection of validation warnings. ⚠️</param>
-	public static ValidationResult WithErrorsAndWarnings(
-		IReadOnlyList<ValidationError> errors,
-		IReadOnlyList<ValidationWarning> warnings) =>
-		new(errors.Count == 0, errors, warnings);
+    /// <summary>
+    /// Creates a validation result with both errors and warnings. 📋
+    /// </summary>
+    /// <param name="errors">Collection of validation errors. ❌</param>
+    /// <param name="warnings">Collection of validation warnings. ⚠️</param>
+    public static ValidationResult WithErrorsAndWarnings(
+        IReadOnlyList<ValidationError> errors,
+        IReadOnlyList<ValidationWarning> warnings) =>
+        new(errors.Count == 0, errors, warnings);
 }
 
 /// <summary>
@@ -52,21 +52,21 @@ public record ValidationResult(
 /// <param name="NodeId">Optional node ID where the error occurred. 🧩</param>
 /// <param name="PropertyName">Optional property name where the error occurred. 📋</param>
 public record ValidationError(
-	string Code,
-	string Message,
-	string? NodeId = null,
-	string? PropertyName = null)
+    string Code,
+    string Message,
+    string? NodeId = null,
+    string? PropertyName = null)
 {
-	/// <summary>
-	/// Returns a formatted string representation of this error. 📝
-	/// </summary>
-	public override string ToString()
-	{
-		var location = NodeId != null
-			? $" (Node: {NodeId}{(PropertyName != null ? $", Property: {PropertyName}" : "")})"
-			: "";
-		return $"[{Code}] {Message}{location}";
-	}
+    /// <summary>
+    /// Returns a formatted string representation of this error. 📝
+    /// </summary>
+    public override string ToString()
+    {
+        var location = NodeId != null
+            ? $" (Node: {NodeId}{(PropertyName != null ? $", Property: {PropertyName}" : "")})"
+            : "";
+        return $"[{Code}] {Message}{location}";
+    }
 }
 
 /// <summary>
@@ -76,17 +76,17 @@ public record ValidationError(
 /// <param name="Message">Human-readable warning message. 💬</param>
 /// <param name="NodeId">Optional node ID where the warning occurred. 🧩</param>
 public record ValidationWarning(
-	string Code,
-	string Message,
-	string? NodeId = null)
+    string Code,
+    string Message,
+    string? NodeId = null)
 {
-	/// <summary>
-	/// Returns a formatted string representation of this warning. 📝
-	/// </summary>
-	public override string ToString()
-	{
-		var location = NodeId != null ? $" (Node: {NodeId})" : "";
-		return $"[{Code}] {Message}{location}";
-	}
+    /// <summary>
+    /// Returns a formatted string representation of this warning. 📝
+    /// </summary>
+    public override string ToString()
+    {
+        var location = NodeId != null ? $" (Node: {NodeId})" : "";
+        return $"[{Code}] {Message}{location}";
+    }
 }
 

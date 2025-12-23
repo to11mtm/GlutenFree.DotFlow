@@ -34,9 +34,9 @@ public class WorkflowValidatorTests
 					Id: "node1",
 					ModuleId: "test.module",
 					Name: "Test Node",
-					Properties: HashMap.empty<string, System.Text.Json.JsonElement>())),
-			Connections: Arr<ConnectionDefinition>.Empty,
-			Variables: HashMap.empty<string, VariableDefinition>());
+					Properties: LanguageExt.HashMap<string, System.Text.Json.JsonElement>.Empty)),
+			Connections: LanguageExt.Arr<ConnectionDefinition>.Empty,
+			Variables: LanguageExt.HashMap<string, VariableDefinition>.Empty);
 	}
 
 	[Fact]

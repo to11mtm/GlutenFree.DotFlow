@@ -19,7 +19,7 @@ namespace Workflow.Core.Models;
 /// Uses LanguageExt Arr for structural equality! Super smart! 💖
 /// </remarks>
 public record ModuleSchema(
-	Arr<PropertyDefinition> Inputs,
-	Arr<PropertyDefinition> Outputs,
-	Arr<PropertyDefinition> Configuration);
+    Arr<PropertyDefinition> Inputs,
+    Arr<PropertyDefinition> Outputs,
+    Arr<PropertyDefinition> Configuration);
 
