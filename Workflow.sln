@@ -15,6 +15,47 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "phases", "phases", "{AA4347
 		phases\README.md = phases\README.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ignore", "ignore", "{B9EB3407-915D-422B-8BD3-CE0DA7923FF3}"
+	ProjectSection(SolutionItems) = preProject
+		.ignoreme.md = .ignoreme.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "modules", "modules", "{ED35BD17-C076-4738-8714-70AE44FFD56A}"
+	ProjectSection(SolutionItems) = preProject
+		examples\modules\DatabaseModule.cs = examples\modules\DatabaseModule.cs
+		examples\modules\FileModule.cs = examples\modules\FileModule.cs
+		examples\modules\HttpModule.cs = examples\modules\HttpModule.cs
+		examples\modules\IModuleRegistry.cs = examples\modules\IModuleRegistry.cs
+		examples\modules\IWorkflowModule.cs = examples\modules\IWorkflowModule.cs
+		examples\modules\IWorkflowPlugin.cs = examples\modules\IWorkflowPlugin.cs
+		examples\modules\ModuleSecurityConfig.cs = examples\modules\ModuleSecurityConfig.cs
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "actors", "actors", "{CE797E43-44CC-479E-B069-399666692DB4}"
+	ProjectSection(SolutionItems) = preProject
+		examples\actors\NodeActor.cs = examples\actors\NodeActor.cs
+		examples\actors\WorkflowCoordinatorActor.cs = examples\actors\WorkflowCoordinatorActor.cs
+		examples\actors\WorkflowInstanceActor.cs = examples\actors\WorkflowInstanceActor.cs
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "api", "api", "{9E3F9BCF-305B-4D1B-8D6B-66839DA4CB91}"
+	ProjectSection(SolutionItems) = preProject
+		examples\api\ApiModels.cs = examples\api\ApiModels.cs
+		examples\api\ModulesController.cs = examples\api\ModulesController.cs
+		examples\api\ScriptTestingController.cs = examples\api\ScriptTestingController.cs
+		examples\api\WorkflowHub.cs = examples\api\WorkflowHub.cs
+		examples\api\WorkflowsController.cs = examples\api\WorkflowsController.cs
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "clients", "clients", "{04A596E0-62A2-41B0-A369-C10CC356C8F0}"
+	ProjectSection(SolutionItems) = preProject
+		examples\clients\WorkflowClient.cs = examples\clients\WorkflowClient.cs
+		examples\clients\WorkflowClient.py = examples\clients\WorkflowClient.py
+		examples\clients\WorkflowClient.ts = examples\clients\WorkflowClient.ts
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -22,5 +63,11 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{AA4347DA-B96C-4458-A3AF-E94A2FD970EA} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
+		{B9EB3407-915D-422B-8BD3-CE0DA7923FF3} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
+		{B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
+		{ED35BD17-C076-4738-8714-70AE44FFD56A} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
+		{CE797E43-44CC-479E-B069-399666692DB4} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
+		{9E3F9BCF-305B-4D1B-8D6B-66839DA4CB91} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
+		{04A596E0-62A2-41B0-A369-C10CC356C8F0} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
 	EndGlobalSection
 EndGlobal
