@@ -4,6 +4,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_", "_", "{969AD7F6-3DDB-48
 	ProjectSection(SolutionItems) = preProject
 		design-requirements.md = design-requirements.md
 		EXPANSION_SUMMARY.md = EXPANSION_SUMMARY.md
+		.editorconfig = .editorconfig
+		Directory.Build.props = Directory.Build.props
+		Directory.Packages.props = Directory.Packages.props
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "phases", "phases", "{AA4347DA-B96C-4458-A3AF-E94A2FD970EA}"

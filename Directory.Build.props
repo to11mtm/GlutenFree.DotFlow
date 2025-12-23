@@ -1,0 +1,45 @@
+﻿<Project>
+	<!-- 🌸 Common properties for all projects in GlutenFree.DotFlow - Made with love by Ami-Chan! UwU 💖 -->
+
+	<PropertyGroup>
+		<!-- 🎯 Target Framework -->
+		<TargetFramework>net8.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+
+		<!-- 💫 Nullable Reference Types - Safety first! -->
+		<Nullable>enable</Nullable>
+
+		<!-- ✨ Implicit Usings - Less boilerplate, more kawaii code! -->
+		<ImplicitUsings>enable</ImplicitUsings>
+
+		<!-- 🎀 Warning Levels - We want ALL the feedback! -->
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<WarningLevel>5</WarningLevel>
+		<AnalysisLevel>latest</AnalysisLevel>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+		<!-- 💖 Code Analysis Rules -->
+		<EnableNETAnalyzers>true</EnableNETAnalyzers>
+		<AnalysisMode>All</AnalysisMode>
+
+		<!-- 🌈 Package Information -->
+		<Company>GlutenFree</Company>
+		<Product>DotFlow</Product>
+		<Description>A kawaii workflow engine built with Akka.NET and love! 💖</Description>
+		<Copyright>Copyright © 2025 GlutenFree</Copyright>
+		<Authors>Ami-Chan &amp; Team</Authors>
+
+		<!-- ✨ Assembly Information -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);1591</NoWarn> <!-- 📝 Suppress missing XML comment warnings for now -->
+
+		<!-- 🎯 Output Paths -->
+		<AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+		<GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+	</PropertyGroup>
+
+	<!-- 🌈 CopilotNote: Package versions are now managed in Directory.Packages.props! -->
+	<!-- ✨ Any package version updates should be done there for easier management, nya~! -->
+
+</Project>
+
