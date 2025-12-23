@@ -3,7 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_", "_", "{969AD7F6-3DDB-4827-8C22-1FD170A9D92B}"
 	ProjectSection(SolutionItems) = preProject
 		design-requirements.md = design-requirements.md
-		design-requirements.original.donotedit.md = design-requirements.original.donotedit.md
 		EXPANSION_SUMMARY.md = EXPANSION_SUMMARY.md
 	EndProjectSection
 EndProject

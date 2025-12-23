@@ -2,7 +2,7 @@
 
 **Goal:** Establish the core architecture and basic workflow execution engine! 🎯
 
-[Back to Main Design Requirements](../design-requirements.md)
+[Back to Main Design Requirements](../design-requirements.md) | [All Phases](README.md)
 
 ---
 
@@ -21,11 +21,7 @@ Phase 1 focuses on building the foundational architecture and core components th
 
 ---
 
-> **Note to AI (Ami-Chan):** This file contains the complete Phase 1 implementation roadmap extracted from the main design-requirements.md file. It's organized into weeks with detailed tasks, tests, and deliverables. Use this for focused Phase 1 planning and tracking! 💖
-
----
-
-[View the complete Phase 1 details in design-requirements.md starting at line 2904]
+> **💡 Note to AI (Ami-Chan):** This file contains the COMPLETE Phase 1 implementation roadmap with ALL detailed tasks, tests, and deliverables. You can work directly from this file without needing to reference design-requirements.md! Everything you need is right here, uwu~! 💖
 
 ---
 
@@ -40,63 +36,911 @@ Phase 1 focuses on building the foundational architecture and core components th
 
 ---
 
-## Phase 1 Content Summary
 
-**Weeks 1-6 cover:**
-
-### Week 1: Project Setup
-- Solution structure creation
-- CI/CD pipeline configuration
-- Code standards and linting
-- Git workflow setup
-- Initial domain models
-
-### Weeks 1-2: Core Domain Models
-- WorkflowDefinition, NodeDefinition, ConnectionDefinition
-- ModuleSchema and property system
-- Validation logic
-- JSON serialization/deserialization
-
-### Weeks 2-4: Basic Akka.NET Engine
-- WorkflowSupervisor actor
-- WorkflowExecutor actor
-- NodeExecutor actor
-- Actor messaging protocol
-- Sequential execution flow
-- Error handling with supervision
-
-### Weeks 4-5: Module System
-- IWorkflowModule interface
-- Module registry and discovery
-- Module validation
-- Property binding system
-- Dynamic module loading from assemblies
-
-### Weeks 5-6: Basic Built-in Modules
-- LogModule - Simple logging
-- DelayModule - Pause execution
-- SetVariableModule - Variable management
-- GetVariableModule - Variable access
 
 ---
 
-## Demo Workflow for Phase 1
+## 🏗️ Phase 1: Foundation (Weeks 1-6)
 
-```
-Start → Log "Hello" → Delay 1s → Set Variable "count"=1 → 
-Get Variable "count" → Log Variable → End
+**Goal:** Establish the core architecture and basic workflow execution engine! 🎯
+
+### 1.1 Project Structure & Setup (Week 1)
+
+**Tasks:**
+- [ ] **Create solution structure with projects:** 📁
+  - [ ] Create blank solution file (`Workflow.sln`)
+  - [ ] Create `Workflow.Core` class library project (.NET 8)
+    - [ ] Add folder structure (Models, Interfaces, Abstractions)
+    - [ ] Configure project settings (nullable enabled, implicit usings)
+  - [ ] Create `Workflow.Engine` class library project (.NET 8)
+    - [ ] Add folder structure (Actors, Services, Messages)
+    - [ ] Add reference to `Workflow.Core`
+  - [ ] Create `Workflow.Modules` class library project (.NET 8)
+    - [ ] Add folder structure (Builtin, Abstractions)
+    - [ ] Add reference to `Workflow.Core`
+  - [ ] Create `Workflow.Api` web project (ASP.NET Core)
+    - [ ] Add folder structure (Controllers, Hubs, Middleware)
+    - [ ] Add references to Engine and Modules
+  - [ ] Create `Workflow.UI` project (Blazor WebAssembly or React)
+    - [ ] Configure frontend build pipeline
+    - [ ] Add folder structure (Components, Pages, Services)
+  - [ ] Create `Workflow.Tests` test project (xUnit)
+    - [ ] Add test project references
+    - [ ] Configure test coverage tools
+    
+- [ ] **Set up CI/CD pipeline** 🚀
+  - [ ] Choose platform (GitHub Actions or Azure DevOps)
+  - [ ] Create build workflow/pipeline
+    - [ ] Configure dotnet restore
+    - [ ] Configure dotnet build
+    - [ ] Configure code linting
+    - [ ] Configure static analysis
+  - [ ] Create test workflow/pipeline
+    - [ ] Configure dotnet test
+    - [ ] Configure test result reporting
+    - [ ] Configure code coverage collection
+    - [ ] Set coverage thresholds (e.g., 80%)
+  - [ ] Create package workflow/pipeline
+    - [ ] Configure NuGet package creation
+    - [ ] Configure container image build
+    - [ ] Configure artifact publishing
+  - [ ] Create deployment workflow/pipeline
+    - [ ] Configure environment stages (dev, staging, prod)
+    - [ ] Configure approval gates
+    - [ ] Configure rollback procedures
+    
+- [ ] **Configure code standards and linting rules** 📏
+  - [ ] Add `.editorconfig` file
+    - [ ] Configure C# formatting rules
+    - [ ] Configure naming conventions
+    - [ ] Configure indentation (tabs vs spaces)
+    - [ ] Configure line ending preferences
+  - [ ] Add `Directory.Build.props` for common properties
+    - [ ] Set common NuGet package versions
+    - [ ] Configure nullable reference types
+    - [ ] Configure implicit usings
+    - [ ] Configure warning levels
+  - [ ] Configure StyleCop analyzers
+    - [ ] Install StyleCop.Analyzers NuGet package
+    - [ ] Create `stylecop.json` configuration
+    - [ ] Configure documentation rules
+  - [ ] Configure Roslyn analyzers
+    - [ ] Enable CA (Code Analysis) rules
+    - [ ] Configure security rules
+    - [ ] Configure performance rules
+  - [ ] Add pre-commit hooks
+    - [ ] Install Husky.NET
+    - [ ] Configure format check on commit
+    - [ ] Configure build check on commit
+    
+- [ ] **Set up Git branching strategy (GitFlow)** 🌳
+  - [ ] Document branching strategy in README
+    - [ ] Define `main` branch purpose (production)
+    - [ ] Define `develop` branch purpose (integration)
+    - [ ] Define `feature/*` branch pattern
+    - [ ] Define `release/*` branch pattern
+    - [ ] Define `hotfix/*` branch pattern
+  - [ ] Configure branch protection rules
+    - [ ] Require pull request reviews
+    - [ ] Require status checks to pass
+    - [ ] Require linear history
+    - [ ] Restrict direct pushes to main
+  - [ ] Create PR templates
+    - [ ] Add checklist for PRs
+    - [ ] Add sections for description, testing, screenshots
+  - [ ] Create issue templates
+    - [ ] Bug report template
+    - [ ] Feature request template
+    - [ ] Documentation improvement template
+
+**Dependencies:**
+```xml
+<PackageReference Include="Akka" Version="1.5.*" />
+<PackageReference Include="Akka.Persistence" Version="1.5.*" />
+<PackageReference Include="Akka.Cluster" Version="1.5.*" />
+<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.*" />
+<PackageReference Include="Serilog" Version="3.1.*" />
 ```
 
-This simple workflow validates:
-- ✅ Sequential execution
-- ✅ Basic modules working
-- ✅ Variable management
-- ✅ Logging functionality
-- ✅ Timing control
+**Deliverables:**
+- ✅ Solution builds successfully without warnings
+- ✅ CI/CD pipeline runs on every commit
+- ✅ Code standards documented and enforced
+- ✅ All project references correct
+- ✅ Git workflow documented
 
 ---
 
-## Success Criteria ✨
+### 1.2 Core Domain Models (Week 1-2)
+
+**Tasks:**
+- [ ] **Implement `WorkflowDefinition` and related models** 🌸
+  - [ ] Create `WorkflowDefinition` record class
+    - [ ] Add `Id` property (Guid)
+    - [ ] Add `Name` property (string)
+    - [ ] Add `Description` property (string?)
+    - [ ] Add `Version` property (Version)
+    - [ ] Add `Nodes` collection property
+    - [ ] Add `Connections` collection property
+    - [ ] Add `Variables` dictionary property
+    - [ ] Add `Trigger` property (optional)
+    - [ ] Add `ErrorHandling` configuration
+    - [ ] Add `CreatedAt` and `UpdatedAt` timestamps
+    - [ ] Add `Tags` for categorization
+  - [ ] Add XML documentation to all properties
+  - [ ] Implement `IEquatable<WorkflowDefinition>`
+  - [ ] Implement custom `ToString()` override
+  
+- [ ] **Implement `NodeDefinition` and `ConnectionDefinition`** 🧩
+  - [ ] Create `NodeDefinition` record class
+    - [ ] Add `Id` property (string - unique within workflow)
+    - [ ] Add `ModuleId` property (string)
+    - [ ] Add `Name` property (string - display name)
+    - [ ] Add `Properties` dictionary (configuration values)
+    - [ ] Add `Position` for UI (X, Y coordinates)
+    - [ ] Add `ErrorHandling` (node-specific overrides)
+    - [ ] Add `Timeout` configuration
+    - [ ] Add `RetryPolicy` configuration
+    - [ ] Add `Metadata` for extensibility
+  - [ ] Create `ConnectionDefinition` record class
+    - [ ] Add `SourceNodeId` property
+    - [ ] Add `SourcePortName` property
+    - [ ] Add `TargetNodeId` property
+    - [ ] Add `TargetPortName` property
+    - [ ] Add `Condition` property (optional - for conditional routing)
+    - [ ] Add `Priority` property (for parallel execution)
+  - [ ] Add validation methods
+  - [ ] Add XML documentation
+  
+- [ ] **Implement `ModuleSchema` and property system** 📋
+  - [ ] Create `ModuleSchema` record class
+    - [ ] Add `Inputs` collection (PropertyDefinition)
+    - [ ] Add `Outputs` collection (PropertyDefinition)
+    - [ ] Add `Configuration` collection (PropertyDefinition)
+  - [ ] Create `PropertyDefinition` record class
+    - [ ] Add `Name` property
+    - [ ] Add `Type` property (PropertyType enum)
+    - [ ] Add `Description` property
+    - [ ] Add `DefaultValue` property
+    - [ ] Add `IsRequired` property
+    - [ ] Add `ValidationRules` collection
+    - [ ] Add `DisplayMetadata` (UI hints)
+  - [ ] Create `PropertyType` enum
+    - [ ] String, Int, Long, Decimal, Boolean
+    - [ ] DateTime, TimeSpan, Guid
+    - [ ] Object, Array
+    - [ ] Connection (reference to another node's output)
+    - [ ] Variable (reference to workflow variable)
+  - [ ] Create validation rule types
+    - [ ] MinLength, MaxLength (strings)
+    - [ ] Min, Max (numbers)
+    - [ ] Regex (pattern matching)
+    - [ ] Enum (allowed values)
+    - [ ] Custom (lambda expression)
+  
+- [ ] **Create validation logic for workflow definitions** ✅
+  - [ ] Implement `WorkflowValidator` class
+    - [ ] Validate workflow has at least one node
+    - [ ] Validate all node IDs are unique
+    - [ ] Validate all module IDs exist in registry
+    - [ ] Validate node properties match module schema
+    - [ ] Validate no cycles in connections (detect infinite loops)
+    - [ ] Validate all connections reference valid nodes
+    - [ ] Validate all connections reference valid ports
+    - [ ] Validate at least one start node (no incoming connections)
+    - [ ] Validate no orphaned nodes (disconnected subgraphs)
+    - [ ] Validate property types match schema
+    - [ ] Validate required properties are provided
+    - [ ] Validate variable references exist
+  - [ ] Implement `ValidationResult` class
+    - [ ] Add `IsValid` property
+    - [ ] Add `Errors` collection
+    - [ ] Add `Warnings` collection
+    - [ ] Add error codes and messages
+  - [ ] Create validation rule attributes
+  - [ ] Add fluent validation integration
+  
+- [ ] **Implement JSON serialization/deserialization** 📝
+  - [ ] Configure System.Text.Json settings
+    - [ ] Add custom converters for complex types
+    - [ ] Configure naming policy (camelCase)
+    - [ ] Configure null handling
+    - [ ] Configure enum serialization
+    - [ ] Configure indentation for readability
+  - [ ] Create JSON converter for `Version` type
+  - [ ] Create JSON converter for `PropertyValue` type
+  - [ ] Test serialization roundtrip (serialize â†’ deserialize â†’ equals)
+  - [ ] Add support for schema versioning
+  - [ ] Implement migration logic for old schema versions
+  - [ ] Add JSON schema generation for validation
+
+**Key Classes:**
+```csharp
+✅ WorkflowDefinition
+✅ NodeDefinition
+✅ ConnectionDefinition
+✅ ModuleSchema
+✅ PropertyDefinition
+✅ VariableDefinition
+✅ TriggerDefinition
+✅ ValidationResult
+✅ WorkflowValidator
+```
+
+**Tests:**
+- [ ] **Workflow definition validation tests** 🧪
+  - [ ] Test cycle detection (A → B → C → A)
+  - [ ] Test orphaned node detection
+  - [ ] Test missing node references in connections
+  - [ ] Test invalid port names
+  - [ ] Test duplicate node IDs
+  - [ ] Test missing required properties
+  - [ ] Test invalid property types
+  - [ ] Test variable reference validation
+  - [ ] Test start node detection
+  - [ ] Test complex workflow graphs
+  
+- [ ] **Serialization/deserialization tests** 💾
+  - [ ] Test simple workflow serialization
+  - [ ] Test complex workflow with all features
+  - [ ] Test null/empty property handling
+  - [ ] Test special characters in strings
+  - [ ] Test large workflows (performance)
+  - [ ] Test schema version migration
+  - [ ] Test backwards compatibility
+  
+- [ ] **Connection validation tests** 🔗
+  - [ ] Test valid connections
+  - [ ] Test invalid source node
+  - [ ] Test invalid target node
+  - [ ] Test invalid port names
+  - [ ] Test self-connections (node to itself)
+  - [ ] Test multiple connections to same input port
+
+**Deliverables:**
+- ✅ Core models fully implemented with all properties
+- ✅ 90%+ test coverage on domain models
+- ✅ XML documentation on all public APIs
+- ✅ Validation prevents invalid workflows
+- ✅ JSON serialization works flawlessly
+
+---
+
+### 1.3 Basic Akka.NET Engine (Week 2-4)
+
+**Tasks:**
+- [ ] **Implement `WorkflowSupervisor` actor** 🎭
+  - [ ] Create actor class inheriting from `ReceiveActor`
+  - [ ] Add private field for tracking active workflows (Dictionary)
+  - [ ] Implement constructor with dependency injection
+  - [ ] Define message handlers
+    - [ ] Handle `CreateWorkflowInstance` message
+      - [ ] Validate workflow definition
+      - [ ] Generate unique execution ID
+      - [ ] Create child `WorkflowExecutor` actor
+      - [ ] Store actor reference in dictionary
+      - [ ] Reply with execution ID
+    - [ ] Handle `GetWorkflowStatus` message
+      - [ ] Look up executor actor
+      - [ ] Forward status request
+      - [ ] Return status to sender
+    - [ ] Handle `CancelWorkflow` message
+      - [ ] Look up executor actor
+      - [ ] Send cancellation message
+      - [ ] Clean up if needed
+    - [ ] Handle `Terminated` message (child death watch)
+      - [ ] Remove actor from tracking dictionary
+      - [ ] Log termination reason
+      - [ ] Notify subscribers
+  - [ ] Configure supervision strategy
+    - [ ] Define restart directive for recoverable errors
+    - [ ] Define stop directive for unrecoverable errors
+    - [ ] Set max retry limits (e.g., 3 retries in 1 minute)
+  - [ ] Add structured logging with context
+  - [ ] Add execution metrics (duration, memory, etc.)
+  
+- [ ] **Implement `WorkflowExecutor` actor** 🎬
+  - [ ] Create actor class inheriting from `ReceiveActor`
+  - [ ] Add private fields for state management
+    - [ ] Workflow definition
+    - [ ] Execution context
+    - [ ] Node actor references (Dictionary)
+    - [ ] Execution graph/topology
+    - [ ] Completed nodes tracking (HashSet)
+    - [ ] Failed nodes tracking
+  - [ ] Define message handlers
+    - [ ] Handle `StartExecution` message
+      - [ ] Initialize execution context
+      - [ ] Parse workflow graph
+      - [ ] Identify start nodes (no dependencies)
+      - [ ] Create NodeExecutor actors for start nodes
+      - [ ] Send `Execute` messages to start nodes
+      - [ ] Update state to `Running`
+    - [ ] Handle `NodeExecutionCompleted` message
+      - [ ] Mark node as completed
+      - [ ] Store node outputs
+      - [ ] Determine next nodes to execute
+      - [ ] Check if outputs satisfy connection conditions
+      - [ ] Create NodeExecutor actors for next nodes
+      - [ ] Pass input data from previous node outputs
+      - [ ] Check if workflow is complete (all nodes done)
+      - [ ] If complete, send `WorkflowCompleted` to parent
+    - [ ] Handle `NodeExecutionFailed` message
+      - [ ] Mark node as failed
+      - [ ] Log error details
+      - [ ] Check error handling configuration
+      - [ ] If retry configured, schedule retry
+      - [ ] If continue-on-error, proceed to next nodes
+      - [ ] If fail-fast, cancel all other nodes
+      - [ ] Send `WorkflowFailed` to parent
+    - [ ] Handle `CancelExecution` message
+      - [ ] Send cancel to all running node actors
+      - [ ] Update state to `Cancelled`
+      - [ ] Clean up resources
+      - [ ] Notify parent
+    - [ ] Handle `GetProgress` message
+      - [ ] Calculate completion percentage
+      - [ ] Gather status from all nodes
+      - [ ] Return progress details
+  - [ ] Implement execution graph traversal
+    - [ ] Topological sort for dependency order
+    - [ ] Handle parallel execution paths
+    - [ ] Detect and handle fan-out/fan-in patterns
+  - [ ] Add execution timing and metrics
+  - [ ] Implement state persistence (for resumability)
+  
+- [ ] **Implement `NodeExecutor` actor** âœ¨
+  - [ ] Create actor class inheriting from `ReceiveActor`
+  - [ ] Add private fields
+    - [ ] Module instance reference
+    - [ ] Node configuration
+    - [ ] Execution context
+    - [ ] Cancellation token source
+  - [ ] Define message handlers
+    - [ ] Handle `Execute` message
+      - [ ] Log execution start
+      - [ ] Validate input data against schema
+      - [ ] Bind properties from configuration
+      - [ ] Create module execution context
+      - [ ] Call module's `ExecuteAsync` method
+      - [ ] Handle success case
+        - [ ] Validate outputs against schema
+        - [ ] Send `NodeExecutionCompleted` to parent
+        - [ ] Include output data
+      - [ ] Handle failure case (try-catch)
+        - [ ] Log exception details
+        - [ ] Send `NodeExecutionFailed` to parent
+        - [ ] Include error information
+      - [ ] Handle timeout case
+        - [ ] Cancel execution token
+        - [ ] Log timeout
+        - [ ] Send failure message
+    - [ ] Handle `Cancel` message
+      - [ ] Trigger cancellation token
+      - [ ] Interrupt module execution
+      - [ ] Send cancellation acknowledgment
+    - [ ] Handle `GetProgress` message (if module supports it)
+      - [ ] Query module progress
+      - [ ] Return progress percentage
+  - [ ] Implement timeout management
+    - [ ] Use `Context.SetReceiveTimeout`
+    - [ ] Configure from node configuration
+    - [ ] Default to reasonable timeout (e.g., 30 seconds)
+  - [ ] Add detailed execution logging
+  - [ ] Implement input/output data validation
+  - [ ] Add execution metrics (duration, memory, etc.)
+  
+- [ ] **Create actor messaging protocol** 📬
+  - [ ] Define message classes (use records for immutability)
+    - [ ] `CreateWorkflowInstance(Guid workflowId, WorkflowDefinition definition, Dictionary<string, object?> inputs)`
+    - [ ] `StartExecution(Guid executionId)`
+    - [ ] `CancelExecution(Guid executionId)`
+    - [ ] `GetWorkflowStatus(Guid executionId)`
+    - [ ] `Execute(string nodeId, Dictionary<string, object?> inputs)`
+    - [ ] `NodeExecutionCompleted(string nodeId, Dictionary<string, object?> outputs)`
+    - [ ] `NodeExecutionFailed(string nodeId, Exception error)`
+    - [ ] `WorkflowCompleted(Guid executionId, Dictionary<string, object?> outputs)`
+    - [ ] `WorkflowFailed(Guid executionId, Exception error)`
+    - [ ] `GetProgress()`
+    - [ ] `ProgressUpdate(int percentage, string currentNode)`
+  - [ ] Add message serialization attributes
+  - [ ] Document message flow diagrams
+  - [ ] Add message validation
+  
+- [ ] **Implement basic execution flow (sequential nodes only)** âž¡ï¸
+  - [ ] Implement linear execution logic (A â†’ B â†’ C)
+  - [ ] Add proper data flow between nodes
+  - [ ] Implement output-to-input mapping
+  - [ ] Handle missing required inputs
+  - [ ] Validate data types match
+  - [ ] Add flow control logging
+  
+- [ ] **Add execution state tracking** 📊
+  - [ ] Create `ExecutionState` enum
+    - [ ] `Pending` - Not started
+    - [ ] `Running` - Currently executing
+    - [ ] `Completed` - Finished successfully
+    - [ ] `Failed` - Finished with error
+    - [ ] `Cancelled` - Cancelled by user
+    - [ ] `Paused` - Temporarily paused
+  - [ ] Create `ExecutionContext` class
+    - [ ] Add `ExecutionId` property
+    - [ ] Add `WorkflowId` property
+    - [ ] Add `State` property
+    - [ ] Add `StartTime` property
+    - [ ] Add `EndTime` property
+    - [ ] Add `Variables` dictionary (workflow variables)
+    - [ ] Add `NodeStates` dictionary (per-node status)
+    - [ ] Add `Outputs` dictionary (final outputs)
+    - [ ] Add `Error` property (if failed)
+  - [ ] Implement state persistence snapshots
+  - [ ] Add state change events/notifications
+  
+- [ ] **Implement supervisor strategy for error handling** 🛡️
+  - [ ] Define supervision directives per actor type
+    - [ ] WorkflowSupervisor directives
+      - [ ] Restart on transient failures
+      - [ ] Stop on critical failures
+      - [ ] Escalate on unknown failures
+    - [ ] WorkflowExecutor directives
+      - [ ] Resume for node failures (if continue-on-error)
+      - [ ] Restart for recoverable state corruption
+      - [ ] Stop for unrecoverable errors
+    - [ ] NodeExecutor directives
+      - [ ] Restart with backoff for transient errors
+      - [ ] Stop after max retries
+  - [ ] Configure restart limits
+    - [ ] Max restarts: 3
+    - [ ] Time window: 1 minute
+  - [ ] Implement custom supervision logic
+  - [ ] Add supervision event logging
+  - [ ] Test supervision with failure injection
+
+**Key Actors:**
+```csharp
+✅ WorkflowSupervisor - Manages workflow lifecycle
+✅ WorkflowExecutor - Executes a single workflow instance
+✅ NodeExecutor - Executes a single node
+✅ ExecutionMonitor - Tracks execution progress (optional)
+```
+
+**Actor Messages:**
+```csharp
+✅ CreateWorkflowInstance(workflowId, definition, inputs)
+✅ StartExecution(executionId)
+✅ Execute(nodeId, inputs)
+✅ NodeExecutionCompleted(nodeId, outputs)
+✅ NodeExecutionFailed(nodeId, error)
+✅ WorkflowCompleted(workflowId, outputs)
+✅ WorkflowFailed(workflowId, error)
+✅ CancelExecution(executionId)
+✅ GetWorkflowStatus(executionId)
+✅ GetProgress()
+```
+
+**Tests:**
+- [ ] **Actor lifecycle tests** 🔄
+  - [ ] Test actor creation
+  - [ ] Test actor initialization
+  - [ ] Test actor termination
+  - [ ] Test graceful shutdown
+  - [ ] Test resource cleanup
+  
+- [ ] **Message passing tests** 📨
+  - [ ] Test Tell (fire-and-forget) messaging
+  - [ ] Test Ask (request-response) messaging
+  - [ ] Test message ordering guarantees
+  - [ ] Test message delivery under load
+  - [ ] Test dead letter handling
+  - [ ] Test message serialization
+  
+- [ ] **Basic workflow execution tests (A â†’ B â†’ C)** ✅
+  - [ ] Test 3-node linear workflow
+  - [ ] Test data passing between nodes
+  - [ ] Test workflow completion detection
+  - [ ] Test output collection
+  - [ ] Test empty workflow (no nodes)
+  - [ ] Test single-node workflow
+  
+- [ ] **Error handling and supervision tests** 🛡️
+  - [ ] Test node failure handling
+  - [ ] Test workflow failure propagation
+  - [ ] Test continue-on-error behavior
+  - [ ] Test fail-fast behavior
+  - [ ] Test retry logic
+  - [ ] Test timeout handling
+  - [ ] Test supervision restart
+  - [ ] Test supervision stop
+  - [ ] Test escalation
+  
+- [ ] **Actor restart behavior tests** 🔁
+  - [ ] Test restart preserves state (where appropriate)
+  - [ ] Test restart limits enforced
+  - [ ] Test restart backoff timing
+  - [ ] Test restart after transient failure
+  - [ ] Test stop after max retries
+
+**Deliverables:**
+- ✅ Can execute a simple linear workflow (sequential nodes)
+- ✅ Execution state properly tracked at all levels
+- ✅ Errors handled gracefully with supervision strategies
+- ✅ All actors communicate correctly via messages
+- ✅ Complete message flow documented
+- ✅ 85%+ test coverage on actor code
+
+---
+
+### 1.4 Module System Foundation (Week 4-5)
+
+**Tasks:**
+- [ ] **Implement `IWorkflowModule` interface** 📦
+  - [ ] Define interface in `Workflow.Core.Abstractions`
+  - [ ] Add `ModuleId` property (string - unique identifier)
+  - [ ] Add `DisplayName` property (string - human-readable name)
+  - [ ] Add `Category` property (string - for UI grouping)
+  - [ ] Add `Description` property (string - help text)
+  - [ ] Add `Icon` property (string - emoji or icon identifier)
+  - [ ] Add `Version` property (Version - module version)
+  - [ ] Add `Schema` property (ModuleSchema - inputs/outputs definition)
+  - [ ] Add `ExecuteAsync` method signature
+    - [ ] Parameter: `ModuleExecutionContext context`
+    - [ ] Parameter: `CancellationToken cancellationToken`
+    - [ ] Return type: `Task<ModuleResult>`
+  - [ ] Add `ValidateConfiguration` method (optional)
+  - [ ] Add XML documentation with examples
+  - [ ] Create `ModuleExecutionContext` class
+    - [ ] Add `Inputs` dictionary
+    - [ ] Add `Configuration` dictionary
+    - [ ] Add `Variables` access (workflow-level)
+    - [ ] Add `Logger` instance
+    - [ ] Add `ExecutionId` for correlation
+    - [ ] Add `ServiceProvider` for DI
+  - [ ] Create `ModuleResult` class
+    - [ ] Add `IsSuccess` property
+    - [ ] Add `Outputs` dictionary
+    - [ ] Add `Error` property (optional)
+    - [ ] Add `Metrics` (duration, resource usage, etc.)
+  
+- [ ] **Create module registry and discovery** 📚
+  - [ ] Implement `IModuleRegistry` interface
+    - [ ] Add `RegisterModule(Type moduleType)` method
+    - [ ] Add `RegisterModule(IWorkflowModule instance)` method
+    - [ ] Add `UnregisterModule(string moduleId)` method
+    - [ ] Add `GetModule(string moduleId)` method
+    - [ ] Add `GetAllModules()` method
+    - [ ] Add `GetModulesByCategory(string category)` method
+    - [ ] Add `ModuleRegistered` event
+    - [ ] Add `ModuleUnregistered` event
+  - [ ] Implement `ModuleRegistry` class
+    - [ ] Use ConcurrentDictionary for thread-safety
+    - [ ] Implement module instance caching
+    - [ ] Add module metadata indexing
+    - [ ] Implement category-based lookup
+    - [ ] Add search functionality (by name, tags)
+  - [ ] Implement automatic discovery
+    - [ ] Scan assemblies for types implementing `IWorkflowModule`
+    - [ ] Use reflection to find modules
+    - [ ] Apply module attributes for metadata
+    - [ ] Auto-register discovered modules
+    - [ ] Handle duplicate registrations gracefully
+  - [ ] Add module dependency resolution
+    - [ ] Track module dependencies
+    - [ ] Validate dependencies are registered
+    - [ ] Load modules in dependency order
+  
+- [ ] **Implement module validation** ✅
+  - [ ] Create `ModuleValidator` class
+  - [ ] Validate module ID is unique
+  - [ ] Validate module ID follows naming conventions
+  - [ ] Validate schema is properly defined
+    - [ ] All input properties have types
+    - [ ] All output properties have types
+    - [ ] No conflicting property names
+  - [ ] Validate module implements interface correctly
+  - [ ] Validate module has parameterless constructor or DI constructor
+  - [ ] Validate module metadata completeness
+    - [ ] DisplayName is not empty
+    - [ ] Description is provided
+    - [ ] Category is valid
+  - [ ] Run validation on registration
+  - [ ] Return detailed validation errors
+  - [ ] Add optional strict mode vs. lenient mode
+  
+- [ ] **Create module property binding system** 🔗
+  - [ ] Implement `IPropertyBinder` interface
+    - [ ] Add `BindProperties(Dictionary config, ModuleSchema schema)` method
+    - [ ] Return bound values with type safety
+  - [ ] Implement `PropertyBinder` class
+    - [ ] Handle primitive type binding (string, int, bool, etc.)
+    - [ ] Handle complex type binding (objects, arrays)
+    - [ ] Handle variable references ({{Variable.Name}})
+    - [ ] Handle node output references ({{NodeId.OutputName}})
+    - [ ] Handle expression evaluation (simple expressions)
+    - [ ] Implement type conversion
+      - [ ] String to int/long/decimal
+      - [ ] String to DateTime
+      - [ ] String to Guid
+      - [ ] JSON to objects
+    - [ ] Validate bindings against schema
+      - [ ] Check required properties present
+      - [ ] Check types match
+      - [ ] Check values meet validation rules
+    - [ ] Implement default value assignment
+    - [ ] Add detailed binding error messages
+  - [ ] Create property value resolvers
+    - [ ] Variable resolver
+    - [ ] Node output resolver
+    - [ ] Expression resolver
+    - [ ] Static value resolver
+  - [ ] Add caching for expensive bindings
+  
+- [ ] **Add support for dynamic module loading from assemblies** 🚀
+  - [ ] Implement `IModuleLoader` interface
+    - [ ] Add `LoadFromAssembly(string path)` method
+    - [ ] Add `LoadFromDirectory(string path)` method
+    - [ ] Add `UnloadModule(string moduleId)` method
+  - [ ] Implement `ModuleLoader` class using `AssemblyLoadContext`
+    - [ ] Create isolated AssemblyLoadContext per module
+    - [ ] Load assembly from file path
+    - [ ] Scan assembly for module types
+    - [ ] Instantiate modules safely
+    - [ ] Handle dependency resolution
+    - [ ] Support assembly unloading
+    - [ ] Implement assembly version checking
+  - [ ] Add security validation
+    - [ ] Verify assembly signature (optional)
+    - [ ] Check for malicious code patterns
+    - [ ] Sandbox module execution (future)
+  - [ ] Add module package format
+    - [ ] Define `.wfmod` package structure (ZIP)
+    - [ ] Include module DLL
+    - [ ] Include `module.json` manifest
+    - [ ] Include dependencies folder
+    - [ ] Include documentation/README
+  - [ ] Implement package validation
+    - [ ] Validate manifest schema
+    - [ ] Check dependencies are available
+    - [ ] Verify module compatibility
+  - [ ] Add module hot-reload capability
+    - [ ] Detect file changes
+    - [ ] Unload old version
+    - [ ] Load new version
+    - [ ] Notify running workflows
+  - [ ] Implement module versioning
+    - [ ] Support multiple versions side-by-side
+    - [ ] Allow workflows to pin versions
+    - [ ] Handle breaking changes gracefully
+
+**Key Interfaces:**
+```csharp
+✅ IWorkflowModule - Base module interface
+✅ IModuleRegistry - Module registration and lookup
+✅ IModuleLoader - Dynamic assembly loading
+✅ IPropertyBinder - Property value binding
+✅ ModuleExecutionContext - Runtime context
+✅ ModuleResult - Execution result
+```
+
+**Tests:**
+- [ ] **Module registration tests** 📝
+  - [ ] Test register single module
+  - [ ] Test register multiple modules
+  - [ ] Test duplicate registration handling
+  - [ ] Test unregister module
+  - [ ] Test module lookup by ID
+  - [ ] Test category-based filtering
+  - [ ] Test module instance caching
+  
+- [ ] **Module discovery tests** 🔍
+  - [ ] Test auto-discovery in assembly
+  - [ ] Test discovery with no modules present
+  - [ ] Test discovery with multiple modules
+  - [ ] Test discovery excludes abstract classes
+  - [ ] Test discovery excludes internal classes
+  
+- [ ] **Property binding tests** 🔗
+  - [ ] Test bind primitive types (string, int, bool)
+  - [ ] Test bind complex types (objects, arrays)
+  - [ ] Test bind with type conversion
+  - [ ] Test bind variable references
+  - [ ] Test bind node output references
+  - [ ] Test bind with default values
+  - [ ] Test bind with missing required property (error)
+  - [ ] Test bind with type mismatch (error)
+  - [ ] Test bind with validation rules
+  
+- [ ] **Module validation tests** ✅
+  - [ ] Test valid module passes
+  - [ ] Test module with missing schema (error)
+  - [ ] Test module with duplicate ID (error)
+  - [ ] Test module with invalid characters in ID (error)
+  - [ ] Test module without constructor (error)
+  - [ ] Test validation error messages are clear
+  
+- [ ] **Dynamic loading tests** 🚀
+  - [ ] Test load module from DLL
+  - [ ] Test load from directory (multiple DLLs)
+  - [ ] Test unload module
+  - [ ] Test load invalid assembly (error)
+  - [ ] Test load assembly with missing dependencies (error)
+  - [ ] Test assembly isolation (separate contexts)
+  - [ ] Test package format validation
+  - [ ] Test hot-reload functionality
+
+**Deliverables:**
+- ✅ Module system can register and discover modules successfully
+- ✅ Modules can be loaded dynamically from external assemblies
+- ✅ Property values properly bound to module inputs with type safety
+- ✅ Module validation prevents broken modules from loading
+- ✅ 90%+ test coverage on module system
+- ✅ Clear documentation for module developers
+
+---
+
+### 1.5 Basic Built-in Modules (Week 5-6)
+
+**Tasks:**
+- [ ] **Implement `LogModule` - Simple logging** 📝
+  - [ ] Create `LogModule` class implementing `IWorkflowModule`
+  - [ ] Configure module metadata
+    - [ ] ModuleId: `builtin.log`
+    - [ ] DisplayName: `Log Message`
+    - [ ] Category: `Utilities`
+    - [ ] Icon: `📝`
+  - [ ] Define module schema
+    - [ ] Input: `message` (string, required) - The message to log
+    - [ ] Input: `level` (LogLevel enum, optional, default=Info) - Log level
+    - [ ] Input: `includeContext` (bool, optional, default=false) - Include execution context
+    - [ ] Output: `timestamp` (DateTime) - When the log was written
+  - [ ] Implement ExecuteAsync method
+    - [ ] Extract message from inputs
+    - [ ] Extract log level from inputs
+    - [ ] Resolve any variable references in message
+    - [ ] Log to configured logger with level
+    - [ ] Include execution ID in log context
+    - [ ] Optionally include full context data
+    - [ ] Return timestamp in outputs
+  - [ ] Add template string support (e.g., "User {userId} logged in")
+  - [ ] Support structured logging properties
+  - [ ] Add XML documentation with examples
+  - [ ] Write comprehensive unit tests
+    - [ ] Test logging at each level (Debug, Info, Warning, Error)
+    - [ ] Test variable interpolation in messages
+    - [ ] Test template string formatting
+    - [ ] Test context inclusion
+  
+- [ ] **Implement `DelayModule` - Pause execution** ⏱️
+  - [ ] Create `DelayModule` class implementing `IWorkflowModule`
+  - [ ] Configure module metadata
+    - [ ] ModuleId: `builtin.delay`
+    - [ ] DisplayName: `Delay`
+    - [ ] Category: `Flow Control`
+    - [ ] Icon: `⏱️`
+  - [ ] Define module schema
+    - [ ] Input: `duration` (TimeSpan or int milliseconds, required) - Delay duration
+    - [ ] Input: `allowCancellation` (bool, optional, default=true)
+    - [ ] Output: `actualDuration` (TimeSpan) - Actual time delayed
+    - [ ] Output: `wasCancelled` (bool) - Whether delay was interrupted
+  - [ ] Implement ExecuteAsync method
+    - [ ] Parse duration from inputs (support ms, seconds, TimeSpan)
+    - [ ] Validate duration is reasonable (e.g., < 1 hour)
+    - [ ] Use `Task.Delay` with cancellation token
+    - [ ] Track actual start/end time
+    - [ ] Handle cancellation gracefully
+    - [ ] Return actual duration in outputs
+  - [ ] Add convenience duration parsing
+    - [ ] Support "5s", "1m", "30s" format
+    - [ ] Support ISO 8601 duration format
+  - [ ] Add XML documentation with examples
+  - [ ] Write comprehensive unit tests
+    - [ ] Test short delay (100ms)
+    - [ ] Test cancellation handling
+    - [ ] Test duration parsing (various formats)
+    - [ ] Test invalid duration (error)
+    - [ ] Test timeout interaction
+  
+- [ ] **Implement `SetVariableModule` - Variable management** 💾
+  - [ ] Create `SetVariableModule` class implementing `IWorkflowModule`
+  - [ ] Configure module metadata
+    - [ ] ModuleId: `builtin.setvariable`
+    - [ ] DisplayName: `Set Variable`
+    - [ ] Category: `Variables`
+    - [ ] Icon: `💾`
+  - [ ] Define module schema
+    - [ ] Input: `name` (string, required) - Variable name
+    - [ ] Input: `value` (object, required) - Value to set
+    - [ ] Input: `scope` (enum, optional, default=Workflow) - Variable scope
+    - [ ] Output: `previousValue` (object, nullable) - Previous value if existed
+    - [ ] Output: `wasCreated` (bool) - True if new, false if updated
+  - [ ] Implement ExecuteAsync method
+    - [ ] Extract variable name from inputs
+    - [ ] Extract value from inputs
+    - [ ] Validate variable name (no special characters)
+    - [ ] Get previous value from context (if exists)
+    - [ ] Set variable in execution context
+    - [ ] Determine if this is create or update
+    - [ ] Return previous value and created flag
+  - [ ] Support variable scopes
+    - [ ] Workflow scope (shared across all nodes)
+    - [ ] Execution scope (current execution only)
+    - [ ] Global scope (shared across executions - optional)
+  - [ ] Add type validation (optional)
+  - [ ] Add XML documentation with examples
+  - [ ] Write comprehensive unit tests
+    - [ ] Test create new variable
+    - [ ] Test update existing variable
+    - [ ] Test variable name validation
+    - [ ] Test different value types (string, int, object, array)
+    - [ ] Test null value handling
+    - [ ] Test scopes
+  
+- [ ] **Implement `GetVariableModule` - Variable access** 🔍
+  - [ ] Create `GetVariableModule` class implementing `IWorkflowModule`
+  - [ ] Configure module metadata
+    - [ ] ModuleId: `builtin.getvariable`
+    - [ ] DisplayName: `Get Variable`
+    - [ ] Category: `Variables`
+    - [ ] Icon: `🔍`
+  - [ ] Define module schema
+    - [ ] Input: `name` (string, required) - Variable name to retrieve
+    - [ ] Input: `defaultValue` (object, optional) - Value if not found
+    - [ ] Input: `throwIfMissing` (bool, optional, default=false)
+    - [ ] Output: `value` (object) - Variable value
+    - [ ] Output: `exists` (bool) - Whether variable exists
+    - [ ] Output: `type` (string) - Type name of the value
+  - [ ] Implement ExecuteAsync method
+    - [ ] Extract variable name from inputs
+    - [ ] Try to get variable from context
+    - [ ] If not found and throwIfMissing is true, throw exception
+    - [ ] If not found and default provided, return default
+    - [ ] If not found, return null
+    - [ ] Return value, exists flag, and type info
+  - [ ] Support dot notation for nested properties
+    - [ ] E.g., `user.address.city`
+  - [ ] Add XML documentation with examples
+  - [ ] Write comprehensive unit tests
+    - [ ] Test get existing variable
+    - [ ] Test get missing variable (with default)
+    - [ ] Test get missing variable (without default)
+    - [ ] Test throwIfMissing behavior
+    - [ ] Test nested property access
+    - [ ] Test type reporting
+
+**Modules:**
+```
+✅ builtin.log - Log messages at various levels
+✅ builtin.delay - Pause workflow execution
+✅ builtin.setvariable - Set workflow variable
+✅ builtin.getvariable - Get workflow variable
+```
+
+**Tests:**
+- [ ] **Each module has unit tests** 🧪
+  - [ ] Test module initialization
+  - [ ] Test schema validation
+  - [ ] Test ExecuteAsync with valid inputs
+  - [ ] Test ExecuteAsync with invalid inputs
+  - [ ] Test ExecuteAsync with missing inputs
+  - [ ] Test error handling
+  - [ ] Test cancellation handling
+  - [ ] Test output generation
+  
+- [ ] **Integration tests combining multiple modules** 🔗
+  - [ ] Test SetVariable → GetVariable → Log
+  - [ ] Test SetVariable → Delay → GetVariable (verify persistence)
+  - [ ] Test variable scoping across nodes
+  - [ ] Test error propagation between modules
+  
+- [ ] **End-to-end workflow tests using these modules** 🎯
+  - [ ] Create workflow: Log start → SetVariable → Delay → GetVariable → Log end
+  - [ ] Execute workflow and validate outputs
+  - [ ] Verify logs are written correctly
+  - [ ] Verify variables are accessible
+  - [ ] Verify timing is correct
+
+---
+
+## Phase 1 Success Criteria ✨
 
 **Must Have:**
 - [ ] Akka.NET actors properly structured and communicating
@@ -105,29 +949,38 @@ This simple workflow validates:
 - [ ] 80%+ code coverage on Phase 1 components
 - [ ] Architecture documentation complete
 
-**Key Metrics:**
-- ✅ All tests passing
-- ✅ CI/CD pipeline green
-- ✅ Code coverage ≥ 80%
-- ✅ Zero critical bugs
-- ✅ Demo workflow executes successfully
+**Demo Workflow:**
+```
+Start → Log "Hello" → Delay 1s → Set Variable "count"=1 → Get Variable "count" → Log Variable → End
+```
+
+**This workflow validates:**
+- ✅ Sequential execution working
+- ✅ Basic modules operational
+- ✅ Variable management
+- ✅ Logging functionality
+- ✅ Timing control
+- ✅ Data flow between nodes
+
+**Key Deliverables:**
+- ✅ Solution builds without warnings
+- ✅ All 4 basic modules implemented
+- ✅ Core domain models complete
+- ✅ Akka.NET engine functional
+- ✅ Module system with dynamic loading
+- ✅ 80%+ test coverage achieved
+- ✅ CI/CD pipeline operational
+- ✅ Code standards enforced
 
 ---
 
-## Detailed Tasks
+## Next Steps → Phase 2 🚀
 
-**For the complete detailed checklist with all sub-tasks, tests, and deliverables, please refer to:**
-
-📄 [design-requirements.md](../design-requirements.md) - Lines 2904-3827
-
-The main file contains:
-- ✨ Detailed implementation steps for each component
-- 🧪 Comprehensive test plans
-- 📦 Dependency information
-- 🎯 Specific deliverables
-- 💡 Code examples and hints
+Once Phase 1 is complete, move on to:
+**[Phase 2: Core Features](Phase2-CoreFeatures.md)** - Persistence, advanced flow control, and 20+ modules!
 
 ---
 
 *Made with 💖 by Ami-Chan! UwU* ✨
 
+**This is now a COMPLETE self-contained Phase 1 roadmap!** Everything you need to implement Phase 1 is right here! 🎀
