@@ -9,7 +9,8 @@ examples/
 ├── actors/                    # 🎭 Akka.NET Actor examples
 │   ├── WorkflowCoordinatorActor.cs
 │   ├── WorkflowInstanceActor.cs
-│   └── NodeActor.cs
+│   ├── NodeActor.cs
+│   └── NodeConfiguration.cs
 │
 ├── modules/                   # 📦 Module system examples
 │   ├── IWorkflowModule.cs
@@ -57,6 +58,8 @@ examples/
 - **[WorkflowCoordinatorActor.cs](actors/WorkflowCoordinatorActor.cs)** - Main orchestrator that manages workflow lifecycle
 - **[WorkflowInstanceActor.cs](actors/WorkflowInstanceActor.cs)** - Represents a single workflow execution
 - **[NodeActor.cs](actors/NodeActor.cs)** - Executes individual workflow nodes
+- **[NodeConfiguration.cs](actors/NodeConfiguration.cs)** - Configuration & messages (ExecuteNode, NodeExecutionResult, etc.)
+- **[DESIGN_RATIONALE.md](actors/DESIGN_RATIONALE.md)** - 📚 Explains configuration vs. messages pattern
 
 ### Module System
 - **[IWorkflowModule.cs](modules/IWorkflowModule.cs)** - Base interface for all workflow modules

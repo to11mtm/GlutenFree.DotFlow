@@ -344,6 +344,49 @@ Phase 4 is all about production readiness:
 - [ ] Create marketing materials
 - [ ] Set up support channels
 - [ ] Prepare launch announcement
+- [ ] **Set up CI/CD pipeline** 🚀
+    - [ ] Choose platform (GitHub Actions or Azure DevOps)
+    - [ ] Create build workflow/pipeline
+        - [ ] Configure dotnet restore
+        - [ ] Configure dotnet build
+        - [ ] Configure code linting
+        - [ ] Configure static analysis
+    - [ ] Create test workflow/pipeline
+        - [ ] Configure dotnet test
+        - [ ] Configure test result reporting
+        - [ ] Configure code coverage collection
+        - [ ] Set coverage thresholds (e.g., 80%)
+    - [ ] Create package workflow/pipeline
+        - [ ] Configure NuGet package creation
+        - [ ] Configure container image build
+        - [ ] Configure artifact publishing
+    - [ ] Create deployment workflow/pipeline
+        - [ ] Configure environment stages (dev, staging, prod)
+        - [ ] Configure approval gates
+        - [ ] Configure rollback procedures
+- [ ] **Set up Git branching strategy (GitFlow)** 🌳
+    - [ ] Document branching strategy in README
+        - [ ] Define `main` branch purpose (production)
+        - [ ] Define `develop` branch purpose (integration)
+        - [ ] Define `feature/*` branch pattern
+        - [ ] Define `release/*` branch pattern
+        - [ ] Define `hotfix/*` branch pattern
+    - [ ] Configure branch protection rules
+        - [ ] Require pull request reviews
+        - [ ] Require status checks to pass
+        - [ ] Require linear history
+        - [ ] Restrict direct pushes to main
+    - [ ] Create PR templates
+        - [ ] Add checklist for PRs
+        - [ ] Add sections for description, testing, screenshots
+    - [ ] Create issue templates
+        - [ ] Bug report template
+        - [ ] Feature request template
+        - [ ] Documentation improvement template
+  - [ ] Add pre-commit hooks
+      - [ ] Install Husky.NET
+      - [ ] Configure format check on commit
+      - [ ] Configure build check on commit
 
 **Beta Testing:**
 ```

@@ -52,6 +52,7 @@ All code snippets organized by category for easy reference:
 - [WorkflowCoordinatorActor.cs](examples/actors/WorkflowCoordinatorActor.cs) - Main orchestrator
 - [WorkflowInstanceActor.cs](examples/actors/WorkflowInstanceActor.cs) - Single workflow execution
 - [NodeActor.cs](examples/actors/NodeActor.cs) - Individual node executor
+- [NodeConfiguration.cs](examples/actors/NodeConfiguration.cs) - Node actor configuration
 
 #### 📦 Modules
 - [IWorkflowModule.cs](examples/modules/IWorkflowModule.cs) - Module interface & schema

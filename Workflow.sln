@@ -38,6 +38,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "actors", "actors", "{CE797E
 		examples\actors\NodeActor.cs = examples\actors\NodeActor.cs
 		examples\actors\WorkflowCoordinatorActor.cs = examples\actors\WorkflowCoordinatorActor.cs
 		examples\actors\WorkflowInstanceActor.cs = examples\actors\WorkflowInstanceActor.cs
+		examples\actors\NodeConfiguration.cs = examples\actors\NodeConfiguration.cs
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "api", "api", "{9E3F9BCF-305B-4D1B-8D6B-66839DA4CB91}"
@@ -47,6 +48,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "api", "api", "{9E3F9BCF-305
 		examples\api\ScriptTestingController.cs = examples\api\ScriptTestingController.cs
 		examples\api\WorkflowHub.cs = examples\api\WorkflowHub.cs
 		examples\api\WorkflowsController.cs = examples\api\WorkflowsController.cs
+		examples\api\MonitoringController.cs = examples\api\MonitoringController.cs
+		examples\api\VariablesController.cs = examples\api\VariablesController.cs
+		examples\api\WebhooksController.cs = examples\api\WebhooksController.cs
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "clients", "clients", "{04A596E0-62A2-41B0-A369-C10CC356C8F0}"
@@ -55,6 +59,44 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "clients", "clients", "{04A5
 		examples\clients\WorkflowClient.py = examples\clients\WorkflowClient.py
 		examples\clients\WorkflowClient.ts = examples\clients\WorkflowClient.ts
 	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ui", "ui", "{2B7DE58B-6F04-4ADF-9986-C2CF95BCC975}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "definitions", "definitions", "{27D5434B-1962-4AB1-8DAC-68DAD4F998C0}"
+	ProjectSection(SolutionItems) = preProject
+		examples\definitions\example-workflow.json = examples\definitions\example-workflow.json
+		examples\definitions\module-manifest.json = examples\definitions\module-manifest.json
+		examples\definitions\WorkflowDefinition.cs = examples\definitions\WorkflowDefinition.cs
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripting", "scripting", "{C7D924E2-B5A1-420E-B3C3-EE647AD90F8E}"
+	ProjectSection(SolutionItems) = preProject
+		examples\scripting\IScriptLibrary.cs = examples\scripting\IScriptLibrary.cs
+		examples\scripting\IWorkflowScriptApi.cs = examples\scripting\IWorkflowScriptApi.cs
+		examples\scripting\javascript-api-integration.js = examples\scripting\javascript-api-integration.js
+		examples\scripting\javascript-data-transformation.js = examples\scripting\javascript-data-transformation.js
+		examples\scripting\lua-csv-processing.lua = examples\scripting\lua-csv-processing.lua
+		examples\scripting\lua-data-processing.lua = examples\scripting\lua-data-processing.lua
+		examples\scripting\python-data-analysis.py = examples\scripting\python-data-analysis.py
+		examples\scripting\python-database-etl.py = examples\scripting\python-database-etl.py
+		examples\scripting\ScriptExecutionConfig.cs = examples\scripting\ScriptExecutionConfig.cs
+		examples\scripting\ScriptExecutors.cs = examples\scripting\ScriptExecutors.cs
+		examples\scripting\ScriptModule.cs = examples\scripting\ScriptModule.cs
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Core", "Workflow.Core\Workflow.Core.csproj", "{811BCE73-D86E-470B-AC2D-1BD287DD7247}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Engine", "Workflow.Engine\Workflow.Engine.csproj", "{DCF05DCF-CB03-415D-BE6B-64AC778832FC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Modules", "Workflow.Modules\Workflow.Modules.csproj", "{1351D59D-1B80-45F7-95A1-A30DC57AF3A3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Api", "Workflow.Api\Workflow.Api.csproj", "{3344FBC0-02A4-4821-8617-45EF6640140F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.UI", "Workflow.UI\Workflow.UI\Workflow.UI.csproj", "{8FB18735-36A1-4AA9-8EB9-0493BCC6EC92}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.UI.Client", "Workflow.UI\Workflow.UI.Client\Workflow.UI.Client.csproj", "{50D67E45-251E-4054-BDFF-9D6FF78BD009}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Tests", "Workflow.Tests\Workflow.Tests.csproj", "{5E59C4BC-9F58-48E4-AFE1-5B24D65F0D7A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -69,5 +111,38 @@ Global
 		{CE797E43-44CC-479E-B069-399666692DB4} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
 		{9E3F9BCF-305B-4D1B-8D6B-66839DA4CB91} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
 		{04A596E0-62A2-41B0-A369-C10CC356C8F0} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
+		{2B7DE58B-6F04-4ADF-9986-C2CF95BCC975} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
+		{27D5434B-1962-4AB1-8DAC-68DAD4F998C0} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
+		{C7D924E2-B5A1-420E-B3C3-EE647AD90F8E} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{811BCE73-D86E-470B-AC2D-1BD287DD7247}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{811BCE73-D86E-470B-AC2D-1BD287DD7247}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{811BCE73-D86E-470B-AC2D-1BD287DD7247}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{811BCE73-D86E-470B-AC2D-1BD287DD7247}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DCF05DCF-CB03-415D-BE6B-64AC778832FC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCF05DCF-CB03-415D-BE6B-64AC778832FC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCF05DCF-CB03-415D-BE6B-64AC778832FC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCF05DCF-CB03-415D-BE6B-64AC778832FC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1351D59D-1B80-45F7-95A1-A30DC57AF3A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1351D59D-1B80-45F7-95A1-A30DC57AF3A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1351D59D-1B80-45F7-95A1-A30DC57AF3A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1351D59D-1B80-45F7-95A1-A30DC57AF3A3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3344FBC0-02A4-4821-8617-45EF6640140F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3344FBC0-02A4-4821-8617-45EF6640140F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3344FBC0-02A4-4821-8617-45EF6640140F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3344FBC0-02A4-4821-8617-45EF6640140F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8FB18735-36A1-4AA9-8EB9-0493BCC6EC92}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8FB18735-36A1-4AA9-8EB9-0493BCC6EC92}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8FB18735-36A1-4AA9-8EB9-0493BCC6EC92}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8FB18735-36A1-4AA9-8EB9-0493BCC6EC92}.Release|Any CPU.Build.0 = Release|Any CPU
+		{50D67E45-251E-4054-BDFF-9D6FF78BD009}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{50D67E45-251E-4054-BDFF-9D6FF78BD009}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{50D67E45-251E-4054-BDFF-9D6FF78BD009}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{50D67E45-251E-4054-BDFF-9D6FF78BD009}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E59C4BC-9F58-48E4-AFE1-5B24D65F0D7A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E59C4BC-9F58-48E4-AFE1-5B24D65F0D7A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E59C4BC-9F58-48E4-AFE1-5B24D65F0D7A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E59C4BC-9F58-48E4-AFE1-5B24D65F0D7A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

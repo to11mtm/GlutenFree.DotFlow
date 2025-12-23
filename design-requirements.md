@@ -119,58 +119,17 @@ A flexible, actor-based workflow engine that allows users to:
 ### 1. Workflow Coordinator Actor
 The main orchestrator that manages workflow lifecycle.
 
-```csharp
-/// <summary>
-/// 🌟 The heart of our workflow system, uwu~!
-/// Coordinates all workflow instances and their lifecycle.
-/// </summary>
-/// <remarks>
-/// CopilotNote: This actor is the parent supervisor for all workflow instances.
-/// It handles workflow creation, scheduling, and cleanup.
-/// </remarks>
-public class WorkflowCoordinatorActor : ReceiveActor
-{
-    private readonly Dictionary<Guid, IActorRef> _activeWorkflows;
-    private readonly IModuleRegistry _moduleRegistry;
-    
-    // Handles: CreateWorkflow, PauseWorkflow, ResumeWorkflow, CancelWorkflow
-}
-```
+📄 **Example:** [WorkflowCoordinatorActor.cs](examples/actors/WorkflowCoordinatorActor.cs)
 
 ### 2. Workflow Instance Actor
 Represents a single workflow execution.
 
-```csharp
-/// <summary>
-/// 🎀 Represents a single running workflow instance!
-/// Each workflow gets its own actor for isolation and fault tolerance.
-/// </summary>
-public class WorkflowInstanceActor : ReceiveActor
-{
-    private WorkflowState _state;
-    private readonly WorkflowDefinition _definition;
-    private readonly Dictionary<string, IActorRef> _nodeActors;
-    
-    // Handles: StartExecution, NodeCompleted, NodeFailed, GetStatus
-}
-```
+📄 **Example:** [WorkflowInstanceActor.cs](examples/actors/WorkflowInstanceActor.cs)
 
 ### 3. Node Actor
 Executes individual workflow nodes.
 
-```csharp
-/// <summary>
-/// ✨ Executes a single node in the workflow!
-/// Wraps module execution with proper error handling and timeout.
-/// </summary>
-public class NodeActor : ReceiveActor
-{
-    private readonly IWorkflowModule _module;
-    private readonly NodeConfiguration _config;
-    
-    // Handles: Execute, Cancel, GetProgress
-}
-```
+📄 **Example:** [NodeActor.cs](examples/actors/NodeActor.cs)
 
 ---
 
@@ -279,46 +238,9 @@ The workflow engine supports embedded scripting in multiple languages! This allo
 
 ### Script Module
 
-```csharp
-/// <summary>
-/// 📜 Execute custom scripts in various languages!
-/// Perfect for quick transformations and custom logic, uwu~
-/// </summary>
-[WorkflowModule("builtin.script")]
-public class ScriptModule : IWorkflowModule
-{
-    public string ModuleId => "builtin.script";
-    public string DisplayName => "Script";
-    public string Category => "Advanced";
-    public string Description => "Execute custom scripts in JavaScript, Lua, or Python";
-    public string Icon => "📜";
-    
-    public ModuleSchema Schema => new()
-    {
-        Inputs =
-        [
-            new() { Name = "input", DisplayName = "Input Data", DataType = typeof(object), IsRequired = false }
-        ],
-        Outputs =
-        [
-            new() { Name = "output", DisplayName = "Output Data", DataType = typeof(object) },
-            new() { Name = "logs", DisplayName = "Script Logs", DataType = typeof(List<string>) }
-        ],
-        Properties =
-        [
-            new() { Name = "language", DisplayName = "Language", DataType = typeof(string), 
-                    EditorType = PropertyEditorType.Dropdown, 
-                    AllowedValues = ["JavaScript", "Lua", "Python"], 
-                    DefaultValue = "JavaScript" },
-            new() { Name = "script", DisplayName = "Script Code", DataType = typeof(string), 
-                    IsRequired = true, EditorType = PropertyEditorType.Code },
-            new() { Name = "timeout", DisplayName = "Timeout (seconds)", DataType = typeof(int), DefaultValue = 30 }
-        ]
-    };
-    
-    // ExecuteAsync implementation with language-specific execution...
-}
-```
+Execute custom scripts in various languages! Perfect for quick transformations and custom logic, uwu~
+
+📄 **Example:** [ScriptModule.cs](examples/scripting/ScriptModule.cs)
 
 ### Scripting API
 
@@ -437,326 +359,34 @@ All API code examples have been extracted into separate files for easier mainten
 
 The workflow engine exposes comprehensive REST and gRPC APIs for external integration! Perfect for calling workflows from other systems~ 🎯
 
-```csharp
-/// <summary>
-/// 🌸 Main API endpoints for workflow management and execution
-/// </summary>
-[ApiController]
-[Route("api/v1/[controller]")]
-public class WorkflowsController : ControllerBase
-{
-    // === Workflow Management === 📋
-    
-    /// <summary>
-    /// Get all workflows 📚
-    /// </summary>
-    [HttpGet]
-    [ProducesResponseType(typeof(List<WorkflowSummary>), 200)]
-    public async Task<IActionResult> GetWorkflows([FromQuery] WorkflowFilter? filter = null);
-    
-    /// <summary>
-    /// Get a specific workflow by ID 🔍
-    /// </summary>
-    [HttpGet("{id}")]
-    [ProducesResponseType(typeof(WorkflowDefinition), 200)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> GetWorkflow(Guid id);
-    
-    /// <summary>
-    /// Create a new workflow ✨
-    /// </summary>
-    [HttpPost]
-    [ProducesResponseType(typeof(WorkflowDefinition), 201)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
-    public async Task<IActionResult> CreateWorkflow([FromBody] CreateWorkflowRequest request);
-    
-    /// <summary>
-    /// Update an existing workflow ✏️
-    /// </summary>
-    [HttpPut("{id}")]
-    [ProducesResponseType(typeof(WorkflowDefinition), 200)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> UpdateWorkflow(Guid id, [FromBody] UpdateWorkflowRequest request);
-    
-    /// <summary>
-    /// Delete a workflow 🗑️
-    /// </summary>
-    [HttpDelete("{id}")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> DeleteWorkflow(Guid id);
-    
-    // === Workflow Execution === ▶️
-    
-    /// <summary>
-    /// Execute a workflow 🚀
-    /// </summary>
-    [HttpPost("{id}/execute")]
-    [ProducesResponseType(typeof(ExecutionResponse), 202)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> ExecuteWorkflow(
-        Guid id, 
-        [FromBody] ExecuteWorkflowRequest request);
-    
-    /// <summary>
-    /// Execute a workflow by name 🎯
-    /// </summary>
-    [HttpPost("execute/{name}")]
-    [ProducesResponseType(typeof(ExecutionResponse), 202)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> ExecuteWorkflowByName(
-        string name,
-        [FromBody] ExecuteWorkflowRequest request);
-    
-    /// <summary>
-    /// Get execution status 📊
-    /// </summary>
-    [HttpGet("executions/{executionId}")]
-    [ProducesResponseType(typeof(ExecutionStatus), 200)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> GetExecutionStatus(Guid executionId);
-    
-    /// <summary>
-    /// Cancel a running execution ⏹️
-    /// </summary>
-    [HttpPost("executions/{executionId}/cancel")]
-    [ProducesResponseType(200)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> CancelExecution(Guid executionId);
-    
-    /// <summary>
-    /// Pause a running execution ⏸️
-    /// </summary>
-    [HttpPost("executions/{executionId}/pause")]
-    [ProducesResponseType(200)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> PauseExecution(Guid executionId);
-    
-    /// <summary>
-    /// Resume a paused execution ▶️
-    /// </summary>
-    [HttpPost("executions/{executionId}/resume")]
-    [ProducesResponseType(200)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> ResumeExecution(Guid executionId);
-    
-    /// <summary>
-    /// Get execution history 📜
-    /// </summary>
-    [HttpGet("{id}/executions")]
-    [ProducesResponseType(typeof(PagedResult<ExecutionSummary>), 200)]
-    public async Task<IActionResult> GetExecutionHistory(
-        Guid id,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 50);
-}
+**📄 Complete Controller Implementations:**
+- **[WorkflowsController.cs](examples/api/WorkflowsController.cs)** - Workflow management & execution
+- **[ModulesController.cs](examples/api/ModulesController.cs)** - Module management
+- **[VariablesController.cs](examples/api/VariablesController.cs)** - Variables & secrets
+- **[MonitoringController.cs](examples/api/MonitoringController.cs)** - Health & metrics
+- **[WebhooksController.cs](examples/api/WebhooksController.cs)** - Webhook triggers
 
-/// <summary>
-/// 📦 Module management endpoints
-/// </summary>
-[ApiController]
-[Route("api/v1/[controller]")]
-public class ModulesController : ControllerBase
-{
-    /// <summary>
-    /// Get all available modules 📋
-    /// </summary>
-    [HttpGet]
-    [ProducesResponseType(typeof(List<ModuleInfo>), 200)]
-    public async Task<IActionResult> GetModules([FromQuery] string? category = null);
-    
-    /// <summary>
-    /// Get module details 🔍
-    /// </summary>
-    [HttpGet("{moduleId}")]
-    [ProducesResponseType(typeof(ModuleDetails), 200)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> GetModule(string moduleId);
-    
-    /// <summary>
-    /// Upload a custom module package 📤
-    /// </summary>
-    [HttpPost]
-    [ProducesResponseType(typeof(ModuleUploadResponse), 201)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), 400)]
-    public async Task<IActionResult> UploadModule([FromForm] IFormFile package);
-    
-    /// <summary>
-    /// Delete a custom module 🗑️
-    /// </summary>
-    [HttpDelete("{packageId}")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
-    public async Task<IActionResult> DeleteModule(string packageId);
-}
+**Key API Endpoints:**
+```
+# Workflow Management
+GET    /api/v1/workflows              # List workflows
+GET    /api/v1/workflows/{id}         # Get workflow
+POST   /api/v1/workflows              # Create workflow
+PUT    /api/v1/workflows/{id}         # Update workflow
+DELETE /api/v1/workflows/{id}         # Delete workflow
 
-/// <summary>
-/// 🔧 Variables and secrets management
-/// </summary>
-[ApiController]
-[Route("api/v1/workflows/{workflowId}/[controller]")]
-public class VariablesController : ControllerBase
-{
-    /// <summary>
-    /// Get all workflow variables 📋
-    /// </summary>
-    [HttpGet]
-    [ProducesResponseType(typeof(Dictionary<string, VariableValue>), 200)]
-    public async Task<IActionResult> GetVariables(Guid workflowId);
-    
-    /// <summary>
-    /// Set a workflow variable 💾
-    /// </summary>
-    [HttpPut("{name}")]
-    [ProducesResponseType(200)]
-    public async Task<IActionResult> SetVariable(
-        Guid workflowId,
-        string name,
-        [FromBody] SetVariableRequest request);
-    
-    /// <summary>
-    /// Delete a workflow variable 🗑️
-    /// </summary>
-    [HttpDelete("{name}")]
-    [ProducesResponseType(204)]
-    public async Task<IActionResult> DeleteVariable(Guid workflowId, string name);
-}
-
-/// <summary>
-/// 📊 Monitoring and metrics endpoints
-/// </summary>
-[ApiController]
-[Route("api/v1/[controller]")]
-public class MonitoringController : ControllerBase
-{
-    /// <summary>
-    /// Get system health status 💚
-    /// </summary>
-    [HttpGet("health")]
-    [ProducesResponseType(typeof(HealthStatus), 200)]
-    public async Task<IActionResult> GetHealth();
-    
-    /// <summary>
-    /// Get workflow engine metrics 📈
-    /// </summary>
-    [HttpGet("metrics")]
-    [ProducesResponseType(typeof(EngineMetrics), 200)]
-    public async Task<IActionResult> GetMetrics();
-    
-    /// <summary>
-    /// Get active executions 🔄
-    /// </summary>
-    [HttpGet("active-executions")]
-    [ProducesResponseType(typeof(List<ExecutionSummary>), 200)]
-    public async Task<IActionResult> GetActiveExecutions();
-}
+# Execution
+POST   /api/v1/workflows/{id}/execute       # Execute workflow
+POST   /api/v1/workflows/execute/{name}     # Execute by name
+GET    /api/v1/workflows/executions/{id}    # Get status
+POST   /api/v1/workflows/executions/{id}/cancel  # Cancel
+POST   /api/v1/workflows/executions/{id}/pause   # Pause
+POST   /api/v1/workflows/executions/{id}/resume  # Resume
 ```
 
 ### API Request/Response Models
 
-```csharp
-/// <summary>
-/// 🚀 Request to execute a workflow
-/// </summary>
-public record ExecuteWorkflowRequest
-{
-    /// <summary>
-    /// Input data for the workflow 📥
-    /// </summary>
-    public Dictionary<string, object?>? Inputs { get; init; }
-    
-    /// <summary>
-    /// Override workflow variables for this execution 🔧
-    /// </summary>
-    public Dictionary<string, object?>? Variables { get; init; }
-    
-    /// <summary>
-    /// Wait for execution to complete (synchronous mode) ⏳
-    /// </summary>
-    public bool WaitForCompletion { get; init; } = false;
-    
-    /// <summary>
-    /// Timeout for synchronous execution (seconds) ⏱️
-    /// </summary>
-    public int? TimeoutSeconds { get; init; }
-    
-    /// <summary>
-    /// Correlation ID for tracking 🔍
-    /// </summary>
-    public string? CorrelationId { get; init; }
-}
-
-/// <summary>
-/// 📬 Response from workflow execution
-/// </summary>
-public record ExecutionResponse
-{
-    public Guid ExecutionId { get; init; }
-    public ExecutionStatus Status { get; init; } = ExecutionStatus.Queued;
-    public Dictionary<string, object?>? Outputs { get; init; }
-    public DateTime QueuedAt { get; init; }
-    public DateTime? StartedAt { get; init; }
-    public DateTime? CompletedAt { get; init; }
-    public string? Error { get; init; }
-}
-
-/// <summary>
-/// 📊 Detailed execution status
-/// </summary>
-public record ExecutionStatusDetail
-{
-    public Guid ExecutionId { get; init; }
-    public Guid WorkflowId { get; init; }
-    public string WorkflowName { get; init; } = string.Empty;
-    public ExecutionStatus Status { get; init; }
-    public DateTime QueuedAt { get; init; }
-    public DateTime? StartedAt { get; init; }
-    public DateTime? CompletedAt { get; init; }
-    public TimeSpan? Duration { get; init; }
-    public Dictionary<string, object?>? Inputs { get; init; }
-    public Dictionary<string, object?>? Outputs { get; init; }
-    public List<NodeExecutionStatus> NodeStatuses { get; init; } = [];
-    public string? Error { get; init; }
-    public string? CorrelationId { get; init; }
-}
-
-/// <summary>
-/// 🧩 Individual node execution status
-/// </summary>
-public record NodeExecutionStatus
-{
-    public string NodeId { get; init; } = string.Empty;
-    public string NodeName { get; init; } = string.Empty;
-    public NodeStatus Status { get; init; }
-    public DateTime? StartedAt { get; init; }
-    public DateTime? CompletedAt { get; init; }
-    public Dictionary<string, object?>? Outputs { get; init; }
-    public string? Error { get; init; }
-}
-
-public enum ExecutionStatus
-{
-    Queued,
-    Running,
-    Paused,
-    Completed,
-    Failed,
-    Cancelled
-}
-
-public enum NodeStatus
-{
-    Pending,
-    Running,
-    Completed,
-    Failed,
-    Skipped
-}
-```
-
-### SignalR Real-Time Hub
-
-```csharp
+📄 **[ApiModels.cs](examples/api/ApiModels.cs)** - Complete request/response models including:
 /// <summary>
 /// 📡 Real-time updates hub for workflow execution monitoring
 /// </summary>
@@ -789,411 +419,34 @@ public class WorkflowHub : Hub
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, "all-executions");
     }
-}
+### SignalR Real-Time Hub
 
-// Events sent to clients:
-// - ExecutionStarted(ExecutionStartedEvent)
-// - ExecutionCompleted(ExecutionCompletedEvent)
-// - ExecutionFailed(ExecutionFailedEvent)
-// - NodeStarted(NodeStartedEvent)
-// - NodeCompleted(NodeCompletedEvent)
-// - NodeFailed(NodeFailedEvent)
-// - ExecutionProgress(ExecutionProgressEvent)
-```
+📄 **[WorkflowHub.cs](examples/api/WorkflowHub.cs)** - Real-time workflow monitoring
+
+Provides real-time updates via SignalR:
+- Subscribe to specific execution updates
+- Subscribe to all workflow executions
+- Events: ExecutionStarted, ExecutionCompleted, ExecutionFailed, NodeStarted, NodeCompleted, ExecutionProgress
 
 ### Webhook Integration
 
-```csharp
-/// <summary>
-/// 🪝 Webhook trigger for workflows
-/// </summary>
-[ApiController]
-[Route("api/v1/webhooks")]
-public class WebhooksController : ControllerBase
-{
-    /// <summary>
-    /// Trigger workflow via webhook 🎣
-    /// </summary>
-    [HttpPost("{webhookId}")]
-    [HttpGet("{webhookId}")]
-    [HttpPut("{webhookId}")]
-    [HttpDelete("{webhookId}")]
-    [ProducesResponseType(typeof(WebhookResponse), 200)]
-    public async Task<IActionResult> HandleWebhook(
-        string webhookId,
-        [FromBody] object? body = null)
-    {
-        // Webhook logic...
-    }
-}
+📄 **[WebhooksController.cs](examples/api/WebhooksController.cs)** - Webhook triggers
 
-/// <summary>
-/// 🪝 Webhook configuration
-/// </summary>
-public record WebhookDefinition
-{
-    public required string WebhookId { get; init; }
-    public required Guid WorkflowId { get; init; }
-    public string? Secret { get; init; }
-    public List<string> AllowedMethods { get; init; } = ["POST"];
-    public Dictionary<string, string>? HeaderValidation { get; init; }
-    public bool ValidateSignature { get; init; } = false;
-}
-```
+Trigger workflows via HTTP webhooks with configurable:
+- HTTP methods (GET, POST, PUT, DELETE)
+- Secret validation
+- Header validation
+- Signature verification
 
 ### Client SDK Examples
 
-**C# Client SDK:**
+All client SDKs are available in the examples directory with full implementations and usage examples:
 
-```csharp
-/// <summary>
-/// 💎 Official C# client SDK for the workflow engine
-/// </summary>
-public class WorkflowClient
-{
-    private readonly HttpClient _httpClient;
-    private readonly string _baseUrl;
-    
-    public WorkflowClient(string baseUrl, string? apiKey = null)
-    {
-        _baseUrl = baseUrl;
-        _httpClient = new HttpClient();
-        if (apiKey != null)
-            _httpClient.DefaultRequestHeaders.Add("X-API-Key", apiKey);
-    }
-    
-    /// <summary>
-    /// Execute a workflow and get the execution ID ✨
-    /// </summary>
-    public async Task<ExecutionResponse> ExecuteWorkflowAsync(
-        string workflowName,
-        Dictionary<string, object?>? inputs = null,
-        CancellationToken cancellationToken = default)
-    {
-        var request = new ExecuteWorkflowRequest { Inputs = inputs };
-        var response = await _httpClient.PostAsJsonAsync(
-            $"{_baseUrl}/api/v1/workflows/execute/{workflowName}",
-            request,
-            cancellationToken);
-        
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ExecutionResponse>(cancellationToken: cancellationToken);
-    }
-    
-    /// <summary>
-    /// Execute and wait for completion (synchronous) ⏳
-    /// </summary>
-    public async Task<ExecutionResponse> ExecuteWorkflowSyncAsync(
-        string workflowName,
-        Dictionary<string, object?>? inputs = null,
-        int timeoutSeconds = 300,
-        CancellationToken cancellationToken = default)
-    {
-        var request = new ExecuteWorkflowRequest 
-        { 
-            Inputs = inputs,
-            WaitForCompletion = true,
-            TimeoutSeconds = timeoutSeconds
-        };
-        
-        var response = await _httpClient.PostAsJsonAsync(
-            $"{_baseUrl}/api/v1/workflows/execute/{workflowName}",
-            request,
-            cancellationToken);
-        
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ExecutionResponse>(cancellationToken: cancellationToken);
-    }
-    
-    /// <summary>
-    /// Get execution status 📊
-    /// </summary>
-    public async Task<ExecutionStatusDetail> GetExecutionStatusAsync(
-        Guid executionId,
-        CancellationToken cancellationToken = default)
-    {
-        var response = await _httpClient.GetAsync(
-            $"{_baseUrl}/api/v1/workflows/executions/{executionId}",
-            cancellationToken);
-        
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ExecutionStatusDetail>(cancellationToken: cancellationToken);
-    }
-    
-    /// <summary>
-    /// Wait for execution to complete 🎯
-    /// </summary>
-    public async Task<ExecutionStatusDetail> WaitForCompletionAsync(
-        Guid executionId,
-        TimeSpan? pollInterval = null,
-        CancellationToken cancellationToken = default)
-    {
-        pollInterval ??= TimeSpan.FromSeconds(2);
-        
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            var status = await GetExecutionStatusAsync(executionId, cancellationToken);
-            
-            if (status.Status is ExecutionStatus.Completed or ExecutionStatus.Failed or ExecutionStatus.Cancelled)
-                return status;
-            
-            await Task.Delay(pollInterval.Value, cancellationToken);
-        }
-        
-        throw new OperationCanceledException();
-    }
-}
+📄 **[WorkflowClient.cs](examples/clients/WorkflowClient.cs)** - C# client SDK with async/sync execution, status polling, and error handling
 
-// Usage example:
-var client = new WorkflowClient("https://workflow-engine.example.com", apiKey: "your-api-key");
+📄 **[WorkflowClient.ts](examples/clients/WorkflowClient.ts)** - TypeScript/JavaScript SDK with SignalR real-time support
 
-// Async execution
-var execution = await client.ExecuteWorkflowAsync("data-sync", new Dictionary<string, object?>
-{
-    ["source"] = "api",
-    ["destination"] = "database"
-});
-
-Console.WriteLine($"Execution started: {execution.ExecutionId}");
-
-// Wait for completion
-var result = await client.WaitForCompletionAsync(execution.ExecutionId);
-Console.WriteLine($"Status: {result.Status}, Duration: {result.Duration}");
-```
-
-**JavaScript/TypeScript Client:**
-
-```typescript
-// 🟨 JavaScript/TypeScript client SDK
-
-class WorkflowClient {
-    constructor(
-        private baseUrl: string,
-        private apiKey?: string
-    ) {}
-    
-    /**
-     * Execute a workflow ✨
-     */
-    async executeWorkflow(
-        workflowName: string,
-        inputs?: Record<string, any>
-    ): Promise<ExecutionResponse> {
-        const response = await fetch(
-            `${this.baseUrl}/api/v1/workflows/execute/${workflowName}`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(this.apiKey && { 'X-API-Key': this.apiKey })
-                },
-                body: JSON.stringify({ inputs })
-            }
-        );
-        
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-    }
-    
-    /**
-     * Execute and wait for completion ⏳
-     */
-    async executeWorkflowSync(
-        workflowName: string,
-        inputs?: Record<string, any>,
-        timeoutSeconds: number = 300
-    ): Promise<ExecutionResponse> {
-        const response = await fetch(
-            `${this.baseUrl}/api/v1/workflows/execute/${workflowName}`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(this.apiKey && { 'X-API-Key': this.apiKey })
-                },
-                body: JSON.stringify({
-                    inputs,
-                    waitForCompletion: true,
-                    timeoutSeconds
-                })
-            }
-        );
-        
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-    }
-    
-    /**
-     * Get execution status 📊
-     */
-    async getExecutionStatus(executionId: string): Promise<ExecutionStatusDetail> {
-        const response = await fetch(
-            `${this.baseUrl}/api/v1/workflows/executions/${executionId}`,
-            {
-                headers: {
-                    ...(this.apiKey && { 'X-API-Key': this.apiKey })
-                }
-            }
-        );
-        
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-    }
-    
-    /**
-     * Connect to real-time updates 📡
-     */
-    connectToRealtime(): WorkflowHubConnection {
-        return new WorkflowHubConnection(this.baseUrl, this.apiKey);
-    }
-}
-
-// SignalR connection for real-time updates
-class WorkflowHubConnection {
-    private connection: signalR.HubConnection;
-    
-    constructor(baseUrl: string, apiKey?: string) {
-        this.connection = new signalR.HubConnectionBuilder()
-            .withUrl(`${baseUrl}/hubs/workflow`, {
-                accessTokenFactory: () => apiKey || ''
-            })
-            .withAutomaticReconnect()
-            .build();
-    }
-    
-    async start() {
-        await this.connection.start();
-    }
-    
-    async subscribeToExecution(executionId: string, callbacks: {
-        onNodeStarted?: (event: NodeStartedEvent) => void;
-        onNodeCompleted?: (event: NodeCompletedEvent) => void;
-        onExecutionCompleted?: (event: ExecutionCompletedEvent) => void;
-    }) {
-        await this.connection.invoke('SubscribeToExecution', executionId);
-        
-        if (callbacks.onNodeStarted)
-            this.connection.on('NodeStarted', callbacks.onNodeStarted);
-        if (callbacks.onNodeCompleted)
-            this.connection.on('NodeCompleted', callbacks.onNodeCompleted);
-        if (callbacks.onExecutionCompleted)
-            this.connection.on('ExecutionCompleted', callbacks.onExecutionCompleted);
-    }
-}
-
-// Usage:
-const client = new WorkflowClient('https://workflow-engine.example.com', 'your-api-key');
-
-// Execute workflow
-const execution = await client.executeWorkflow('data-processing', {
-    source: 'api',
-    format: 'json'
-});
-
-console.log(`Started execution: ${execution.executionId}`);
-
-// Real-time monitoring
-const hub = client.connectToRealtime();
-await hub.start();
-await hub.subscribeToExecution(execution.executionId, {
-    onNodeStarted: (event) => console.log(`Node started: ${event.nodeName}`),
-    onNodeCompleted: (event) => console.log(`Node completed: ${event.nodeName}`),
-    onExecutionCompleted: (event) => console.log(`Execution completed! Status: ${event.status}`)
-});
-```
-
-**Python Client:**
-
-```python
-# 🐍 Python client SDK
-
-import requests
-from typing import Dict, Any, Optional
-import time
-
-class WorkflowClient:
-    def __init__(self, base_url: str, api_key: Optional[str] = None):
-        self.base_url = base_url
-        self.api_key = api_key
-        self.session = requests.Session()
-        if api_key:
-            self.session.headers['X-API-Key'] = api_key
-    
-    def execute_workflow(
-        self, 
-        workflow_name: str, 
-        inputs: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Execute a workflow ✨"""
-        response = self.session.post(
-            f"{self.base_url}/api/v1/workflows/execute/{workflow_name}",
-            json={"inputs": inputs or {}}
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    def execute_workflow_sync(
-        self,
-        workflow_name: str,
-        inputs: Optional[Dict[str, Any]] = None,
-        timeout_seconds: int = 300
-    ) -> Dict[str, Any]:
-        """Execute and wait for completion ⏳"""
-        response = self.session.post(
-            f"{self.base_url}/api/v1/workflows/execute/{workflow_name}",
-            json={
-                "inputs": inputs or {},
-                "waitForCompletion": True,
-                "timeoutSeconds": timeout_seconds
-            }
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    def get_execution_status(self, execution_id: str) -> Dict[str, Any]:
-        """Get execution status 📊"""
-        response = self.session.get(
-            f"{self.base_url}/api/v1/workflows/executions/{execution_id}"
-        )
-        response.raise_for_status()
-        return response.json()
-    
-    def wait_for_completion(
-        self,
-        execution_id: str,
-        poll_interval: float = 2.0,
-        timeout: Optional[float] = None
-    ) -> Dict[str, Any]:
-        """Wait for execution to complete 🎯"""
-        start_time = time.time()
-        
-        while True:
-            status = self.get_execution_status(execution_id)
-            
-            if status['status'] in ['Completed', 'Failed', 'Cancelled']:
-                return status
-            
-            if timeout and (time.time() - start_time) > timeout:
-                raise TimeoutError(f"Execution timed out after {timeout} seconds")
-            
-            time.sleep(poll_interval)
-
-# Usage:
-client = WorkflowClient('https://workflow-engine.example.com', api_key='your-api-key')
-
-# Execute workflow
-execution = client.execute_workflow('data-sync', {
-    'source': 'api',
-    'destination': 'database'
-})
-
-print(f"Execution started: {execution['executionId']}")
-
-# Wait for completion
-result = client.wait_for_completion(execution['executionId'])
-print(f"Status: {result['status']}, Duration: {result['duration']}")
-```
-
+📄 **[WorkflowClient.py](examples/clients/WorkflowClient.py)** - Python client SDK with synchronous and asynchronous execution
 ---
 
 ## 🎨 UI Requirements
