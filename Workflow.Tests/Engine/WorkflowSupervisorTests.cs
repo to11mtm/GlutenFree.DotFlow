@@ -38,16 +38,24 @@ public class WorkflowSupervisorTests : TestKit
 
     /// <summary>
     /// Test that the WorkflowSupervisor actor can be created successfully.
+    /// Verifies the actor is alive and responding to messages~ 💖
     /// </summary>
     [Fact]
     public void WorkflowSupervisor_ShouldBeCreatedSuccessfully()
     {
         // Arrange & Act
-        var supervisor = Sys.ActorOf(WorkflowSupervisor.Props(this.serviceProvider));
+        var supervisor = Sys.ActorOf(WorkflowSupervisor.Props(this.serviceProvider), "test-supervisor");
 
         // Assert
         supervisor.Should().NotBeNull();
-        supervisor.Path.Name.Should().Contain("user");
+        supervisor.Path.Name.Should().Be("test-supervisor");
+
+        // Verify the actor is actually alive by checking if it can handle a simple message
+        // We'll query status for a non-existent workflow - should get a Failure response
+        supervisor.Tell(new GetWorkflowStatus(Guid.NewGuid()));
+        var response = ExpectMsg<Status.Failure>(TimeSpan.FromSeconds(3));
+        response.Should().NotBeNull();
+        response.Cause.Should().BeOfType<InvalidOperationException>();
     }
 
     /// <summary>
