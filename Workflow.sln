@@ -16,6 +16,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "phases", "phases", "{AA4347
 		phases\Phase3-AdvancedFeatures.md = phases\Phase3-AdvancedFeatures.md
 		phases\Phase4-Production.md = phases\Phase4-Production.md
 		phases\README.md = phases\README.md
+		phases\Phase1-3-AkkaEngine.md = phases\Phase1-3-AkkaEngine.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ignore", "ignore", "{B9EB3407-915D-422B-8BD3-CE0DA7923FF3}"
