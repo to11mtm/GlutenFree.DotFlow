@@ -4,11 +4,24 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "_", "_", "{969AD7F6-3DDB-48
 	ProjectSection(SolutionItems) = preProject
 		design-requirements.md = design-requirements.md
 		design-requirements.original.donotedit.md = design-requirements.original.donotedit.md
+		EXPANSION_SUMMARY.md = EXPANSION_SUMMARY.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "phases", "phases", "{AA4347DA-B96C-4458-A3AF-E94A2FD970EA}"
+	ProjectSection(SolutionItems) = preProject
+		phases\Phase1-Foundation.md = phases\Phase1-Foundation.md
+		phases\Phase2-CoreFeatures.md = phases\Phase2-CoreFeatures.md
+		phases\Phase3-AdvancedFeatures.md = phases\Phase3-AdvancedFeatures.md
+		phases\Phase4-Production.md = phases\Phase4-Production.md
+		phases\README.md = phases\README.md
 	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{AA4347DA-B96C-4458-A3AF-E94A2FD970EA} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
 	EndGlobalSection
 EndGlobal
