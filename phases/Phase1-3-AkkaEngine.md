@@ -216,56 +216,424 @@ This sub-phase focuses on implementing the core actor-based workflow execution e
 
 ## 1.3.4 Actor Messaging Protocol
 
-**Purpose:** Define the message contracts that enable communication between actors in the system.
+**Purpose:** Define the message contracts that enable communication between actors in the system, with proper immutability, serialization, and validation.
 
-**Tasks:**
-- [ ] **Create actor messaging protocol** 📬
-  - [ ] Define message classes (use records for immutability)
-    - [ ] `CreateWorkflowInstance(Guid workflowId, WorkflowDefinition definition, Dictionary<string, object?> inputs)`
-    - [ ] `StartExecution(Guid executionId)`
-    - [ ] `CancelExecution(Guid executionId)`
-    - [ ] `GetWorkflowStatus(Guid executionId)`
-    - [ ] `Execute(string nodeId, Dictionary<string, object?> inputs)`
-    - [ ] `NodeExecutionCompleted(string nodeId, Dictionary<string, object?> outputs)`
-    - [ ] `NodeExecutionFailed(string nodeId, Exception error)`
-    - [ ] `WorkflowCompleted(Guid executionId, Dictionary<string, object?> outputs)`
-    - [ ] `WorkflowFailed(Guid executionId, Exception error)`
-    - [ ] `GetProgress()`
-    - [ ] `ProgressUpdate(int percentage, string currentNode)`
-  - [ ] Add message serialization attributes
-  - [ ] Document message flow diagrams
-  - [ ] Add message validation
+### Design Decisions
 
-**Key Actors Reference:**
-```csharp
-✅ WorkflowSupervisor - Manages workflow lifecycle
-✅ WorkflowExecutor - Executes a single workflow instance
-✅ NodeExecutor - Executes a single node
-✅ ExecutionMonitor - Tracks execution progress (optional)
+#### Collections: LanguageExt
+All collection properties in messages should use LanguageExt types for:
+- **Immutability** - Messages should never be modified after creation
+- **Structural Equality** - Two messages with same content should be equal
+- **Thread Safety** - Safe to pass between actors without copying
+
+| Use Case | Type |
+|----------|------|
+| Key-value data (inputs, outputs, properties) | `HashMap<string, object?>` |
+| Ordered lists | `Arr<T>` |
+| Sets (unique items) | `HashSet<T>` |
+| Optional values | `Option<T>` |
+
+#### Serialization: Dual Format Support
+Messages need serialization for:
+1. **Akka.NET Persistence** - Event sourcing, snapshotting
+2. **External APIs** - REST endpoints, SignalR
+3. **High-performance scenarios** - Cluster communication
+
+**Packages to add:**
+- `System.Text.Json` - Already included, add `[JsonPropertyName]` attributes
+- `MessagePack.Annotations` - Lightweight annotations only (not full MessagePack)
+
+```xml
+<PackageReference Include="MessagePack.Annotations" />
 ```
 
-**Actor Messages Reference:**
+#### Message Validation: Basic
+Implement basic validation:
+- Null checks on required fields
+- Empty GUID detection
+- Empty string detection for required strings
+- Use `Validation<Error, T>` from LanguageExt for validation results
+
+---
+
+### Tasks
+
+- [ ] **Update existing message records to use LanguageExt** 📬
+  - [ ] Replace `Dictionary<string, object?>` with `HashMap<string, object?>`
+  - [ ] Replace `Dictionary<string, NodeExecutionState>` with `HashMap<string, NodeExecutionState>`
+  - [ ] Add `Option<T>` for nullable reference types where appropriate
+  
+- [ ] **Add serialization attributes** 📦
+  - [ ] Add `[MessagePackObject(keyAsPropertyName: true)]` to message records such that property names are the keys
+  - [ ] Add `[JsonPropertyName]` where property names need customization
+  - [ ] Ensure all types are serializable (no lambdas, no delegates)
+  
+- [ ] **Add missing messages for complete protocol** ➕
+  - [ ] `WorkflowInstanceCreationFailed` - Response when creation fails
+  - [ ] `PauseExecution` - Request to pause a running workflow
+  - [ ] `ResumeExecution` - Request to resume a paused workflow
+  - [ ] `RetryNode` - Request to retry a failed node
+  - [ ] `NodeRetrying` - Notification that a node is being retried
+  - [ ] `ExecutionPaused` - Confirmation that execution is paused
+  - [ ] `ExecutionResumed` - Confirmation that execution resumed
+
+- [ ] **Add message validation** ✅
+  - [ ] Create `MessageValidation` static class
+  - [ ] Add `Validate()` extension method for each message type
+  - [ ] Return `Validation<Error, TMessage>` from LanguageExt
+  - [ ] Validate required fields are not null/empty
+  - [ ] Validate GUIDs are not empty
+  - [ ] Validate collections are not null (can be empty)
+
+- [ ] **Document message flow** 📊
+  - [ ] Create Mermaid diagrams for actor relationships
+  - [ ] Create sequence diagrams for key workflows
+  - [ ] Document message ordering guarantees
+  - [ ] Document error scenarios
+
+---
+
+### Complete Message Protocol
+
+#### Supervisor Messages (WorkflowSupervisor)
+
+| Message | Direction | Description |
+|---------|-----------|-------------|
+| `CreateWorkflowInstance` | → Supervisor | Request to create new workflow |
+| `WorkflowInstanceCreated` | ← Supervisor | Success response with execution ID |
+| `WorkflowInstanceCreationFailed` | ← Supervisor | Failure response with errors |
+| `GetWorkflowStatus` | → Supervisor | Query workflow status |
+| `WorkflowStatusResponse` | ← Supervisor | Status information |
+| `CancelExecution` | → Supervisor | Request cancellation |
+
+#### Executor Messages (WorkflowExecutor)
+
+| Message | Direction | Description |
+|---------|-----------|-------------|
+| `StartExecution` | → Executor | Begin workflow execution |
+| `PauseExecution` | → Executor | Pause running workflow |
+| `ResumeExecution` | → Executor | Resume paused workflow |
+| `ExecutionPaused` | ← Executor | Confirmation of pause |
+| `ExecutionResumed` | ← Executor | Confirmation of resume |
+| `GetProgress` | → Executor | Query progress |
+| `ProgressUpdate` | ← Executor | Progress information |
+| `WorkflowCompleted` | ← Executor | Workflow finished successfully |
+| `WorkflowFailed` | ← Executor | Workflow finished with error |
+
+#### Node Messages (NodeExecutor)
+
+| Message | Direction | Description |
+|---------|-----------|-------------|
+| `Execute` | → Node | Execute the node |
+| `CancelExecution` | → Node | Cancel node execution |
+| `RetryNode` | → Node | Retry failed node |
+| `NodeExecutionCompleted` | ← Node | Node finished successfully |
+| `NodeExecutionFailed` | ← Node | Node finished with error |
+| `NodeRetrying` | ← Node | Node is being retried |
+
+---
+
+### Message Flow Diagrams
+
+#### Actor Hierarchy (Mermaid)
+
+```mermaid
+graph TD
+    subgraph "Actor System"
+        WS[WorkflowSupervisor]
+        
+        subgraph "Workflow Instance 1"
+            WE1[WorkflowExecutor]
+            NE1A[NodeExecutor A]
+            NE1B[NodeExecutor B]
+            NE1C[NodeExecutor C]
+        end
+        
+        subgraph "Workflow Instance 2"
+            WE2[WorkflowExecutor]
+            NE2A[NodeExecutor A]
+            NE2B[NodeExecutor B]
+        end
+    end
+    
+    WS -->|supervises| WE1
+    WS -->|supervises| WE2
+    WE1 -->|supervises| NE1A
+    WE1 -->|supervises| NE1B
+    WE1 -->|supervises| NE1C
+    WE2 -->|supervises| NE2A
+    WE2 -->|supervises| NE2B
+```
+
+#### Workflow Creation Sequence
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant WS as WorkflowSupervisor
+    participant WE as WorkflowExecutor
+    
+    Client->>WS: CreateWorkflowInstance(definition, inputs)
+    WS->>WS: Validate definition
+    alt Validation succeeds
+        WS->>WE: Create child actor
+        WS-->>Client: WorkflowInstanceCreated(executionId)
+    else Validation fails
+        WS-->>Client: WorkflowInstanceCreationFailed(errors)
+    end
+```
+
+#### Workflow Execution Sequence
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant WS as WorkflowSupervisor
+    participant WE as WorkflowExecutor
+    participant NE as NodeExecutor
+    participant Module
+    
+    Client->>WS: StartExecution(executionId)
+    WS->>WE: StartExecution
+    WE->>WE: Find start nodes
+    
+    loop For each start node
+        WE->>NE: Create NodeExecutor
+        WE->>NE: Execute(nodeId, inputs)
+        NE->>Module: ExecuteAsync(context)
+        Module-->>NE: ModuleResult
+        alt Success
+            NE-->>WE: NodeExecutionCompleted(outputs)
+        else Failure
+            NE-->>WE: NodeExecutionFailed(error)
+        end
+    end
+    
+    WE->>WE: Check if complete
+    alt All nodes complete
+        WE-->>WS: WorkflowCompleted(outputs)
+    else Has failures
+        WE-->>WS: WorkflowFailed(error)
+    end
+```
+
+#### Error Handling Sequence
+
+```mermaid
+sequenceDiagram
+    participant WE as WorkflowExecutor
+    participant NE as NodeExecutor
+    participant Module
+    
+    WE->>NE: Execute(nodeId, inputs)
+    NE->>Module: ExecuteAsync(context)
+    Module--xNE: Exception thrown
+    
+    alt Retry configured
+        NE-->>WE: NodeRetrying(attempt)
+        NE->>Module: ExecuteAsync(context)
+        alt Retry succeeds
+            Module-->>NE: ModuleResult
+            NE-->>WE: NodeExecutionCompleted
+        else Max retries exceeded
+            NE-->>WE: NodeExecutionFailed
+        end
+    else No retry
+        NE-->>WE: NodeExecutionFailed(error)
+    end
+    
+    alt Continue on error
+        WE->>WE: Mark node failed, continue
+    else Fail fast
+        WE->>WE: Cancel all nodes
+        WE-->>WE: WorkflowFailed
+    end
+```
+
+#### Cancellation Sequence
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant WS as WorkflowSupervisor
+    participant WE as WorkflowExecutor
+    participant NE1 as NodeExecutor 1
+    participant NE2 as NodeExecutor 2
+    
+    Client->>WS: CancelExecution(executionId)
+    WS->>WE: CancelExecution
+    
+    par Cancel all running nodes
+        WE->>NE1: CancelExecution
+        WE->>NE2: CancelExecution
+    end
+    
+    NE1-->>WE: (stops)
+    NE2-->>WE: (stops)
+    
+    WE->>WE: State = Cancelled
+    WE-->>WS: WorkflowFailed(OperationCancelledException)
+```
+
+---
+
+### Message Record Definitions (Updated)
+
 ```csharp
-✅ CreateWorkflowInstance(workflowId, definition, inputs)
-✅ StartExecution(executionId)
-✅ Execute(nodeId, inputs)
-✅ NodeExecutionCompleted(nodeId, outputs)
-✅ NodeExecutionFailed(nodeId, error)
-✅ WorkflowCompleted(workflowId, outputs)
-✅ WorkflowFailed(workflowId, error)
-✅ CancelExecution(executionId)
-✅ GetWorkflowStatus(executionId)
-✅ GetProgress()
+// Example of updated message with LanguageExt and serialization attributes
+[MessagePackObject]
+public record CreateWorkflowInstance(
+    [property: Key(0)] Guid WorkflowId,
+    [property: Key(1)] WorkflowDefinition Definition,
+    [property: Key(2)] HashMap<string, object?> Inputs) : IWorkflowMessage;
+
+[MessagePackObject]
+public record WorkflowInstanceCreationFailed(
+    [property: Key(0)] Guid WorkflowId,
+    [property: Key(1)] Arr<string> Errors) : IWorkflowMessage;
+
+[MessagePackObject]
+public record NodeExecutionCompleted(
+    [property: Key(0)] string NodeId,
+    [property: Key(1)] HashMap<string, object?> Outputs,
+    [property: Key(2)] Guid ExecutionId,
+    [property: Key(3)] TimeSpan Duration) : IWorkflowMessage;
+```
+
+---
+
+### Validation Examples
+
+```csharp
+public static class MessageValidation
+{
+    public static Validation<Error, CreateWorkflowInstance> Validate(
+        this CreateWorkflowInstance message)
+    {
+        var errors = new List<Error>();
+        
+        if (message.WorkflowId == Guid.Empty)
+            errors.Add(Error.New("WorkflowId cannot be empty"));
+        if (message.Definition == null)
+            errors.Add(Error.New("Definition is required"));
+        if (message.Inputs == null)
+            errors.Add(Error.New("Inputs cannot be null (use empty HashMap)"));
+            
+        return errors.Count == 0 
+            ? Success<Error, CreateWorkflowInstance>(message)
+            : Fail<Error, CreateWorkflowInstance>(errors.ToSeq());
+    }
+}
+```
+
+---
+
+### Tests
+
+- [ ] **Message structure tests** 📨
+  - [ ] Test all messages implement IWorkflowMessage
+  - [ ] Test message immutability (records)
+  - [ ] Test structural equality with LanguageExt collections
+  - [ ] Test HashMap serialization round-trip
+  - [ ] Test Arr serialization round-trip
+
+- [ ] **Message validation tests** ✅
+  - [ ] Test validation catches empty GUIDs
+  - [ ] Test validation catches null required fields
+  - [ ] Test validation passes for valid messages
+  - [ ] Test validation accumulates multiple errors
+
+- [ ] **Message serialization tests** 📦
+  - [ ] Test System.Text.Json serialization
+  - [ ] Test MessagePack serialization
+  - [ ] Test serialization preserves all properties
+  - [ ] Test serialization handles Option<T> correctly
+  - [ ] Test serialization handles HashMap correctly
+
+- [ ] **Message flow integration tests** 🔄
+  - [ ] Test Tell (fire-and-forget) messaging
+  - [ ] Test Ask (request-response) messaging
+  - [ ] Test message ordering between actors
+  - [ ] Test dead letter handling
+
+---
+
+### Dependencies to Add
+
+```xml
+<!-- In Directory.Packages.props -->
+<PackageVersion Include="MessagePack.Annotations" Version="2.5.140" />
+```
+
+```xml
+<!-- In Workflow.Engine.csproj -->
+<PackageReference Include="MessagePack.Annotations" />
+```
+
+---
+
+### Files to Create/Modify
+
+| File | Action | Description |
+|------|--------|-------------|
+| `Workflow.Engine/Messages/WorkflowMessages.cs` | Modify | Update to use LanguageExt, add serialization |
+| `Workflow.Engine/Messages/MessageValidation.cs` | Create | Validation extension methods |
+| `Workflow.Tests/Engine/MessageTests.cs` | Create | Message structure and validation tests |
+| `Workflow.Tests/Engine/MessageSerializationTests.cs` | Create | Serialization round-trip tests |
+| `docs/MESSAGE_FLOW.md` | Create | Message flow documentation with diagrams |
+
+**Key Actors Reference:**
+```
+✅ WorkflowSupervisor - Manages workflow lifecycle, creates/tracks executors
+✅ WorkflowExecutor   - Executes a single workflow instance, manages node graph
+✅ NodeExecutor       - Executes a single node via module invocation
+⏳ ExecutionMonitor   - Tracks execution progress (optional, Phase 2)
+```
+
+**Complete Message Protocol Reference:**
+```
+Supervisor Messages:
+  ✅ CreateWorkflowInstance(workflowId, definition, inputs) → Supervisor
+  ✅ WorkflowInstanceCreated(executionId, workflowId)       ← Supervisor
+  ⏳ WorkflowInstanceCreationFailed(workflowId, errors)     ← Supervisor [NEW]
+  ✅ GetWorkflowStatus(executionId)                         → Supervisor
+  ✅ WorkflowStatusResponse(...)                            ← Supervisor
+  ✅ CancelExecution(executionId)                           → Supervisor
+
+Executor Messages:
+  ✅ StartExecution(executionId)                            → Executor
+  ⏳ PauseExecution(executionId)                            → Executor [NEW]
+  ⏳ ResumeExecution(executionId)                           → Executor [NEW]
+  ⏳ ExecutionPaused(executionId)                           ← Executor [NEW]
+  ⏳ ExecutionResumed(executionId)                          ← Executor [NEW]
+  ✅ GetProgress()                                          → Executor
+  ✅ ProgressUpdate(percentage, currentNode, ...)           ← Executor
+  ✅ WorkflowCompleted(executionId, outputs, duration)      ← Executor
+  ✅ WorkflowFailed(executionId, error, duration, partial)  ← Executor
+
+Node Messages:
+  ✅ Execute(nodeId, inputs, executionId)                   → Node
+  ✅ CancelExecution(executionId)                           → Node
+  ⏳ RetryNode(nodeId, attempt)                             → Node [NEW]
+  ✅ NodeExecutionCompleted(nodeId, outputs, ...)           ← Node
+  ✅ NodeExecutionFailed(nodeId, error, ...)                ← Node
+  ⏳ NodeRetrying(nodeId, attempt, maxAttempts)             ← Node [NEW]
+
+Legend: ✅ Implemented  ⏳ To be added in 1.3.4
 ```
 
 **Tests:**
-- [ ] **Message passing tests** 📨
-  - [ ] Test Tell (fire-and-forget) messaging
-  - [ ] Test Ask (request-response) messaging
+- [ ] **Message protocol tests** 📨
+  - [ ] Test all messages implement IWorkflowMessage
+  - [ ] Test message immutability (records are immutable)
+  - [ ] Test structural equality with LanguageExt HashMap/Arr
+  - [ ] Test Tell (fire-and-forget) messaging between actors
+  - [ ] Test Ask (request-response) messaging pattern
   - [ ] Test message ordering guarantees
-  - [ ] Test message delivery under load
-  - [ ] Test dead letter handling
-  - [ ] Test message serialization
+  - [ ] Test dead letter handling for undelivered messages
+  - [ ] Test message validation catches invalid data
+  - [ ] Test System.Text.Json serialization round-trip
+  - [ ] Test MessagePack serialization round-trip
 
 ---
 
