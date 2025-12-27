@@ -668,10 +668,24 @@ Legend: ✅ Implemented (message record defined)
 | Development/debugging | System.Text.Json | Easy to inspect |
 
 #### LanguageExt Type Handling
-LanguageExt's immutable collections need custom serializers because:
-- `HashMap<K,V>` serializes as key-value pairs (like Dictionary)
-- `Option<T>` serializes as `null` (None) or value (Some)
-- `Arr<T>` serializes as JSON array
+
+**Tested Behavior (December 27, 2025):**
+
+| Type | System.Text.Json | MessagePack |
+|------|-----------------|-------------|
+| `HashMap<K,V>` | ❌ Serializes as `[{},{},{}]`, can't deserialize | ✅ Works perfectly! |
+| `Arr<T>` | ⚠️ Serializes OK, can't deserialize (read-only) | ✅ Works perfectly! |
+| `Option<T>` | ❌ Serializes as array `["value"]`, can't deserialize | ✅ Works perfectly! |
+| Record with LE types | ❌ Fails on deserialization | ✅ Works with ContractlessStandardResolver! |
+
+**Conclusion:**
+- **MessagePack:** Works out of the box! No custom formatters needed. Use `ContractlessStandardResolver` for `object?` values.
+- **System.Text.Json:** Requires custom converters for both serialization (wrong format) and deserialization (read-only types).
+
+**Required Custom Converters (System.Text.Json only):**
+- `HashMap<K,V>` → Serialize as `{"key1":"value1",...}` object, deserialize by building HashMap. Use `IEnumerable<(K key, V value)>` constructor for final result and
+- `Option<T>` → Serialize as `value` (Some) or `null` (None), deserialize accordingly
+- `Arr<T>` → Serialize as array (works), deserialize by using `IEnumerable<T>` constructor. 
 
 ### Tasks
 
@@ -688,12 +702,10 @@ LanguageExt's immutable collections need custom serializers because:
   - [ ] Create `JsonSerializerOptionsExtensions` for easy registration
   - [ ] Handle nested LanguageExt types (e.g., `HashMap<string, Option<int>>`)
 
-- [ ] **Implement MessagePack Formatters** 📦
-  - [ ] Create `HashMapFormatter<K,V>` for MessagePack
-  - [ ] Create `OptionFormatter<T>` for MessagePack
-  - [ ] Create `ArrFormatter<T>` for MessagePack
-  - [ ] Create `LanguageExtFormatterResolver` for registration
-  - [ ] Configure Akka.NET to use custom resolver
+- [x] **MessagePack Formatters** 📦 ✅ **NOT NEEDED!**
+  - [x] LanguageExt types work out of the box with MessagePack
+  - [x] Use `ContractlessStandardResolver` for `object?` value types
+  - [ ] Configure Akka.NET to use MessagePack with correct resolver
 
 - [ ] **Create Serialization Tests** ✅
   - [ ] Test `HashMap<string, object?>` round-trip (JSON)
@@ -717,19 +729,17 @@ LanguageExt's immutable collections need custom serializers because:
 | `Workflow.Engine/Serialization/HashMapJsonConverter.cs` | JSON converter for HashMap |
 | `Workflow.Engine/Serialization/OptionJsonConverter.cs` | JSON converter for Option |
 | `Workflow.Engine/Serialization/ArrJsonConverter.cs` | JSON converter for Arr |
-| `Workflow.Engine/Serialization/LanguageExtJsonExtensions.cs` | Registration helpers |
-| `Workflow.Engine/Serialization/HashMapFormatter.cs` | MessagePack formatter for HashMap |
-| `Workflow.Engine/Serialization/OptionFormatter.cs` | MessagePack formatter for Option |
-| `Workflow.Engine/Serialization/ArrFormatter.cs` | MessagePack formatter for Arr |
-| `Workflow.Engine/Serialization/LanguageExtFormatterResolver.cs` | MessagePack resolver |
+| `Workflow.Engine/Serialization/LanguageExtJsonExtensions.cs` | Registration helpers for JSON |
 | `Workflow.Engine/Configuration/akka.serialization.conf` | HOCON serializer config |
 | `Workflow.Tests/Engine/SerializationTests.cs` | Serialization round-trip tests |
+
+> **Note:** MessagePack formatters are NOT needed - LanguageExt types serialize correctly out of the box! 🎉
 
 ### Dependencies to Add
 
 ```xml
 <!-- In Directory.Packages.props -->
-<PackageVersion Include="MessagePack" Version="2.5.140" />
+<PackageVersion Include="MessagePack" Version="3.1.4" />
 <!-- Note: We already have MessagePack.Annotations, now we need full MessagePack -->
 ```
 

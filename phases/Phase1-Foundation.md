@@ -387,9 +387,9 @@ automatically thanks to record types and JsonElement usage. 💖
 - `HashMap<K,V>` - Immutable hashmap with structural equality (replaces IReadOnlyDictionary)
 - `Option<T>` - Explicit optional values (replaces nullable references)
 - **Why LanguageExt?** Better performance, true immutability, structural equality, functional operations
-- **Serialization:** Requires custom converters (see Phase 1.3.5)
-  - System.Text.Json: `HashMapJsonConverter<K,V>`, `OptionJsonConverter<T>`, `ArrJsonConverter<T>`
-  - MessagePack: Custom formatters + `LanguageExtFormatterResolver`
+- **Serialization:** (see Phase 1.3.5 for details)
+  - **MessagePack:** ✅ Works out of the box! No custom formatters needed.
+  - **System.Text.Json:** ❌ Requires custom converters (wrong format + read-only types)
 - **Migration:** See LANGUAGEEXT_MIGRATION.md for details
 
 **Known Issues (From Tests):** 🔧
