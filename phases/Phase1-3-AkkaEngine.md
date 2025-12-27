@@ -60,133 +60,157 @@ This sub-phase focuses on implementing the core actor-based workflow execution e
 
 ---
 
-## 1.3.2 WorkflowExecutor Actor Implementation
+## 1.3.2 WorkflowExecutor Actor Implementation ✅ **COMPLETE!**
 
 **Purpose:** Orchestrates execution of a single workflow instance, managing the execution graph and coordinating node actors.
 
 **Tasks:**
-- [ ] **Implement `WorkflowExecutor` actor** 🎬
-  - [ ] Create actor class inheriting from `ReceiveActor`
-  - [ ] Add private fields for state management
-    - [ ] Workflow definition
-    - [ ] Execution context
-    - [ ] Node actor references (Dictionary)
-    - [ ] Execution graph/topology
-    - [ ] Completed nodes tracking (HashSet)
-    - [ ] Failed nodes tracking
-  - [ ] Define message handlers
-    - [ ] Handle `StartExecution` message
-      - [ ] Initialize execution context
-      - [ ] Parse workflow graph
-      - [ ] Identify start nodes (no dependencies)
-      - [ ] Create NodeExecutor actors for start nodes
-      - [ ] Send `Execute` messages to start nodes
-      - [ ] Update state to `Running`
-    - [ ] Handle `NodeExecutionCompleted` message
-      - [ ] Mark node as completed
-      - [ ] Store node outputs
-      - [ ] Determine next nodes to execute
-      - [ ] Check if outputs satisfy connection conditions
-      - [ ] Create NodeExecutor actors for next nodes
-      - [ ] Pass input data from previous node outputs
-      - [ ] Check if workflow is complete (all nodes done)
-      - [ ] If complete, send `WorkflowCompleted` to parent
-    - [ ] Handle `NodeExecutionFailed` message
-      - [ ] Mark node as failed
-      - [ ] Log error details
-      - [ ] Check error handling configuration
-      - [ ] If retry configured, schedule retry
-      - [ ] If continue-on-error, proceed to next nodes
-      - [ ] If fail-fast, cancel all other nodes
-      - [ ] Send `WorkflowFailed` to parent
-    - [ ] Handle `CancelExecution` message
-      - [ ] Send cancel to all running node actors
-      - [ ] Update state to `Cancelled`
-      - [ ] Clean up resources
-      - [ ] Notify parent
-    - [ ] Handle `GetProgress` message
-      - [ ] Calculate completion percentage
-      - [ ] Gather status from all nodes
-      - [ ] Return progress details
-  - [ ] Implement execution graph traversal
-    - [ ] Topological sort for dependency order
-    - [ ] Handle parallel execution paths
-    - [ ] Detect and handle fan-out/fan-in patterns
-  - [ ] Add execution timing and metrics
-  - [ ] Implement state persistence (for resumability)
+- [x] **Implement `WorkflowExecutor` actor** 🎬
+  - [x] Create actor class inheriting from `ReceiveActor`
+  - [x] Add private fields for state management
+    - [x] Workflow definition
+    - [x] Execution context
+    - [x] Node actor references (Dictionary)
+    - [x] Execution graph/topology
+    - [x] Completed nodes tracking (HashSet)
+    - [x] Failed nodes tracking
+  - [x] Define message handlers
+    - [x] Handle `StartExecution` message
+      - [x] Initialize execution context
+      - [x] Parse workflow graph
+      - [x] Identify start nodes (no dependencies)
+      - [x] Create NodeExecutor actors for start nodes
+      - [x] Send `Execute` messages to start nodes
+      - [x] Update state to `Running`
+    - [x] Handle `NodeExecutionCompleted` message
+      - [x] Mark node as completed
+      - [x] Store node outputs
+      - [x] Determine next nodes to execute
+      - [x] Check if outputs satisfy connection conditions
+      - [x] Create NodeExecutor actors for next nodes
+      - [x] Pass input data from previous node outputs
+      - [x] Check if workflow is complete (all nodes done)
+      - [x] If complete, send `WorkflowCompleted` to parent
+    - [x] Handle `NodeExecutionFailed` message
+      - [x] Mark node as failed
+      - [x] Log error details
+      - [x] Check error handling configuration
+      - [ ] If retry configured, schedule retry (deferred to 1.3.7)
+      - [x] If continue-on-error, proceed to next nodes
+      - [x] If fail-fast, cancel all other nodes
+      - [x] Send `WorkflowFailed` to parent
+    - [x] Handle `CancelExecution` message
+      - [x] Send cancel to all running node actors
+      - [x] Update state to `Cancelled`
+      - [x] Clean up resources
+      - [x] Notify parent
+    - [x] Handle `GetProgress` message
+      - [x] Calculate completion percentage
+      - [x] Gather status from all nodes
+      - [x] Return progress details
+  - [x] Implement execution graph traversal
+    - [x] Topological sort for dependency order
+    - [x] Handle parallel execution paths
+    - [x] Detect and handle fan-out/fan-in patterns
+  - [x] Add execution timing and metrics
+  - [ ] Implement state persistence (for resumability) (deferred to Phase 2)
 
 **Tests:**
-- [ ] **WorkflowExecutor-specific tests** 🎬
-  - [ ] Test executor creation and initialization
-  - [ ] Test workflow start execution
-  - [ ] Test node completion handling
-  - [ ] Test node failure handling
-  - [ ] Test execution graph traversal
-  - [ ] Test parallel path execution
-  - [ ] Test workflow completion detection
-  - [ ] Test workflow cancellation
-  - [ ] Test progress tracking
-  - [ ] Test state persistence
+- [x] **WorkflowExecutor-specific tests** 🎬
+  - [x] Test executor creation and initialization
+  - [x] Test workflow start execution
+  - [x] Test node completion handling
+  - [x] Test node failure handling (basic - see continue-on-error)
+  - [x] Test execution graph traversal (linear workflow test)
+  - [ ] Test parallel path execution (deferred - need parallel workflow test)
+  - [x] Test workflow completion detection
+  - [x] Test workflow cancellation
+  - [x] Test progress tracking
+  - [ ] Test state persistence (deferred to Phase 2)
+
+**Completion Date:** December 23, 2025 🎉  
+**Test Coverage:** 14 comprehensive tests written!  
+**Files Created/Modified:**
+- ✅ `Workflow.Engine/Actors/WorkflowExecutor.cs` - Full implementation (~500 lines)
+- ✅ `Workflow.Engine/Actors/NodeExecutor.cs` - Functional stub (~150 lines)
+- ✅ `Workflow.Tests/Engine/WorkflowExecutorTests.cs` - 14 tests
 
 ---
 
-## 1.3.3 NodeExecutor Actor Implementation
+## 1.3.3 NodeExecutor Actor Implementation ✅ **COMPLETE!**
 
 **Purpose:** Executes a single workflow node by invoking the appropriate module with the correct inputs.
 
 **Tasks:**
-- [ ] **Implement `NodeExecutor` actor** ✨
-  - [ ] Create actor class inheriting from `ReceiveActor`
-  - [ ] Add private fields
-    - [ ] Module instance reference
-    - [ ] Node configuration
-    - [ ] Execution context
-    - [ ] Cancellation token source
-  - [ ] Define message handlers
-    - [ ] Handle `Execute` message
-      - [ ] Log execution start
-      - [ ] Validate input data against schema
-      - [ ] Bind properties from configuration
-      - [ ] Create module execution context
-      - [ ] Call module's `ExecuteAsync` method
-      - [ ] Handle success case
-        - [ ] Validate outputs against schema
-        - [ ] Send `NodeExecutionCompleted` to parent
-        - [ ] Include output data
-      - [ ] Handle failure case (try-catch)
-        - [ ] Log exception details
-        - [ ] Send `NodeExecutionFailed` to parent
-        - [ ] Include error information
-      - [ ] Handle timeout case
-        - [ ] Cancel execution token
-        - [ ] Log timeout
-        - [ ] Send failure message
-    - [ ] Handle `Cancel` message
-      - [ ] Trigger cancellation token
-      - [ ] Interrupt module execution
-      - [ ] Send cancellation acknowledgment
-    - [ ] Handle `GetProgress` message (if module supports it)
+- [x] **Implement `NodeExecutor` actor** ✨
+  - [x] Create actor class inheriting from `ReceiveActor`
+  - [x] Add private fields
+    - [x] Module instance reference (via IModuleRegistry)
+    - [x] Node configuration
+    - [x] Execution context
+    - [x] Cancellation token source
+  - [x] Define message handlers
+    - [x] Handle `Execute` message
+      - [x] Log execution start
+      - [x] Validate input data against schema
+      - [x] Bind properties from configuration
+      - [x] Create module execution context
+      - [x] Call module's `ExecuteAsync` method
+      - [x] Handle success case
+        - [x] Validate outputs against schema (basic)
+        - [x] Send `NodeExecutionCompleted` to parent
+        - [x] Include output data
+      - [x] Handle failure case (try-catch)
+        - [x] Log exception details
+        - [x] Send `NodeExecutionFailed` to parent
+        - [x] Include error information
+      - [x] Handle timeout case
+        - [x] Cancel execution token
+        - [x] Log timeout
+        - [x] Send failure message
+    - [x] Handle `Cancel` message
+      - [x] Trigger cancellation token
+      - [x] Interrupt module execution
+      - [ ] Send cancellation acknowledgment (parent stops actor directly)
+    - [ ] Handle `GetProgress` message (if module supports it) - Deferred
       - [ ] Query module progress
       - [ ] Return progress percentage
-  - [ ] Implement timeout management
-    - [ ] Use `Context.SetReceiveTimeout`
-    - [ ] Configure from node configuration
-    - [ ] Default to reasonable timeout (e.g., 30 seconds)
-  - [ ] Add detailed execution logging
-  - [ ] Implement input/output data validation
-  - [ ] Add execution metrics (duration, memory, etc.)
+  - [x] Implement timeout management
+    - [x] Use `Context.SetReceiveTimeout`
+    - [x] Configure from node configuration
+    - [x] Default to reasonable timeout (30 seconds)
+  - [x] Add detailed execution logging
+  - [x] Implement input/output data validation
+  - [x] Add execution metrics (duration)
+  - [x] Implement fallback stub execution for unregistered modules
 
 **Tests:**
-- [ ] **NodeExecutor-specific tests** ✨
-  - [ ] Test node executor creation
-  - [ ] Test node execution success
-  - [ ] Test node execution failure
-  - [ ] Test input validation
-  - [ ] Test output validation
-  - [ ] Test timeout handling
-  - [ ] Test cancellation
-  - [ ] Test module invocation
-  - [ ] Test metrics collection
+- [x] **NodeExecutor-specific tests** ✨
+  - [x] Test node executor creation
+  - [x] Test node execution success (with registered module)
+  - [x] Test node execution failure (module throws)
+  - [x] Test input passing to modules
+  - [x] Test fallback stub for unregistered modules
+  - [ ] Test timeout handling (deferred - requires slow module)
+  - [x] Test cancellation
+  - [x] Test duplicate execution prevention
+  - [ ] Test metrics collection (deferred)
+
+**Module Infrastructure Created:**
+- ✅ `Workflow.Modules/Abstractions/IWorkflowModule.cs` - Module interface and types
+- ✅ `Workflow.Modules/Abstractions/IModuleRegistry.cs` - Registry interface
+- ✅ `Workflow.Modules/InMemoryModuleRegistry.cs` - In-memory implementation
+- ✅ `Workflow.Modules/Builtin/PassThroughModule.cs` - Test module
+
+**Completion Date:** December 27, 2025 🎉  
+**Test Coverage:** 7 comprehensive tests written!  
+**Files Created/Modified:**
+- ✅ `Workflow.Engine/Actors/NodeExecutor.cs` - Full implementation (~400 lines)
+- ✅ `Workflow.Modules/Abstractions/IWorkflowModule.cs` - Module contracts
+- ✅ `Workflow.Modules/Abstractions/IModuleRegistry.cs` - Registry interface
+- ✅ `Workflow.Modules/InMemoryModuleRegistry.cs` - Registry implementation
+- ✅ `Workflow.Modules/Builtin/PassThroughModule.cs` - Built-in module
+- ✅ `Workflow.Tests/Engine/NodeExecutorTests.cs` - 7 tests
 
 ---
 

@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
     </ItemGroup>
 
     <ItemGroup>
@@ -16,6 +17,7 @@
         <PackageReference Include="Akka.Cluster" />
         <PackageReference Include="Akka.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Serilog" />
         <PackageReference Include="StyleCop.Analyzers">
             <PrivateAssets>all</PrivateAssets>

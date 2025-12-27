@@ -142,6 +142,7 @@ public class WorkflowSupervisorTests : TestKit
 
     /// <summary>
     /// Test that status can be queried for an active workflow.
+    /// Verifies the workflow executor responds with valid status~ 📊
     /// </summary>
     [Fact]
     public void GetWorkflowStatus_ForExistingWorkflow_ShouldReturnStatus()
@@ -165,7 +166,18 @@ public class WorkflowSupervisorTests : TestKit
         // Assert
         var status = ExpectMsg<WorkflowStatusResponse>(TimeSpan.FromSeconds(3));
         status.ExecutionId.Should().Be(created.ExecutionId);
-        status.State.Should().Be(ExecutionState.Pending); // Stub always returns Pending
+
+        // With the full WorkflowExecutor, the workflow will be Running or Completed
+        // (single node workflow completes very quickly with the stub NodeExecutor)
+        status.State.Should().BeOneOf(
+            ExecutionState.Running,
+            ExecutionState.Completed);
+
+        // Progress should be valid (0-100%)
+        status.Progress.Should().BeInRange(0, 100);
+
+        // Should have node state information
+        status.NodeStates.Should().NotBeNull();
     }
 
     /// <summary>
