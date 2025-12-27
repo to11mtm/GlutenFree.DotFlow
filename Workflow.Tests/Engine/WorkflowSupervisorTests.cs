@@ -72,7 +72,7 @@ public class WorkflowSupervisorTests : TestKit
         var message = new CreateWorkflowInstance(
             workflowId,
             definition,
-            new Dictionary<string, object?>());
+            HashMap<string, object?>.Empty);
 
         // Act
         supervisor.Tell(message);
@@ -99,7 +99,7 @@ public class WorkflowSupervisorTests : TestKit
         var message = new CreateWorkflowInstance(
             workflowId,
             definition,
-            new Dictionary<string, object?>());
+            HashMap<string, object?>.Empty);
 
         // Act
         supervisor.Tell(message);
@@ -128,7 +128,7 @@ public class WorkflowSupervisorTests : TestKit
             var message = new CreateWorkflowInstance(
                 workflowId,
                 definition,
-                new Dictionary<string, object?>());
+                HashMap<string, object?>.Empty);
 
             supervisor.Tell(message);
             var response = ExpectMsg<WorkflowInstanceCreated>(TimeSpan.FromSeconds(3));
@@ -156,7 +156,7 @@ public class WorkflowSupervisorTests : TestKit
         supervisor.Tell(new CreateWorkflowInstance(
             workflowId,
             definition,
-            new Dictionary<string, object?>()));
+            HashMap<string, object?>.Empty));
 
         var created = ExpectMsg<WorkflowInstanceCreated>(TimeSpan.FromSeconds(3));
 
@@ -214,7 +214,7 @@ public class WorkflowSupervisorTests : TestKit
         supervisor.Tell(new CreateWorkflowInstance(
             workflowId,
             definition,
-            new Dictionary<string, object?>()));
+            HashMap<string, object?>.Empty));
 
         var created = ExpectMsg<WorkflowInstanceCreated>(TimeSpan.FromSeconds(3));
 
@@ -261,7 +261,7 @@ public class WorkflowSupervisorTests : TestKit
         supervisor.Tell(new CreateWorkflowInstance(
             workflowId,
             definition,
-            new Dictionary<string, object?>()));
+            HashMap<string, object?>.Empty));
 
         var created = ExpectMsg<WorkflowInstanceCreated>(TimeSpan.FromSeconds(3));
 

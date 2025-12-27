@@ -385,7 +385,11 @@ automatically thanks to record types and JsonElement usage. 💖
 **Collection Types Used:** 🎨
 - `Arr<T>` - Immutable array with structural equality (replaces IReadOnlyList)
 - `HashMap<K,V>` - Immutable hashmap with structural equality (replaces IReadOnlyDictionary)
+- `Option<T>` - Explicit optional values (replaces nullable references)
 - **Why LanguageExt?** Better performance, true immutability, structural equality, functional operations
+- **Serialization:** Requires custom converters (see Phase 1.3.5)
+  - System.Text.Json: `HashMapJsonConverter<K,V>`, `OptionJsonConverter<T>`, `ArrJsonConverter<T>`
+  - MessagePack: Custom formatters + `LanguageExtFormatterResolver`
 - **Migration:** See LANGUAGEEXT_MIGRATION.md for details
 
 **Known Issues (From Tests):** 🔧
@@ -414,17 +418,18 @@ automatically thanks to record types and JsonElement usage. 💖
 
 > 📋 **See detailed sub-phases:** [Phase1-3-AkkaEngine.md](./Phase1-3-AkkaEngine.md)
 
-This phase implements the core actor-based workflow execution engine using Akka.NET. The work is organized into 8 sub-phases:
+This phase implements the core actor-based workflow execution engine using Akka.NET. The work is organized into 9 sub-phases:
 
 **Sub-Phases:**
-- **1.3.1** - WorkflowSupervisor Actor Implementation
-- **1.3.2** - WorkflowExecutor Actor Implementation  
-- **1.3.3** - NodeExecutor Actor Implementation
-- **1.3.4** - Actor Messaging Protocol
-- **1.3.5** - Basic Execution Flow (Sequential)
-- **1.3.6** - Execution State Tracking
-- **1.3.7** - Supervision Strategy & Error Handling
-- **1.3.8** - Actor Lifecycle Management
+- **1.3.1** - WorkflowSupervisor Actor Implementation ✅
+- **1.3.2** - WorkflowExecutor Actor Implementation ✅
+- **1.3.3** - NodeExecutor Actor Implementation ✅
+- **1.3.4** - Actor Messaging Protocol ✅
+- **1.3.5** - Serialization Configuration (LanguageExt + MessagePack + JSON)
+- **1.3.6** - Basic Execution Flow (Sequential)
+- **1.3.7** - Execution State Tracking
+- **1.3.8** - Supervision Strategy & Error Handling
+- **1.3.9** - Actor Lifecycle Management
 
 **Deliverables:**
 - ✅ Can execute a simple linear workflow (sequential nodes)

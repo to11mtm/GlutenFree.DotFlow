@@ -13,6 +13,7 @@ using Akka.Actor;
 using Akka.TestKit.Xunit2;
 using FluentAssertions;
 using LanguageExt;
+using static LanguageExt.Prelude;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Workflow.Core.Models;
@@ -99,14 +100,14 @@ public class NodeExecutorTests : TestKit
             TestActor,
             "passthrough-executor");
 
-        // Act
-        executor.Tell(new Execute(nodeId, inputs, executionId));
+        // Act - Convert Dictionary to HashMap for the message
+        executor.Tell(new Execute(nodeId, inputs.ToHashMap(), executionId));
 
         // Assert
         var completed = ExpectMsg<NodeExecutionCompleted>(TimeSpan.FromSeconds(5));
         completed.NodeId.Should().Be(nodeId);
         completed.ExecutionId.Should().Be(executionId);
-        completed.Outputs.Should().ContainKey("input");
+        completed.Outputs.ContainsKey("input").Should().BeTrue();
         completed.Duration.Should().BeGreaterThan(TimeSpan.Zero);
     }
 
@@ -129,13 +130,13 @@ public class NodeExecutorTests : TestKit
             "unknown-executor");
 
         // Act
-        executor.Tell(new Execute(nodeId, inputs, executionId));
+        executor.Tell(new Execute(nodeId, inputs.ToHashMap(), executionId));
 
         // Assert - Should complete with stub outputs
         var completed = ExpectMsg<NodeExecutionCompleted>(TimeSpan.FromSeconds(5));
         completed.NodeId.Should().Be(nodeId);
-        completed.Outputs.Should().ContainKey("success");
-        completed.Outputs["success"].Should().Be(true);
+        completed.Outputs.ContainsKey("success").Should().BeTrue();
+        completed.Outputs.Find("success").IfSome(v => v.Should().Be(true));
     }
 
     /// <summary>
@@ -161,12 +162,12 @@ public class NodeExecutorTests : TestKit
             "inputs-executor");
 
         // Act
-        executor.Tell(new Execute(nodeId, inputs, executionId));
+        executor.Tell(new Execute(nodeId, inputs.ToHashMap(), executionId));
 
         // Assert
         var completed = ExpectMsg<NodeExecutionCompleted>(TimeSpan.FromSeconds(5));
-        completed.Outputs.Should().ContainKey("testValue");
-        completed.Outputs.Should().ContainKey("message");
+        completed.Outputs.ContainsKey("testValue").Should().BeTrue();
+        completed.Outputs.ContainsKey("message").Should().BeTrue();
     }
 
     #endregion
@@ -192,7 +193,7 @@ public class NodeExecutorTests : TestKit
             "failing-executor");
 
         // Act
-        executor.Tell(new Execute(nodeId, inputs, executionId));
+        executor.Tell(new Execute(nodeId, inputs.ToHashMap(), executionId));
 
         // Assert
         var failed = ExpectMsg<NodeExecutionFailed>(TimeSpan.FromSeconds(5));
@@ -225,14 +226,15 @@ public class NodeExecutorTests : TestKit
             "cancel-executor");
 
         // Act - Start then cancel
-        executor.Tell(new Execute(nodeId, inputs, executionId));
+        executor.Tell(new Execute(nodeId, inputs.ToHashMap(), executionId));
         Thread.Sleep(100); // Give it time to start
         executor.Tell(new CancelExecution(executionId));
 
-        // Assert - Should not receive normal completion (might get failure from cancellation)
-        // The delay module takes 5 seconds, so if we don't get completion within 1 second, it was cancelled
-
-        ExpectMsg<object>(a=>a is NodeExecutionFailed,TimeSpan.FromMilliseconds(500));
+        // Assert - Cancellation should result in a failure message (not completion)
+        // The delay module takes 5 seconds, but cancellation causes immediate failure
+        var failed = ExpectMsg<NodeExecutionFailed>(TimeSpan.FromSeconds(2));
+        failed.NodeId.Should().Be(nodeId);
+        failed.Error.Should().BeOfType<OperationCanceledException>();
     }
 
     #endregion
@@ -258,8 +260,8 @@ public class NodeExecutorTests : TestKit
             "duplicate-executor");
 
         // Act - Send two execute messages
-        executor.Tell(new Execute(nodeId, inputs, executionId));
-        executor.Tell(new Execute(nodeId, inputs, executionId));
+        executor.Tell(new Execute(nodeId, inputs.ToHashMap(), executionId));
+        executor.Tell(new Execute(nodeId, inputs.ToHashMap(), executionId));
 
         // Assert - Should only complete once (after 5 second delay)
         var completed = ExpectMsg<NodeExecutionCompleted>(TimeSpan.FromSeconds(10));
@@ -282,7 +284,7 @@ public class NodeExecutorTests : TestKit
             Id: "test-node",
             ModuleId: moduleId,
             Name: "Test Node",
-            Properties: HashMap<string, JsonElement>.Empty,
+            Properties: LanguageExt.HashMap<string, JsonElement>.Empty,
             Position: null,
             ErrorHandling: null,
             Timeout: null,

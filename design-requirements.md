@@ -61,6 +61,9 @@ A flexible, actor-based workflow engine that allows users to:
 |-----------|------------|
 | Runtime | .NET 8+ |
 | Actor Framework | Akka.NET |
+| Immutable Collections | LanguageExt |
+| Serialization (JSON) | System.Text.Json |
+| Serialization (Binary) | MessagePack |
 | UI Framework | Blazor (Server/WASM) or MAUI |
 | Database | PostgreSQL / SQL Server |
 | Module Loading | `AssemblyLoadContext` |

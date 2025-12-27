@@ -16,6 +16,8 @@
         <PackageReference Include="Akka.Persistence" />
         <PackageReference Include="Akka.Cluster" />
         <PackageReference Include="Akka.DependencyInjection" />
+        <PackageReference Include="LanguageExt.Core" />
+        <PackageReference Include="MessagePack.Annotations" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Serilog" />

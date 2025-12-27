@@ -368,11 +368,12 @@ public class WorkflowExecutorTests : TestKit
 
         // Assert
         var status = ExpectMsg<WorkflowStatusResponse>(TimeSpan.FromSeconds(3));
-        status.NodeStates.Should().ContainKey("node_a");
+        status.NodeStates.ContainsKey("node_a").Should().BeTrue();
         // Node can be Running or Completed depending on timing
-        status.NodeStates["node_a"].Should().BeOneOf(
-            NodeExecutionState.Running,
-            NodeExecutionState.Completed);
+        status.NodeStates.Find("node_a").IfSome(state =>
+            state.Should().BeOneOf(
+                NodeExecutionState.Running,
+                NodeExecutionState.Completed));
     }
 
     #endregion
@@ -407,10 +408,11 @@ public class WorkflowExecutorTests : TestKit
         var finalStatus = ExpectMsg<WorkflowStatusResponse>(TimeSpan.FromSeconds(3));
 
         // Verify node exists and has been started
-        finalStatus.NodeStates.Should().ContainKey("node_a");
-        finalStatus.NodeStates["node_a"].Should().BeOneOf(
-            NodeExecutionState.Running,
-            NodeExecutionState.Completed);
+        finalStatus.NodeStates.ContainsKey("node_a").Should().BeTrue();
+        finalStatus.NodeStates.Find("node_a").IfSome(state =>
+            state.Should().BeOneOf(
+                NodeExecutionState.Running,
+                NodeExecutionState.Completed));
 
         // The stub NodeExecutor receives inputs and executes successfully
         // (Output verification would require WorkflowCompleted message or accessing internal state)
@@ -441,7 +443,7 @@ public class WorkflowExecutorTests : TestKit
         finalStatus.State.Should().BeOneOf(ExecutionState.Running, ExecutionState.Completed);
 
         // Verify at least node_a has started
-        finalStatus.NodeStates.Should().ContainKey("node_a");
+        finalStatus.NodeStates.ContainsKey("node_a").Should().BeTrue();
     }
 
     #endregion

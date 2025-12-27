@@ -6,6 +6,7 @@ namespace Workflow.Engine.Actors;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Akka.Actor;
 using Akka.Event;
 using Microsoft.Extensions.DependencyInjection;
@@ -179,8 +180,10 @@ public class WorkflowSupervisor : ReceiveActor
 
             // Create child WorkflowExecutor actor
             var executorName = $"executor-{executionId:N}";
+            var inputsDict = new Dictionary<string, object?>(
+                message.Inputs.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
             var executor = Context.ActorOf(
-                WorkflowExecutor.Props(executionId, message.Definition, message.Inputs, this.serviceProvider),
+                WorkflowExecutor.Props(executionId, message.Definition, inputsDict, this.serviceProvider),
                 executorName);
 
             // Watch for child termination

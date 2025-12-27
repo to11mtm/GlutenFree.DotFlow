@@ -48,9 +48,9 @@ public class WorkflowExecutor : ReceiveActor
     private readonly Dictionary<string, IActorRef> _nodeActors = new();
     private readonly Dictionary<string, NodeExecutionState> _nodeStates = new();
     private readonly Dictionary<string, Dictionary<string, object?>> _nodeOutputs = new();
-    private readonly LanguageExt.HashSet<string> _completedNodes = new();
-    private readonly LanguageExt.HashSet<string> _failedNodes = new();
-    private readonly LanguageExt.HashSet<string> _runningNodes = new();
+    private LanguageExt.HashSet<string> _completedNodes;
+    private LanguageExt.HashSet<string> _failedNodes;
+    private LanguageExt.HashSet<string> _runningNodes;
 
     // Graph structure (built from connections)
     private readonly Dictionary<string, List<string>> _nodeSuccessors = new();
@@ -243,7 +243,7 @@ public class WorkflowExecutor : ReceiveActor
 
         // Update state
         _nodeStates[nodeId] = NodeExecutionState.Running;
-        _runningNodes.Add(nodeId);
+        _runningNodes = _runningNodes.Add(nodeId);
 
         // Create NodeExecutor actor
         var executorName = $"node-{nodeId.Replace(".", "-")}";
@@ -255,8 +255,9 @@ public class WorkflowExecutor : ReceiveActor
         Context.Watch(nodeActor);
         _nodeActors[nodeId] = nodeActor;
 
-        // Send execute message
-        nodeActor.Tell(new Execute(nodeId, nodeInputs, _executionId));
+        // Send execute message (convert Dictionary to HashMap for immutability)
+        var inputsHashMap = nodeInputs.ToHashMap();
+        nodeActor.Tell(new Execute(nodeId, inputsHashMap, _executionId));
     }
 
     /// <summary>
@@ -314,9 +315,10 @@ public class WorkflowExecutor : ReceiveActor
 
         // Update state
         _nodeStates[nodeId] = NodeExecutionState.Completed;
-        _completedNodes.Add(nodeId);
-        _runningNodes.Remove(nodeId);
-        _nodeOutputs[nodeId] = message.Outputs;
+        _completedNodes = _completedNodes.Add(nodeId);
+        _runningNodes = _runningNodes.Remove(nodeId);
+        _nodeOutputs[nodeId] = new Dictionary<string, object?>(
+            message.Outputs.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
 
         // Clean up actor reference
         if (_nodeActors.TryGetValue(nodeId, out var actor))
@@ -395,7 +397,7 @@ public class WorkflowExecutor : ReceiveActor
     private void HandleNodeFailure(string nodeId, Exception error)
     {
         _nodeStates[nodeId] = NodeExecutionState.Failed;
-        _failedNodes.Add(nodeId);
+        _failedNodes = _failedNodes.Add(nodeId);
         _runningNodes.Remove(nodeId);
         _lastError = error;
 
@@ -416,8 +418,9 @@ public class WorkflowExecutor : ReceiveActor
         {
             case ErrorBehavior.Continue:
                 _log.Warning("⚡ Continue-on-error: proceeding despite failure in node {NodeId}", nodeId);
+
                 // Treat as completed for successor execution purposes
-                _completedNodes.Add(nodeId);
+                _completedNodes = _completedNodes.Add(nodeId);
                 if (IsWorkflowComplete())
                 {
                     // Complete with partial success
@@ -464,18 +467,21 @@ public class WorkflowExecutor : ReceiveActor
         }
 
         _nodeActors.Clear();
-        _runningNodes.Clear();
+        _runningNodes = LanguageExt.HashSet<string>.Empty;
 
         _state = ExecutionState.Cancelled;
         _endTime = DateTimeOffset.UtcNow;
         _executionTimer.Stop();
 
         // Notify parent
+        var partialOutputs = GatherWorkflowOutputs();
         Context.Parent.Tell(new WorkflowFailed(
             _executionId,
             new OperationCanceledException("Workflow execution was cancelled"),
             _executionTimer.Elapsed,
-            GatherWorkflowOutputs()));
+            partialOutputs.Count > 0
+                ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
+                : Option<HashMap<string, object?>>.None));
     }
 
     /// <summary>
@@ -488,10 +494,10 @@ public class WorkflowExecutor : ReceiveActor
             _executionId,
             _state,
             CalculateProgress(),
-            new Dictionary<string, NodeExecutionState>(_nodeStates),
+            _nodeStates.ToHashMap(),
             _startTime,
-            _endTime,
-            _lastError?.Message);
+            _endTime.HasValue ? Option<DateTimeOffset>.Some(_endTime.Value) : Option<DateTimeOffset>.None,
+            _lastError != null ? Option<string>.Some(_lastError.Message) : Option<string>.None);
 
         Sender.Tell(response);
     }
@@ -502,7 +508,7 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleGetProgress(GetProgress message)
     {
-        var currentNode = _runningNodes.FirstOrDefault();
+        var currentNode = _runningNodes.HeadOrNone();
         var progress = new ProgressUpdate(
             _executionId,
             CalculateProgress(),
@@ -597,7 +603,7 @@ public class WorkflowExecutor : ReceiveActor
         _endTime = DateTimeOffset.UtcNow;
         _executionTimer.Stop();
 
-        var outputs = GatherWorkflowOutputs();
+        var outputs = GatherWorkflowOutputs().ToHashMap();
 
         _log.Info(
             "🎉 Workflow execution {ExecutionId} completed in {Duration}ms ({CompletedNodes}/{TotalNodes} nodes)",
@@ -629,7 +635,7 @@ public class WorkflowExecutor : ReceiveActor
         }
 
         _nodeActors.Clear();
-        _runningNodes.Clear();
+        _runningNodes = LanguageExt.HashSet<string>.Empty;
 
         _log.Error(
             error,
@@ -638,11 +644,14 @@ public class WorkflowExecutor : ReceiveActor
             _executionTimer.ElapsedMilliseconds,
             error.Message);
 
+        var partialOutputs = GatherWorkflowOutputs();
         Context.Parent.Tell(new WorkflowFailed(
             _executionId,
             error,
             _executionTimer.Elapsed,
-            GatherWorkflowOutputs()));
+            partialOutputs.Count > 0
+                ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
+                : Option<HashMap<string, object?>>.None));
     }
 
     /// <summary>

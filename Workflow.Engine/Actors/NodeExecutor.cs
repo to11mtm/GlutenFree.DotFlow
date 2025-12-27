@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Akka.Actor;
 using Akka.Event;
+using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Workflow.Core.Models;
@@ -359,7 +360,7 @@ public class NodeExecutor : ReceiveActor
 
         Context.Parent.Tell(new NodeExecutionCompleted(
             _nodeId,
-            outputs,
+            outputs.ToHashMap(),
             _executionId,
             _timer.Elapsed));
     }
