@@ -63,9 +63,10 @@ public class NodeExecutorTests : TestKit
         var inputs = new Dictionary<string, object?>();
         var executionId = Guid.NewGuid();
 
-        // Act
-        var executor = Sys.ActorOf(
+        // Act - Create as child of TestActor
+        var executor = ActorOfAsTestActorRef<NodeExecutor>(
             NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider),
+            TestActor,
             "test-node-executor");
 
         // Assert
@@ -92,8 +93,11 @@ public class NodeExecutorTests : TestKit
         };
         var executionId = Guid.NewGuid();
 
-        var executor = Sys.ActorOf(
-            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider));
+        // Create executor as child of TestActor so Context.Parent messages come to us
+        var executor = ActorOfAsTestActorRef<NodeExecutor>(
+            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider),
+            TestActor,
+            "passthrough-executor");
 
         // Act
         executor.Tell(new Execute(nodeId, inputs, executionId));
@@ -118,8 +122,11 @@ public class NodeExecutorTests : TestKit
         var inputs = new Dictionary<string, object?>();
         var executionId = Guid.NewGuid();
 
-        var executor = Sys.ActorOf(
-            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider));
+        // Create executor as child of TestActor
+        var executor = ActorOfAsTestActorRef<NodeExecutor>(
+            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider),
+            TestActor,
+            "unknown-executor");
 
         // Act
         executor.Tell(new Execute(nodeId, inputs, executionId));
@@ -147,8 +154,11 @@ public class NodeExecutorTests : TestKit
         };
         var executionId = Guid.NewGuid();
 
-        var executor = Sys.ActorOf(
-            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider));
+        // Create executor as child of TestActor
+        var executor = ActorOfAsTestActorRef<NodeExecutor>(
+            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider),
+            TestActor,
+            "inputs-executor");
 
         // Act
         executor.Tell(new Execute(nodeId, inputs, executionId));
@@ -175,8 +185,11 @@ public class NodeExecutorTests : TestKit
         var inputs = new Dictionary<string, object?>();
         var executionId = Guid.NewGuid();
 
-        var executor = Sys.ActorOf(
-            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider));
+        // Create executor as child of TestActor
+        var executor = ActorOfAsTestActorRef<NodeExecutor>(
+            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider),
+            TestActor,
+            "failing-executor");
 
         // Act
         executor.Tell(new Execute(nodeId, inputs, executionId));
@@ -205,16 +218,21 @@ public class NodeExecutorTests : TestKit
         var inputs = new Dictionary<string, object?>();
         var executionId = Guid.NewGuid();
 
-        var executor = Sys.ActorOf(
-            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider));
+        // Create executor as child of TestActor
+        var executor = ActorOfAsTestActorRef<NodeExecutor>(
+            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider),
+            TestActor,
+            "cancel-executor");
 
         // Act - Start then cancel
         executor.Tell(new Execute(nodeId, inputs, executionId));
         Thread.Sleep(100); // Give it time to start
         executor.Tell(new CancelExecution(executionId));
 
-        // Assert - Should not receive completion (actor will be stopped by parent)
-        ExpectNoMsg(TimeSpan.FromMilliseconds(500));
+        // Assert - Should not receive normal completion (might get failure from cancellation)
+        // The delay module takes 5 seconds, so if we don't get completion within 1 second, it was cancelled
+
+        ExpectMsg<object>(a=>a is NodeExecutionFailed,TimeSpan.FromMilliseconds(500));
     }
 
     #endregion
@@ -233,14 +251,17 @@ public class NodeExecutorTests : TestKit
         var inputs = new Dictionary<string, object?>();
         var executionId = Guid.NewGuid();
 
-        var executor = Sys.ActorOf(
-            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider));
+        // Create executor as child of TestActor
+        var executor = ActorOfAsTestActorRef<NodeExecutor>(
+            NodeExecutor.Props(nodeId, nodeDef, inputs, executionId, _serviceProvider),
+            TestActor,
+            "duplicate-executor");
 
         // Act - Send two execute messages
         executor.Tell(new Execute(nodeId, inputs, executionId));
         executor.Tell(new Execute(nodeId, inputs, executionId));
 
-        // Assert - Should only complete once
+        // Assert - Should only complete once (after 5 second delay)
         var completed = ExpectMsg<NodeExecutionCompleted>(TimeSpan.FromSeconds(10));
         completed.NodeId.Should().Be(nodeId);
 
