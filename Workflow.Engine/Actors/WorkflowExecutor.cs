@@ -279,6 +279,12 @@ public class WorkflowExecutor : ReceiveActor
             .Where(c => c.TargetNodeId == nodeId)
             .ToList();
 
+        _log.Debug(
+            "📥 Gathering inputs for node {NodeId}: {WorkflowInputCount} workflow inputs, {ConnectionCount} incoming connections",
+            nodeId,
+            _workflowInputs.Count,
+            incomingConnections.Count);
+
         foreach (var conn in incomingConnections)
         {
             if (_nodeOutputs.TryGetValue(conn.SourceNodeId, out var sourceOutputs))
@@ -287,6 +293,19 @@ public class WorkflowExecutor : ReceiveActor
                 if (sourceOutputs.TryGetValue(conn.SourcePortName, out var outputValue))
                 {
                     inputs[conn.TargetPortName] = outputValue;
+                    _log.Debug(
+                        "🔗 Data flow: {SourceNode}.{SourcePort} → {TargetNode}.{TargetPort}",
+                        conn.SourceNodeId,
+                        conn.SourcePortName,
+                        nodeId,
+                        conn.TargetPortName);
+                }
+                else
+                {
+                    _log.Warning(
+                        "⚠️ Connection expects output '{SourcePort}' from node '{SourceNode}' but it was not produced",
+                        conn.SourcePortName,
+                        conn.SourceNodeId);
                 }
 
                 // Also copy all outputs with a prefix for flexibility
@@ -295,7 +314,20 @@ public class WorkflowExecutor : ReceiveActor
                     inputs[$"{conn.SourceNodeId}.{key}"] = value;
                 }
             }
+            else
+            {
+                _log.Warning(
+                    "⚠️ No outputs available from predecessor node '{SourceNode}' for connection to '{TargetNode}'",
+                    conn.SourceNodeId,
+                    nodeId);
+            }
         }
+
+        _log.Debug(
+            "📦 Node {NodeId} will receive {InputCount} total inputs: [{InputKeys}]",
+            nodeId,
+            inputs.Count,
+            string.Join(", ", inputs.Keys.Take(10)) + (inputs.Count > 10 ? "..." : ""));
 
         return inputs;
     }

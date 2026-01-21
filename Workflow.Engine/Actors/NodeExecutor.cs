@@ -1,4 +1,4 @@
-﻿// <copyright file="NodeExecutor.cs" company="GlutenFree">
+﻿﻿// <copyright file="NodeExecutor.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -251,29 +251,150 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Validates inputs against the module schema.
+    /// Checks for missing required inputs and validates data types~ 🔍✨
     /// </summary>
+    /// <param name="schema">The module schema to validate against.</param>
+    /// <returns>List of validation error messages.</returns>
     private List<string> ValidateInputs(ModuleSchema schema)
     {
         var errors = new List<string>();
 
-        foreach (var inputDef in schema.Inputs.Where(i => i.IsRequired))
+        foreach (var inputDef in schema.Inputs)
         {
-            if (!_inputs.ContainsKey(inputDef.Name) || _inputs[inputDef.Name] == null)
-            {
-                // Check if we have any matching input (fuzzy match for flexibility)
-                var inputName = inputDef.Name;
-                var hasMatch = _inputs.Keys.Any(k =>
-                    k.Equals(inputName, StringComparison.OrdinalIgnoreCase) ||
-                    k.EndsWith("." + inputName, StringComparison.OrdinalIgnoreCase));
+            var inputName = inputDef.Name;
+            var inputValue = GetInputValue(inputName);
 
-                if (!hasMatch && inputDef.DefaultValue == null)
+            // Check required inputs
+            if (inputDef.IsRequired)
+            {
+                if (inputValue == null && inputDef.DefaultValue == null)
                 {
-                    errors.Add("Required input '" + inputName + "' is missing");
+                    errors.Add($"Required input '{inputName}' is missing");
+                    continue;
                 }
+            }
+
+            // Skip type validation for null values (optional inputs with no value)
+            if (inputValue == null)
+            {
+                continue;
+            }
+
+            // Validate data type compatibility
+            var typeError = ValidateDataType(inputName, inputValue, inputDef.DataType);
+            if (typeError != null)
+            {
+                errors.Add(typeError);
             }
         }
 
         return errors;
+    }
+
+    /// <summary>
+    /// Gets an input value by name, checking both exact match and fuzzy match.
+    /// Supports "nodeName.portName" format for predecessor outputs~ 📥
+    /// </summary>
+    /// <param name="inputName">The input name to find.</param>
+    /// <returns>The input value or null if not found.</returns>
+    private object? GetInputValue(string inputName)
+    {
+        // Exact match
+        if (_inputs.TryGetValue(inputName, out var value))
+        {
+            return value;
+        }
+
+        // Fuzzy match - check for case-insensitive or suffixed keys
+        var matchingKey = _inputs.Keys.FirstOrDefault(k =>
+            k.Equals(inputName, StringComparison.OrdinalIgnoreCase) ||
+            k.EndsWith("." + inputName, StringComparison.OrdinalIgnoreCase));
+
+        if (matchingKey != null)
+        {
+            return _inputs[matchingKey];
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Validates that an input value is compatible with the expected data type.
+    /// Returns an error message if validation fails, null if valid~ 🔍
+    /// </summary>
+    /// <param name="inputName">The name of the input for error messages.</param>
+    /// <param name="value">The actual value.</param>
+    /// <param name="expectedType">The expected data type.</param>
+    /// <returns>Error message or null if valid.</returns>
+    private static string? ValidateDataType(string inputName, object value, Type expectedType)
+    {
+        var actualType = value.GetType();
+
+        // Exact type match
+        if (expectedType.IsAssignableFrom(actualType))
+        {
+            return null;
+        }
+
+        // Allow object type to accept anything
+        if (expectedType == typeof(object))
+        {
+            return null;
+        }
+
+        // Check for numeric conversions (int can become long, float can become double, etc.)
+        if (IsNumericCompatible(actualType, expectedType))
+        {
+            return null;
+        }
+
+        // Check for string-to-primitive conversions
+        if (expectedType == typeof(string))
+        {
+            return null; // Everything can be converted to string via ToString()
+        }
+
+        // Special handling for common type mismatches
+        if (actualType == typeof(string) && CanParseFromString(expectedType))
+        {
+            return null; // Will be converted during execution
+        }
+
+        return $"Input '{inputName}' has type '{actualType.Name}' but expected '{expectedType.Name}'";
+    }
+
+    /// <summary>
+    /// Checks if two numeric types are compatible for conversion.
+    /// </summary>
+    private static bool IsNumericCompatible(Type actual, Type expected)
+    {
+        var numericTypes = new System.Collections.Generic.HashSet<Type>
+        {
+            typeof(byte), typeof(sbyte),
+            typeof(short), typeof(ushort),
+            typeof(int), typeof(uint),
+            typeof(long), typeof(ulong),
+            typeof(float), typeof(double), typeof(decimal),
+        };
+
+        return numericTypes.Contains(actual) && numericTypes.Contains(expected);
+    }
+
+    /// <summary>
+    /// Checks if a type can be parsed from a string representation.
+    /// </summary>
+    private static bool CanParseFromString(Type type)
+    {
+        return type == typeof(int) ||
+               type == typeof(long) ||
+               type == typeof(double) ||
+               type == typeof(float) ||
+               type == typeof(decimal) ||
+               type == typeof(bool) ||
+               type == typeof(DateTime) ||
+               type == typeof(DateTimeOffset) ||
+               type == typeof(Guid) ||
+               type == typeof(TimeSpan);
     }
 
     /// <summary>
