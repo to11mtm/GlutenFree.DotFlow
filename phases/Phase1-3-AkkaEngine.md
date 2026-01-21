@@ -689,61 +689,69 @@ Legend: ✅ Implemented (message record defined)
 
 ### Tasks
 
-- [ ] **Configure Akka.NET Serialization Bindings** 🔧
-  - [ ] Create HOCON configuration for serializer bindings
-  - [ ] Bind `IWorkflowMessage` types to MessagePack serializer
-  - [ ] Configure fallback serializer for unknown types
-  - [ ] Disable default Hyperion serializer (deprecated)
+- [x] **Configure Akka.NET Serialization Bindings** 🔧 ✅ **COMPLETE!**
+  - [x] Create HOCON configuration for serializer bindings
+  - [x] Bind `IWorkflowMessage` types to MessagePack serializer
+  - [x] Configure fallback serializer for unknown types
+  - [x] Disable default Hyperion serializer (deprecated)
 
-- [ ] **Implement System.Text.Json Converters** 📝
-  - [ ] Create `HashMapJsonConverter<K,V>` for HashMap serialization
-  - [ ] Create `OptionJsonConverter<T>` for Option serialization
-  - [ ] Create `ArrJsonConverter<T>` for Arr serialization
-  - [ ] Create `JsonSerializerOptionsExtensions` for easy registration
-  - [ ] Handle nested LanguageExt types (e.g., `HashMap<string, Option<int>>`)
+- [x] **Implement System.Text.Json Converters** 📝 ✅ **COMPLETE!**
+  - [x] Create `HashMapJsonConverter<K,V>` for HashMap serialization
+  - [x] Create `OptionJsonConverter<T>` for Option serialization
+  - [x] Create `ArrJsonConverter<T>` for Arr serialization
+  - [x] Create `JsonSerializerOptionsExtensions` for easy registration
+  - [x] Handle nested LanguageExt types (e.g., `HashMap<string, Option<int>>`)
 
 - [x] **MessagePack Formatters** 📦 ✅ **NOT NEEDED!**
   - [x] LanguageExt types work out of the box with MessagePack
   - [x] Use `ContractlessStandardResolver` for `object?` value types
-  - [ ] Configure Akka.NET to use MessagePack with correct resolver
+  - [x] Configure Akka.NET to use MessagePack with correct resolver
 
-- [ ] **Create Serialization Tests** ✅
-  - [ ] Test `HashMap<string, object?>` round-trip (JSON)
-  - [ ] Test `HashMap<string, object?>` round-trip (MessagePack)
-  - [ ] Test `Option<T>` with Some value (JSON)
-  - [ ] Test `Option<T>` with None (JSON)
-  - [ ] Test `Arr<T>` with elements (JSON)
-  - [ ] Test all message types round-trip
-  - [ ] Test nested LanguageExt types
-  - [ ] Test Akka.NET serialization integration
+- [x] **Create Serialization Tests** ✅ **COMPLETE!**
+  - [x] Test `HashMap<string, object?>` round-trip (JSON)
+  - [x] Test `HashMap<string, object?>` round-trip (MessagePack)
+  - [x] Test `Option<T>` with Some value (JSON)
+  - [x] Test `Option<T>` with None (JSON)
+  - [x] Test `Arr<T>` with elements (JSON)
+  - [x] Test all message types round-trip
+  - [x] Test nested LanguageExt types
+  - [ ] Test Akka.NET serialization integration (deferred to Phase 2)
 
 - [ ] **Document Serialization Configuration** 📚
   - [ ] Add HOCON configuration examples
   - [ ] Document custom converter usage
   - [ ] Add troubleshooting guide for serialization issues
 
-### Files to Create
+### Files Created ✅
 
-| File | Description |
-|------|-------------|
-| `Workflow.Engine/Serialization/HashMapJsonConverter.cs` | JSON converter for HashMap |
-| `Workflow.Engine/Serialization/OptionJsonConverter.cs` | JSON converter for Option |
-| `Workflow.Engine/Serialization/ArrJsonConverter.cs` | JSON converter for Arr |
-| `Workflow.Engine/Serialization/LanguageExtJsonExtensions.cs` | Registration helpers for JSON |
-| `Workflow.Engine/Configuration/akka.serialization.conf` | HOCON serializer config |
-| `Workflow.Tests/Engine/SerializationTests.cs` | Serialization round-trip tests |
+| File | Description | Status |
+|------|-------------|--------|
+| `Workflow.Engine/Serialization/JsonConverters/HashMapJsonConverter.cs` | JSON converter + factory for HashMap | ✅ Complete |
+| `Workflow.Engine/Serialization/JsonConverters/OptionJsonConverter.cs` | JSON converter + factory for Option | ✅ Complete |
+| `Workflow.Engine/Serialization/JsonConverters/ArrJsonConverter.cs` | JSON converter + factory for Arr | ✅ Complete |
+| `Workflow.Engine/Serialization/JsonConverters/JsonSerializerOptionsExtensions.cs` | Registration helpers for JSON | ✅ Complete |
+| `Workflow.Engine/Serialization/AkkaSerializationConfig.cs` | HOCON serializer config provider | ✅ Complete |
+| `Workflow.Engine/Serialization/MsgPack2Setup.cs` | Setup helper for Akka.Serialization.MessagePack2 with LanguageExt resolvers | ✅ Complete |
+| `Workflow.Tests/Engine/SerializationTests.cs` | 22 serialization round-trip tests | ✅ Complete |
 
-> **Note:** MessagePack formatters are NOT needed - LanguageExt types serialize correctly out of the box! 🎉
+> **Note:** Uses official `Akka.Serialization.MessagePack2` package with custom resolver chain for LanguageExt types! 🎉
 
-### Dependencies to Add
+**Completion Date:** January 20, 2026 🎉
+**Test Coverage:** 22 comprehensive tests written and passing!
+
+### Dependencies Added
 
 ```xml
 <!-- In Directory.Packages.props -->
+<PackageVersion Include="Akka.Serialization.MessagePack2" Version="1.5.51.1" />
 <PackageVersion Include="MessagePack" Version="3.1.4" />
-<!-- Note: We already have MessagePack.Annotations, now we need full MessagePack -->
 ```
 
 ```xml
+<!-- In Workflow.Engine.csproj -->
+<PackageReference Include="Akka.Serialization.MessagePack2" />
+<PackageReference Include="MessagePack" />
+```
 <!-- In Workflow.Engine.csproj -->
 <PackageReference Include="MessagePack" />
 ```

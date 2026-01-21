@@ -3,6 +3,7 @@
 // Licensed under the MIT License.
 // ────────────────────────────────────────────────────────────────────────────────
 
+using System.Text.Json;
 using Workflow.Core.Models;
 
 namespace Workflow.Core.Abstractions;

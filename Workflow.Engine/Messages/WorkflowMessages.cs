@@ -22,6 +22,26 @@ using Workflow.Core.Models;
 /// MessagePack attributes enable efficient binary serialization for persistence and clustering.
 /// </para>
 /// </remarks>
+[Union(0, typeof(CreateWorkflowInstance))]
+[Union(1, typeof(WorkflowInstanceCreated))]
+[Union(2, typeof(WorkflowInstanceCreationFailed))]
+[Union(3, typeof(GetWorkflowStatus))]
+[Union(4, typeof(WorkflowStatusResponse))]
+[Union(5, typeof(StartExecution))]
+[Union(6, typeof(CancelExecution))]
+[Union(7, typeof(PauseExecution))]
+[Union(8, typeof(ResumeExecution))]
+[Union(9, typeof(ExecutionPaused))]
+[Union(10, typeof(ExecutionResumed))]
+[Union(11, typeof(GetProgress))]
+[Union(12, typeof(ProgressUpdate))]
+[Union(13, typeof(WorkflowCompleted))]
+[Union(14, typeof(WorkflowFailed))]
+[Union(15, typeof(Execute))]
+[Union(16, typeof(NodeExecutionCompleted))]
+[Union(17, typeof(NodeExecutionFailed))]
+[Union(18, typeof(RetryNode))]
+[Union(19, typeof(NodeRetrying))]
 public interface IWorkflowMessage
 {
 }
@@ -41,7 +61,7 @@ public interface IWorkflowMessage
 public record CreateWorkflowInstance(
     Guid WorkflowId,
     WorkflowDefinition Definition,
-    HashMap<string, object?> Inputs) : IWorkflowMessage;
+    HashMap<string, object?> Inputs): IWorkflowMessage;
 
 /// <summary>
 /// Response message containing the execution ID for a newly created workflow instance.
@@ -52,7 +72,7 @@ public record CreateWorkflowInstance(
 [MessagePackObject(keyAsPropertyName: true)]
 public record WorkflowInstanceCreated(
     Guid ExecutionId,
-    Guid WorkflowId) : IWorkflowMessage;
+    Guid WorkflowId): IWorkflowMessage;
 
 /// <summary>
 /// Response message when workflow instance creation fails.
@@ -63,7 +83,7 @@ public record WorkflowInstanceCreated(
 [MessagePackObject(keyAsPropertyName: true)]
 public record WorkflowInstanceCreationFailed(
     Guid WorkflowId,
-    Arr<string> Errors) : IWorkflowMessage;
+    Arr<string> Errors): IWorkflowMessage;
 
 /// <summary>
 /// Message to query the current status of a workflow execution.
@@ -71,7 +91,7 @@ public record WorkflowInstanceCreationFailed(
 /// </summary>
 /// <param name="ExecutionId">The execution ID to query.</param>
 [MessagePackObject(keyAsPropertyName: true)]
-public record GetWorkflowStatus(Guid ExecutionId) : IWorkflowMessage;
+public record GetWorkflowStatus(Guid ExecutionId): IWorkflowMessage;
 
 /// <summary>
 /// Response message containing the current workflow execution status.
@@ -92,7 +112,7 @@ public record WorkflowStatusResponse(
     HashMap<string, NodeExecutionState> NodeStates,
     DateTimeOffset StartTime,
     Option<DateTimeOffset> EndTime,
-    Option<string> Error) : IWorkflowMessage;
+    Option<string> Error): IWorkflowMessage;
 
 #endregion
 
@@ -104,7 +124,7 @@ public record WorkflowStatusResponse(
 /// </summary>
 /// <param name="ExecutionId">The execution ID to start.</param>
 [MessagePackObject(keyAsPropertyName: true)]
-public record StartExecution(Guid ExecutionId) : IWorkflowMessage;
+public record StartExecution(Guid ExecutionId): IWorkflowMessage;
 
 /// <summary>
 /// Message to request cancellation of a running workflow execution.
@@ -112,7 +132,7 @@ public record StartExecution(Guid ExecutionId) : IWorkflowMessage;
 /// </summary>
 /// <param name="ExecutionId">The execution ID to cancel.</param>
 [MessagePackObject(keyAsPropertyName: true)]
-public record CancelExecution(Guid ExecutionId) : IWorkflowMessage;
+public record CancelExecution(Guid ExecutionId): IWorkflowMessage;
 
 /// <summary>
 /// Message to pause a running workflow execution.
@@ -120,7 +140,7 @@ public record CancelExecution(Guid ExecutionId) : IWorkflowMessage;
 /// </summary>
 /// <param name="ExecutionId">The execution ID to pause.</param>
 [MessagePackObject(keyAsPropertyName: true)]
-public record PauseExecution(Guid ExecutionId) : IWorkflowMessage;
+public record PauseExecution(Guid ExecutionId): IWorkflowMessage;
 
 /// <summary>
 /// Message to resume a paused workflow execution.
@@ -128,7 +148,7 @@ public record PauseExecution(Guid ExecutionId) : IWorkflowMessage;
 /// </summary>
 /// <param name="ExecutionId">The execution ID to resume.</param>
 [MessagePackObject(keyAsPropertyName: true)]
-public record ResumeExecution(Guid ExecutionId) : IWorkflowMessage;
+public record ResumeExecution(Guid ExecutionId): IWorkflowMessage;
 
 /// <summary>
 /// Confirmation that a workflow execution has been paused.
@@ -141,7 +161,7 @@ public record ResumeExecution(Guid ExecutionId) : IWorkflowMessage;
 public record ExecutionPaused(
     Guid ExecutionId,
     int CompletedNodes,
-    int PendingNodes) : IWorkflowMessage;
+    int PendingNodes): IWorkflowMessage;
 
 /// <summary>
 /// Confirmation that a workflow execution has been resumed.
@@ -149,14 +169,14 @@ public record ExecutionPaused(
 /// </summary>
 /// <param name="ExecutionId">The resumed execution ID.</param>
 [MessagePackObject(keyAsPropertyName: true)]
-public record ExecutionResumed(Guid ExecutionId) : IWorkflowMessage;
+public record ExecutionResumed(Guid ExecutionId): IWorkflowMessage;
 
 /// <summary>
 /// Message to request current progress of a workflow execution.
 /// Returns percentage complete and current node information~ 📈
 /// </summary>
 [MessagePackObject(keyAsPropertyName: true)]
-public record GetProgress() : IWorkflowMessage;
+public record GetProgress(): IWorkflowMessage;
 
 /// <summary>
 /// Message containing progress update information.
@@ -173,7 +193,7 @@ public record ProgressUpdate(
     int Percentage,
     Option<string> CurrentNode,
     int CompletedNodes,
-    int TotalNodes) : IWorkflowMessage;
+    int TotalNodes): IWorkflowMessage;
 
 /// <summary>
 /// Message sent when an entire workflow execution completes successfully.
@@ -186,7 +206,7 @@ public record ProgressUpdate(
 public record WorkflowCompleted(
     Guid ExecutionId,
     HashMap<string, object?> Outputs,
-    TimeSpan Duration) : IWorkflowMessage;
+    TimeSpan Duration): IWorkflowMessage;
 
 /// <summary>
 /// Message sent when a workflow execution fails.
@@ -218,7 +238,7 @@ public record WorkflowFailed(
 public record Execute(
     string NodeId,
     HashMap<string, object?> Inputs,
-    Guid ExecutionId) : IWorkflowMessage;
+    Guid ExecutionId): IWorkflowMessage;
 
 /// <summary>
 /// Message sent when a node completes execution successfully.
@@ -233,7 +253,7 @@ public record NodeExecutionCompleted(
     string NodeId,
     HashMap<string, object?> Outputs,
     Guid ExecutionId,
-    TimeSpan Duration) : IWorkflowMessage;
+    TimeSpan Duration): IWorkflowMessage;
 
 /// <summary>
 /// Message sent when a node execution fails.
@@ -248,7 +268,7 @@ public record NodeExecutionFailed(
     string NodeId,
     Exception Error,
     Guid ExecutionId,
-    TimeSpan Duration) : IWorkflowMessage;
+    TimeSpan Duration): IWorkflowMessage;
 
 /// <summary>
 /// Message to retry a failed node.
@@ -263,7 +283,7 @@ public record RetryNode(
     string NodeId,
     Guid ExecutionId,
     int Attempt,
-    int MaxAttempts) : IWorkflowMessage;
+    int MaxAttempts): IWorkflowMessage;
 
 /// <summary>
 /// Notification that a node is being retried.
@@ -280,7 +300,7 @@ public record NodeRetrying(
     Guid ExecutionId,
     int Attempt,
     int MaxAttempts,
-    Exception LastError) : IWorkflowMessage;
+    Exception LastError): IWorkflowMessage;
 
 #endregion
 

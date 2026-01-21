@@ -13,8 +13,10 @@
     <PackageVersion Include="Akka.Cluster.Sharding" Version="1.5.57" />
     <PackageVersion Include="Akka.Persistence.Sql" Version="1.5.55.1" />
     <PackageVersion Include="Akka.DependencyInjection" Version="1.5.57" />
+    <PackageVersion Include="Akka.Serialization.MessagePack2" Version="1.5.31" />
     <PackageVersion Include="LanguageExt.Core" Version="4.4.9" />
     <PackageVersion Include="MessagePack" Version="3.1.4" />
+    <PackageVersion Include="MessagePack.Annotations" Version="3.1.4" />
     <!-- 🌸 Microsoft Extensions -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
@@ -34,9 +36,8 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
     <!-- 💾 Serialization -->
-    <PackageVersion Include="System.Text.Json" Version="8.0.5" />
+    <PackageVersion Include="System.Text.Json" Version="10.0.1" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageVersion Include="MessagePack.Annotations" Version="2.5.140" />
     <!-- 🧪 Testing Packages -->
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />

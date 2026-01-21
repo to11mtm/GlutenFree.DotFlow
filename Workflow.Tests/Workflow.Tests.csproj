@@ -20,6 +20,8 @@
         <PackageReference Include="FluentAssertions" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Akka.TestKit.Xunit2" />
+        <PackageReference Include="MessagePack" />
+        <PackageReference Include="System.Text.Json" />
     </ItemGroup>
 
     <ItemGroup>
