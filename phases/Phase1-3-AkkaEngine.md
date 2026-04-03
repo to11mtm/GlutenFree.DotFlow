@@ -95,7 +95,7 @@ This sub-phase focuses on implementing the core actor-based workflow execution e
       - [x] Mark node as failed
       - [x] Log error details
       - [x] Check error handling configuration
-      - [ ] If retry configured, schedule retry (deferred to 1.3.8)
+      - [x] If retry configured, schedule retry (implemented in 1.3.8)
       - [x] If continue-on-error, proceed to next nodes
       - [x] If fail-fast, cancel all other nodes
       - [x] Send `WorkflowFailed` to parent
@@ -894,42 +894,50 @@ public class OptionJsonConverter<T> : JsonConverter<Option<T>>
 
 ---
 
-## 1.3.8 Supervision Strategy & Error Handling
+## 1.3.8 Supervision Strategy & Error Handling ✅ **COMPLETE!**
 
 **Purpose:** Implement Akka.NET supervision strategies to handle failures gracefully and ensure system resilience.
 
 **Tasks:**
-- [ ] **Implement supervisor strategy for error handling** 🛡️
-  - [ ] Define supervision directives per actor type
-    - [ ] WorkflowSupervisor directives
-      - [ ] Restart on transient failures
-      - [ ] Stop on critical failures
-      - [ ] Escalate on unknown failures
-    - [ ] WorkflowExecutor directives
-      - [ ] Resume for node failures (if continue-on-error)
-      - [ ] Restart for recoverable state corruption
-      - [ ] Stop for unrecoverable errors
-    - [ ] NodeExecutor directives
-      - [ ] Restart with backoff for transient errors
-      - [ ] Stop after max retries
-  - [ ] Configure restart limits
-    - [ ] Max restarts: 3
-    - [ ] Time window: 1 minute
-  - [ ] Implement custom supervision logic
-  - [ ] Add supervision event logging
-  - [ ] Test supervision with failure injection
+- [x] **Implement supervisor strategy for error handling** 🛡️
+  - [x] Define supervision directives per actor type
+    - [x] WorkflowSupervisor directives
+      - [x] Restart on transient failures
+      - [x] Stop on critical failures
+      - [x] Escalate on unknown failures
+    - [x] WorkflowExecutor directives
+      - [x] Resume for node failures (if continue-on-error)
+      - [x] Restart for recoverable state corruption
+      - [x] Stop for unrecoverable errors
+    - [x] NodeExecutor directives
+      - [x] Restart with backoff for transient errors
+      - [x] Stop after max retries
+  - [x] Configure restart limits
+    - [x] Max restarts: 3
+    - [x] Time window: 1 minute
+  - [x] Implement custom supervision logic
+  - [x] Add supervision event logging
+  - [x] Test supervision with failure injection
 
 **Tests:**
-- [ ] **Error handling and supervision tests** 🛡️
-  - [ ] Test node failure handling
-  - [ ] Test workflow failure propagation
-  - [ ] Test continue-on-error behavior
-  - [ ] Test fail-fast behavior
-  - [ ] Test retry logic
-  - [ ] Test timeout handling
-  - [ ] Test supervision restart
-  - [ ] Test supervision stop
-  - [ ] Test escalation
+- [x] **Error handling and supervision tests** 🛡️
+  - [x] Test node failure handling
+  - [x] Test workflow failure propagation
+  - [x] Test continue-on-error behavior
+  - [x] Test fail-fast behavior
+  - [x] Test retry logic
+  - [x] Test timeout handling
+  - [x] Test supervision restart
+  - [x] Test supervision stop
+  - [x] Test escalation
+
+**Completion Date:** April 2, 2026 🎉
+**Test Coverage:** 12 new tests (165 total, all passing)
+**Files Created/Modified:**
+- ✅ `Workflow.Engine/Messages/WorkflowMessages.cs` — Added `SupervisionEvent` message
+- ✅ `Workflow.Engine/Actors/WorkflowSupervisor.cs` — Enhanced supervision with event publishing
+- ✅ `Workflow.Engine/Actors/WorkflowExecutor.cs` — Added `SupervisorStrategy()`, `HandleRetryNode`, retry backoff, fixed continue-on-error bug
+- ✅ `Workflow.Tests/Engine/SupervisionStrategyTests.cs` — 12 comprehensive tests
 
 ---
 
