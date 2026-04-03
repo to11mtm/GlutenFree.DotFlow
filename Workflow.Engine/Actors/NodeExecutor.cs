@@ -1,4 +1,4 @@
-﻿﻿// <copyright file="NodeExecutor.cs" company="GlutenFree">
+﻿// <copyright file="NodeExecutor.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 

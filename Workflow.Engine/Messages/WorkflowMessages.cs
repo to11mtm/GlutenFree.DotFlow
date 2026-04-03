@@ -42,6 +42,13 @@ using Workflow.Core.Models;
 [Union(17, typeof(NodeExecutionFailed))]
 [Union(18, typeof(RetryNode))]
 [Union(19, typeof(NodeRetrying))]
+[Union(20, typeof(ExecutionStateChanged))]
+[Union(21, typeof(NodeStateChanged))]
+[Union(22, typeof(SaveExecutionSnapshot))]
+[Union(23, typeof(ExecutionSnapshotSaved))]
+[Union(24, typeof(GetExecutionSnapshot))]
+[Union(25, typeof(ExecutionSnapshotResponse))]
+[Union(26, typeof(SupervisionEvent))]
 public interface IWorkflowMessage
 {
 }
@@ -301,6 +308,106 @@ public record NodeRetrying(
     int Attempt,
     int MaxAttempts,
     Exception LastError): IWorkflowMessage;
+
+#endregion
+
+#region State Tracking Messages
+
+/// <summary>
+/// Notification published when a workflow execution transitions between states.
+/// Published to both parent actor and EventStream for decoupled observability~ 📡✨
+/// </summary>
+/// <remarks>
+/// CopilotNote: Subscribe to these via <c>Context.System.EventStream.Subscribe&lt;ExecutionStateChanged&gt;(Self)</c>
+/// for building monitoring dashboards, audit logs, or webhook triggers! UwU 💖
+/// </remarks>
+/// <param name="ExecutionId">The execution that transitioned. 🆔</param>
+/// <param name="OldState">The state before the transition. 🔙</param>
+/// <param name="NewState">The state after the transition. 🔜</param>
+/// <param name="Timestamp">When the transition occurred. ⏰</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record ExecutionStateChanged(
+    Guid ExecutionId,
+    ExecutionState OldState,
+    ExecutionState NewState,
+    DateTimeOffset Timestamp) : IWorkflowMessage;
+
+/// <summary>
+/// Notification published when an individual node transitions between states.
+/// Published alongside <see cref="ExecutionStateChanged"/> for granular tracking~ 🧩✨
+/// </summary>
+/// <param name="NodeId">The node that transitioned. 🆔</param>
+/// <param name="ExecutionId">The parent execution. 🔗</param>
+/// <param name="OldState">The state before the transition. 🔙</param>
+/// <param name="NewState">The state after the transition. 🔜</param>
+/// <param name="Timestamp">When the transition occurred. ⏰</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record NodeStateChanged(
+    string NodeId,
+    Guid ExecutionId,
+    NodeExecutionState OldState,
+    NodeExecutionState NewState,
+    DateTimeOffset Timestamp) : IWorkflowMessage;
+
+/// <summary>
+/// Request to persist a snapshot of the current execution context.
+/// Used for persistence and resumability~ 💾
+/// </summary>
+/// <param name="ExecutionId">The execution to snapshot. 🆔</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record SaveExecutionSnapshot(
+    Guid ExecutionId) : IWorkflowMessage;
+
+/// <summary>
+/// Confirmation that an execution snapshot was saved successfully~ ✅
+/// </summary>
+/// <param name="ExecutionId">The execution that was snapshotted. 🆔</param>
+/// <param name="Timestamp">When the snapshot was saved. ⏰</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record ExecutionSnapshotSaved(
+    Guid ExecutionId,
+    DateTimeOffset Timestamp) : IWorkflowMessage;
+
+/// <summary>
+/// Request to retrieve a previously saved execution snapshot~ 📥
+/// </summary>
+/// <param name="ExecutionId">The execution to retrieve. 🆔</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record GetExecutionSnapshot(
+    Guid ExecutionId) : IWorkflowMessage;
+
+/// <summary>
+/// Response containing a previously saved execution snapshot~ 📊
+/// </summary>
+/// <param name="ExecutionId">The execution ID. 🆔</param>
+/// <param name="Context">The saved context (None if not found). 📋</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record ExecutionSnapshotResponse(
+    Guid ExecutionId,
+    Option<Models.WorkflowExecutionContext> Context) : IWorkflowMessage;
+
+/// <summary>
+/// Event published when the Akka.NET supervision strategy makes a decision.
+/// Enables monitoring and observability of actor failure handling~ 🛡️✨
+/// </summary>
+/// <remarks>
+/// CopilotNote: Subscribe to these via <c>Context.System.EventStream.Subscribe&lt;SupervisionEvent&gt;(Self)</c>
+/// for building failure dashboards, alerting, or audit logs! UwU 💖
+/// </remarks>
+/// <param name="ActorPath">The path of the actor that failed. 📍</param>
+/// <param name="ExceptionType">The type name of the exception that caused the failure. 💥</param>
+/// <param name="ExceptionMessage">The exception message for debugging. 📝</param>
+/// <param name="Directive">The supervision directive applied (Restart, Stop, Escalate, Resume). 🎯</param>
+/// <param name="Timestamp">When the supervision event occurred. ⏰</param>
+/// <param name="ExecutionId">The related execution ID, if known. 🆔</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record SupervisionEvent(
+    string ActorPath,
+    string ExceptionType,
+    string ExceptionMessage,
+    string Directive,
+    DateTimeOffset Timestamp,
+    Option<Guid> ExecutionId) : IWorkflowMessage;
 
 #endregion
 

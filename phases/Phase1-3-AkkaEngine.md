@@ -843,34 +843,54 @@ public class OptionJsonConverter<T> : JsonConverter<Option<T>>
 **Purpose:** Track and persist the execution state of workflows and nodes for monitoring and resumability.
 
 **Tasks:**
-- [ ] **Add execution state tracking** 📊
-  - [ ] Create `ExecutionState` enum
-    - [ ] `Pending` - Not started
-    - [ ] `Running` - Currently executing
-    - [ ] `Completed` - Finished successfully
-    - [ ] `Failed` - Finished with error
-    - [ ] `Cancelled` - Cancelled by user
-    - [ ] `Paused` - Temporarily paused
-  - [ ] Create `ExecutionContext` class
-    - [ ] Add `ExecutionId` property
-    - [ ] Add `WorkflowId` property
-    - [ ] Add `State` property
-    - [ ] Add `StartTime` property
-    - [ ] Add `EndTime` property
-    - [ ] Add `Variables` dictionary (workflow variables)
-    - [ ] Add `NodeStates` dictionary (per-node status)
-    - [ ] Add `Outputs` dictionary (final outputs)
-    - [ ] Add `Error` property (if failed)
-  - [ ] Implement state persistence snapshots
-  - [ ] Add state change events/notifications
+- [x] **Add execution state tracking** 📊
+  - [x] Create `ExecutionState` enum
+    - [x] `Pending` - Not started
+    - [x] `Running` - Currently executing
+    - [x] `Completed` - Finished successfully
+    - [x] `Failed` - Finished with error
+    - [x] `Cancelled` - Cancelled by user
+    - [x] `Paused` - Temporarily paused
+  - [x] Create `ExecutionContext` class (`WorkflowExecutionContext` in `Workflow.Engine/Models/`)
+    - [x] Add `ExecutionId` property
+    - [x] Add `WorkflowId` property
+    - [x] Add `State` property
+    - [x] Add `StartTime` property
+    - [x] Add `EndTime` property
+    - [x] Add `Variables` dictionary (workflow variables)
+    - [x] Add `NodeStates` dictionary (per-node status)
+    - [x] Add `Outputs` dictionary (final outputs)
+    - [x] Add `Error` property (if failed)
+    - [x] Add `StateHistory` audit trail (bonus! 📜)
+    - [x] Add `NodeTimings` per-node timing info (bonus! ⏱️)
+    - [x] Add `With*` immutable transition helpers
+    - [x] Add `CalculateProgress()`, `IsTerminal`, `GetNodeStateCounts()` query helpers
+  - [x] Implement state persistence snapshots
+    - [x] `IExecutionStateStore` interface (`Workflow.Engine/Services/`)
+    - [x] `InMemoryExecutionStateStore` thread-safe implementation
+    - [x] `SaveExecutionSnapshot` / `ExecutionSnapshotSaved` messages
+    - [x] `GetExecutionSnapshot` / `ExecutionSnapshotResponse` messages
+    - [x] Auto-snapshot on terminal states (Completed, Failed, Cancelled) and Pause
+  - [x] Add state change events/notifications
+    - [x] `ExecutionStateChanged` message (published to parent + EventStream)
+    - [x] `NodeStateChanged` message (published to parent + EventStream)
+    - [x] `TransitionExecutionState()` centralized state transition method
+    - [x] `TransitionNodeState()` centralized node state transition method
+  - [x] Implement Pause/Resume handlers in WorkflowExecutor
+    - [x] `HandlePauseExecution` — sets pause flag, defers new nodes
+    - [x] `HandleResumeExecution` — clears flag, kicks off deferred nodes
+  - [x] Refactored `WorkflowExecutor` to use `WorkflowExecutionContext` as canonical state
 
-**Tests:**
-- [ ] **State tracking tests** 📊
-  - [ ] Test state transitions
-  - [ ] Test state persistence
-  - [ ] Test state restoration
-  - [ ] Test concurrent state updates
-  - [ ] Test state change notifications
+**Tests:** (30 tests, all passing ✅)
+- [x] **State tracking tests** 📊
+  - [x] Test state transitions (Pending→Running→Completed, Failed, Cancelled, Paused→Resumed)
+  - [x] Test state persistence (save, load, overwrite, delete, list)
+  - [x] Test state restoration (round-trip snapshot verification)
+  - [x] Test concurrent state updates (linear workflow A→B→C completion tracking)
+  - [x] Test state change notifications (EventStream ExecutionStateChanged & NodeStateChanged)
+  - [x] Test snapshot via actor messages (GetExecutionSnapshot, SaveExecutionSnapshot)
+  - [x] Test context unit operations (progress calculation, variable tracking, node state counts)
+  - [x] Test pause/resume integration
 
 ---
 

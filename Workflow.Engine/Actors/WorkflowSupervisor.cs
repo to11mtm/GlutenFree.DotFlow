@@ -83,6 +83,19 @@ public class WorkflowSupervisor : ReceiveActor
             withinTimeRange: TimeSpan.FromMinutes(1),
             localOnlyDecider: ex =>
             {
+                // Helper to publish a supervision event to the EventStream for observability~ 📡
+                void PublishSupervisionEvent(string directive)
+                {
+                    var supervisionEvent = new SupervisionEvent(
+                        ActorPath: Sender.Path.ToString(),
+                        ExceptionType: ex.GetType().Name,
+                        ExceptionMessage: ex.Message,
+                        Directive: directive,
+                        Timestamp: DateTimeOffset.UtcNow,
+                        ExecutionId: LanguageExt.Option<Guid>.None);
+                    Context.System.EventStream.Publish(supervisionEvent);
+                }
+
                 switch (ex)
                 {
                     // Transient failures - restart the actor
@@ -91,6 +104,7 @@ public class WorkflowSupervisor : ReceiveActor
                         this.log.Warning(
                             "⚠️ Transient failure in workflow executor: {ErrorType}. Restarting...",
                             ex.GetType().Name);
+                        PublishSupervisionEvent("Restart");
                         return Directive.Restart;
 
                     // Critical failures - stop the actor
@@ -100,6 +114,7 @@ public class WorkflowSupervisor : ReceiveActor
                             ex,
                             "❌ Critical failure in workflow executor: {ErrorType}. Stopping actor.",
                             ex.GetType().Name);
+                        PublishSupervisionEvent("Stop");
                         return Directive.Stop;
 
                     // Unknown failures - escalate to parent
@@ -108,6 +123,7 @@ public class WorkflowSupervisor : ReceiveActor
                             ex,
                             "🔥 Unknown failure in workflow executor: {ErrorType}. Escalating...",
                             ex.GetType().Name);
+                        PublishSupervisionEvent("Escalate");
                         return Directive.Escalate;
                 }
             });
