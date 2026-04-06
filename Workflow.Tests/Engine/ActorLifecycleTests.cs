@@ -880,6 +880,7 @@ public class ActorLifecycleTests : TestKit
         public string Category => "Testing";
         public string Description => "Always succeeds~ ✅";
         public string Icon => "✅";
+        public Version Version => new(1, 0, 0);
         public ModuleSchema Schema => ModuleSchema.Empty;
 
         public Task<ModuleResult> ExecuteAsync(
@@ -903,6 +904,7 @@ public class ActorLifecycleTests : TestKit
         public string Category => "Testing";
         public string Description => "Takes a while~ 🐌";
         public string Icon => "🐌";
+        public Version Version => new(1, 0, 0);
         public ModuleSchema Schema => ModuleSchema.Empty;
 
         public async Task<ModuleResult> ExecuteAsync(
@@ -923,6 +925,7 @@ public class ActorLifecycleTests : TestKit
         public string Category => "Testing";
         public string Description => "Always fails~ 💥";
         public string Icon => "💥";
+        public Version Version => new(1, 0, 0);
         public ModuleSchema Schema => ModuleSchema.Empty;
 
         public Task<ModuleResult> ExecuteAsync(
@@ -934,6 +937,4 @@ public class ActorLifecycleTests : TestKit
 
     #endregion
 }
-
-
 

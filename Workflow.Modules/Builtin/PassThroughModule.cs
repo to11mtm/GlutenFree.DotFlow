@@ -41,6 +41,9 @@ public class PassThroughModule : IWorkflowModule
     public string Icon => "🔄";
 
     /// <inheritdoc />
+    public Version Version => new(1, 0, 0);
+
+    /// <inheritdoc />
     public ModuleSchema Schema => new(
         Inputs: Arr.create(
             new PortDefinition(

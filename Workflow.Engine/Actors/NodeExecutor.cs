@@ -211,7 +211,22 @@ public class NodeExecutor : ReceiveActor
                     _nodeId,
                     _timer.ElapsedMilliseconds);
 
-                SendSuccess(result.ModuleResult.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value));
+                // Build execution metrics — always capture duration from our Stopwatch,
+                // but preserve any module-provided extras (MemoryBytes, CustomMetrics) ✨
+                var moduleMetrics = result.ModuleResult.Metrics;
+                var metrics = new ExecutionMetrics
+                {
+                    Duration = _timer.Elapsed,
+                    MemoryBytes = moduleMetrics?.MemoryBytes,
+                    CustomMetrics = moduleMetrics?.CustomMetrics,
+                };
+
+                // Attach metrics to the result so downstream consumers can see them
+                var enrichedResult = result.ModuleResult with { Metrics = metrics };
+
+                SendSuccess(
+                    enrichedResult.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value),
+                    metrics);
             }
             else
             {
@@ -477,7 +492,7 @@ public class NodeExecutor : ReceiveActor
     /// <summary>
     /// Sends success message to parent.
     /// </summary>
-    private void SendSuccess(Dictionary<string, object?> outputs)
+    private void SendSuccess(Dictionary<string, object?> outputs, ExecutionMetrics? metrics = null)
     {
         _isExecuting = false;
         Context.SetReceiveTimeout(null);
@@ -486,7 +501,8 @@ public class NodeExecutor : ReceiveActor
             _nodeId,
             outputs.ToHashMap(),
             _executionId,
-            _timer.Elapsed));
+            _timer.Elapsed,
+            metrics));
     }
 
     /// <summary>

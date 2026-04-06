@@ -24,87 +24,97 @@ These were created during the Akka Engine phase and are **already complete**:
 
 ---
 
-## 1.4.1 IWorkflowModule & ModuleResult Enhancements ⏳
+## 1.4.1 IWorkflowModule & ModuleResult Enhancements ✅
 
 **Purpose:** Add the missing members to existing contracts without breaking the 196 green tests from Phase 1.3.
 
 **Complexity:** 🟢 Low
 
 **Tasks:**
-- [ ] **Enhance `IWorkflowModule` interface** 📦
-  - [ ] Add `Version` property (`Version` type) — module version for compatibility tracking
-  - [ ] Add `ValidateConfiguration` default interface method
-    - [ ] Signature: `ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)`
-    - [ ] Default implementation returns `ValidationResult.Success()` (non-breaking!)
-  - [ ] Add `Dependencies` property (`IReadOnlyList<string>`) — stub for future dependency resolution
-    - [ ] Default implementation returns empty list (non-breaking!)
-  - [ ] Update `PassThroughModule` to implement `Version` (e.g., `new Version(1, 0, 0)`)
-  - [ ] Add XML documentation with examples
+- [x] **Enhance `IWorkflowModule` interface** 📦
+  - [x] Add `Version` property (`Version` type) — module version for compatibility tracking
+  - [x] Add `ValidateConfiguration` default interface method
+    - [x] Signature: `ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)`
+    - [x] Default implementation returns `ValidationResult.Success()` (non-breaking!)
+  - [x] Add `Dependencies` property (`IReadOnlyList<string>`) — stub for future dependency resolution
+    - [x] Default implementation returns empty list (non-breaking!)
+  - [x] Update `PassThroughModule` to implement `Version` (e.g., `new Version(1, 0, 0)`)
+  - [x] Add XML documentation with examples
 
-- [ ] **Enhance `ModuleResult`** 📊
-  - [ ] Create `ExecutionMetrics` record:
-    - [ ] `Duration` (TimeSpan) — how long the module took
-    - [ ] `MemoryBytes` (long?) — optional memory usage tracking
-    - [ ] `CustomMetrics` (HashMap<string, object>?) — extensible metrics bag
-  - [ ] Add `Metrics` property to `ModuleResult` (nullable, default null)
-  - [ ] Add `ModuleResult.Ok(Dictionary outputs, ExecutionMetrics? metrics)` overload
+- [x] **Enhance `ModuleResult`** 📊
+  - [x] Create `ExecutionMetrics` record:
+    - [x] `Duration` (TimeSpan) — how long the module took
+    - [x] `MemoryBytes` (long?) — optional memory usage tracking
+    - [x] `CustomMetrics` (HashMap<string, object>?) — extensible metrics bag
+  - [x] Add `Metrics` property to `ModuleResult` (nullable, default null)
+  - [x] Add `ModuleResult.Ok(Dictionary outputs, ExecutionMetrics? metrics)` overload
 
-- [ ] **Update `NodeExecutor`** ⚡
-  - [ ] Capture `Stopwatch` elapsed time around module execution
-  - [ ] Populate `ExecutionMetrics.Duration` automatically
-  - [ ] Include metrics in `NodeExecutionCompleted` message
+- [x] **Update `NodeExecutor`** ⚡
+  - [x] Capture `Stopwatch` elapsed time around module execution
+  - [x] Populate `ExecutionMetrics.Duration` automatically
+  - [x] Include metrics in `NodeExecutionCompleted` message
 
-**Tests (~8):**
-- [ ] Test `IWorkflowModule.Version` is not null on `PassThroughModule`
-- [ ] Test `ValidateConfiguration` default returns success
-- [ ] Test `Dependencies` default returns empty
-- [ ] Test `ExecutionMetrics` creation and properties
-- [ ] Test `ModuleResult.Ok` with metrics
-- [ ] Test `ModuleResult.Ok` without metrics (backwards compat)
-- [ ] Test `NodeExecutor` captures duration metrics
-- [ ] Test metrics round-trip through messages
+**Tests (~8):** → `Workflow.Tests/Modules/ModuleContractTests.cs`
+- [x] Test `IWorkflowModule.Version` is not null on `PassThroughModule`
+- [x] Test `ValidateConfiguration` default returns success
+- [x] Test `Dependencies` default returns empty
+- [x] Test `ExecutionMetrics` creation and properties
+- [x] Test `ModuleResult.Ok` with metrics
+- [x] Test `ModuleResult.Ok` without metrics (backwards compat)
+- [ ] Test `NodeExecutor` captures duration metrics *(covered in NodeExecutorTests already)*
+- [ ] Test metrics round-trip through messages *(covered in SerializationTests already)*
 
 ---
 
-## 1.4.2 Registry Enhancements ⏳
+## 1.4.2 Registry Enhancements ✅
 
 **Purpose:** Expand `IModuleRegistry` and `InMemoryModuleRegistry` with category lookup, search, events, and type-based registration.
 
 **Complexity:** 🟡 Low-Medium
 
 **Tasks:**
-- [ ] **Expand `IModuleRegistry` interface** 📚
-  - [ ] Add `GetModulesByCategory(string category)` → `IReadOnlyList<IWorkflowModule>`
-  - [ ] Add `SearchModules(string query)` → `IReadOnlyList<IWorkflowModule>`
-    - [ ] Case-insensitive search across ModuleId, DisplayName, Description
-  - [ ] Add `RegisterModule(Type moduleType, IServiceProvider? services = null)` overload
-    - [ ] Instantiate via `ActivatorUtilities.CreateInstance` if services provided
-    - [ ] Fall back to `Activator.CreateInstance` otherwise
-  - [ ] Add `event Action<IWorkflowModule>? ModuleRegistered`
-  - [ ] Add `event Action<string>? ModuleUnregistered`
+- [x] **Expand `IModuleRegistry` interface** 📚
+  - [x] Add `GetModulesByCategory(string category)` → `IReadOnlyList<IWorkflowModule>`
+  - [x] Add `SearchModules(string query)` → `IReadOnlyList<IWorkflowModule>`
+    - [x] Case-insensitive search across ModuleId, DisplayName, Description
+  - [x] Add `RegisterModule(Type moduleType, IServiceProvider? services = null)` overload
+    - [x] Instantiate via `ActivatorUtilities.CreateInstance` if services provided
+    - [x] Fall back to `Activator.CreateInstance` otherwise
+  - [x] Add `IDisposable Subscribe(IModuleRegistryObserver observer)` for notifications
+    - [x] No events on the interface! Observer pattern for cross-domain modularity 🎯
+    - [x] Returns `IDisposable` so subscribers can cleanly unsubscribe (no memory leaks!)
 
-- [ ] **Implement in `InMemoryModuleRegistry`** 🗂️
-  - [ ] Implement category lookup (LINQ filter on `Category`, case-insensitive)
-  - [ ] Implement search (case-insensitive Contains on Id/DisplayName/Description)
-  - [ ] Implement type-based registration with DI support
-  - [ ] Fire events on register/unregister
-  - [ ] ** Clarification :** Duplicate registration policy
-    - [ ] Currently: silently overwrites
-    - [ ] How we should handle: throw `InvalidOperationException` by default, add `bool allowOverwrite = false` param
+- [x] **Create `IModuleRegistryObserver` interface** 👀
+  - [x] In `IModuleRegistry.cs`
+  - [x] `OnModuleRegistered(IWorkflowModule module)` — called after successful registration
+  - [x] `OnModuleUnregistered(string moduleId, IWorkflowModule module)` — called after removal
+  - [x] Both methods are synchronous (notifications are fire-and-forget)
+  - [x] Observers are invoked in registration order, exceptions in one don't block others
 
-**Tests (~12):**
-- [ ] Test `GetModulesByCategory` returns matching modules
-- [ ] Test `GetModulesByCategory` returns empty for unknown category
-- [ ] Test `GetModulesByCategory` is case-insensitive
-- [ ] Test `SearchModules` finds by ModuleId
-- [ ] Test `SearchModules` finds by DisplayName
-- [ ] Test `SearchModules` finds by Description
-- [ ] Test `SearchModules` returns empty for no matches
-- [ ] Test `RegisterModule(Type)` creates instance correctly
-- [ ] Test `RegisterModule(Type, IServiceProvider)` uses DI
-- [ ] Test `ModuleRegistered` event fires on registration
-- [ ] Test `ModuleUnregistered` event fires on unregistration
-- [ ] Test duplicate registration behavior (whichever policy is chosen)
+- [x] **Implement in `InMemoryModuleRegistry`** 🗂️
+  - [x] Implement category lookup (LINQ filter on `Category`, case-insensitive)
+  - [x] Implement search (case-insensitive Contains on Id/DisplayName/Description)
+  - [x] Implement type-based registration with DI support
+  - [x] Maintain `List<IModuleRegistryObserver>` for subscribers
+  - [x] Notify observers on register/unregister (wrapped in try/catch per observer)
+  - [x] `Subscribe` returns a `Disposable` that removes the observer from the list
+  - [x] Duplicate registration policy: throw `InvalidOperationException` by default, add `bool allowOverwrite = false` param
+
+**Tests (~14):** → `Workflow.Tests/Modules/ModuleRegistryTests.cs`
+- [x] Test `GetModulesByCategory` returns matching modules
+- [x] Test `GetModulesByCategory` returns empty for unknown category
+- [x] Test `GetModulesByCategory` is case-insensitive
+- [x] Test `SearchModules` finds by ModuleId
+- [x] Test `SearchModules` finds by DisplayName
+- [x] Test `SearchModules` finds by Description
+- [x] Test `SearchModules` returns empty for no matches
+- [x] Test `RegisterModule(Type)` creates instance correctly
+- [x] Test `RegisterModule(Type, IServiceProvider)` uses DI
+- [x] Test observer receives `OnModuleRegistered` notification
+- [x] Test observer receives `OnModuleUnregistered` notification
+- [x] Test `Dispose` unsubscribes observer (no more notifications)
+- [x] Test duplicate registration throws by default
+- [x] Test duplicate registration with `allowOverwrite = true` succeeds
 
 ---
 

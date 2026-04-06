@@ -306,6 +306,7 @@ public class NodeExecutorTests : TestKit
         public string Category => "Testing";
         public string Description => "Delays for testing timeouts and cancellation.";
         public string Icon => "⏱️";
+        public Version Version => new(1, 0, 0);
 
         public ModuleSchema Schema => new(
             Inputs: Arr<PortDefinition>.Empty,
@@ -336,6 +337,7 @@ public class NodeExecutorTests : TestKit
         public string Category => "Testing";
         public string Description => "Always fails for testing error handling.";
         public string Icon => "💥";
+        public Version Version => new(1, 0, 0);
 
         public ModuleSchema Schema => ModuleSchema.Empty;
 

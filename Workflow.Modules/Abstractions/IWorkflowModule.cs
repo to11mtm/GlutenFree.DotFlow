@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using LanguageExt;
 using Microsoft.Extensions.Logging;
 using Workflow.Core.Models;
 
@@ -19,6 +20,11 @@ using Workflow.Core.Models;
 /// <para>
 /// CopilotNote: Module authors implement this interface to create
 /// custom workflow nodes. Keep it simple and stateless for best results!
+/// </para>
+/// <para>
+/// Phase 1.4.1 additions: Version, ValidateConfiguration (default impl),
+/// Dependencies (default impl). All have safe defaults so existing modules
+/// don't break~ non-breaking is the way! 💖
 /// </para>
 /// </remarks>
 public interface IWorkflowModule
@@ -49,10 +55,43 @@ public interface IWorkflowModule
     string Icon { get; }
 
     /// <summary>
+    /// Gets the version of this module for compatibility tracking. 🏷️
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Used for side-by-side versioning (Phase 2.8) and
+    /// schema compatibility checks. Every module should declare a version! ✨
+    /// </remarks>
+    Version Version { get; }
+
+    /// <summary>
     /// Gets the input/output schema for this module. 📋
     /// Uses the unified ModuleSchema from Workflow.Core.Models.
     /// </summary>
     ModuleSchema Schema { get; }
+
+    /// <summary>
+    /// Gets the list of module IDs this module depends on. 🔗
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: This is a stub for future dependency resolution (Phase 2.8).
+    /// Modules CAN declare deps now, but resolution logic comes later~ 💖
+    /// Default returns empty — most modules have no deps!
+    /// </remarks>
+    IReadOnlyList<string> Dependencies => Array.Empty<string>();
+
+    /// <summary>
+    /// Validates the given configuration before execution. ✅
+    /// Override this to add custom validation logic for your module's properties!
+    /// </summary>
+    /// <param name="configuration">The configuration dictionary to validate.</param>
+    /// <returns>A <see cref="ValidationResult"/> indicating if the config is valid.</returns>
+    /// <remarks>
+    /// CopilotNote: The default implementation returns success — modules only
+    /// need to override this if they have specific config validation needs.
+    /// Called by ModuleValidator (Phase 1.4.3) and optionally by NodeExecutor~ 🎯
+    /// </remarks>
+    ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
+        => ValidationResult.Success();
 
     /// <summary>
     /// Execute the module's logic! This is where the magic happens~ ✨
@@ -107,6 +146,45 @@ public record ModuleExecutionContext
 }
 
 /// <summary>
+/// 📊 Metrics captured during module execution.
+/// </summary>
+/// <remarks>
+/// CopilotNote: NodeExecutor auto-populates Duration via Stopwatch.
+/// Modules can optionally set MemoryBytes and CustomMetrics themselves
+/// for richer observability! Phase 4 monitoring feeds from these~ ✨
+/// </remarks>
+public record ExecutionMetrics
+{
+    /// <summary>
+    /// Gets how long the module took to execute. ⏱️
+    /// </summary>
+    public required TimeSpan Duration { get; init; }
+
+    /// <summary>
+    /// Gets the optional memory usage in bytes during execution. 🧠
+    /// </summary>
+    public long? MemoryBytes { get; init; }
+
+    /// <summary>
+    /// Gets an optional extensible bag of custom metrics. 📦
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Use this for module-specific metrics like
+    /// "rows_processed", "api_calls_made", etc. Phase 4 dashboards
+    /// will aggregate these per-module~ 💖
+    /// </remarks>
+    public HashMap<string, object>? CustomMetrics { get; init; }
+
+    /// <summary>
+    /// Creates an <see cref="ExecutionMetrics"/> with just a duration. ⏱️
+    /// </summary>
+    /// <param name="duration">The execution duration.</param>
+    /// <returns>A new <see cref="ExecutionMetrics"/> instance.</returns>
+    public static ExecutionMetrics FromDuration(TimeSpan duration)
+        => new() { Duration = duration };
+}
+
+/// <summary>
 /// 🎯 Result of module execution.
 /// </summary>
 public record ModuleResult
@@ -132,12 +210,30 @@ public record ModuleResult
     public Exception? Exception { get; init; }
 
     /// <summary>
+    /// Gets the execution metrics (duration, memory, custom). 📊
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: This is auto-populated by NodeExecutor with at least Duration.
+    /// Modules can also set their own metrics via the Ok overload~ ✨
+    /// </remarks>
+    public ExecutionMetrics? Metrics { get; init; }
+
+    /// <summary>
     /// Creates a successful result with outputs.
     /// </summary>
     /// <param name="outputs">The output values.</param>
     /// <returns>A successful ModuleResult.</returns>
     public static ModuleResult Ok(Dictionary<string, object?> outputs)
         => new() { Success = true, Outputs = outputs };
+
+    /// <summary>
+    /// Creates a successful result with outputs and execution metrics. 📊
+    /// </summary>
+    /// <param name="outputs">The output values.</param>
+    /// <param name="metrics">Execution metrics (duration, memory, custom).</param>
+    /// <returns>A successful ModuleResult with metrics.</returns>
+    public static ModuleResult Ok(Dictionary<string, object?> outputs, ExecutionMetrics metrics)
+        => new() { Success = true, Outputs = outputs, Metrics = metrics };
 
     /// <summary>
     /// Creates a failed result with error message.

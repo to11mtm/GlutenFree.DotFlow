@@ -641,6 +641,7 @@ public class SupervisionStrategyTests : TestKit
         public string Category => "Testing";
         public string Description => "Always fails for testing error handling~ 💥";
         public string Icon => "💥";
+        public Version Version => new(1, 0, 0);
 
         public ModuleSchema Schema => ModuleSchema.Empty;
 
@@ -677,7 +678,7 @@ public class SupervisionStrategyTests : TestKit
         public string Category => "Testing";
         public string Description => "Fails N times then succeeds~ 🔄";
         public string Icon => "🔄";
-
+        public Version Version => new(1, 0, 0);
         public ModuleSchema Schema => ModuleSchema.Empty;
 
         /// <summary>
@@ -753,6 +754,7 @@ public class SupervisionStrategyTests : TestKit
         public string Category => "Testing";
         public string Description => "Always succeeds, passes inputs as outputs~ ✅";
         public string Icon => "✅";
+        public Version Version => new(1, 0, 0);
 
         public ModuleSchema Schema => ModuleSchema.Empty;
 
@@ -780,6 +782,7 @@ public class SupervisionStrategyTests : TestKit
         public string Category => "Testing";
         public string Description => "Takes forever (for timeout testing)~ 🐌";
         public string Icon => "🐌";
+        public Version Version => new(1, 0, 0);
 
         public ModuleSchema Schema => ModuleSchema.Empty;
 

@@ -8,6 +8,7 @@ using System;
 using LanguageExt;
 using MessagePack;
 using Workflow.Core.Models;
+using Workflow.Modules.Abstractions;
 
 #region Base Interface
 
@@ -258,12 +259,14 @@ public record Execute(
 /// <param name="Outputs">Output values produced by the node (immutable HashMap).</param>
 /// <param name="ExecutionId">The parent execution ID.</param>
 /// <param name="Duration">How long the node took to execute.</param>
+/// <param name="Metrics">Optional execution metrics (duration, memory, custom). 📊</param>
 [MessagePackObject(keyAsPropertyName: true)]
 public record NodeExecutionCompleted(
     string NodeId,
     HashMap<string, object?> Outputs,
     Guid ExecutionId,
-    TimeSpan Duration): IWorkflowMessage;
+    TimeSpan Duration,
+    ExecutionMetrics? Metrics = null): IWorkflowMessage;
 
 /// <summary>
 /// Message sent when a node execution fails.
