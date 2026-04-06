@@ -33,6 +33,7 @@ public class WorkflowSupervisor : ReceiveActor
     private readonly ILoggingAdapter log;
     private readonly IServiceProvider serviceProvider;
     private readonly Dictionary<Guid, IActorRef> activeWorkflows;
+    private readonly IActorLifecycleHooks _lifecycleHooks;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkflowSupervisor"/> class.
@@ -44,6 +45,8 @@ public class WorkflowSupervisor : ReceiveActor
         this.serviceProvider = serviceProvider;
         this.log = Context.GetLogger();
         this.activeWorkflows = new Dictionary<Guid, IActorRef>();
+        this._lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
+            ?? NullActorLifecycleHooks.Instance;
 
         // Handle workflow instance creation
         Receive<CreateWorkflowInstance>(msg => HandleCreateWorkflowInstance(msg));
@@ -56,6 +59,9 @@ public class WorkflowSupervisor : ReceiveActor
 
         // Handle child actor termination (death watch)
         Receive<Terminated>(msg => HandleTerminated(msg));
+
+        // Handle graceful shutdown request~ 🛑🌸
+        Receive<GracefulShutdown>(msg => HandleGracefulShutdown(msg));
 
         this.log.Info("🎭 WorkflowSupervisor started and ready to manage workflows! UwU");
     }
@@ -137,11 +143,12 @@ public class WorkflowSupervisor : ReceiveActor
     {
         base.PreStart();
         this.log.Info("✨ WorkflowSupervisor initializing...");
+        this._lifecycleHooks.OnPreStart(CreateLifecycleContext());
     }
 
     /// <summary>
     /// Lifecycle hook called when the actor is stopping.
-    /// Performs cleanup tasks~ 🧹
+    /// Performs cleanup tasks — cancels all active workflows and releases resources~ 🧹
     /// </summary>
     protected override void PostStop()
     {
@@ -157,7 +164,68 @@ public class WorkflowSupervisor : ReceiveActor
         }
 
         this.activeWorkflows.Clear();
+        this._lifecycleHooks.OnPostStop(CreateLifecycleContext());
         base.PostStop();
+    }
+
+    /// <summary>
+    /// Lifecycle hook called before the actor restarts due to a supervision directive.
+    /// Preserves active workflow references so they can be re-tracked after restart~ 🔄✨
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: During <c>PreRestart</c>, we log the failure reason and let children
+    /// continue running (by NOT calling <c>base.PreRestart</c> which would stop all children).
+    /// The active workflow dictionary is preserved because it's rebuilt in <c>PostRestart</c>
+    /// from still-alive child actor references. UwU 💖
+    /// </remarks>
+    /// <param name="reason">The exception that caused the restart.</param>
+    /// <param name="message">The message being processed when the failure occurred.</param>
+    protected override void PreRestart(Exception reason, object message)
+    {
+        this.log.Warning(
+            "🔄 WorkflowSupervisor restarting due to: {Error}. Preserving {Count} active workflows~ UwU",
+            reason.Message,
+            this.activeWorkflows.Count);
+
+        this._lifecycleHooks.OnPreRestart(CreateLifecycleContext(), reason, message);
+
+        // Do NOT call base.PreRestart — that would stop all children!
+        // We want child WorkflowExecutor actors to survive the supervisor restart~ 💖
+        PostStop();
+    }
+
+    /// <summary>
+    /// Lifecycle hook called after the actor restarts.
+    /// Re-watches any surviving child actors to restore death-watch tracking~ 🌸✨
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: After restart, the actor's constructor runs again (clearing fields),
+    /// but child actors may still be alive. We iterate <c>Context.GetChildren()</c> to
+    /// rebuild the tracking dictionary from surviving children. Kawaii recovery! 💕
+    /// </remarks>
+    /// <param name="reason">The exception that caused the restart.</param>
+    protected override void PostRestart(Exception reason)
+    {
+        base.PostRestart(reason);
+
+        // Rebuild active workflow tracking from surviving children~ 🔄
+        foreach (var child in Context.GetChildren())
+        {
+            // Extract execution ID from actor name (format: "executor-{guid:N}")
+            var name = child.Path.Name;
+            if (name.StartsWith("executor-") && Guid.TryParse(name.Substring("executor-".Length), out var executionId))
+            {
+                this.activeWorkflows[executionId] = child;
+                Context.Watch(child);
+                this.log.Info("🔄 Re-tracked surviving workflow executor: {ExecutionId}", executionId);
+            }
+        }
+
+        this.log.Info(
+            "✅ WorkflowSupervisor restarted successfully. Re-tracked {Count} workflows~ 🎉",
+            this.activeWorkflows.Count);
+
+        this._lifecycleHooks.OnPostRestart(CreateLifecycleContext(), reason);
     }
 
     /// <summary>
@@ -296,6 +364,68 @@ public class WorkflowSupervisor : ReceiveActor
         {
             this.log.Warning("⚠️ Received Terminated message for unknown actor: {ActorPath}", message.ActorRef.Path);
         }
+    }
+
+    /// <summary>
+    /// Handles the GracefulShutdown message.
+    /// Cancels all active (non-terminal) workflows and responds when cleanup is done~ 🛑🌸
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CopilotNote: This handler provides a clean shutdown path! It sends CancelExecution
+    /// to every active workflow, clears the tracking dictionary, and tells the caller
+    /// "we're done, uwu~". The timeout parameter is included for future use when we
+    /// add cooperative cancellation (waiting for in-flight nodes). For now we just
+    /// fire cancellations immediately. 💖
+    /// </para>
+    /// </remarks>
+    /// <param name="message">The graceful shutdown request.</param>
+    private void HandleGracefulShutdown(GracefulShutdown message)
+    {
+        this.log.Info(
+            "🛑🌸 Graceful shutdown requested (timeout: {Timeout}). Cancelling {Count} active workflow(s)~ UwU",
+            message.Timeout,
+            this.activeWorkflows.Count);
+
+        var cancelledCount = 0;
+
+        foreach (var (executionId, executor) in this.activeWorkflows.ToList())
+        {
+            this.log.Info(
+                "🛑 Graceful shutdown: cancelling workflow {ExecutionId}",
+                executionId);
+            executor.Tell(new CancelExecution(executionId));
+            cancelledCount++;
+        }
+
+        var completedCount = 0; // Already-terminal workflows were already removed from tracking
+        this.activeWorkflows.Clear();
+
+        var response = new GracefulShutdownComplete(
+            CancelledCount: cancelledCount,
+            CompletedCount: completedCount,
+            Timestamp: DateTimeOffset.UtcNow);
+
+        Sender.Tell(response);
+
+        this.log.Info(
+            "✅ Graceful shutdown complete: cancelled {CancelledCount} workflow(s)~ 🌸",
+            cancelledCount);
+
+        // Stop self after graceful shutdown~ 👋
+        Context.Stop(Self);
+    }
+
+    /// <summary>
+    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ 🌸
+    /// </summary>
+    /// <returns>A context describing this actor instance.</returns>
+    private ActorLifecycleContext CreateLifecycleContext()
+    {
+        return new ActorLifecycleContext(
+            ActorPath: Self.Path.ToString(),
+            ActorType: nameof(WorkflowSupervisor),
+            Services: this.serviceProvider);
     }
 }
 

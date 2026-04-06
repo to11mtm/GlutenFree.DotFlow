@@ -49,6 +49,9 @@ using Workflow.Core.Models;
 [Union(24, typeof(GetExecutionSnapshot))]
 [Union(25, typeof(ExecutionSnapshotResponse))]
 [Union(26, typeof(SupervisionEvent))]
+[Union(27, typeof(GracefulShutdown))]
+[Union(28, typeof(GracefulShutdownComplete))]
+[Union(29, typeof(ActorLifecycleEvent))]
 public interface IWorkflowMessage
 {
 }
@@ -408,6 +411,60 @@ public record SupervisionEvent(
     string Directive,
     DateTimeOffset Timestamp,
     Option<Guid> ExecutionId) : IWorkflowMessage;
+
+#endregion
+
+#region Lifecycle Messages
+
+/// <summary>
+/// Request for a graceful shutdown of the WorkflowSupervisor.
+/// Active workflows will be given a chance to complete before the supervisor stops~ 🛑🌸
+/// </summary>
+/// <remarks>
+/// <para>
+/// CopilotNote: Send this message to the WorkflowSupervisor to initiate a clean shutdown.
+/// Workflows already in a terminal state are ignored. Running/paused workflows are cancelled.
+/// The supervisor responds with <see cref="GracefulShutdownComplete"/> when done. UwU 💖
+/// </para>
+/// </remarks>
+/// <param name="Timeout">Maximum time to wait for active workflows to finish before forcing cancellation. ⏰</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record GracefulShutdown(
+    TimeSpan Timeout) : IWorkflowMessage;
+
+/// <summary>
+/// Response confirming that graceful shutdown completed.
+/// Contains a summary of what happened to active workflows~ ✅🌸
+/// </summary>
+/// <param name="CancelledCount">Number of workflows that were cancelled during shutdown. 🛑</param>
+/// <param name="CompletedCount">Number of workflows that were already in a terminal state. ✅</param>
+/// <param name="Timestamp">When the shutdown completed. ⏰</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record GracefulShutdownComplete(
+    int CancelledCount,
+    int CompletedCount,
+    DateTimeOffset Timestamp) : IWorkflowMessage;
+
+/// <summary>
+/// Event published when an actor lifecycle hook fires (PreStart, PostStop, PreRestart, PostRestart).
+/// Enables external monitoring and testing of actor lifecycle behavior~ 🌸📡
+/// </summary>
+/// <remarks>
+/// CopilotNote: Subscribe via <c>Context.System.EventStream.Subscribe&lt;ActorLifecycleEvent&gt;(Self)</c>
+/// to monitor actor lifecycle in tests or for operational dashboards! UwU 💖
+/// </remarks>
+/// <param name="ActorPath">The path of the actor whose lifecycle changed. 📍</param>
+/// <param name="ActorType">The CLR type name of the actor (e.g., "WorkflowSupervisor"). 🏷️</param>
+/// <param name="Hook">Which lifecycle hook fired (PreStart, PostStop, PreRestart, PostRestart). 🔄</param>
+/// <param name="Timestamp">When the event occurred. ⏰</param>
+/// <param name="Reason">Optional reason (e.g., exception message for restart hooks). 📝</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record ActorLifecycleEvent(
+    string ActorPath,
+    string ActorType,
+    string Hook,
+    DateTimeOffset Timestamp,
+    Option<string> Reason) : IWorkflowMessage;
 
 #endregion
 

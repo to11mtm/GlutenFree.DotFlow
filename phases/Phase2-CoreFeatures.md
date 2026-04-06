@@ -16,6 +16,7 @@ Phase 2 builds upon the foundation with critical production features:
 - File system & cloud storage modules
 - Data transformation modules
 - Complete REST API with authentication
+- Module system enhancements (`.wfmod` packages, hot-reload, versioning, dependency resolution) *(deferred from Phase 1.4)*
 
 **Timeline:** 8 weeks  
 **Team Size:** 3-4 developers  
@@ -36,6 +37,7 @@ Phase 2 builds upon the foundation with critical production features:
 - [2.5 File System Modules (Week 12-13)](#25-file-system-modules-week-12-13)
 - [2.6 Data Transformation Modules (Week 13)](#26-data-transformation-modules-week-13)
 - [2.7 REST API Implementation (Week 13-14)](#27-rest-api-implementation-week-13-14)
+- [2.8 Module System Enhancements (Deferred from Phase 1.4)](#28-module-system-enhancements-deferred-from-phase-14-)
 - [Phase 2 Success Criteria](#phase-2-success-criteria-)
 
 ---
@@ -2016,6 +2018,98 @@ Phase 2 builds upon the foundation with critical production features:
 
 ---
 
+### 2.8 Module System Enhancements (Deferred from Phase 1.4) 📦
+
+> **CopilotNote:** These items were deferred from Phase 1.4 (Module System Foundation) because they go beyond foundational work. Phase 1.4 establishes the core module contracts, registry, validation, property binding, discovery, and basic dynamic loading. These items build on top of that foundation~ 💖
+
+**Tasks:**
+- [ ] **Define `.wfmod` package format** 📦
+  - [ ] Define package structure (ZIP archive):
+    - [ ] `module.json` — manifest with metadata, version, dependencies
+    - [ ] `lib/` — module DLL(s) and dependency assemblies
+    - [ ] `docs/` — README, changelog, examples
+    - [ ] `assets/` — icons, screenshots
+  - [ ] Create `ModuleManifest` class (deserialized from `module.json`)
+    - [ ] `Id`, `Version`, `DisplayName`, `Description`, `Author`
+    - [ ] `MinEngineVersion` — minimum DotFlow engine version required
+    - [ ] `Dependencies` — list of other module IDs + version ranges
+    - [ ] `EntryAssembly` — path to main DLL within package
+  - [ ] Create `ModulePackageReader` class
+    - [ ] Read and validate `.wfmod` ZIP structure
+    - [ ] Deserialize manifest
+    - [ ] Extract DLLs to isolated directory
+    - [ ] Validate dependencies are available
+  - [ ] Integrate with `AssemblyModuleLoader` (from Phase 1.4.6) for loading extracted DLLs
+  - [ ] Add comprehensive tests
+    - [ ] Test valid package loads correctly
+    - [ ] Test invalid ZIP fails gracefully
+    - [ ] Test missing manifest fails
+    - [ ] Test missing DLL fails
+    - [ ] Test dependency validation
+
+- [ ] **Implement module hot-reload** 🔄
+  - [ ] Create `IModuleWatcher` interface
+    - [ ] `Watch(string directory)` — start watching for changes
+    - [ ] `Stop()` — stop watching
+    - [ ] `event Action<string> ModuleChanged` — fires on DLL/package changes
+  - [ ] Implement `FileSystemModuleWatcher` using `FileSystemWatcher`
+    - [ ] Monitor configured module directories
+    - [ ] Debounce rapid changes (e.g., 500ms delay)
+    - [ ] On change: unload old → load new via `AssemblyModuleLoader`
+  - [ ] Handle running workflows gracefully
+    - [ ] Don't unload modules with active executions
+    - [ ] Queue reload until current executions complete
+    - [ ] Publish `ModuleReloaded` event to Akka EventStream
+  - [ ] Add comprehensive tests
+
+- [ ] **Implement module versioning (side-by-side)** 🔢
+  - [ ] Extend `IModuleRegistry` to support versioned lookups
+    - [ ] `GetModule(string moduleId, Version? version = null)` — null = latest
+    - [ ] `GetModuleVersions(string moduleId) → IReadOnlyList<Version>`
+  - [ ] Store multiple versions per module ID in registry
+  - [ ] Allow workflows to pin to specific module versions
+    - [ ] Add `ModuleVersion` to `NodeDefinition` (optional)
+    - [ ] Resolve at execution time: pinned version > latest
+  - [ ] Handle breaking changes:
+    - [ ] Validate schema compatibility between versions
+    - [ ] Warn on incompatible upgrades
+  - [ ] Add comprehensive tests
+
+- [ ] **Implement full module dependency resolution** 🔗
+  - [ ] Build on `IWorkflowModule.Dependencies` stub (from Phase 1.4.1)
+  - [ ] Create `ModuleDependencyResolver` class
+    - [ ] Topological sort of modules by dependency order
+    - [ ] Detect circular dependencies
+    - [ ] Validate all declared dependencies are registered
+    - [ ] Report missing dependencies with clear messages
+  - [ ] Wire into module loading: load/register in dependency order
+  - [ ] Add comprehensive tests
+
+- [ ] **Assembly signature verification** 🔏
+  - [ ] Optionally verify assembly strong-name signatures on load
+  - [ ] Create `IAssemblyVerifier` interface
+    - [ ] `Verify(string assemblyPath) → bool`
+  - [ ] Implement `StrongNameVerifier`
+  - [ ] Allow trusted publisher list in configuration
+  - [ ] Log warnings for unsigned assemblies (don't block by default)
+  - [ ] Add comprehensive tests
+
+**Tests:**
+- [ ] Package format tests (valid/invalid packages)
+- [ ] Hot-reload tests (watch, reload, running-workflow safety)
+- [ ] Version management tests (side-by-side, pin, resolve)
+- [ ] Dependency resolution tests (sort, circular detection)
+- [ ] Assembly verification tests (signed, unsigned, trusted)
+
+**Deliverables:**
+- ✅ `.wfmod` packages can be loaded and validated
+- ✅ Module hot-reload works with file watching
+- ✅ Multiple module versions can coexist
+- ✅ Module dependencies resolved automatically
+- ✅ Assembly signatures optionally verified
+
+---
+
 ### Phase 2 Success Criteria ✨
 
 **Must Have:**
@@ -2023,6 +2117,8 @@ Phase 2 builds upon the foundation with critical production features:
 - [ ] Conditionals, loops, and parallel execution working
 - [ ] 20+ built-in modules operational
 - [ ] Complete REST API with auth
+- [ ] `.wfmod` package format defined and loadable
+- [ ] Module versioning (side-by-side) operational
 - [ ] 80%+ code coverage maintained
 
 **Demo Workflow:**

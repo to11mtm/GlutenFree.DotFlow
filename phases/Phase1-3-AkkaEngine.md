@@ -941,34 +941,34 @@ public class OptionJsonConverter<T> : JsonConverter<Option<T>>
 
 ---
 
-## 1.3.9 Actor Lifecycle Management
+## 1.3.9 Actor Lifecycle Management ✅ COMPLETE
 
 **Purpose:** Ensure proper creation, initialization, and cleanup of actors throughout their lifecycle.
 
 **Tasks:**
-- [ ] **Implement actor lifecycle management** 🔄
-  - [ ] Implement PreStart hooks for initialization
-  - [ ] Implement PostStop hooks for cleanup
-  - [ ] Implement PreRestart hooks for state preservation
-  - [ ] Implement PostRestart hooks for state restoration
-  - [ ] Add resource disposal logic
-  - [ ] Add graceful shutdown handling
-  - [ ] Test lifecycle hooks
+- [x] **Implement actor lifecycle management** 🔄
+  - [x] Implement PreStart hooks for initialization
+  - [x] Implement PostStop hooks for cleanup
+  - [x] Implement PreRestart hooks for state preservation
+  - [x] Implement PostRestart hooks for state restoration
+  - [x] Add resource disposal logic
+  - [x] Add graceful shutdown handling
+  - [x] Test lifecycle hooks
 
 **Tests:**
-- [ ] **Actor lifecycle tests** 🔄
-  - [ ] Test actor creation
-  - [ ] Test actor initialization
-  - [ ] Test actor termination
-  - [ ] Test graceful shutdown
-  - [ ] Test resource cleanup
+- [x] **Actor lifecycle tests** 🔄 (30 tests in `ActorLifecycleTests.cs`)
+  - [x] Test actor creation
+  - [x] Test actor initialization
+  - [x] Test actor termination
+  - [x] Test graceful shutdown
+  - [x] Test resource cleanup
   
-- [ ] **Actor restart behavior tests** 🔁
-  - [ ] Test restart preserves state (where appropriate)
-  - [ ] Test restart limits enforced
-  - [ ] Test restart backoff timing
-  - [ ] Test restart after transient failure
-  - [ ] Test stop after max retries
+- [x] **Actor restart behavior tests** 🔁
+  - [x] Test restart preserves state (where appropriate)
+  - [x] Test restart limits enforced
+  - [x] Test restart backoff timing
+  - [x] Test restart after transient failure
+  - [x] Test stop after max retries
 
 ---
 

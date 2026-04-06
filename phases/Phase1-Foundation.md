@@ -414,22 +414,70 @@ automatically thanks to record types and JsonElement usage. 💖
 
 ---
 
-### 1.3 Basic Akka.NET Engine (Week 2-4)
+### 1.3 Basic Akka.NET Engine (Week 2-4) ✅ **COMPLETE!**
 
 > 📋 **See detailed sub-phases:** [Phase1-3-AkkaEngine.md](./Phase1-3-AkkaEngine.md)
 
-This phase implements the core actor-based workflow execution engine using Akka.NET. The work is organized into 9 sub-phases:
+This phase implements the core actor-based workflow execution engine using Akka.NET. The work is organized into 9 sub-phases — **ALL COMPLETE!** 🎉✨
 
 **Sub-Phases:**
-- **1.3.1** - WorkflowSupervisor Actor Implementation ✅
-- **1.3.2** - WorkflowExecutor Actor Implementation ✅
-- **1.3.3** - NodeExecutor Actor Implementation ✅
-- **1.3.4** - Actor Messaging Protocol ✅
-- **1.3.5** - Serialization Configuration (LanguageExt + MessagePack + JSON)
-- **1.3.6** - Basic Execution Flow (Sequential)
-- **1.3.7** - Execution State Tracking
-- **1.3.8** - Supervision Strategy & Error Handling
-- **1.3.9** - Actor Lifecycle Management
+- **1.3.1** - WorkflowSupervisor Actor Implementation ✅ (Dec 2025)
+- **1.3.2** - WorkflowExecutor Actor Implementation ✅ (Dec 2025)
+- **1.3.3** - NodeExecutor Actor Implementation ✅ (Dec 2025)
+- **1.3.4** - Actor Messaging Protocol ✅ (Dec 2025)
+- **1.3.5** - Serialization Configuration (LanguageExt + MessagePack + JSON) ✅ (Jan 2026)
+- **1.3.6** - Basic Execution Flow (Sequential) ✅ (Jan 2026)
+- **1.3.7** - Execution State Tracking ✅ (Apr 2026)
+- **1.3.8** - Supervision Strategy & Error Handling ✅ (Apr 2026)
+- **1.3.9** - Actor Lifecycle Management ✅ (Apr 2026)
+
+**Key Implementations:**
+- 🎭 **3 Actor Types:** WorkflowSupervisor, WorkflowExecutor, NodeExecutor — all fully functional
+- 📬 **Complete Message Protocol:** 20+ message types with LanguageExt immutable collections
+- 📦 **Dual Serialization:** MessagePack (Akka internals) + System.Text.Json (external APIs) with LanguageExt converters
+- ➡️ **Sequential Execution:** Linear workflow A→B→C with data flow between nodes
+- 📊 **Execution State Tracking:** `WorkflowExecutionContext` with state history audit trail, pause/resume, snapshots
+- 🛡️ **Supervision Strategies:** Custom per-actor supervision, retry with exponential backoff, continue-on-error/fail-fast
+- 🔄 **Actor Lifecycle:** PreStart/PostStop/PreRestart/PostRestart hooks, graceful shutdown, resource cleanup
+
+**Test Coverage:** 196 tests, ALL passing ✅ (as of April 6, 2026)
+
+**Files Created/Modified:**
+- ✅ `Workflow.Engine/Actors/WorkflowSupervisor.cs` — Top-level lifecycle management + supervision
+- ✅ `Workflow.Engine/Actors/WorkflowExecutor.cs` — Graph traversal, state tracking, pause/resume, retry
+- ✅ `Workflow.Engine/Actors/NodeExecutor.cs` — Module execution, input validation, timeout/cancel
+- ✅ `Workflow.Engine/Messages/WorkflowMessages.cs` — Complete message protocol with LanguageExt types
+- ✅ `Workflow.Engine/Messages/MessageValidation.cs` — Validation extension methods
+- ✅ `Workflow.Engine/Serialization/` — JSON converters (HashMap, Option, Arr) + MsgPack2 setup + Akka config
+- ✅ `Workflow.Engine/Models/WorkflowExecutionContext.cs` — Immutable execution state + audit trail
+- ✅ `Workflow.Engine/Services/IExecutionStateStore.cs` — State persistence interface
+- ✅ `Workflow.Engine/Services/InMemoryExecutionStateStore.cs` — Thread-safe in-memory store
+- ✅ `Workflow.Modules/Abstractions/IWorkflowModule.cs` — Module interface and types
+- ✅ `Workflow.Modules/Abstractions/IModuleRegistry.cs` — Registry interface
+- ✅ `Workflow.Modules/InMemoryModuleRegistry.cs` — In-memory registry implementation
+- ✅ `Workflow.Modules/Builtin/PassThroughModule.cs` — Test module for verification
+
+**Test Files:**
+- ✅ `Workflow.Tests/Engine/Actors/WorkflowSupervisorTests.cs` — 8 tests
+- ✅ `Workflow.Tests/Engine/WorkflowExecutorTests.cs` — 14 tests
+- ✅ `Workflow.Tests/Engine/NodeExecutorTests.cs` — 7 tests
+- ✅ `Workflow.Tests/Engine/SerializationTests.cs` — 22 tests
+- ✅ `Workflow.Tests/Engine/ExecutionFlowTests.cs` — Sequential execution tests
+- ✅ `Workflow.Tests/Engine/ExecutionStateTrackingTests.cs` — 30 tests
+- ✅ `Workflow.Tests/Engine/SupervisionStrategyTests.cs` — 12 tests
+- ✅ `Workflow.Tests/Engine/ActorLifecycleTests.cs` — 30 tests
+
+**Dependencies Added (Phase 1.3):**
+```xml
+<!-- Akka Serialization -->
+<PackageVersion Include="Akka.Serialization.MessagePack2" Version="1.5.51.1" />
+<PackageVersion Include="MessagePack" Version="3.1.4" />
+<PackageVersion Include="MessagePack.Annotations" Version="2.5.140" />
+```
+
+**Completion Date:** April 6, 2026 🎉
+**Progress:** 100% Complete ✅
+**Status:** 🎊 **ALL 9 SUB-PHASES COMPLETE!** Ready to proceed to Phase 1.4!
 
 **Deliverables:**
 - ✅ Can execute a simple linear workflow (sequential nodes)
@@ -443,208 +491,40 @@ This phase implements the core actor-based workflow execution engine using Akka.
 
 ### 1.4 Module System Foundation (Week 4-5)
 
-**Tasks:**
-- [ ] **Implement `IWorkflowModule` interface** 📦
-  - [ ] Define interface in `Workflow.Core.Abstractions`
-  - [ ] Add `ModuleId` property (string - unique identifier)
-  - [ ] Add `DisplayName` property (string - human-readable name)
-  - [ ] Add `Category` property (string - for UI grouping)
-  - [ ] Add `Description` property (string - help text)
-  - [ ] Add `Icon` property (string - emoji or icon identifier)
-  - [ ] Add `Version` property (Version - module version)
-  - [ ] Add `Schema` property (ModuleSchema - inputs/outputs definition)
-  - [ ] Add `ExecuteAsync` method signature
-    - [ ] Parameter: `ModuleExecutionContext context`
-    - [ ] Parameter: `CancellationToken cancellationToken`
-    - [ ] Return type: `Task<ModuleResult>`
-  - [ ] Add `ValidateConfiguration` method (optional)
-  - [ ] Add XML documentation with examples
-  - [ ] Create `ModuleExecutionContext` class
-    - [ ] Add `Inputs` dictionary
-    - [ ] Add `Configuration` dictionary
-    - [ ] Add `Variables` access (workflow-level)
-    - [ ] Add `Logger` instance
-    - [ ] Add `ExecutionId` for correlation
-    - [ ] Add `ServiceProvider` for DI
-  - [ ] Create `ModuleResult` class
-    - [ ] Add `IsSuccess` property
-    - [ ] Add `Outputs` dictionary
-    - [ ] Add `Error` property (optional)
-    - [ ] Add `Metrics` (duration, resource usage, etc.)
-  
-- [ ] **Create module registry and discovery** 📚
-  - [ ] Implement `IModuleRegistry` interface
-    - [ ] Add `RegisterModule(Type moduleType)` method
-    - [ ] Add `RegisterModule(IWorkflowModule instance)` method
-    - [ ] Add `UnregisterModule(string moduleId)` method
-    - [ ] Add `GetModule(string moduleId)` method
-    - [ ] Add `GetAllModules()` method
-    - [ ] Add `GetModulesByCategory(string category)` method
-    - [ ] Add `ModuleRegistered` event
-    - [ ] Add `ModuleUnregistered` event
-  - [ ] Implement `ModuleRegistry` class
-    - [ ] Use ConcurrentDictionary for thread-safety
-    - [ ] Implement module instance caching
-    - [ ] Add module metadata indexing
-    - [ ] Implement category-based lookup
-    - [ ] Add search functionality (by name, tags)
-  - [ ] Implement automatic discovery
-    - [ ] Scan assemblies for types implementing `IWorkflowModule`
-    - [ ] Use reflection to find modules
-    - [ ] Apply module attributes for metadata
-    - [ ] Auto-register discovered modules
-    - [ ] Handle duplicate registrations gracefully
-  - [ ] Add module dependency resolution
-    - [ ] Track module dependencies
-    - [ ] Validate dependencies are registered
-    - [ ] Load modules in dependency order
-  
-- [ ] **Implement module validation** ✅
-  - [ ] Create `ModuleValidator` class
-  - [ ] Validate module ID is unique
-  - [ ] Validate module ID follows naming conventions
-  - [ ] Validate schema is properly defined
-    - [ ] All input properties have types
-    - [ ] All output properties have types
-    - [ ] No conflicting property names
-  - [ ] Validate module implements interface correctly
-  - [ ] Validate module has parameterless constructor or DI constructor
-  - [ ] Validate module metadata completeness
-    - [ ] DisplayName is not empty
-    - [ ] Description is provided
-    - [ ] Category is valid
-  - [ ] Run validation on registration
-  - [ ] Return detailed validation errors
-  - [ ] Add optional strict mode vs. lenient mode
-  
-- [ ] **Create module property binding system** 🔗
-  - [ ] Implement `IPropertyBinder` interface
-    - [ ] Add `BindProperties(Dictionary config, ModuleSchema schema)` method
-    - [ ] Return bound values with type safety
-  - [ ] Implement `PropertyBinder` class
-    - [ ] Handle primitive type binding (string, int, bool, etc.)
-    - [ ] Handle complex type binding (objects, arrays)
-    - [ ] Handle variable references ({{Variable.Name}})
-    - [ ] Handle node output references ({{NodeId.OutputName}})
-    - [ ] Handle expression evaluation (simple expressions)
-    - [ ] Implement type conversion
-      - [ ] String to int/long/decimal
-      - [ ] String to DateTime
-      - [ ] String to Guid
-      - [ ] JSON to objects
-    - [ ] Validate bindings against schema
-      - [ ] Check required properties present
-      - [ ] Check types match
-      - [ ] Check values meet validation rules
-    - [ ] Implement default value assignment
-    - [ ] Add detailed binding error messages
-  - [ ] Create property value resolvers
-    - [ ] Variable resolver
-    - [ ] Node output resolver
-    - [ ] Expression resolver
-    - [ ] Static value resolver
-  - [ ] Add caching for expensive bindings
-  
-- [ ] **Add support for dynamic module loading from assemblies** 🚀
-  - [ ] Implement `IModuleLoader` interface
-    - [ ] Add `LoadFromAssembly(string path)` method
-    - [ ] Add `LoadFromDirectory(string path)` method
-    - [ ] Add `UnloadModule(string moduleId)` method
-  - [ ] Implement `ModuleLoader` class using `AssemblyLoadContext`
-    - [ ] Create isolated AssemblyLoadContext per module
-    - [ ] Load assembly from file path
-    - [ ] Scan assembly for module types
-    - [ ] Instantiate modules safely
-    - [ ] Handle dependency resolution
-    - [ ] Support assembly unloading
-    - [ ] Implement assembly version checking
-  - [ ] Add security validation
-    - [ ] Verify assembly signature (optional)
-    - [ ] Check for malicious code patterns
-    - [ ] Sandbox module execution (future)
-  - [ ] Add module package format
-    - [ ] Define `.wfmod` package structure (ZIP)
-    - [ ] Include module DLL
-    - [ ] Include `module.json` manifest
-    - [ ] Include dependencies folder
-    - [ ] Include documentation/README
-  - [ ] Implement package validation
-    - [ ] Validate manifest schema
-    - [ ] Check dependencies are available
-    - [ ] Verify module compatibility
-  - [ ] Add module hot-reload capability
-    - [ ] Detect file changes
-    - [ ] Unload old version
-    - [ ] Load new version
-    - [ ] Notify running workflows
-  - [ ] Implement module versioning
-    - [ ] Support multiple versions side-by-side
-    - [ ] Allow workflows to pin versions
-    - [ ] Handle breaking changes gracefully
+> 📋 **See detailed sub-phases:** [Phase1-4-ModuleSystem.md](./Phase1-4-ModuleSystem.md)
 
-**Key Interfaces:**
-```csharp
-✅ IWorkflowModule - Base module interface
-✅ IModuleRegistry - Module registration and lookup
-✅ IModuleLoader - Dynamic assembly loading
-✅ IPropertyBinder - Property value binding
-✅ ModuleExecutionContext - Runtime context
-✅ ModuleResult - Execution result
-```
+This phase builds the complete module infrastructure on top of contracts already created during Phase 1.3. The work is organized into 6 sub-phases.
 
-**Tests:**
-- [ ] **Module registration tests** 📝
-  - [ ] Test register single module
-  - [ ] Test register multiple modules
-  - [ ] Test duplicate registration handling
-  - [ ] Test unregister module
-  - [ ] Test module lookup by ID
-  - [ ] Test category-based filtering
-  - [ ] Test module instance caching
-  
-- [ ] **Module discovery tests** 🔍
-  - [ ] Test auto-discovery in assembly
-  - [ ] Test discovery with no modules present
-  - [ ] Test discovery with multiple modules
-  - [ ] Test discovery excludes abstract classes
-  - [ ] Test discovery excludes internal classes
-  
-- [ ] **Property binding tests** 🔗
-  - [ ] Test bind primitive types (string, int, bool)
-  - [ ] Test bind complex types (objects, arrays)
-  - [ ] Test bind with type conversion
-  - [ ] Test bind variable references
-  - [ ] Test bind node output references
-  - [ ] Test bind with default values
-  - [ ] Test bind with missing required property (error)
-  - [ ] Test bind with type mismatch (error)
-  - [ ] Test bind with validation rules
-  
-- [ ] **Module validation tests** ✅
-  - [ ] Test valid module passes
-  - [ ] Test module with missing schema (error)
-  - [ ] Test module with duplicate ID (error)
-  - [ ] Test module with invalid characters in ID (error)
-  - [ ] Test module without constructor (error)
-  - [ ] Test validation error messages are clear
-  
-- [ ] **Dynamic loading tests** 🚀
-  - [ ] Test load module from DLL
-  - [ ] Test load from directory (multiple DLLs)
-  - [ ] Test unload module
-  - [ ] Test load invalid assembly (error)
-  - [ ] Test load assembly with missing dependencies (error)
-  - [ ] Test assembly isolation (separate contexts)
-  - [ ] Test package format validation
-  - [ ] Test hot-reload functionality
+**Pre-Existing (from Phase 1.3):** ✅
+- `IWorkflowModule` interface — ModuleId, DisplayName, Category, Description, Icon, Schema, ExecuteAsync
+- `ModuleExecutionContext` record — Inputs, Properties, Variables, Logger, Services, ExecutionId, NodeId
+- `ModuleResult` record — Success, Outputs, ErrorMessage, Exception, Ok/Fail factories
+- `IModuleRegistry` interface — 5 methods (GetAll/Get/Register/Unregister/Has)
+- `InMemoryModuleRegistry` — ConcurrentDictionary-based, thread-safe
+- `ModuleSchema`, `PortDefinition`, `ModulePropertyDefinition` — Full LanguageExt-based schemas
+- `PassThroughModule` — Working test module
+
+**Sub-Phases:**
+- **1.4.1** - IWorkflowModule & ModuleResult Enhancements (Version, ValidateConfiguration, Metrics)
+- **1.4.2** - Registry Enhancements (Category lookup, search, events, type-based registration)
+- **1.4.3** - Module Validation (`ModuleValidator` + `WorkflowValidator` integration)
+- **1.4.4** - Property Binding System (type conversion, variable/output references, defaults)
+- **1.4.5** - Module Discovery (assembly scanning, `[WorkflowModule]` attribute)
+- **1.4.6** - Dynamic Module Loading (AssemblyLoadContext-based plugin loading)
+
+**Deferred to Phase 2+:**
+- `.wfmod` package format, hot-reload, assembly security, module versioning (side-by-side), full dependency resolution, expression evaluation (Phase 3)
 
 **Deliverables:**
-- ✅ Module system can register and discover modules successfully
-- ✅ Modules can be loaded dynamically from external assemblies
-- ✅ Property values properly bound to module inputs with type safety
-- ✅ Module validation prevents broken modules from loading
-- ✅ 90%+ test coverage on module system
-- ✅ Clear documentation for module developers
+- [ ] Module contracts enhanced with Version, ValidateConfiguration, Metrics
+- [ ] Registry supports category lookup, search, events, type-based registration
+- [ ] ModuleValidator prevents broken modules from loading
+- [ ] Property binding resolves variables, converts types, validates against schema
+- [ ] Assembly scanning auto-discovers modules
+- [ ] Dynamic loading from DLLs works with isolation
+- [ ] ~70-80 new tests written and passing
+- [ ] WorkflowValidator deferred checks from Phase 1.2 resolved
+- [ ] Clear XML documentation on all new APIs
 
 ---
 

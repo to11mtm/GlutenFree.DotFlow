@@ -67,6 +67,18 @@ public class WorkflowExecutor : ReceiveActor
     private readonly Dictionary<string, int> _nodeRetryAttempts = new();
     private readonly Dictionary<string, Exception> _lastNodeErrors = new();
 
+    /// <summary>
+    /// Cancelable handles for pending scheduled retry messages.
+    /// We track these so we can cancel them in PostStop to avoid memory leaks and
+    /// orphaned scheduled messages (fixes AK1004 warning)~ 🧹✨
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Each entry maps a nodeId → its ICancelable from ScheduleTellOnce.
+    /// When the actor stops, we cancel all pending retries. When a retry fires, we
+    /// remove the entry. Kawaii resource management! UwU 💖
+    /// </remarks>
+    private readonly Dictionary<string, ICancelable> _pendingRetryCancellations = new();
+
     // Graph structure (built from connections, actor-local)
     private readonly Dictionary<string, List<string>> _nodeSuccessors = new();
     private readonly Dictionary<string, List<string>> _nodePredecessors = new();
@@ -75,8 +87,25 @@ public class WorkflowExecutor : ReceiveActor
     // State store for persistence snapshots (optional — resolved from DI)
     private readonly IExecutionStateStore? _stateStore;
 
+    /// <summary>
+    /// Lifecycle hooks resolved from DI — allows consumers to inject custom behavior
+    /// during PreStart, PostStop, PreRestart, and PostRestart~ 🌸💖
+    /// </summary>
+    private readonly IActorLifecycleHooks _lifecycleHooks;
+
     // Pause flag — when true, no new nodes will be started~ ⏸️
     private bool _isPaused;
+
+    /// <summary>
+    /// Flag indicating whether the actor is in a restart cycle (PreRestart → PostStop → PostRestart).
+    /// When true, PostStop skips full cleanup since PreRestart handles child preservation~ 🔄
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: This prevents PostStop from cancelling running nodes during a supervised
+    /// restart. PreRestart sets this to true, PostStop checks it, and PostRestart resets it.
+    /// Without this, we'd accidentally kill child actors we wanted to survive! UwU 💕
+    /// </remarks>
+    private bool _isRestarting;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkflowExecutor"/> class.
@@ -100,6 +129,8 @@ public class WorkflowExecutor : ReceiveActor
 
         // Try to resolve the state store from DI (optional)
         _stateStore = serviceProvider.GetService(typeof(IExecutionStateStore)) as IExecutionStateStore;
+        _lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
+            ?? NullActorLifecycleHooks.Instance;
 
         // Initialize the immutable execution context~ 🌱
         _context = WorkflowExecutionContext.Create(
@@ -656,12 +687,14 @@ public class WorkflowExecutor : ReceiveActor
         TransitionNodeState(nodeId, NodeExecutionState.Retrying, DateTimeOffset.UtcNow);
 
         // Schedule the retry after backoff delay — non-blocking, idiomatic Akka.NET! ✨
+        // We track the ICancelable so we can cancel it in PostStop (fixes AK1004)~ 🧹
         var retryMessage = new RetryNode(nodeId, _executionId, currentAttempt, retryPolicy.MaxAttempts);
-        Context.System.Scheduler.ScheduleTellOnce(
+        var cancellable = Context.System.Scheduler.ScheduleTellOnceCancelable(
             delay: TimeSpan.FromMilliseconds(delay),
             receiver: Self,
             message: retryMessage,
             sender: Self);
+        _pendingRetryCancellations[nodeId] = cancellable;
 
         // Publish NodeRetrying event for observability~ 📡
         var retryingEvent = new NodeRetrying(nodeId, _executionId, currentAttempt, retryPolicy.MaxAttempts, error);
@@ -691,6 +724,9 @@ public class WorkflowExecutor : ReceiveActor
             nodeId,
             message.Attempt,
             message.MaxAttempts);
+
+        // Clean up the pending cancellation handle — this retry has fired~ 🧹
+        _pendingRetryCancellations.Remove(nodeId);
 
         // Remove from failed set so it can run again
         _failedNodes = _failedNodes.Remove(nodeId);
@@ -1139,16 +1175,252 @@ public class WorkflowExecutor : ReceiveActor
 
     #endregion
 
-    #region Lifecycle 👋
+    #region Lifecycle 🌸👋🔄
 
     /// <summary>
-    /// Lifecycle hook - cleanup when actor stops.
+    /// Lifecycle hook called when the actor is starting for the first time.
+    /// Validates dependencies and logs initialization details~ 🌸✨
     /// </summary>
+    /// <remarks>
+    /// CopilotNote: PreStart is the earliest point where <c>Context</c> is available.
+    /// We use it to verify the state store is reachable and log the execution graph
+    /// summary. This runs BEFORE any message is processed! UwU 💖
+    /// </remarks>
+    protected override void PreStart()
+    {
+        base.PreStart();
+
+        _log.Info(
+            "🌸 WorkflowExecutor initializing for execution {ExecutionId} (workflow: '{WorkflowName}', nodes: {NodeCount}, connections: {ConnectionCount})",
+            _executionId,
+            _definition.Name,
+            _definition.Nodes.Count,
+            _definition.Connections.Count);
+
+        if (_stateStore != null)
+        {
+            _log.Debug("💾 State store available: {StoreType}", _stateStore.GetType().Name);
+        }
+        else
+        {
+            _log.Debug("⚠️ No state store registered — snapshots will be skipped");
+        }
+
+        _lifecycleHooks.OnPreStart(CreateLifecycleContext());
+    }
+
+    /// <summary>
+    /// Lifecycle hook called before the actor restarts due to a supervision directive.
+    /// Preserves child NodeExecutor actors and saves a snapshot for recovery~ 🔄✨
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CopilotNote: We do NOT call <c>base.PreRestart</c> because that would stop
+    /// all child NodeExecutor actors. Instead, we let running node actors survive
+    /// the restart so we can re-track them in <see cref="PostRestart"/>. We also
+    /// save a snapshot to allow state recovery. Kawaii resilience! 💕
+    /// </para>
+    /// </remarks>
+    /// <param name="reason">The exception that caused the restart.</param>
+    /// <param name="message">The message being processed when the failure occurred.</param>
+    protected override void PreRestart(Exception reason, object message)
+    {
+        // Mark that we're restarting so PostStop doesn't do full cleanup~ 🔄
+        _isRestarting = true;
+
+        _log.Warning(
+            "🔄 WorkflowExecutor restarting for execution {ExecutionId} due to: {Error}. " +
+            "Preserving {RunningCount} running node(s) and {ActorCount} actor ref(s)~ UwU",
+            _executionId,
+            reason.Message,
+            _runningNodes.Count,
+            _nodeActors.Count);
+
+        _lifecycleHooks.OnPreRestart(CreateLifecycleContext(), reason, message);
+
+        // Save a snapshot before restart so state can be recovered~ 💾
+        SaveSnapshotAsync();
+
+        // Do NOT call base.PreRestart — that would stop all child NodeExecutor actors!
+        // We want them to survive the executor restart so work isn't lost~ 💖
+        // Only call PostStop for our own cleanup (timer etc.)
+        PostStop();
+    }
+
+    /// <summary>
+    /// Lifecycle hook called after the actor restarts.
+    /// Rebuilds node actor tracking from surviving children and restores state from snapshot~ 🌸✨
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CopilotNote: After restart, the constructor runs again (re-initializing fields to defaults),
+    /// but child actors may still be alive! We iterate <c>Context.GetChildren()</c> to
+    /// rebuild the <c>_nodeActors</c> dictionary, and restore execution sets from the
+    /// context's <c>NodeStates</c>. Sugoi recovery pattern! 💕
+    /// </para>
+    /// </remarks>
+    /// <param name="reason">The exception that caused the restart.</param>
+    protected override void PostRestart(Exception reason)
+    {
+        base.PostRestart(reason);
+
+        // We're done restarting — clear the flag~ 🌸
+        _isRestarting = false;
+
+        _log.Info(
+            "🌸 WorkflowExecutor restarted for execution {ExecutionId}. Rebuilding node tracking...",
+            _executionId);
+
+        // Rebuild _nodeActors from surviving children~ 🔄
+        foreach (var child in Context.GetChildren())
+        {
+            var name = child.Path.Name;
+            if (name.StartsWith("node-"))
+            {
+                // Extract nodeId from actor name (format: "node-{nodeId}" where dots were replaced with dashes)
+                var nodeId = name.Substring("node-".Length).Replace("-", ".");
+                _nodeActors[nodeId] = child;
+                Context.Watch(child);
+                _log.Debug("🔄 Re-tracked surviving node actor: {NodeId}", nodeId);
+            }
+        }
+
+        // Rebuild running/completed/failed sets from the context's NodeStates~ 📊
+        foreach (var (nodeId, state) in _context.NodeStates)
+        {
+            switch (state)
+            {
+                case NodeExecutionState.Running:
+                case NodeExecutionState.Retrying:
+                    _runningNodes = _runningNodes.Add(nodeId);
+                    break;
+                case NodeExecutionState.Completed:
+                    _completedNodes = _completedNodes.Add(nodeId);
+                    break;
+                case NodeExecutionState.Failed:
+                    _failedNodes = _failedNodes.Add(nodeId);
+                    break;
+            }
+        }
+
+        // Restart the execution timer if we're still running~ ⏱️
+        if (_context.State == ExecutionState.Running && !_executionTimer.IsRunning)
+        {
+            _executionTimer.Start();
+        }
+
+        _log.Info(
+            "✅ WorkflowExecutor recovery complete for execution {ExecutionId}. " +
+            "Re-tracked {ActorCount} node actor(s), {RunningCount} running, " +
+            "{CompletedCount} completed, {FailedCount} failed~ 🎉",
+            _executionId,
+            _nodeActors.Count,
+            _runningNodes.Count,
+            _completedNodes.Count,
+            _failedNodes.Count);
+
+        _lifecycleHooks.OnPostRestart(CreateLifecycleContext(), reason);
+    }
+
+    /// <summary>
+    /// Lifecycle hook called when the actor is stopping.
+    /// Cancels pending retry timers, cleans up running nodes (on true shutdown only),
+    /// saves a final snapshot, and disposes resources~ 👋🧹
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CopilotNote: PostStop is called in two scenarios:
+    /// 1. **True shutdown** — actor is being permanently stopped. We cancel all pending
+    ///    retries, stop running node actors, and save a final snapshot.
+    /// 2. **During restart** — called by PreRestart (we set <c>_isRestarting = true</c>).
+    ///    We skip node cleanup since PreRestart preserves children for recovery.
+    ///    Only timer + retry cancellation happens.
+    /// </para>
+    /// <para>
+    /// The <c>_pendingRetryCancellations</c> are ALWAYS cancelled regardless of restart/stop,
+    /// because scheduled messages targeting the old actor ref would be pointless. UwU 💖
+    /// </para>
+    /// </remarks>
     protected override void PostStop()
     {
         _executionTimer.Stop();
-        _log.Debug("👋 WorkflowExecutor stopping for execution {ExecutionId}", _executionId);
+
+        // 🧹 Cancel all pending scheduled retry messages to prevent memory leaks (AK1004 fix)
+        if (_pendingRetryCancellations.Count > 0)
+        {
+            _log.Debug(
+                "🧹 Cancelling {PendingRetryCount} pending retry timer(s) for execution {ExecutionId}",
+                _pendingRetryCancellations.Count,
+                _executionId);
+
+            foreach (var (nodeId, cancellable) in _pendingRetryCancellations)
+            {
+                cancellable.Cancel();
+                _log.Debug("🧹 Cancelled pending retry for node {NodeId}", nodeId);
+            }
+
+            _pendingRetryCancellations.Clear();
+        }
+
+        if (!_isRestarting)
+        {
+            // True shutdown — clean up running node actors~ 🛑
+            if (_nodeActors.Count > 0)
+            {
+                _log.Info(
+                    "🛑 True shutdown: stopping {ActorCount} remaining node actor(s) for execution {ExecutionId}",
+                    _nodeActors.Count,
+                    _executionId);
+
+                foreach (var (nodeId, actor) in _nodeActors.ToList())
+                {
+                    Context.Unwatch(actor);
+                    Context.Stop(actor);
+                }
+
+                _nodeActors.Clear();
+                _runningNodes = LanguageExt.HashSet<string>.Empty;
+            }
+
+            // Save final snapshot if we're in a non-terminal state (unexpected stop)~ 💾
+            if (_context.State == ExecutionState.Running ||
+                _context.State == ExecutionState.Paused)
+            {
+                _log.Warning(
+                    "⚠️ WorkflowExecutor stopping while still in {State} state for execution {ExecutionId}. Saving snapshot...",
+                    _context.State,
+                    _executionId);
+                SaveSnapshotAsync();
+            }
+        }
+
+        _log.Info(
+            "👋 WorkflowExecutor stopping for execution {ExecutionId} (state: {State}, " +
+            "completed: {CompletedCount}/{TotalNodes} nodes, restart: {IsRestarting})",
+            _executionId,
+            _context.State,
+            _completedNodes.Count,
+            _definition.Nodes.Count,
+            _isRestarting);
+
+        _lifecycleHooks.OnPostStop(CreateLifecycleContext());
         base.PostStop();
+    }
+
+    #endregion
+
+    #region Lifecycle Helpers 🌸
+
+    /// <summary>
+    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ 🌸
+    /// </summary>
+    /// <returns>A context describing this actor instance.</returns>
+    private ActorLifecycleContext CreateLifecycleContext()
+    {
+        return new ActorLifecycleContext(
+            ActorPath: Self.Path.ToString(),
+            ActorType: nameof(WorkflowExecutor),
+            Services: _serviceProvider);
     }
 
     #endregion

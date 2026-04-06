@@ -308,6 +308,28 @@ Phase 3 adds the most user-facing features:
 - ✅ 90%+ test coverage on scripting components
 - ✅ Comprehensive API documentation
 
+#### Property Binding Expression Evaluation *(Deferred from Phase 1.4)* 🧮
+
+> **CopilotNote:** Phase 1.4 implements `PropertyBinder` with `{{Variable.Name}}` and `{{NodeId.Output}}`
+> reference resolution, but defers inline expression evaluation (e.g., `{{1 + 2}}`, `{{Variable.Count * 2}}`)
+> to Phase 3 since it overlaps with the scripting engine work~ 💖
+
+- [ ] **Extend `PropertyBinder` with expression evaluation** 📐
+  - [ ] Detect expression patterns in property binding templates (e.g., `{{Variable.Count > 5}}`)
+  - [ ] Evaluate using one of the scripting engines (Jint/JavaScript recommended for lightweight eval)
+  - [ ] Support arithmetic: `+`, `-`, `*`, `/`, `%`
+  - [ ] Support comparison: `>`, `<`, `>=`, `<=`, `==`, `!=`
+  - [ ] Support logical: `&&`, `||`, `!`
+  - [ ] Support string interpolation within expressions
+  - [ ] Sandbox expressions with strict timeout (e.g., 100ms)
+  - [ ] Cache compiled expressions for performance
+  - [ ] Add comprehensive tests
+    - [ ] Test arithmetic expressions
+    - [ ] Test comparison expressions
+    - [ ] Test variable references in expressions
+    - [ ] Test invalid expression errors
+    - [ ] Test timeout on expensive expressions
+
 ---
 
 ### 3.2 SignalR Real-Time Hub (Week 17)

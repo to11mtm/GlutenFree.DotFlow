@@ -47,6 +47,7 @@ public class NodeExecutor : ReceiveActor
     private readonly Guid _executionId;
     private readonly IServiceProvider _serviceProvider;
     private readonly Stopwatch _timer = new();
+    private readonly IActorLifecycleHooks _lifecycleHooks;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isExecuting;
 
@@ -71,6 +72,8 @@ public class NodeExecutor : ReceiveActor
         _inputs = inputs;
         _executionId = executionId;
         _serviceProvider = serviceProvider;
+        _lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
+            ?? NullActorLifecycleHooks.Instance;
 
         // Set up message handlers
         Receive<Execute>(HandleExecute);
@@ -503,15 +506,128 @@ public class NodeExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Lifecycle hook - cleanup when actor stops.
+    /// Lifecycle hook called when the actor is starting for the first time.
+    /// Logs initialization and validates the service provider state~ 🌸✨
     /// </summary>
+    /// <remarks>
+    /// CopilotNote: PreStart runs before any message is delivered! We use it
+    /// to verify the DI container has what we need and log the node config. UwU 💖
+    /// </remarks>
+    protected override void PreStart()
+    {
+        base.PreStart();
+        _log.Info(
+            "🌸 NodeExecutor initializing for node {NodeId} (module: {ModuleId}, execution: {ExecutionId})",
+            _nodeId,
+            _nodeDefinition.ModuleId,
+            _executionId);
+        _lifecycleHooks.OnPreStart(CreateLifecycleContext());
+    }
+
+    /// <summary>
+    /// Lifecycle hook called before the actor restarts due to supervision.
+    /// Cancels any running execution and cleans up resources~ 🔄
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CopilotNote: When a NodeExecutor crashes mid-execution, we need to cancel any
+    /// in-flight async work (module execution) to prevent dangling tasks. We dispose
+    /// the CancellationTokenSource and reset the execution flag so PostRestart can
+    /// set up a clean slate for a fresh retry. Kawaii cleanup! 💕
+    /// </para>
+    /// </remarks>
+    /// <param name="reason">The exception that caused the restart.</param>
+    /// <param name="message">The message being processed when the failure occurred.</param>
+    protected override void PreRestart(Exception reason, object message)
+    {
+        _log.Warning(
+            "🔄 NodeExecutor restarting for node {NodeId} due to: {Error}~ UwU",
+            _nodeId,
+            reason.Message);
+
+        _lifecycleHooks.OnPreRestart(CreateLifecycleContext(), reason, message);
+
+        // Cancel any in-flight execution to prevent dangling tasks~ 🛑
+        _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
+        _cancellationTokenSource = null;
+
+        // Clear the receive timeout
+        Context.SetReceiveTimeout(null);
+
+        _timer.Stop();
+
+        // Call base to allow Akka to stop children (NodeExecutor has no children, but it's good form)
+        base.PreRestart(reason, message);
+    }
+
+    /// <summary>
+    /// Lifecycle hook called after the actor restarts.
+    /// Resets execution state for a clean retry~ 🌸✨
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: After restart, the constructor runs again so most fields are fresh.
+    /// We just reset <c>_isExecuting</c> in case state was partially set before the crash.
+    /// The parent WorkflowExecutor will re-send <see cref="Execute"/> if it wants a retry! 💖
+    /// </remarks>
+    /// <param name="reason">The exception that caused the restart.</param>
+    protected override void PostRestart(Exception reason)
+    {
+        base.PostRestart(reason);
+
+        _isExecuting = false;
+        _timer.Reset();
+
+        _log.Info(
+            "🌸 NodeExecutor restarted for node {NodeId}. Ready for fresh execution~ ✨",
+            _nodeId);
+
+        _lifecycleHooks.OnPostRestart(CreateLifecycleContext(), reason);
+    }
+
+    /// <summary>
+    /// Lifecycle hook called when the actor is stopping.
+    /// Cancels running execution, disposes resources, and logs final state~ 👋🧹
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: PostStop is the last chance to release resources!
+    /// We cancel the CTS, stop the timer, and log our farewell. Sayonara~ 💕
+    /// </remarks>
     protected override void PostStop()
     {
         _timer.Stop();
-        _cancellationTokenSource?.Cancel();
-        _cancellationTokenSource?.Dispose();
-        _log.Debug("👋 NodeExecutor stopping for node {NodeId}", _nodeId);
+
+        // Cancel and dispose the CTS if it's still alive~ 🛑
+        if (_cancellationTokenSource != null)
+        {
+            _cancellationTokenSource.Cancel();
+            _cancellationTokenSource.Dispose();
+            _cancellationTokenSource = null;
+        }
+
+        // Clear any pending receive timeout~ ⏰
+        Context.SetReceiveTimeout(null);
+
+        _log.Info(
+            "👋 NodeExecutor stopping for node {NodeId} (was executing: {WasExecuting}, elapsed: {ElapsedMs}ms)",
+            _nodeId,
+            _isExecuting,
+            _timer.ElapsedMilliseconds);
+
+        _lifecycleHooks.OnPostStop(CreateLifecycleContext());
         base.PostStop();
+    }
+
+    /// <summary>
+    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ 🌸
+    /// </summary>
+    /// <returns>A context describing this actor instance.</returns>
+    private ActorLifecycleContext CreateLifecycleContext()
+    {
+        return new ActorLifecycleContext(
+            ActorPath: Self.Path.ToString(),
+            ActorType: nameof(NodeExecutor),
+            Services: _serviceProvider);
     }
 
     /// <summary>

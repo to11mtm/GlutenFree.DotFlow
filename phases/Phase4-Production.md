@@ -132,6 +132,20 @@ Phase 4 is all about production readiness:
 - [ ] Add CSP headers
 - [ ] Implement JWT with refresh tokens
 
+**Module Security *(Deferred from Phase 1.4)*:** 🔒
+- [ ] **Implement module execution sandboxing**
+  - [ ] Create `IModuleSandbox` interface for controlled execution environments
+  - [ ] Restrict file system access to allowed paths only
+  - [ ] Restrict network access based on module permissions
+  - [ ] Enforce memory limits per module execution
+  - [ ] Enforce CPU time limits per module execution
+  - [ ] Log security-relevant module actions (audit trail)
+- [ ] **Harden assembly loading** (builds on Phase 2.8 assembly verification)
+  - [ ] Enforce strong-name signatures in production mode
+  - [ ] Validate loaded assemblies against trusted publisher list
+  - [ ] Scan for known malicious patterns in loaded code
+  - [ ] Isolate module file I/O to dedicated directories
+
 **Security Features:**
 ```csharp
 ✅ API authentication (JWT + API keys)
@@ -629,7 +643,11 @@ Once launched, the workflow engine will be:
 1. Gather user feedback
 2. Plan v2.0 features
 3. Build community
-4. Create marketplace for modules
+4. Create marketplace for modules *(deferred from Phase 1.4 — builds on `.wfmod` packages from Phase 2.8)*
+   - Public module registry / gallery
+   - Module publishing workflow (submit → review → publish)
+   - Module ratings, downloads, and reviews
+   - Dependency resolution from marketplace
 5. Continue improving!
 
 ---
