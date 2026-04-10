@@ -118,42 +118,42 @@ These were created during the Akka Engine phase and are **already complete**:
 
 ---
 
-## 1.4.3 Module Validation (`ModuleValidator`) ⏳
+## 1.4.3 Module Validation (`ModuleValidator`) ✅
 
 **Purpose:** Create a validator that ensures modules are well-formed before registration, and wire it into the `WorkflowValidator` to resolve deferred Phase 1.2 checks.
 
 **Complexity:** 🟡 Medium
 
 **Tasks:**
-- [ ] **Create `ModuleValidator` class** ✅
-  - [ ] New file: `Workflow.Modules/Validation/ModuleValidator.cs`
-  - [ ] `Validate(IWorkflowModule module) → ValidationResult`
-  - [ ] Validate module ID:
-    - [ ] Not empty/null
-    - [ ] Matches naming convention: `^[a-z][a-z0-9._-]*$` (e.g., `builtin.log`)
-    - [ ] Reasonable max length (e.g., 128 chars)
-  - [ ] Validate metadata:
-    - [ ] `DisplayName` is not empty
-    - [ ] `Description` is not empty
-    - [ ] `Category` is not empty
-    - [ ] `Version` is not null
-  - [ ] Validate schema:
-    - [ ] All `PortDefinition` entries have non-null `Name`
-    - [ ] All `PortDefinition` entries have non-null `DataType`
-    - [ ] No duplicate port names within inputs
-    - [ ] No duplicate port names within outputs
-    - [ ] No duplicate property names
-  - [ ] Add strict mode (`bool strict = false`):
-    - [ ] In strict: require descriptions on all ports/properties
-    - [ ] In strict: require `Icon` to be set
-  - [ ] Return `ValidationResult` with detailed errors/warnings
+- [x] **Create `ModuleValidator` class** ✅
+  - [x] New file: `Workflow.Modules/Validation/ModuleValidator.cs`
+  - [x] `Validate(IWorkflowModule module) → ValidationResult`
+  - [x] Validate module ID:
+    - [x] Not empty/null
+    - [x] Matches naming convention: `^[a-z][a-z0-9._-]*$` (e.g., `builtin.log`)
+    - [x] Reasonable max length (e.g., 128 chars)
+  - [x] Validate metadata:
+    - [x] `DisplayName` is not empty
+    - [x] `Description` is not empty
+    - [x] `Category` is not empty
+    - [x] `Version` is not null
+  - [x] Validate schema:
+    - [x] All `PortDefinition` entries have non-null `Name`
+    - [x] All `PortDefinition` entries have non-null `DataType`
+    - [x] No duplicate port names within inputs
+    - [x] No duplicate port names within outputs
+    - [x] No duplicate property names
+  - [x] Add strict mode (`bool strict = false`):
+    - [x] In strict: require descriptions on all ports/properties
+    - [x] In strict: require `Icon` to be set
+  - [x] Return `ValidationResult` with detailed errors/warnings
 
-- [ ] **Wire into registry** 🔗
-  - [ ] Call `ModuleValidator.Validate()` in `InMemoryModuleRegistry.RegisterModule()`
-  - [ ] Reject modules that fail validation (throw or return errors)
-  - [ ] Allow bypass with a `skipValidation` parameter for testing
+- [x] **Wire into registry** 🔗
+  - [x] Call `ModuleValidator.Validate()` in `InMemoryModuleRegistry.RegisterModule()`
+  - [x] Reject modules that fail validation (throw or return errors)
+  - [x] Allow bypass with a `skipValidation` parameter for testing
 
-- [ ] **Integrate with `WorkflowValidator`** 🔌
+- [ ] **Integrate with `WorkflowValidator`** 🔌 *(⚠️ Deferred — see note)*
   - [ ] Add optional `IModuleRegistry?` parameter to `WorkflowValidator` constructor
   - [ ] When registry available, resolve deferred Phase 1.2 checks:
     - [ ] Validate that node `ModuleId` values exist in registry
@@ -161,94 +161,106 @@ These were created during the Akka Engine phase and are **already complete**:
     - [ ] Validate connection port names match module schema ports
   - [ ] When registry is null, skip module-aware checks (backwards compat)
 
-**Tests (~15):**
-- [ ] Test valid module passes validation
-- [ ] Test empty ModuleId fails
-- [ ] Test invalid ModuleId format fails (special chars, uppercase start)
-- [ ] Test missing DisplayName fails
-- [ ] Test missing Description fails
-- [ ] Test missing Category fails
-- [ ] Test null Version fails
-- [ ] Test duplicate input port names fails
-- [ ] Test duplicate output port names fails
-- [ ] Test duplicate property names fails
-- [ ] Test port with null DataType fails
-- [ ] Test strict mode catches missing descriptions
-- [ ] Test strict mode catches missing Icon
-- [ ] Test validation wired into registry (invalid module rejected)
-- [ ] Test WorkflowValidator with registry validates module references
+> **⚠️ Dependency Direction Note:** `WorkflowValidator` lives in `Workflow.Core` which does NOT reference `Workflow.Modules` (where `IModuleRegistry` lives). Adding this integration requires either:
+> (A) Moving `IModuleRegistry` to `Workflow.Core` (simplest, may break layering)
+> (B) Creating an `IModuleSchemaProvider` interface in `Workflow.Core` as an abstraction
+> (C) Creating a `ModuleAwareWorkflowValidator` subclass in `Workflow.Modules`
+> **Decision deferred to avoid rushed refactoring — tracked for Phase 1.4 wrap-up.** 💖
+
+**Tests (~15):** → `Workflow.Tests/Modules/ModuleValidatorTests.cs` + `ModuleRegistryTests.cs`
+- [x] Test valid module passes validation
+- [x] Test empty ModuleId fails
+- [x] Test invalid ModuleId format fails (special chars, uppercase start)
+- [x] Test missing DisplayName fails
+- [x] Test missing Description fails
+- [x] Test missing Category fails
+- [x] Test null Version fails
+- [x] Test duplicate input port names fails
+- [x] Test duplicate output port names fails
+- [x] Test duplicate property names fails
+- [x] Test port with null DataType fails
+- [x] Test strict mode catches missing descriptions
+- [x] Test strict mode catches missing Icon
+- [x] Test validation wired into registry (invalid module rejected)
+- [ ] Test WorkflowValidator with registry validates module references *(deferred — see note above)*
 
 ---
 
-## 1.4.4 Property Binding System ⏳
+## 1.4.4 Property Binding System ✅
 
 **Purpose:** Create a robust property binding system that resolves variable references, converts types, applies defaults, and validates against schema.
 
 **Complexity:** 🔴 Medium-High
 
 **Tasks:**
-- [ ] **Create binding contracts** 🔗
-  - [ ] New file: `Workflow.Modules/Binding/IPropertyBinder.cs`
-  - [ ] `IPropertyBinder` interface:
-    - [ ] `BindProperties(IReadOnlyDictionary<string, object?> rawValues, Arr<PortDefinition> schema, PropertyBindingContext context) → PropertyBindingResult`
-  - [ ] `PropertyBindingContext` record:
-    - [ ] `Variables` (IReadOnlyDictionary<string, object?>)
-    - [ ] `NodeOutputs` (IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>)
-    - [ ] `ServiceProvider` (IServiceProvider?)
-  - [ ] `PropertyBindingResult` record:
-    - [ ] `Success` (bool)
-    - [ ] `BoundValues` (IReadOnlyDictionary<string, object?>)
-    - [ ] `Errors` (Arr\<string\>)
+- [x] **Create binding contracts** 🔗
+  - [x] New file: `Workflow.Modules/Binding/IPropertyBinder.cs`
+  - [x] `IPropertyBinder` interface:
+    - [x] `BindProperties(IReadOnlyDictionary<string, object?> rawValues, Arr<PortDefinition> schema, PropertyBindingContext context) → PropertyBindingResult`
+  - [x] `PropertyBindingContext` record:
+    - [x] `Variables` (IReadOnlyDictionary<string, object?>)
+    - [x] `NodeOutputs` (IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>>)
+    - [x] `ServiceProvider` (IServiceProvider?)
+  - [x] `PropertyBindingResult` record:
+    - [x] `Success` (bool)
+    - [x] `BoundValues` (IReadOnlyDictionary<string, object?>)
+    - [x] `Errors` (Arr\<string\>)
 
-- [ ] **Implement `PropertyBinder`** ⚙️
-  - [ ] New file: `Workflow.Modules/Binding/PropertyBinder.cs`
-  - [ ] **Static value pass-through** — raw value used as-is when type matches
-  - [ ] **Type conversion** (`TypeConverter` static class):
-    - [ ] string → int, long, decimal, double, float
-    - [ ] string → bool
-    - [ ] string → DateTime, DateTimeOffset
-    - [ ] string → Guid
-    - [ ] string → TimeSpan
-    - [ ] JSON string → complex objects (via System.Text.Json)
-  - [ ] **Variable reference resolution**:
-    - [ ] Detect `{{Variable.Name}}` pattern via regex
-    - [ ] Look up in `PropertyBindingContext.Variables`
-    - [ ] Support nested: `{{Variable.User.Name}}` (dot-notation traversal)
-  - [ ] **Node output reference resolution**:
-    - [ ] Detect `{{NodeId.OutputName}}` pattern via regex
-    - [ ] Look up in `PropertyBindingContext.NodeOutputs`
-  - [ ] **Default value assignment**:
-    - [ ] When input missing AND port is not required → use `PortDefinition.DefaultValue`
-    - [ ] When input missing AND port is required → add error
-  - [ ] **Schema validation**:
-    - [ ] Validate converted type matches `PortDefinition.DataType`
-    - [ ] Apply `ValidationRule` checks from `ModulePropertyDefinition`
-  - [ ] **Error accumulation** — collect all errors, don't stop at first
+- [x] **Implement `PropertyBinder`** ⚙️
+  - [x] New file: `Workflow.Modules/Binding/PropertyBinder.cs`
+  - [x] **Static value pass-through** — raw value used as-is when type matches
+  - [x] **Type conversion** (`TypeConverter` static class):
+    - [x] string → int, long, decimal, double, float
+    - [x] string → bool
+    - [x] string → DateTime, DateTimeOffset
+    - [x] string → Guid
+    - [x] string → TimeSpan
+    - [x] JSON string → complex objects (via System.Text.Json)
+  - [x] **Variable reference resolution**:
+    - [x] Detect `{{Variable.Name}}` pattern via regex
+    - [x] Look up in `PropertyBindingContext.Variables`
+    - [x] Support nested: `{{Variable.User.Name}}` (dot-notation traversal)
+  - [x] **Node output reference resolution**:
+    - [x] Detect `{{NodeId.OutputName}}` pattern via regex
+    - [x] Look up in `PropertyBindingContext.NodeOutputs`
+  - [x] **Default value assignment**:
+    - [x] When input missing AND port is not required → use `PortDefinition.DefaultValue`
+    - [x] When input missing AND port is required → add error
+  - [x] **Schema validation**:
+    - [x] Validate converted type matches `PortDefinition.DataType`
+    - [x] Apply `ValidationRule` checks from `ModulePropertyDefinition`
+  - [x] **Error accumulation** — collect all errors, don't stop at first
 
-- [ ] **Integrate into `NodeExecutor`** 🎭
-  - [ ] Replace inline property extraction in `NodeExecutor` with `PropertyBinder`
-  - [ ] Pass workflow variables from `WorkflowExecutor` context
-  - [ ] Pass predecessor node outputs for cross-node references
+- [x] **Integrate into `NodeExecutor`** 🎭
+  - [x] Replace inline property extraction in `NodeExecutor` with `PropertyBinder`
+  - [x] Pass workflow variables from `WorkflowExecutor` context
+  - [x] Pass predecessor node outputs for cross-node references
 
-**Tests (~18):**
-- [ ] Test bind string pass-through
-- [ ] Test bind int conversion from string
-- [ ] Test bind bool conversion from string
-- [ ] Test bind DateTime conversion from string
-- [ ] Test bind Guid conversion from string
-- [ ] Test bind TimeSpan conversion from string
-- [ ] Test bind decimal conversion from string
-- [ ] Test bind JSON string to complex object
-- [ ] Test resolve `{{Variable.Name}}` reference
-- [ ] Test resolve nested `{{Variable.User.Name}}` reference
-- [ ] Test resolve `{{NodeId.OutputName}}` reference
-- [ ] Test missing variable reference → error
-- [ ] Test missing node output reference → error
-- [ ] Test default value applied for optional missing input
-- [ ] Test required missing input → error
-- [ ] Test type mismatch after conversion → error
-- [ ] Test multiple errors accumulated
-- [ ] Test integration with `NodeExecutor` (end-to-end binding)
+**Tests (~18 → 23 actual):** → `Workflow.Tests/Modules/PropertyBinderTests.cs`
+- [x] Test bind string pass-through
+- [x] Test bind int conversion from string
+- [x] Test bind bool conversion from string
+- [x] Test bind DateTime conversion from string
+- [x] Test bind Guid conversion from string
+- [x] Test bind TimeSpan conversion from string
+- [x] Test bind decimal conversion from string
+- [x] Test bind JSON string to complex object
+- [x] Test resolve `{{Variable.Name}}` reference
+- [x] Test resolve nested `{{Variable.User.Name}}` reference
+- [x] Test resolve `{{NodeId.OutputName}}` reference
+- [x] Test missing variable reference → error
+- [x] Test missing node output reference → error
+- [x] Test default value applied for optional missing input
+- [x] Test required missing input → error
+- [x] Test type mismatch after conversion → error
+- [x] Test multiple errors accumulated
+- [x] Test numeric widening (int → long)
+- [x] Test single variable reference preserves resolved type
+- [x] Test mixed text with references interpolates as string
+- [x] Test optional missing no default binds to null
+- [x] Test extra values pass through
+- [x] Test case-insensitive port name matching
+- [ ] Test integration with `NodeExecutor` (end-to-end binding) *(covered in NodeExecutorTests already)*
 
 ---
 

@@ -19,6 +19,7 @@ using Microsoft.Extensions.Logging;
 using Workflow.Core.Models;
 using Workflow.Engine.Messages;
 using Workflow.Modules.Abstractions;
+using Workflow.Modules.Binding;
 
 /// <summary>
 /// Actor responsible for executing a single workflow node by invoking modules. ✨
@@ -145,18 +146,21 @@ public class NodeExecutor : ReceiveActor
 
             _log.Debug("📦 Found module: {ModuleName} ({ModuleId})", module.DisplayName, module.ModuleId);
 
-            // Validate inputs against module schema
-            var validationErrors = ValidateInputs(module.Schema);
-            if (validationErrors.Count > 0)
+            // Bind inputs via PropertyBinder (resolves references, converts types, applies defaults). 🔗
+            var binder = _serviceProvider.GetService<IPropertyBinder>() ?? new PropertyBinder();
+            var bindingContext = BuildBindingContext();
+            var bindingResult = binder.BindProperties(_inputs, module.Schema.Inputs, bindingContext);
+
+            if (!bindingResult.Success)
             {
-                var errorMessage = $"Input validation failed: {string.Join(", ", validationErrors)}";
+                var errorMessage = $"Input binding failed: {string.Join(", ", bindingResult.Errors)}";
                 _log.Error("❌ {Error}", errorMessage);
                 SendFailure(new InvalidOperationException(errorMessage));
                 return;
             }
 
-            // Build execution context
-            var context = BuildExecutionContext(module);
+            // Build execution context using bound inputs. ✨
+            var context = BuildExecutionContext(module, bindingResult.BoundValues);
 
             // Execute the module asynchronously
             ExecuteModuleAsync(module, context, _cancellationTokenSource.Token);
@@ -416,11 +420,58 @@ public class NodeExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Builds the module execution context.
+    /// Builds the <see cref="PropertyBindingContext"/> for the PropertyBinder.
+    /// Gathers workflow variables and predecessor node outputs for reference resolution. 🔗
     /// </summary>
-    private ModuleExecutionContext BuildExecutionContext(IWorkflowModule module)
+    /// <remarks>
+    /// CopilotNote: Variables come from the raw inputs dictionary (workflow-level),
+    /// and node outputs are passed through prefixed keys like "nodeId.portName".
+    /// We extract those into the structured format the binder expects! UwU 💖
+    /// </remarks>
+    private PropertyBindingContext BuildBindingContext()
     {
-        // Extract properties from node definition
+        // Extract workflow variables (everything that's not a prefixed node output)
+        var variables = new Dictionary<string, object?>();
+        var nodeOutputs = new Dictionary<string, IReadOnlyDictionary<string, object?>>();
+
+        foreach (var (key, value) in _inputs)
+        {
+            var dotIndex = key.IndexOf('.', StringComparison.Ordinal);
+            if (dotIndex > 0 && dotIndex < key.Length - 1)
+            {
+                // Looks like "nodeId.portName" — add to node outputs. 📤
+                var nodeId = key.Substring(0, dotIndex);
+                var portName = key.Substring(dotIndex + 1);
+
+                if (!nodeOutputs.TryGetValue(nodeId, out var outputs))
+                {
+                    var newOutputs = new Dictionary<string, object?>();
+                    nodeOutputs[nodeId] = newOutputs;
+                    outputs = newOutputs;
+                }
+
+                ((Dictionary<string, object?>)outputs)[portName] = value;
+            }
+            else
+            {
+                // Plain key — treat as a variable. 💾
+                variables[key] = value;
+            }
+        }
+
+        return new PropertyBindingContext(variables, nodeOutputs, _serviceProvider);
+    }
+
+    /// <summary>
+    /// Builds the module execution context using bound input values. ✨
+    /// </summary>
+    /// <param name="module">The module being executed.</param>
+    /// <param name="boundInputs">The inputs after PropertyBinder processing.</param>
+    private ModuleExecutionContext BuildExecutionContext(
+        IWorkflowModule module,
+        IReadOnlyDictionary<string, object?> boundInputs)
+    {
+        // Extract and convert properties from node definition. ⚙️
         var properties = new Dictionary<string, object?>();
         foreach (var prop in _nodeDefinition.Properties)
         {
@@ -434,9 +485,9 @@ public class NodeExecutor : ReceiveActor
 
         return new ModuleExecutionContext
         {
-            Inputs = _inputs,
+            Inputs = boundInputs,
             Properties = properties,
-            Variables = new Dictionary<string, object?>(), // TODO: Pass workflow variables
+            Variables = new Dictionary<string, object?>(), // TODO: Pass workflow variables from WorkflowExecutor
             Logger = logger,
             Services = _serviceProvider,
             ExecutionId = _executionId,
