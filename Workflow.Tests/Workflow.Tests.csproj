@@ -33,6 +33,10 @@
         <ProjectReference Include="..\Workflow.Engine\Workflow.Engine.csproj" />
         <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
         <ProjectReference Include="..\Workflow.Api\Workflow.Api.csproj" />
+        <!-- 🧪 SampleModules is referenced here only to enforce build order — loader tests
+             need the DLL to exist on disk before running. We resolve the path at test time
+             via typeof(SampleLogModule).Assembly.Location so no hardcoded paths~ 💖 -->
+        <ProjectReference Include="..\Workflow.Tests.SampleModules\Workflow.Tests.SampleModules.csproj" />
     </ItemGroup>
 
 </Project>

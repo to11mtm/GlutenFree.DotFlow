@@ -91,6 +91,15 @@ Phase 4: Polish & Prod     [░░░░░░░░░░] Weeks 23-28 (6 weeks
 3. Dive into detailed task lists in main design document
 4. Follow coding standards in design document Section 1.1
 
+### For Module Authors (Plugin Developers)
+1. Read **[docs/module-author-guide.md](docs/module-author-guide.md)** — complete guide to creating, packaging, and shipping modules
+   - How to implement `IWorkflowModule`
+   - Module ID naming conventions
+   - **How to correctly ship `.deps.json` and private dependencies** (critical!)
+   - What to include/exclude from your plugin folder
+   - Validation rules cheat sheet
+   - Troubleshooting common load failures
+
 ### For Stakeholders
 1. Read Phase summaries in **[phases/](phases/)** for high-level understanding
 2. Review success criteria in each phase file

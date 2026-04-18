@@ -1772,6 +1772,21 @@ Phase 2 builds upon the foundation with critical production features:
         - [ ] Test cancel execution
         - [ ] Test list executions
 
+- [ ] **Create module schema DTO layer** 📐
+  - [ ] `ModuleSchemaDto` record — serializable version of `ModuleSchema`
+  - [ ] `PortDefinitionDto` record:
+    - [ ] `Name` (string)
+    - [ ] `DisplayName` (string)
+    - [ ] `DataType` (string) — type name, e.g. `"System.String"`, `"System.Int32"`
+    - [ ] `Description` (string?)
+    - [ ] `IsRequired` (bool)
+    - [ ] `DefaultValue` (JsonElement?) — serializable default
+  - [ ] `ModulePropertyDefinitionDto` — mirrors `ModulePropertyDefinition` with serializable types
+  - [ ] `ModuleSummaryDto` — lightweight list view (no schema, just id/name/category/description/version)
+  - [ ] `ModuleDetailsDto` — full view including `ModuleSchemaDto`
+  - [ ] Projection mapping: `IWorkflowModule → ModuleDetailsDto`
+  - [ ] Tests for DTO projection and round-trip JSON serialization
+
 - [ ] **Add module management endpoints** 📦
     - [ ] Create `ModulesController` class
     - [ ] Implement GET /api/v1/modules

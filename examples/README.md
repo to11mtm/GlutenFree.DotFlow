@@ -67,6 +67,7 @@ examples/
 - **[HttpModule.cs](modules/HttpModule.cs)** - HTTP request module example
 - **[DatabaseModule.cs](modules/DatabaseModule.cs)** - Database query module example
 - **[FileModule.cs](modules/FileModule.cs)** - File operations module example
+- **[docs/module-author-guide.md](../docs/module-author-guide.md)** - 📖 Complete guide: implementing, packaging, and shipping modules (includes `.deps.json` requirements!)
 
 ### Scripting Support
 - **[ScriptModule.cs](scripting/ScriptModule.cs)** - Script execution module
@@ -105,8 +106,9 @@ examples/
 
 ### For Developers
 1. **Building Modules** - Start with `IWorkflowModule.cs` and refer to the built-in module examples
-2. **API Integration** - Check the controller examples for REST API implementation patterns
-3. **Scripting** - Use the script examples as templates for your workflows
+2. **Shipping Modules** - Read **[docs/module-author-guide.md](../docs/module-author-guide.md)** for the complete packaging guide including `.deps.json` requirements
+3. **API Integration** - Check the controller examples for REST API implementation patterns
+4. **Scripting** - Use the script examples as templates for your workflows
 
 ### For Script Authors
 - JavaScript examples show how to use the workflow API for data transformation

@@ -137,6 +137,9 @@ public class ModuleDiscovery : IModuleDiscovery
                     continue;
                 }
 
+                // Apply any attribute metadata overrides BEFORE validation~ 🏷️
+                module = ApplyAttributeOverrides(type, module);
+
                 // Validate the module before registration~ ✅
                 var validationResult = _validator.Validate(module);
                 if (!validationResult.IsValid)
@@ -230,6 +233,42 @@ public class ModuleDiscovery : IModuleDiscovery
     }
 
     /// <summary>
+    /// Applies any <see cref="WorkflowModuleAttribute"/> metadata overrides to the module.
+    /// When <c>ModuleId</c>, <c>Category</c>, or <c>Description</c> are set on the attribute,
+    /// wraps the module in an <see cref="AttributeOverrideModule"/> decorator~ 🏷️
+    /// </summary>
+    /// <param name="type">The module type (used to read the attribute).</param>
+    /// <param name="module">The instantiated module to potentially wrap.</param>
+    /// <returns>
+    /// The original module if no overrides are set, or a wrapped module with overrides applied.
+    /// </returns>
+    private IWorkflowModule ApplyAttributeOverrides(Type type, IWorkflowModule module)
+    {
+        var attribute = type.GetCustomAttribute<WorkflowModuleAttribute>();
+        if (attribute == null)
+        {
+            return module;
+        }
+
+        // Only wrap if at least one override is set~ ✨
+        if (attribute.ModuleId == null && attribute.Category == null && attribute.Description == null)
+        {
+            return module;
+        }
+
+        _logger.LogDebug(
+            "🏷️ Applying attribute overrides to module '{OriginalId}' (type: {TypeName})~ " +
+            "ModuleId={ModuleId}, Category={Category}, Description={Description}",
+            module.ModuleId,
+            type.FullName,
+            attribute.ModuleId ?? "(no override)",
+            attribute.Category ?? "(no override)",
+            attribute.Description ?? "(no override)");
+
+        return new AttributeOverrideModule(module, attribute);
+    }
+
+    /// <summary>
     /// Instantiates a module from its type, using DI when available or
     /// falling back to <see cref="Activator.CreateInstance(Type)"/>~ 🏭
     /// </summary>
@@ -262,3 +301,55 @@ public class ModuleDiscovery : IModuleDiscovery
     }
 }
 
+/// <summary>
+/// 🎭 Decorator that wraps an <see cref="IWorkflowModule"/> and overrides selected
+/// metadata properties from a <see cref="WorkflowModuleAttribute"/>~ ✨
+/// </summary>
+/// <remarks>
+/// CopilotNote: This is an internal implementation detail of <see cref="ModuleDiscovery"/>.
+/// It only overrides the properties that are explicitly set on the attribute —
+/// everything else (Schema, Execute, etc.) is delegated to the inner module~ 💖
+/// </remarks>
+internal sealed class AttributeOverrideModule : IWorkflowModule
+{
+    private readonly IWorkflowModule _inner;
+    private readonly WorkflowModuleAttribute _attribute;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AttributeOverrideModule"/> class.
+    /// </summary>
+    /// <param name="inner">The wrapped module instance.</param>
+    /// <param name="attribute">The attribute providing override values.</param>
+    public AttributeOverrideModule(IWorkflowModule inner, WorkflowModuleAttribute attribute)
+    {
+        _inner = inner;
+        _attribute = attribute;
+    }
+
+    /// <inheritdoc />
+    public string ModuleId => _attribute.ModuleId ?? _inner.ModuleId;
+
+    /// <inheritdoc />
+    public string DisplayName => _inner.DisplayName;
+
+    /// <inheritdoc />
+    public string Category => _attribute.Category ?? _inner.Category;
+
+    /// <inheritdoc />
+    public string Description => _attribute.Description ?? _inner.Description;
+
+    /// <inheritdoc />
+    public string Icon => _inner.Icon;
+
+    /// <inheritdoc />
+    public Version Version => _inner.Version;
+
+    /// <inheritdoc />
+    public Workflow.Core.Models.ModuleSchema Schema => _inner.Schema;
+
+    /// <inheritdoc />
+    public System.Threading.Tasks.Task<Workflow.Modules.Abstractions.ModuleResult> ExecuteAsync(
+        Workflow.Modules.Abstractions.ModuleExecutionContext context,
+        System.Threading.CancellationToken cancellationToken = default)
+        => _inner.ExecuteAsync(context, cancellationToken);
+}

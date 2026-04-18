@@ -153,13 +153,13 @@ These were created during the Akka Engine phase and are **already complete**:
   - [x] Reject modules that fail validation (throw or return errors)
   - [x] Allow bypass with a `skipValidation` parameter for testing
 
-- [ ] **Integrate with `WorkflowValidator`** 🔌 *(⚠️ Deferred — see note)*
-  - [ ] Add optional `IModuleRegistry?` parameter to `WorkflowValidator` constructor
-  - [ ] When registry available, resolve deferred Phase 1.2 checks:
-    - [ ] Validate that node `ModuleId` values exist in registry
-    - [ ] Validate node properties match module schema
-    - [ ] Validate connection port names match module schema ports
-  - [ ] When registry is null, skip module-aware checks (backwards compat)
+- [ ] **Integrate with `WorkflowValidator`** 🔌 ✅ *Implemented via Option C*
+  - [x] Created `ModuleAwareWorkflowValidator` in `Workflow.Modules/Validation/`
+  - [x] Wraps base `WorkflowValidator` via composition (no Core dependency change needed)
+  - [x] Validate that node `ModuleId` values exist in registry (MA001)
+  - [x] Validate node properties match module schema (MA002)
+  - [x] Validate connection port names match module schema ports (MA003/MA004)
+  - [x] When registry is null, use base `WorkflowValidator` directly (backwards compat)
 
 > **⚠️ Dependency Direction Note:** `WorkflowValidator` lives in `Workflow.Core` which does NOT reference `Workflow.Modules` (where `IModuleRegistry` lives). Adding this integration requires either:
 > (A) Moving `IModuleRegistry` to `Workflow.Core` (simplest, may break layering)
@@ -182,7 +182,7 @@ These were created during the Akka Engine phase and are **already complete**:
 - [x] Test strict mode catches missing descriptions
 - [x] Test strict mode catches missing Icon
 - [x] Test validation wired into registry (invalid module rejected)
-- [ ] Test WorkflowValidator with registry validates module references *(deferred — see note above)*
+- [ ] Test WorkflowValidator with registry validates module references *(resolved via ModuleAwareWorkflowValidatorTests — 13 tests passing)*
 
 ---
 
@@ -264,98 +264,111 @@ These were created during the Akka Engine phase and are **already complete**:
 
 ---
 
-## 1.4.5 Module Discovery (Assembly Scanning) ⏳
+## 1.4.5 Module Discovery (Assembly Scanning) ✅
 
 **Purpose:** Automatically find and register `IWorkflowModule` implementations in assemblies without manual registration.
 
 **Complexity:** 🟡 Medium
 
 **Tasks:**
-- [ ] **Create discovery attribute** 🏷️
-  - [ ] New file: `Workflow.Modules/Discovery/WorkflowModuleAttribute.cs`
-  - [ ] `[WorkflowModule]` attribute (optional, for metadata overrides):
-    - [ ] `ModuleId` (string?) — override the module's ID
-    - [ ] `Category` (string?) — override category
-    - [ ] `Description` (string?) — override description
-    - [ ] `Ignore` (bool) — exclude from auto-discovery
+- [x] **Create discovery attribute** 🏷️
+  - [x] New file: `Workflow.Modules/Discovery/WorkflowModuleAttribute.cs`
+  - [x] `[WorkflowModule]` attribute (optional, for metadata overrides):
+    - [x] `ModuleId` (string?) — override the module's ID
+    - [x] `Category` (string?) — override category
+    - [x] `Description` (string?) — override description
+    - [x] `Ignore` (bool) — exclude from auto-discovery
 
-- [ ] **Create discovery service** 🔍
-  - [ ] New file: `Workflow.Modules/Discovery/IModuleDiscovery.cs`
-  - [ ] `IModuleDiscovery` interface:
-    - [ ] `DiscoverModuleTypes(Assembly assembly) → IReadOnlyList<Type>`
-    - [ ] `DiscoverAndRegister(Assembly assembly, IModuleRegistry registry, IServiceProvider? services = null) → int` (returns count)
-  - [ ] New file: `Workflow.Modules/Discovery/ModuleDiscovery.cs`
-  - [ ] `ModuleDiscovery` class:
-    - [ ] Scan assembly for public, non-abstract classes implementing `IWorkflowModule`
-    - [ ] Respect `[WorkflowModule(Ignore = true)]` to skip modules
-    - [ ] Instantiate via `ActivatorUtilities.CreateInstance` when `IServiceProvider` available
-    - [ ] Run `ModuleValidator` on each discovered module
-    - [ ] Skip invalid modules with logged warnings (don't crash!)
-    - [ ] Handle duplicate registrations gracefully (log warning, skip)
+- [x] **Create discovery service** 🔍
+  - [x] New file: `Workflow.Modules/Discovery/IModuleDiscovery.cs`
+  - [x] `IModuleDiscovery` interface:
+    - [x] `DiscoverModuleTypes(Assembly assembly) → IReadOnlyList<Type>`
+    - [x] `DiscoverAndRegister(Assembly assembly, IModuleRegistry registry, IServiceProvider? services = null) → int` (returns count)
+  - [x] New file: `Workflow.Modules/Discovery/ModuleDiscovery.cs`
+  - [x] `ModuleDiscovery` class:
+    - [x] Scan assembly for public, non-abstract classes implementing `IWorkflowModule`
+    - [x] Respect `[WorkflowModule(Ignore = true)]` to skip modules
+    - [x] Instantiate via `ActivatorUtilities.CreateInstance` when `IServiceProvider` available
+    - [x] Run `ModuleValidator` on each discovered module
+    - [x] Skip invalid modules with logged warnings (don't crash!)
+    - [x] Handle duplicate registrations gracefully (log warning, skip)
+    - [x] Apply `WorkflowModuleAttribute` metadata overrides (ModuleId/Category/Description) via `AttributeOverrideModule` decorator
 
-- [ ] **Add convenience extensions** 🎀
-  - [ ] `IModuleRegistry.DiscoverAndRegisterFrom(Assembly assembly, IServiceProvider? services)`
-  - [ ] `IModuleRegistry.DiscoverAndRegisterFromCallingAssembly(IServiceProvider? services)` — convenience for app startup
+- [x] **Add convenience extensions** 🎀
+  - [x] `IModuleRegistry.DiscoverAndRegisterFrom(Assembly assembly, IServiceProvider? services)`
+  - [x] `IModuleRegistry.DiscoverAndRegisterFromCallingAssembly(IServiceProvider? services)` — convenience for app startup
 
-**Tests (~10):**
-- [ ] Test discover modules in test assembly (finds `PassThroughModule`)
-- [ ] Test discover skips abstract classes
-- [ ] Test discover skips non-public (internal) classes
-- [ ] Test discover respects `[WorkflowModule(Ignore = true)]`
-- [ ] Test discover with DI (constructor injection)
-- [ ] Test discover empty assembly returns 0
-- [ ] Test discover and register populates registry
-- [ ] Test discover skips invalid modules (with validation)
-- [ ] Test discover handles duplicates gracefully
-- [ ] Test attribute metadata override works
+**Tests (15 passing):** → `Workflow.Tests/Modules/ModuleDiscoveryTests.cs`
+- [x] Test discover modules in test assembly (finds `PassThroughModule`)
+- [x] Test discover skips abstract classes
+- [x] Test discover skips non-public (internal) classes
+- [x] Test discover respects `[WorkflowModule(Ignore = true)]`
+- [x] Test discover with DI (constructor injection)
+- [x] Test discover empty assembly returns 0
+- [x] Test discover and register populates registry
+- [x] Test discover skips invalid modules (with validation)
+- [x] Test discover handles duplicates gracefully
+- [x] Test attribute metadata override works
+- [x] Test null assembly throws ArgumentNullException
+- [x] Test null registry throws ArgumentNullException
+- [x] Test DiscoverAndRegisterFrom extension method
+- [x] Test DiscoverAndRegisterFromCallingAssembly extension method
+- [x] Test empty assembly DiscoverAndRegister returns 0
 
 ---
 
-## 1.4.6 Dynamic Module Loading (Foundation) ⏳
+## 1.4.6 Dynamic Module Loading (Foundation) ✅
 
 **Purpose:** Load module assemblies from disk at runtime using isolated `AssemblyLoadContext` for plugin-style extensibility.
 
 **Complexity:** 🟡 Medium
 
 **Tasks:**
-- [ ] **Create loader contracts** 🚀
-  - [ ] New file: `Workflow.Modules/Loading/IModuleLoader.cs`
-  - [ ] `IModuleLoader` interface:
-    - [ ] `LoadFromAssembly(string assemblyPath) → ModuleLoadResult`
-    - [ ] `LoadFromDirectory(string directoryPath) → IReadOnlyList<ModuleLoadResult>`
-    - [ ] `UnloadAssembly(string assemblyPath) → bool`
-    - [ ] `GetLoadedAssemblies() → IReadOnlyList<string>`
-  - [ ] `ModuleLoadResult` record:
-    - [ ] `AssemblyPath` (string)
-    - [ ] `LoadedModules` (IReadOnlyList\<IWorkflowModule\>)
-    - [ ] `Errors` (IReadOnlyList\<string\>)
-    - [ ] `Success` (bool)
+- [x] **Create loader contracts** 🚀
+  - [x] New file: `Workflow.Modules/Loading/IModuleLoader.cs`
+  - [x] `IModuleLoader` interface:
+    - [x] `LoadFromAssembly(string assemblyPath) → ModuleLoadResult`
+    - [x] `LoadFromDirectory(string directoryPath) → IReadOnlyList<ModuleLoadResult>`
+    - [x] `UnloadAssembly(string assemblyPath) → bool`
+    - [x] `GetLoadedAssemblies() → IReadOnlyList<string>`
+  - [x] `ModuleLoadResult` record:
+    - [x] `AssemblyPath` (string)
+    - [x] `LoadedModules` (IReadOnlyList\<IWorkflowModule\>)
+    - [x] `Errors` (IReadOnlyList\<string\>)
+    - [x] `Success` (bool)
 
-- [ ] **Implement `AssemblyModuleLoader`** 📦
-  - [ ] New file: `Workflow.Modules/Loading/AssemblyModuleLoader.cs`
-  - [ ] Create collectible `AssemblyLoadContext` per loaded assembly (isolation!)
-  - [ ] Load assembly from file path
-  - [ ] Use `ModuleDiscovery` to scan loaded assembly
-  - [ ] Register discovered modules into provided `IModuleRegistry`
-  - [ ] Track loaded contexts for later unloading
-  - [ ] `UnloadAssembly`: unregister all modules from that assembly, unload context
-  - [ ] Handle errors gracefully: invalid path, missing dependencies, etc.
+- [x] **Implement `AssemblyModuleLoader`** 📦
+  - [x] New file: `Workflow.Modules/Loading/AssemblyModuleLoader.cs`
+  - [x] Create collectible `AssemblyLoadContext` per loaded assembly (isolation!)
+  - [x] Load assembly from file path
+  - [x] Use `ModuleDiscovery` to scan loaded assembly
+  - [x] Register discovered modules into provided `IModuleRegistry`
+  - [x] Track loaded contexts for later unloading
+  - [x] `UnloadAssembly`: unregister all modules from that assembly, unload context
+  - [x] Handle errors gracefully: invalid path, missing dependencies, etc.
 
-- [ ] **Create test modules project** 🧪
-  - [ ] New project: `Workflow.Tests.SampleModules` (class library)
-  - [ ] Add to solution
-  - [ ] Create 2-3 sample modules for loader testing
-  - [ ] Build output used by loader tests
+- [x] **Create test modules project** 🧪
+  - [x] New project: `Workflow.Tests.SampleModules` (class library)
+  - [x] Add to solution
+  - [x] Create 2-3 sample modules for loader testing
+  - [x] Build output used by loader tests
 
-**Tests (~8):**
-- [ ] Test load valid assembly discovers modules
-- [ ] Test load registers modules into registry
-- [ ] Test unload removes modules from registry
-- [ ] Test load invalid path throws/returns error
-- [ ] Test load assembly with no modules returns empty
-- [ ] Test assembly isolation (separate load contexts)
-- [ ] Test load from directory finds all DLLs
-- [ ] Test `GetLoadedAssemblies` tracks loaded paths
+**Tests (15 passing):** → `Workflow.Tests/Modules/ModuleLoaderTests.cs`
+- [x] Test load valid assembly discovers modules
+- [x] Test load registers modules into registry
+- [x] Test unload removes modules from registry
+- [x] Test load invalid path throws/returns error
+- [x] Test load assembly with no modules returns empty
+- [x] Test assembly isolation (separate load contexts)
+- [x] Test load from directory finds all DLLs
+- [x] Test `GetLoadedAssemblies` tracks loaded paths
+- [x] Test load same assembly twice is idempotent (bonus~)
+- [x] Test unload non-loaded assembly returns false (bonus~)
+- [x] Test `GetLoadedAssemblies` cleared after unload (bonus~)
+- [x] Test invalid module skipped, valid modules loaded (bonus~)
+- [x] Test null path throws ArgumentException (bonus~)
+- [x] Test LoadFromDirectory null path throws (bonus~)
+- [x] Test LoadFromDirectory non-existent directory returns empty (bonus~)
 
 ---
 
@@ -381,15 +394,15 @@ These items from the original design doc are **intentionally deferred** as they 
 ## Phase 1.4 Deliverables
 
 **Completion Criteria:**
-- [ ] Module contracts enhanced with Version, ValidateConfiguration, Metrics
-- [ ] Registry supports category lookup, search, events, type-based registration
-- [ ] ModuleValidator prevents broken modules from loading
-- [ ] Property binding resolves variables, converts types, validates against schema
-- [ ] Assembly scanning auto-discovers modules
-- [ ] Dynamic loading from DLLs works with isolation
-- [ ] ~70-80 new tests written and passing
-- [ ] WorkflowValidator deferred checks from Phase 1.2 resolved
-- [ ] Clear XML documentation on all new APIs
+- [x] Module contracts enhanced with Version, ValidateConfiguration, Metrics
+- [x] Registry supports category lookup, search, events, type-based registration
+- [x] ModuleValidator prevents broken modules from loading
+- [x] Property binding resolves variables, converts types, validates against schema
+- [x] Assembly scanning auto-discovers modules
+- [x] Dynamic loading from DLLs works with isolation
+- [x] ~70-80 new tests written and passing
+- [x] WorkflowValidator deferred checks from Phase 1.2 resolved
+- [x] Clear XML documentation on all new APIs
 
 **Estimated New Files:**
 ```
