@@ -27,13 +27,17 @@ This directory contains individual phase breakdown files to make it easier to na
 
 ### [Phase2-CoreFeatures.md](Phase2-CoreFeatures.md) 🚀
 **Weeks 7-14** - Core Features and Modules
-- Persistence layer (PostgreSQL, NATS KV, S3)
-- Advanced flow control (conditionals, loops, parallel)
-- HTTP & Network modules
-- Database modules
-- File system modules
-- Data transformation modules
-- REST API with authentication
+- ⏳ Persistence layer (PostgreSQL, NATS KV, S3) (2.1)
+- ⏳ Advanced flow control (conditionals, loops, parallel) (2.2)
+- ⏳ HTTP & Network modules (2.3)
+- ⏳ Database modules (2.4)
+- ⏳ File system & cloud storage modules (2.5)
+- ⏳ Data transformation modules (2.6)
+- ⏳ REST API with authentication (2.7)
+- ⏳ Module system enhancements (2.8)
+
+#### Sub-Phase Breakdowns:
+- [Phase2-1-PersistenceLayer.md](Phase2-1-PersistenceLayer.md) ⏳ — 6 sub-phases, detailed breakout ready!
 
 ### [Phase3-AdvancedFeatures.md](Phase3-AdvancedFeatures.md) 🎨
 **Weeks 15-22** - Advanced Features and UI

@@ -48,6 +48,11 @@ Phase 2 builds upon the foundation with critical production features:
 
 ### 2.1 Persistence Layer (Week 7-9)
 
+> 📋 **See detailed sub-phases:** [Phase2-1-PersistenceLayer.md](./Phase2-1-PersistenceLayer.md)
+
+> **Sub-phases:** 2.1.0 Abstractions · 2.1.1 In-Memory · 2.1.2 PostgreSQL · 2.1.3 NATS KV · 2.1.4 S3 Blob · 2.1.5 Engine Integration
+> **Estimated tests:** ~107 | **New projects:** Workflow.Persistence, Workflow.Persistence.Postgres, Workflow.Persistence.Nats, Workflow.Persistence.S3
+
 **Tasks:**
 - [ ] **Implement pluggable persistence interface** 🔌
     - [ ] Define `IPersistenceProvider` base interface
