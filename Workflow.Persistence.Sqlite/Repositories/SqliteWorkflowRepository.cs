@@ -11,6 +11,7 @@ using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 using Workflow.Persistence.Sqlite.Data;
 using Workflow.Persistence.Sqlite.Data.Entities;
+using Workflow.Persistence.Sqlite.Serialization;
 
 /// <summary>
 /// 📋 SQLite-backed implementation of <see cref="IWorkflowRepository"/>~ ✨💖
@@ -21,7 +22,7 @@ using Workflow.Persistence.Sqlite.Data.Entities;
 /// </remarks>
 public sealed class SqliteWorkflowRepository : IWorkflowRepository
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = LanguageExtJsonConverters.CreateOptions();
 
     private readonly WorkflowDataConnectionFactory _factory;
 

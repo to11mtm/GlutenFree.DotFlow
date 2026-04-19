@@ -99,7 +99,7 @@ public sealed class SqliteExecutionHistoryRepository : IExecutionHistoryReposito
 
         if (filter.States is { Length: > 0 })
         {
-            var stateNames = filter.States.Select(s => s.ToString()).ToArray();
+            IReadOnlyList<string> stateNames = filter.States.Select(s => s.ToString()).ToArray();
             query = query.Where(e => stateNames.Contains(e.State));
         }
 
