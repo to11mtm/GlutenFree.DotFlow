@@ -17,17 +17,17 @@ using Workflow.Modules.Validation;
 /// <summary>
 /// 🗂️ In-memory implementation of the module registry with category lookup,
 /// search, type-based registration, observer notifications, module validation,
-/// and duplicate registration policy support~ 💖
+/// and duplicate registration policy support~ 💖.
 /// </summary>
 /// <remarks>
 /// <para>
 /// CopilotNote: Thread-safe via ConcurrentDictionary and lock on observer list.
 /// Observers are invoked in registration order. Exceptions in one observer
-/// do NOT block others — each is wrapped in try/catch. UwU ✨
+/// do NOT block others — each is wrapped in try/catch. UwU ✨.
 /// </para>
 /// <para>
 /// Phase 1.4.3: ModuleValidator is wired in — modules are validated at
-/// registration time. Use <c>skipValidation: true</c> to bypass for testing~ 🧪
+/// registration time. Use <c>skipValidation: true</c> to bypass for testing~ 🧪.
 /// </para>
 /// </remarks>
 public class InMemoryModuleRegistry : IModuleRegistry
@@ -40,7 +40,7 @@ public class InMemoryModuleRegistry : IModuleRegistry
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InMemoryModuleRegistry"/> class
-    /// with an optional logger~ 🌸
+    /// with an optional logger~ 🌸.
     /// </summary>
     /// <param name="logger">Optional logger for observer error reporting.</param>
     public InMemoryModuleRegistry(ILogger<InMemoryModuleRegistry>? logger = null)
@@ -62,11 +62,11 @@ public class InMemoryModuleRegistry : IModuleRegistry
     }
 
     /// <summary>
-    /// Registers a module instance. Validates the module first unless skipped. ➕
+    /// Registers a module instance. Validates the module first unless skipped. ➕.
     /// </summary>
     /// <param name="module">The module to register.</param>
     /// <param name="allowOverwrite">If true, silently overwrites an existing module with the same ID.</param>
-    /// <param name="skipValidation">If true, skips ModuleValidator checks (useful for testing). 🧪</param>
+    /// <param name="skipValidation">If true, skips ModuleValidator checks (useful for testing). 🧪.</param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the module fails validation or when a duplicate is found and
     /// <paramref name="allowOverwrite"/> is false.
@@ -199,7 +199,7 @@ public class InMemoryModuleRegistry : IModuleRegistry
 
     /// <summary>
     /// Notifies all observers that a module was registered. 🔔➕
-    /// Each observer is wrapped in try/catch — one failure doesn't block others~ 💖
+    /// Each observer is wrapped in try/catch — one failure doesn't block others~ 💖.
     /// </summary>
     private void NotifyRegistered(IWorkflowModule module)
     {
@@ -227,7 +227,7 @@ public class InMemoryModuleRegistry : IModuleRegistry
     }
 
     /// <summary>
-    /// Notifies all observers that a module was unregistered. 🔔➖
+    /// Notifies all observers that a module was unregistered. 🔔➖.
     /// </summary>
     private void NotifyUnregistered(string moduleId, IWorkflowModule module)
     {
@@ -255,7 +255,7 @@ public class InMemoryModuleRegistry : IModuleRegistry
     }
 
     /// <summary>
-    /// Removes an observer from the subscription list. Called by <see cref="ObserverSubscription.Dispose"/>~ 🧹
+    /// Removes an observer from the subscription list. Called by <see cref="ObserverSubscription.Dispose"/>~ 🧹.
     /// </summary>
     private void RemoveObserver(IModuleRegistryObserver observer)
     {
@@ -266,7 +266,7 @@ public class InMemoryModuleRegistry : IModuleRegistry
     }
 
     /// <summary>
-    /// 🎀 Disposable subscription handle — removes the observer on dispose to prevent leaks!
+    /// 🎀 Disposable subscription handle — removes the observer on dispose to prevent leaks!.
     /// </summary>
     private sealed class ObserverSubscription : IDisposable
     {
@@ -290,4 +290,3 @@ public class InMemoryModuleRegistry : IModuleRegistry
         }
     }
 }
-

@@ -17,7 +17,7 @@ using Workflow.Core.Models;
 /// <summary>
 /// ⚙️ Default implementation of <see cref="IPropertyBinder"/>.
 /// Resolves variable/node-output references, converts types, applies defaults,
-/// validates against schema, and accumulates all errors. The full binding pipeline~ 💖
+/// validates against schema, and accumulates all errors. The full binding pipeline~ 💖.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -27,24 +27,24 @@ using Workflow.Core.Models;
 /// 3. If string → check for <c>{{...}}</c> reference patterns and resolve.
 /// 4. Convert to expected <see cref="PortDefinition.DataType"/>.
 /// 5. Validate the final value type matches schema.
-/// 6. Accumulate errors, never short-circuit! UwU ✨
+/// 6. Accumulate errors, never short-circuit! UwU ✨.
 /// </para>
 /// </remarks>
 public class PropertyBinder : IPropertyBinder
 {
     /// <summary>
-    /// Prefix used to identify variable references (case-insensitive). 💾
+    /// Prefix used to identify variable references (case-insensitive). 💾.
     /// </summary>
     private const string VariablePrefix = "Variable.";
 
     /// <summary>
     /// Regex pattern for detecting template references like <c>{{Variable.Name}}</c>
-    /// or <c>{{NodeId.OutputName}}</c>. Captures the inner expression. 🔍
+    /// or <c>{{NodeId.OutputName}}</c>. Captures the inner expression. 🔍.
     /// </summary>
     /// <remarks>
     /// CopilotNote: The inner group captures everything between {{ and }},
     /// trimmed of whitespace during processing. Supports dots for nested access!
-    /// E.g., <c>{{Variable.User.Name}}</c> → inner = "Variable.User.Name". 💫
+    /// E.g., <c>{{Variable.User.Name}}</c> → inner = "Variable.User.Name". 💫.
     /// </remarks>
     private static readonly Regex ReferencePattern = new(
         @"\{\{\s*(.+?)\s*\}\}",
@@ -168,13 +168,13 @@ public class PropertyBinder : IPropertyBinder
 
     /// <summary>
     /// Resolves <c>{{...}}</c> reference patterns within a string value.
-    /// Supports <c>{{Variable.Name}}</c> and <c>{{NodeId.OutputName}}</c> patterns. 💫
+    /// Supports <c>{{Variable.Name}}</c> and <c>{{NodeId.OutputName}}</c> patterns. 💫.
     /// </summary>
     /// <remarks>
     /// CopilotNote: If the ENTIRE string is a single reference (e.g., <c>"{{Variable.Count}}"</c>),
     /// the resolved value keeps its original type (int stays int). If the string CONTAINS
     /// references mixed with text (e.g., <c>"Hello {{Variable.Name}}!"</c>), the result
-    /// is always a string with interpolated values. Smart and kawaii. 💖
+    /// is always a string with interpolated values. Smart and kawaii. 💖.
     /// </remarks>
     private static ReferenceResolution ResolveReferences(
         string stringValue,
@@ -217,7 +217,7 @@ public class PropertyBinder : IPropertyBinder
 
     /// <summary>
     /// Resolves a single reference expression (the part inside <c>{{ }}</c>).
-    /// Routes to variable resolution or node output resolution. 🔀
+    /// Routes to variable resolution or node output resolution. 🔀.
     /// </summary>
     private static ReferenceResolution ResolveSingleReference(
         string expression,
@@ -250,7 +250,7 @@ public class PropertyBinder : IPropertyBinder
 
     /// <summary>
     /// Resolves a <c>{{Variable.Name}}</c> or <c>{{Variable.User.Name}}</c> reference
-    /// by traversing the variable dictionary with dot-notation. 💾
+    /// by traversing the variable dictionary with dot-notation. 💾.
     /// </summary>
     private static ReferenceResolution ResolveVariableReference(
         string variablePath,
@@ -304,7 +304,7 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <summary>
-    /// Resolves a <c>{{NodeId.OutputName}}</c> reference from predecessor node outputs. 📤
+    /// Resolves a <c>{{NodeId.OutputName}}</c> reference from predecessor node outputs. 📤.
     /// </summary>
     private static ReferenceResolution ResolveNodeOutputReference(
         string nodeId,
@@ -370,7 +370,7 @@ public class PropertyBinder : IPropertyBinder
 
     /// <summary>
     /// Traverses a property on an object by name, supporting dictionaries and
-    /// <see cref="JsonElement"/> objects for nested access. 🔗
+    /// <see cref="JsonElement"/> objects for nested access. 🔗.
     /// </summary>
     private static object? TraverseProperty(object obj, string propertyName)
     {
@@ -423,7 +423,7 @@ public class PropertyBinder : IPropertyBinder
     /// <summary>
     /// Converts a resolved value to the expected data type specified by the port schema.
     /// Handles string-to-primitive parsing, numeric widening, JSON deserialization,
-    /// and pass-through for compatible types. 🔄✨
+    /// and pass-through for compatible types. 🔄✨.
     /// </summary>
     private static ConversionResult ConvertToExpectedType(
         object? value,
@@ -493,7 +493,7 @@ public class PropertyBinder : IPropertyBinder
 
     /// <summary>
     /// Converts a string to the expected type via parsing. Supports all common
-    /// primitives, dates, GUIDs, TimeSpans, and JSON for complex objects. 📝✨
+    /// primitives, dates, GUIDs, TimeSpans, and JSON for complex objects. 📝✨.
     /// </summary>
     private static ConversionResult ConvertFromString(
         string str,
@@ -613,7 +613,7 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <summary>
-    /// Converts a <see cref="JsonElement"/> to the expected type. 📋
+    /// Converts a <see cref="JsonElement"/> to the expected type. 📋.
     /// </summary>
     private static ConversionResult ConvertFromJsonElement(
         JsonElement element,
@@ -634,7 +634,7 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <summary>
-    /// Converts a <see cref="JsonElement"/> to a regular .NET object (for untyped scenarios). 📋
+    /// Converts a <see cref="JsonElement"/> to a regular .NET object (for untyped scenarios). 📋.
     /// </summary>
     private static object? ConvertJsonElement(JsonElement element)
     {
@@ -653,7 +653,7 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <summary>
-    /// Checks if a type is a numeric type. 🔢
+    /// Checks if a type is a numeric type. 🔢.
     /// </summary>
     private static bool IsNumericType(Type type)
     {
@@ -666,7 +666,7 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <summary>
-    /// Internal result for reference resolution operations. 🔗
+    /// Internal result for reference resolution operations. 🔗.
     /// </summary>
     private readonly struct ReferenceResolution
     {
@@ -690,7 +690,7 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <summary>
-    /// Internal result for type conversion operations. 🔄
+    /// Internal result for type conversion operations. 🔄.
     /// </summary>
     private readonly struct ConversionResult
     {
@@ -713,6 +713,3 @@ public class PropertyBinder : IPropertyBinder
             new(null, new[] { error });
     }
 }
-
-
-

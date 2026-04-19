@@ -19,6 +19,26 @@ indent_size = 4
 # 🎯 C# files - Detailed formatting rules
 [*.cs]
 
+dotnet_diagnostic.SA1101.severity = none
+dotnet_diagnostic.CA1852.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1859.severity = none
+dotnet_diagnostic.CA1515.severity = none
+dotnet_diagnostic.CA1859.severity = none
+dotnet_diagnostic.SA1124.severity = none
+dotnet_diagnostic.CA1062.severity = none
+dotnet_diagnostic.SA1611.severity = none
+dotnet_diagnostic.SA1200.severity = none
+dotnet_diagnostic.SA1615.severity = none
+dotnet_diagnostic.SA1201.severity = none
+dotnet_diagnostic.SA1122.severity = none
+dotnet_diagnostic.SA1309.severity = none
+dotnet_diagnostic.SA1204.severity = none
+dotnet_diagnostic.SA1402.severity = none
+dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.SA1636.severity = none
+
 # 💫 Organize usings
 dotnet_sort_system_directives_first = true
 dotnet_separate_import_directive_groups = false
@@ -215,4 +235,3 @@ indent_style = space
 indent_size = 2
 
 # 🎀 Made with love by Ami-Chan! Keep the code kawaii and clean! UwU 💖✨
-

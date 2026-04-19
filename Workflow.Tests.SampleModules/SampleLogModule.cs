@@ -15,12 +15,12 @@ using Workflow.Modules.Abstractions;
 
 /// <summary>
 /// 📋 A sample logging module used for testing the dynamic module loader.
-/// Simulates a real plugin module that would be loaded from disk at runtime~ ✨
+/// Simulates a real plugin module that would be loaded from disk at runtime~ ✨.
 /// </summary>
 /// <remarks>
 /// CopilotNote: This module is ONLY used in loader integration tests to verify
 /// that AssemblyModuleLoader can discover, load, and unload modules from a
-/// separately built assembly. Never use this in production! 🧪
+/// separately built assembly. Never use this in production! 🧪.
 /// </remarks>
 public sealed class SampleLogModule : IWorkflowModule
 {
@@ -71,4 +71,3 @@ public sealed class SampleLogModule : IWorkflowModule
         return Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?> { ["logged"] = true }));
     }
 }
-

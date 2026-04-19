@@ -11,13 +11,13 @@ namespace Workflow.Engine.Serialization.JsonConverters;
 
 /// <summary>
 /// Custom JSON converter for LanguageExt Arr&lt;T&gt;.
-/// Serializes as a standard JSON array and deserializes back to Arr~ 📚
+/// Serializes as a standard JSON array and deserializes back to Arr~ 📚.
 /// </summary>
 /// <typeparam name="T">The type of elements in the Arr.</typeparam>
 /// <remarks>
 /// CopilotNote: While Arr serializes to JSON array correctly,
 /// deserialization fails because Arr is read-only!
-/// This converter handles both directions properly using the IEnumerable constructor~ ✨
+/// This converter handles both directions properly using the IEnumerable constructor~ ✨.
 /// </remarks>
 public class ArrJsonConverter<T> : JsonConverter<Arr<T>>
 {
@@ -76,11 +76,11 @@ public class ArrJsonConverter<T> : JsonConverter<Arr<T>>
 
 /// <summary>
 /// Factory for creating ArrJsonConverter instances for any element type T.
-/// Enables automatic Arr serialization for all element types~ 🏭
+/// Enables automatic Arr serialization for all element types~ 🏭.
 /// </summary>
 /// <remarks>
 /// CopilotNote: Register this factory with JsonSerializerOptions and
-/// all Arr&lt;T&gt; types will be handled automatically!
+/// all Arr&lt;T&gt; types will be handled automatically!.
 /// </remarks>
 public class ArrJsonConverterFactory : JsonConverterFactory
 {

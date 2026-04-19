@@ -18,7 +18,7 @@ using Workflow.Engine.Services;
 
 /// <summary>
 /// Actor responsible for executing a single workflow instance.
-/// Orchestrates the execution graph, manages node actors, and tracks completion. 🎬✨
+/// Orchestrates the execution graph, manages node actors, and tracks completion. 🎬✨.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,14 +29,14 @@ using Workflow.Engine.Services;
 /// <para>
 /// CopilotNote: This actor implements the "executor" pattern - it coordinates many
 /// child actors (NodeExecutors) to accomplish a larger goal (workflow execution).
-/// The execution follows a topological order based on node dependencies~ 💖
+/// The execution follows a topological order based on node dependencies~ 💖.
 /// </para>
 /// <para>
 /// 📊 State tracking: All execution state lives in the immutable
 /// <see cref="WorkflowExecutionContext"/>. Every transition publishes
 /// <see cref="ExecutionStateChanged"/> and <see cref="NodeStateChanged"/>
 /// events to parent + EventStream for observability. Snapshots are saved
-/// on terminal states via <see cref="IExecutionStateStore"/>. UwU~ ✨
+/// on terminal states via <see cref="IExecutionStateStore"/>. UwU~ ✨.
 /// </para>
 /// </remarks>
 public class WorkflowExecutor : ReceiveActor
@@ -70,12 +70,12 @@ public class WorkflowExecutor : ReceiveActor
     /// <summary>
     /// Cancelable handles for pending scheduled retry messages.
     /// We track these so we can cancel them in PostStop to avoid memory leaks and
-    /// orphaned scheduled messages (fixes AK1004 warning)~ 🧹✨
+    /// orphaned scheduled messages (fixes AK1004 warning)~ 🧹✨.
     /// </summary>
     /// <remarks>
     /// CopilotNote: Each entry maps a nodeId → its ICancelable from ScheduleTellOnce.
     /// When the actor stops, we cancel all pending retries. When a retry fires, we
-    /// remove the entry. Kawaii resource management! UwU 💖
+    /// remove the entry. Kawaii resource management! UwU 💖.
     /// </remarks>
     private readonly Dictionary<string, ICancelable> _pendingRetryCancellations = new();
 
@@ -89,7 +89,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hooks resolved from DI — allows consumers to inject custom behavior
-    /// during PreStart, PostStop, PreRestart, and PostRestart~ 🌸💖
+    /// during PreStart, PostStop, PreRestart, and PostRestart~ 🌸💖.
     /// </summary>
     private readonly IActorLifecycleHooks _lifecycleHooks;
 
@@ -98,18 +98,18 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Flag indicating whether the actor is in a restart cycle (PreRestart → PostStop → PostRestart).
-    /// When true, PostStop skips full cleanup since PreRestart handles child preservation~ 🔄
+    /// When true, PostStop skips full cleanup since PreRestart handles child preservation~ 🔄.
     /// </summary>
     /// <remarks>
     /// CopilotNote: This prevents PostStop from cancelling running nodes during a supervised
     /// restart. PreRestart sets this to true, PostStop checks it, and PostRestart resets it.
-    /// Without this, we'd accidentally kill child actors we wanted to survive! UwU 💕
+    /// Without this, we'd accidentally kill child actors we wanted to survive! UwU 💕.
     /// </remarks>
     private bool _isRestarting;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkflowExecutor"/> class.
-    /// Sets up message handlers and builds the execution graph. UwU~
+    /// Sets up message handlers and builds the execution graph. UwU~.
     /// </summary>
     /// <param name="executionId">The unique execution ID.</param>
     /// <param name="definition">The workflow definition to execute.</param>
@@ -166,7 +166,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Creates Props for spawning a WorkflowExecutor actor.
-    /// Use this factory method for proper instantiation~ 💝
+    /// Use this factory method for proper instantiation~ 💝.
     /// </summary>
     public static Props Props(
         Guid executionId,
@@ -180,14 +180,14 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Configures the supervision strategy for child NodeExecutor actors.
-    /// Provides resilient error handling with contextual directives per exception type~ 🛡️✨
+    /// Provides resilient error handling with contextual directives per exception type~ 🛡️✨.
     /// </summary>
     /// <remarks>
     /// <para>
     /// CopilotNote: NodeExecutor failures are handled here at the WorkflowExecutor level.
     /// Transient errors (timeout, I/O) → Restart with backoff.
     /// Critical errors (invalid args) → Stop (no point retrying).
-    /// Unknown errors → Escalate to WorkflowSupervisor. UwU 💖
+    /// Unknown errors → Escalate to WorkflowSupervisor. UwU 💖.
     /// </para>
     /// </remarks>
     /// <returns>The supervision strategy for child actors.</returns>
@@ -248,7 +248,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Builds the execution graph (successors, predecessors, in-degrees) from workflow connections.
-    /// This enables topological execution order and dependency tracking~ 🔗
+    /// This enables topological execution order and dependency tracking~ 🔗.
     /// </summary>
     private void BuildExecutionGraph()
     {
@@ -289,7 +289,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Gets nodes with no incoming connections (start nodes).
-    /// These are executed first when the workflow starts~ 🚀
+    /// These are executed first when the workflow starts~ 🚀.
     /// </summary>
     private IEnumerable<string> GetStartNodes()
     {
@@ -312,7 +312,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles the StartExecution message.
-    /// Initializes execution state and starts executing nodes with no dependencies~ 🎬
+    /// Initializes execution state and starts executing nodes with no dependencies~ 🎬.
     /// </summary>
     private void HandleStartExecution(StartExecution message)
     {
@@ -358,7 +358,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Executes a single node by creating a NodeExecutor actor and sending Execute message.
-    /// Gathers inputs from workflow inputs and predecessor outputs~ ⚡
+    /// Gathers inputs from workflow inputs and predecessor outputs~ ⚡.
     /// </summary>
     private void ExecuteNode(string nodeId)
     {
@@ -400,12 +400,12 @@ public class WorkflowExecutor : ReceiveActor
 
         // Send execute message (convert Dictionary to HashMap for immutability)
         var inputsHashMap = nodeInputs.ToHashMap();
-        nodeActor.Tell(new Execute(nodeId, inputsHashMap, _executionId));
+        nodeActor.Tell(new Execute(nodeId, inputsHashMap, _executionId, _context.Variables));
     }
 
     /// <summary>
     /// Gathers inputs for a node from workflow inputs and predecessor outputs.
-    /// Follows connection mappings to route data correctly~ 📥
+    /// Follows connection mappings to route data correctly~ 📥.
     /// </summary>
     private Dictionary<string, object?> GatherNodeInputs(string nodeId)
     {
@@ -481,7 +481,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles NodeExecutionCompleted message.
-    /// Marks node as complete, stores outputs, and triggers successor nodes~ ✅
+    /// Marks node as complete, stores outputs, applies variable updates, and triggers successor nodes~ ✅.
     /// </summary>
     private void HandleNodeExecutionCompleted(NodeExecutionCompleted message)
     {
@@ -497,6 +497,20 @@ public class WorkflowExecutor : ReceiveActor
         // Update context: node → Completed with timing~ 🎉
         TransitionNodeState(nodeId, NodeExecutionState.Completed, now);
         _context = _context.WithNodeCompleted(nodeId, now, message.Duration);
+
+        // Apply variable updates from the module result, if any~ 💾
+        if (message.VariableUpdates is { Count: > 0 } varUpdates)
+        {
+            foreach (var (name, value) in varUpdates)
+            {
+                _log.Debug(
+                    "💾 Variable update from node {NodeId}: {VarName} = {VarValue}",
+                    nodeId,
+                    name,
+                    value);
+                _context = _context.WithVariable(name, value);
+            }
+        }
 
         _completedNodes = _completedNodes.Add(nodeId);
         _runningNodes = _runningNodes.Remove(nodeId);
@@ -524,7 +538,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Checks which successor nodes are ready to execute and starts them.
-    /// A node is ready when all its predecessors have completed~ 🔄
+    /// A node is ready when all its predecessors have completed~ 🔄.
     /// </summary>
     private void ExecuteReadySuccessors(string completedNodeId)
     {
@@ -549,7 +563,8 @@ public class WorkflowExecutor : ReceiveActor
 
             if (allPredecessorsComplete)
             {
-                _log.Debug("🔗 Predecessor {CompletedNode} done, executing successor {SuccessorNode}",
+                _log.Debug(
+                    "🔗 Predecessor {CompletedNode} done, executing successor {SuccessorNode}",
                     completedNodeId, successorId);
                 ExecuteNode(successorId);
             }
@@ -558,7 +573,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles NodeExecutionFailed message.
-    /// Implements error handling based on configuration (fail-fast, continue-on-error, retry)~ ⚠️
+    /// Implements error handling based on configuration (fail-fast, continue-on-error, retry)~ ⚠️.
     /// </summary>
     private void HandleNodeExecutionFailed(NodeExecutionFailed message)
     {
@@ -643,12 +658,12 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles retry behavior when a node fails with <see cref="ErrorBehavior.Retry"/>.
-    /// Computes exponential backoff delay and schedules a <see cref="RetryNode"/> message~ 🔄✨
+    /// Computes exponential backoff delay and schedules a <see cref="RetryNode"/> message~ 🔄✨.
     /// </summary>
     /// <remarks>
     /// CopilotNote: The retry delay uses exponential backoff:
     /// <c>delay = baseDelay * (backoffMultiplier ^ attemptIndex)</c>, capped at <c>MaxDelayMs</c>.
-    /// Scheduling is done via <c>Context.System.Scheduler.ScheduleTellOnce</c> to avoid blocking the actor! UwU 💖
+    /// Scheduling is done via <c>Context.System.Scheduler.ScheduleTellOnce</c> to avoid blocking the actor! UwU 💖.
     /// </remarks>
     private void HandleRetryBehavior(string nodeId, Exception error, NodeDefinition? nodeDef, ErrorHandling? errorHandling)
     {
@@ -708,12 +723,12 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles the <see cref="RetryNode"/> message.
-    /// Re-creates the NodeExecutor child actor and re-sends Execute to retry the failed node~ 🔄✨
+    /// Re-creates the NodeExecutor child actor and re-sends Execute to retry the failed node~ 🔄✨.
     /// </summary>
     /// <remarks>
     /// CopilotNote: This handler is triggered by the scheduler after the backoff delay.
     /// We remove the old failed node from tracking, reset its state, and spin up a fresh
-    /// NodeExecutor actor. The retry attempt is tracked for exponential backoff! UwU 💖
+    /// NodeExecutor actor. The retry attempt is tracked for exponential backoff! UwU 💖.
     /// </remarks>
     private void HandleRetryNode(RetryNode message)
     {
@@ -749,7 +764,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles PauseExecution message.
-    /// Currently running nodes finish, but no new nodes start~ ⏸️
+    /// Currently running nodes finish, but no new nodes start~ ⏸️.
     /// </summary>
     private void HandlePauseExecution(PauseExecution message)
     {
@@ -777,7 +792,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles ResumeExecution message.
-    /// Resumes execution from where it was paused, starting eligible nodes~ ▶️
+    /// Resumes execution from where it was paused, starting eligible nodes~ ▶️.
     /// </summary>
     private void HandleResumeExecution(ResumeExecution message)
     {
@@ -825,7 +840,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles CancelExecution message.
-    /// Stops all running node actors and marks workflow as cancelled~ 🛑
+    /// Stops all running node actors and marks workflow as cancelled~ 🛑.
     /// </summary>
     private void HandleCancelExecution(CancelExecution message)
     {
@@ -833,7 +848,8 @@ public class WorkflowExecutor : ReceiveActor
             _context.State == ExecutionState.Failed ||
             _context.State == ExecutionState.Cancelled)
         {
-            _log.Warning("⚠️ Cannot cancel execution {ExecutionId} - already in terminal state {State}",
+            _log.Warning(
+                "⚠️ Cannot cancel execution {ExecutionId} - already in terminal state {State}",
                 _executionId, _context.State);
             return;
         }
@@ -879,7 +895,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles GetWorkflowStatus message.
-    /// Returns current execution state and progress~ 📊
+    /// Returns current execution state and progress~ 📊.
     /// </summary>
     private void HandleGetWorkflowStatus(GetWorkflowStatus message)
     {
@@ -897,7 +913,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles GetProgress message.
-    /// Returns detailed progress information~ 📈
+    /// Returns detailed progress information~ 📈.
     /// </summary>
     private void HandleGetProgress(GetProgress message)
     {
@@ -917,7 +933,7 @@ public class WorkflowExecutor : ReceiveActor
     #region Snapshot Handlers 💾
 
     /// <summary>
-    /// Handles SaveExecutionSnapshot message — persists current context~ 💾
+    /// Handles SaveExecutionSnapshot message — persists current context~ 💾.
     /// </summary>
     private void HandleSaveSnapshot(SaveExecutionSnapshot message)
     {
@@ -926,7 +942,7 @@ public class WorkflowExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Handles GetExecutionSnapshot message — returns the current context~ 📋
+    /// Handles GetExecutionSnapshot message — returns the current context~ 📋.
     /// </summary>
     private void HandleGetSnapshot(GetExecutionSnapshot message)
     {
@@ -936,7 +952,7 @@ public class WorkflowExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Saves the current execution context to the state store asynchronously~ 💾
+    /// Saves the current execution context to the state store asynchronously~ 💾.
     /// </summary>
     private void SaveSnapshotAsync()
     {
@@ -954,7 +970,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Handles Terminated message for child NodeExecutor actors.
-    /// Cleans up tracking if unexpected termination~ 💔
+    /// Cleans up tracking if unexpected termination~ 💔.
     /// </summary>
     private void HandleTerminated(Terminated message)
     {
@@ -987,7 +1003,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Checks if the workflow execution is complete.
-    /// Complete when all nodes are either completed, failed (with continue-on-error), or skipped~ ✅
+    /// Complete when all nodes are either completed, failed (with continue-on-error), or skipped~ ✅.
     /// </summary>
     private bool IsWorkflowComplete()
     {
@@ -998,7 +1014,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Gathers final workflow outputs from completed end nodes.
-    /// End nodes are nodes with no successors~ 📤
+    /// End nodes are nodes with no successors~ 📤.
     /// </summary>
     private Dictionary<string, object?> GatherWorkflowOutputs()
     {
@@ -1025,7 +1041,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Completes the workflow successfully.
-    /// Gathers outputs and notifies parent~ 🎉
+    /// Gathers outputs and notifies parent~ 🎉.
     /// </summary>
     private void CompleteWorkflow()
     {
@@ -1056,7 +1072,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Fails the workflow with an error.
-    /// Stops all running nodes and notifies parent~ 💔
+    /// Stops all running nodes and notifies parent~ 💔.
     /// </summary>
     private void FailWorkflow(Exception error)
     {
@@ -1108,7 +1124,7 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Transitions the workflow execution state, publishes change events, and
-    /// updates the immutable context. The single source of truth for state changes~ 🔄✨
+    /// updates the immutable context. The single source of truth for state changes~ 🔄✨.
     /// </summary>
     /// <param name="newState">The target state.</param>
     /// <param name="timestamp">When the transition occurred.</param>
@@ -1140,7 +1156,7 @@ public class WorkflowExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Transitions a node's execution state and publishes a change event~ 🧩
+    /// Transitions a node's execution state and publishes a change event~ 🧩.
     /// </summary>
     /// <param name="nodeId">The node being transitioned.</param>
     /// <param name="newState">The target node state.</param>
@@ -1179,12 +1195,12 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called when the actor is starting for the first time.
-    /// Validates dependencies and logs initialization details~ 🌸✨
+    /// Validates dependencies and logs initialization details~ 🌸✨.
     /// </summary>
     /// <remarks>
     /// CopilotNote: PreStart is the earliest point where <c>Context</c> is available.
     /// We use it to verify the state store is reachable and log the execution graph
-    /// summary. This runs BEFORE any message is processed! UwU 💖
+    /// summary. This runs BEFORE any message is processed! UwU 💖.
     /// </remarks>
     protected override void PreStart()
     {
@@ -1211,14 +1227,14 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called before the actor restarts due to a supervision directive.
-    /// Preserves child NodeExecutor actors and saves a snapshot for recovery~ 🔄✨
+    /// Preserves child NodeExecutor actors and saves a snapshot for recovery~ 🔄✨.
     /// </summary>
     /// <remarks>
     /// <para>
     /// CopilotNote: We do NOT call <c>base.PreRestart</c> because that would stop
     /// all child NodeExecutor actors. Instead, we let running node actors survive
     /// the restart so we can re-track them in <see cref="PostRestart"/>. We also
-    /// save a snapshot to allow state recovery. Kawaii resilience! 💕
+    /// save a snapshot to allow state recovery. Kawaii resilience! 💕.
     /// </para>
     /// </remarks>
     /// <param name="reason">The exception that caused the restart.</param>
@@ -1249,14 +1265,14 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called after the actor restarts.
-    /// Rebuilds node actor tracking from surviving children and restores state from snapshot~ 🌸✨
+    /// Rebuilds node actor tracking from surviving children and restores state from snapshot~ 🌸✨.
     /// </summary>
     /// <remarks>
     /// <para>
     /// CopilotNote: After restart, the constructor runs again (re-initializing fields to defaults),
     /// but child actors may still be alive! We iterate <c>Context.GetChildren()</c> to
     /// rebuild the <c>_nodeActors</c> dictionary, and restore execution sets from the
-    /// context's <c>NodeStates</c>. Sugoi recovery pattern! 💕
+    /// context's <c>NodeStates</c>. Sugoi recovery pattern! 💕.
     /// </para>
     /// </remarks>
     /// <param name="reason">The exception that caused the restart.</param>
@@ -1325,7 +1341,7 @@ public class WorkflowExecutor : ReceiveActor
     /// <summary>
     /// Lifecycle hook called when the actor is stopping.
     /// Cancels pending retry timers, cleans up running nodes (on true shutdown only),
-    /// saves a final snapshot, and disposes resources~ 👋🧹
+    /// saves a final snapshot, and disposes resources~ 👋🧹.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1338,7 +1354,7 @@ public class WorkflowExecutor : ReceiveActor
     /// </para>
     /// <para>
     /// The <c>_pendingRetryCancellations</c> are ALWAYS cancelled regardless of restart/stop,
-    /// because scheduled messages targeting the old actor ref would be pointless. UwU 💖
+    /// because scheduled messages targeting the old actor ref would be pointless. UwU 💖.
     /// </para>
     /// </remarks>
     protected override void PostStop()
@@ -1412,7 +1428,7 @@ public class WorkflowExecutor : ReceiveActor
     #region Lifecycle Helpers 🌸
 
     /// <summary>
-    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ 🌸
+    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ 🌸.
     /// </summary>
     /// <returns>A context describing this actor instance.</returns>
     private ActorLifecycleContext CreateLifecycleContext()

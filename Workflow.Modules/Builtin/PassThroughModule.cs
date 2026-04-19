@@ -14,7 +14,7 @@ using Workflow.Modules.Abstractions;
 
 /// <summary>
 /// 🔄 A simple pass-through module that copies inputs to outputs.
-/// Useful for testing data flow and as a template for new modules~ ✨
+/// Useful for testing data flow and as a template for new modules~ ✨.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -82,4 +82,3 @@ public class PassThroughModule : IWorkflowModule
         return Task.FromResult(ModuleResult.Ok(outputs));
     }
 }
-

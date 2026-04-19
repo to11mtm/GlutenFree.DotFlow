@@ -11,7 +11,7 @@ using System.Runtime.Loader;
 
 /// <summary>
 /// 🔌 A collectible <see cref="AssemblyLoadContext"/> for loading plugin assemblies
-/// in isolation while sharing host-framework assemblies to preserve type identity~ ✨
+/// in isolation while sharing host-framework assemblies to preserve type identity~ ✨.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,7 +19,7 @@ using System.Runtime.Loader;
 /// the plugin ALC, the host's <c>IWorkflowModule</c> and the plugin's <c>IWorkflowModule</c>
 /// are DIFFERENT types — even though the code is identical. The cast to IWorkflowModule
 /// would then silently fail at runtime. To prevent this, we override <see cref="Load"/>
-/// to redirect "known host" assemblies back to the default/host context~ 💖
+/// to redirect "known host" assemblies back to the default/host context~ 💖.
 /// </para>
 /// <para>
 /// Which assemblies are shared:
@@ -43,13 +43,14 @@ internal sealed class PluginAssemblyLoadContext : AssemblyLoadContext
         : base(name: $"Plugin:{Path.GetFileNameWithoutExtension(pluginPath)}", isCollectible: true)
     {
         _pluginPath = pluginPath;
+
         // CopilotNote: AssemblyDependencyResolver reads the .deps.json and .runtimeconfig.json
         // next to the plugin DLL to find its dependencies~ 🎯
         _resolver = new AssemblyDependencyResolver(pluginPath);
     }
 
     /// <summary>
-    /// Gets the path to the plugin assembly this context manages~ 📦
+    /// Gets the path to the plugin assembly this context manages~ 📦.
     /// </summary>
     public string PluginPath => _pluginPath;
 
@@ -58,7 +59,7 @@ internal sealed class PluginAssemblyLoadContext : AssemblyLoadContext
     /// CopilotNote: We first check if the host already has the assembly loaded. If so,
     /// we return the host's version (shared types). Only if the host doesn't have it
     /// do we load it ourselves from the plugin's directory. This handles the type-identity
-    /// problem cleanly without needing an explicit "shared assemblies" list~ 💖
+    /// problem cleanly without needing an explicit "shared assemblies" list~ 💖.
     /// </remarks>
     protected override Assembly? Load(AssemblyName assemblyName)
     {
@@ -97,4 +98,3 @@ internal sealed class PluginAssemblyLoadContext : AssemblyLoadContext
             : IntPtr.Zero;
     }
 }
-

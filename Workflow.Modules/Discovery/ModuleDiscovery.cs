@@ -17,14 +17,14 @@ using Workflow.Modules.Validation;
 /// <summary>
 /// 🔍 Default implementation of <see cref="IModuleDiscovery"/> that scans assemblies
 /// for <see cref="IWorkflowModule"/> implementations via reflection. Handles DI-based
-/// instantiation, validation, and graceful error handling like a pro~ ✨
+/// instantiation, validation, and graceful error handling like a pro~ ✨.
 /// </summary>
 /// <remarks>
 /// <para>
 /// CopilotNote: This class is the heart of the module auto-discovery system!
 /// It scans assemblies, finds candidate types, instantiates them, validates them,
 /// and registers them — all while being super resilient to errors. One bad module
-/// won't crash the whole app startup, it just gets skipped with a warning~ 💖
+/// won't crash the whole app startup, it just gets skipped with a warning~ 💖.
 /// </para>
 /// <para>
 /// Discovery rules:
@@ -43,7 +43,7 @@ public class ModuleDiscovery : IModuleDiscovery
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ModuleDiscovery"/> class
-    /// with optional validator and logger dependencies~ 🌸
+    /// with optional validator and logger dependencies~ 🌸.
     /// </summary>
     /// <param name="validator">
     /// Optional module validator. If null, a default instance is created.
@@ -195,7 +195,7 @@ public class ModuleDiscovery : IModuleDiscovery
     /// Determines if a type is a valid <see cref="IWorkflowModule"/> candidate for discovery.
     /// Must be public, concrete, non-abstract, non-generic-definition, implement
     /// <see cref="IWorkflowModule"/>, and not marked with
-    /// <c>[WorkflowModule(Ignore = true)]</c>~ 🎯
+    /// <c>[WorkflowModule(Ignore = true)]</c>~ 🎯.
     /// </summary>
     /// <param name="type">The type to evaluate.</param>
     /// <returns>True if the type should be discovered.</returns>
@@ -235,7 +235,7 @@ public class ModuleDiscovery : IModuleDiscovery
     /// <summary>
     /// Applies any <see cref="WorkflowModuleAttribute"/> metadata overrides to the module.
     /// When <c>ModuleId</c>, <c>Category</c>, or <c>Description</c> are set on the attribute,
-    /// wraps the module in an <see cref="AttributeOverrideModule"/> decorator~ 🏷️
+    /// wraps the module in an <see cref="AttributeOverrideModule"/> decorator~ 🏷️.
     /// </summary>
     /// <param name="type">The module type (used to read the attribute).</param>
     /// <param name="module">The instantiated module to potentially wrap.</param>
@@ -270,7 +270,7 @@ public class ModuleDiscovery : IModuleDiscovery
 
     /// <summary>
     /// Instantiates a module from its type, using DI when available or
-    /// falling back to <see cref="Activator.CreateInstance(Type)"/>~ 🏭
+    /// falling back to <see cref="Activator.CreateInstance(Type)"/>~ 🏭.
     /// </summary>
     /// <param name="type">The module type to instantiate.</param>
     /// <param name="services">Optional service provider for DI. Can be null.</param>
@@ -303,12 +303,12 @@ public class ModuleDiscovery : IModuleDiscovery
 
 /// <summary>
 /// 🎭 Decorator that wraps an <see cref="IWorkflowModule"/> and overrides selected
-/// metadata properties from a <see cref="WorkflowModuleAttribute"/>~ ✨
+/// metadata properties from a <see cref="WorkflowModuleAttribute"/>~ ✨.
 /// </summary>
 /// <remarks>
 /// CopilotNote: This is an internal implementation detail of <see cref="ModuleDiscovery"/>.
 /// It only overrides the properties that are explicitly set on the attribute —
-/// everything else (Schema, Execute, etc.) is delegated to the inner module~ 💖
+/// everything else (Schema, Execute, etc.) is delegated to the inner module~ 💖.
 /// </remarks>
 internal sealed class AttributeOverrideModule : IWorkflowModule
 {

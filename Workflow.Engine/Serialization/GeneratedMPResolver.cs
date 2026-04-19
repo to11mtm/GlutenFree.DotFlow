@@ -1,4 +1,4 @@
-﻿﻿using LanguageExt;
+﻿using LanguageExt;
 using MessagePack;
 
 [assembly:MessagePackAssumedFormattableAttribute(typeof(HashMap<string, object>))]
@@ -7,16 +7,16 @@ using MessagePack;
 [assembly:MessagePackAssumedFormattableAttribute(typeof(Option<HashMap<string, object>>))]
 [assembly:MessagePackAssumedFormattableAttribute(typeof(Option<DateTimeOffset>))]
 /*
- * 					case 0: return new global::Workflow.Engine.Serialization.MyResolver.LanguageExt.ArrFormatter<string>();
-					case 1: return new global::Workflow.Engine.Serialization.MyResolver.LanguageExt.OptionFormatter<global::LanguageExt.HashMap<string, object>>();
-					case 2: return new global::Workflow.Engine.Serialization.MyResolver.LanguageExt.OptionFormatter<string>();
-					case 3: return new global::Workflow.Engine.Serialization.MyResolver.LanguageExt.OptionFormatter<global::System.DateTimeOffset>();
+ *                  case 0: return new global::Workflow.Engine.Serialization.MyResolver.LanguageExt.ArrFormatter<string>();
+                    case 1: return new global::Workflow.Engine.Serialization.MyResolver.LanguageExt.OptionFormatter<global::LanguageExt.HashMap<string, object>>();
+                    case 2: return new global::Workflow.Engine.Serialization.MyResolver.LanguageExt.OptionFormatter<string>();
+                    case 3: return new global::Workflow.Engine.Serialization.MyResolver.LanguageExt.OptionFormatter<global::System.DateTimeOffset>();
  */
 namespace Workflow.Engine.Serialization;
 
 /// <summary>
 /// Generated MessagePack resolver for workflow types with LanguageExt collections.
-/// Made public so it can be accessed from tests and other assemblies~ 💖
+/// Made public so it can be accessed from tests and other assemblies~ 💖.
 /// </summary>
 /// <remarks>
 /// CopilotNote: This resolver is used by AkkaMessagePackSerializer and tests.

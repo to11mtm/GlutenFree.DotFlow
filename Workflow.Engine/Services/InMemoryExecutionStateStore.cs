@@ -17,7 +17,7 @@ namespace Workflow.Engine.Services;
 /// <para>
 /// CopilotNote: Uses <see cref="ConcurrentDictionary{TKey,TValue}"/> for thread safety
 /// since multiple actors might snapshot concurrently. All operations are O(1) and
-/// complete synchronously (wrapped in Task for interface compliance), nya~ 💖
+/// complete synchronously (wrapped in Task for interface compliance), nya~ 💖.
 /// </para>
 /// <para>
 /// ⚠️ Data is lost when the process exits! This is intentional for dev/test scenarios.
@@ -71,13 +71,12 @@ public class InMemoryExecutionStateStore : IExecutionStateStore
     }
 
     /// <summary>
-    /// Gets the total number of stored snapshots. Handy for testing assertions~ 📊
+    /// Gets the total number of stored snapshots. Handy for testing assertions~ 📊.
     /// </summary>
     public int Count => _snapshots.Count;
 
     /// <summary>
-    /// Clears all stored snapshots. Useful for test cleanup~ 🧹
+    /// Clears all stored snapshots. Useful for test cleanup~ 🧹.
     /// </summary>
     public void Clear() => _snapshots.Clear();
 }
-

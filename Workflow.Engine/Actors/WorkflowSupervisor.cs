@@ -14,7 +14,7 @@ using Workflow.Engine.Messages;
 
 /// <summary>
 /// Top-level supervisor actor responsible for managing workflow lifecycle.
-/// This actor creates and supervises WorkflowExecutor actors for each workflow instance~ 🎭✨
+/// This actor creates and supervises WorkflowExecutor actors for each workflow instance~ 🎭✨.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -25,7 +25,7 @@ using Workflow.Engine.Messages;
 /// <para>
 /// CopilotNote: This actor uses the "one-actor-per-workflow" pattern for isolation.
 /// Each workflow execution gets its own WorkflowExecutor actor as a child, which
-/// enables independent failure handling and resource management~ 💖
+/// enables independent failure handling and resource management~ 💖.
 /// </para>
 /// </remarks>
 public class WorkflowSupervisor : ReceiveActor
@@ -37,7 +37,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkflowSupervisor"/> class.
-    /// Sets up message handlers and supervision strategy~ UwU
+    /// Sets up message handlers and supervision strategy~ UwU.
     /// </summary>
     /// <param name="serviceProvider">Service provider for dependency injection.</param>
     public WorkflowSupervisor(IServiceProvider serviceProvider)
@@ -68,7 +68,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Creates Props for spawning a WorkflowSupervisor actor.
-    /// Use this factory method for proper dependency injection~ 💝
+    /// Use this factory method for proper dependency injection~ 💝.
     /// </summary>
     /// <param name="serviceProvider">Service provider for DI.</param>
     /// <returns>Props configuration for actor creation.</returns>
@@ -79,7 +79,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Configures the supervision strategy for child WorkflowExecutor actors.
-    /// Implements resilient error handling with restart limits~ 🛡️
+    /// Implements resilient error handling with restart limits~ 🛡️.
     /// </summary>
     /// <returns>The supervision strategy.</returns>
     protected override SupervisorStrategy SupervisorStrategy()
@@ -137,7 +137,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called when the actor is starting.
-    /// Performs initialization tasks~ 🌸
+    /// Performs initialization tasks~ 🌸.
     /// </summary>
     protected override void PreStart()
     {
@@ -148,7 +148,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called when the actor is stopping.
-    /// Performs cleanup tasks — cancels all active workflows and releases resources~ 🧹
+    /// Performs cleanup tasks — cancels all active workflows and releases resources~ 🧹.
     /// </summary>
     protected override void PostStop()
     {
@@ -170,13 +170,13 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called before the actor restarts due to a supervision directive.
-    /// Preserves active workflow references so they can be re-tracked after restart~ 🔄✨
+    /// Preserves active workflow references so they can be re-tracked after restart~ 🔄✨.
     /// </summary>
     /// <remarks>
     /// CopilotNote: During <c>PreRestart</c>, we log the failure reason and let children
     /// continue running (by NOT calling <c>base.PreRestart</c> which would stop all children).
     /// The active workflow dictionary is preserved because it's rebuilt in <c>PostRestart</c>
-    /// from still-alive child actor references. UwU 💖
+    /// from still-alive child actor references. UwU 💖.
     /// </remarks>
     /// <param name="reason">The exception that caused the restart.</param>
     /// <param name="message">The message being processed when the failure occurred.</param>
@@ -196,12 +196,12 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called after the actor restarts.
-    /// Re-watches any surviving child actors to restore death-watch tracking~ 🌸✨
+    /// Re-watches any surviving child actors to restore death-watch tracking~ 🌸✨.
     /// </summary>
     /// <remarks>
     /// CopilotNote: After restart, the actor's constructor runs again (clearing fields),
     /// but child actors may still be alive. We iterate <c>Context.GetChildren()</c> to
-    /// rebuild the tracking dictionary from surviving children. Kawaii recovery! 💕
+    /// rebuild the tracking dictionary from surviving children. Kawaii recovery! 💕.
     /// </remarks>
     /// <param name="reason">The exception that caused the restart.</param>
     protected override void PostRestart(Exception reason)
@@ -230,7 +230,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Handles the CreateWorkflowInstance message.
-    /// Creates a new WorkflowExecutor child actor and starts the workflow~ 🚀
+    /// Creates a new WorkflowExecutor child actor and starts the workflow~ 🚀.
     /// </summary>
     /// <param name="message">The create workflow message.</param>
     private void HandleCreateWorkflowInstance(CreateWorkflowInstance message)
@@ -296,7 +296,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Handles the GetWorkflowStatus message.
-    /// Forwards the status request to the appropriate WorkflowExecutor~ 📊
+    /// Forwards the status request to the appropriate WorkflowExecutor~ 📊.
     /// </summary>
     /// <param name="message">The status query message.</param>
     private void HandleGetWorkflowStatus(GetWorkflowStatus message)
@@ -316,7 +316,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Handles the CancelExecution message.
-    /// Forwards the cancellation request to the appropriate WorkflowExecutor~ 🛑
+    /// Forwards the cancellation request to the appropriate WorkflowExecutor~ 🛑.
     /// </summary>
     /// <param name="message">The cancel execution message.</param>
     private void HandleCancelExecution(CancelExecution message)
@@ -336,7 +336,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Handles the Terminated message when a child WorkflowExecutor stops.
-    /// Cleans up tracking data and logs termination~ 💔
+    /// Cleans up tracking data and logs termination~ 💔.
     /// </summary>
     /// <param name="message">The termination message.</param>
     private void HandleTerminated(Terminated message)
@@ -368,7 +368,7 @@ public class WorkflowSupervisor : ReceiveActor
 
     /// <summary>
     /// Handles the GracefulShutdown message.
-    /// Cancels all active (non-terminal) workflows and responds when cleanup is done~ 🛑🌸
+    /// Cancels all active (non-terminal) workflows and responds when cleanup is done~ 🛑🌸.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -376,7 +376,7 @@ public class WorkflowSupervisor : ReceiveActor
     /// to every active workflow, clears the tracking dictionary, and tells the caller
     /// "we're done, uwu~". The timeout parameter is included for future use when we
     /// add cooperative cancellation (waiting for in-flight nodes). For now we just
-    /// fire cancellations immediately. 💖
+    /// fire cancellations immediately. 💖.
     /// </para>
     /// </remarks>
     /// <param name="message">The graceful shutdown request.</param>
@@ -417,7 +417,7 @@ public class WorkflowSupervisor : ReceiveActor
     }
 
     /// <summary>
-    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ 🌸
+    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ 🌸.
     /// </summary>
     /// <returns>A context describing this actor instance.</returns>
     private ActorLifecycleContext CreateLifecycleContext()
@@ -428,4 +428,3 @@ public class WorkflowSupervisor : ReceiveActor
             Services: this.serviceProvider);
     }
 }
-

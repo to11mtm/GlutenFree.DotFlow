@@ -9,16 +9,16 @@ using System;
 using LanguageExt;
 
 /// <summary>
-/// Defines the schema for a workflow module (its inputs, outputs, and configuration). 📐
+/// Defines the schema for a workflow module (its inputs, outputs, and configuration). 📐.
 /// </summary>
-/// <param name="Inputs">Immutable array of input port definitions. 📥</param>
-/// <param name="Outputs">Immutable array of output port definitions. 📤</param>
-/// <param name="Properties">Immutable array of configuration property definitions. ⚙️</param>
+/// <param name="Inputs">Immutable array of input port definitions. 📥.</param>
+/// <param name="Outputs">Immutable array of output port definitions. 📤.</param>
+/// <param name="Properties">Immutable array of configuration property definitions. ⚙️.</param>
 /// <remarks>
 /// <para>
 /// CopilotNote: This is the "contract" that defines what a module can do!
 /// Modules expose this schema so the workflow designer knows what ports and properties to show.
-/// Uses LanguageExt Arr for structural equality! Super smart! 💖
+/// Uses LanguageExt Arr for structural equality! Super smart! 💖.
 /// </para>
 /// </remarks>
 public record ModuleSchema(
@@ -39,17 +39,17 @@ public record ModuleSchema(
 /// 🔌 Defines an input or output port for a module.
 /// Ports are the connection points for data flow between nodes.
 /// </summary>
-/// <param name="Name">The unique name of the port (used in connections). 🏷️</param>
-/// <param name="DisplayName">The display name shown in UI. 🎨</param>
-/// <param name="DataType">The .NET type of data this port handles. 📊</param>
-/// <param name="Description">A human-readable description of what this port does. 📝</param>
-/// <param name="IsRequired">Whether this port must be connected. Default is true for inputs. ✅</param>
-/// <param name="DefaultValue">The default value if not connected (for optional inputs). 💫</param>
+/// <param name="Name">The unique name of the port (used in connections). 🏷️.</param>
+/// <param name="DisplayName">The display name shown in UI. 🎨.</param>
+/// <param name="DataType">The .NET type of data this port handles. 📊.</param>
+/// <param name="Description">A human-readable description of what this port does. 📝.</param>
+/// <param name="IsRequired">Whether this port must be connected. Default is true for inputs. ✅.</param>
+/// <param name="DefaultValue">The default value if not connected (for optional inputs). 💫.</param>
 /// <remarks>
 /// <para>
 /// CopilotNote: Ports are different from properties! Ports carry data between nodes,
 /// while properties are configuration settings for the node itself. Think of ports
-/// as the plugs on the side of the node, and properties as the knobs on top~ 💖
+/// as the plugs on the side of the node, and properties as the knobs on top~ 💖.
 /// </para>
 /// </remarks>
 public record PortDefinition(
@@ -85,21 +85,21 @@ public record PortDefinition(
 /// ⚙️ Defines a configurable property for a module.
 /// Properties are settings that configure how the module behaves.
 /// </summary>
-/// <param name="Name">The unique name of the property. 🏷️</param>
-/// <param name="DisplayName">The display name shown in UI. 🎨</param>
-/// <param name="DataType">The .NET type of this property. 📊</param>
-/// <param name="Description">A human-readable description of what this property does. 📝</param>
-/// <param name="IsRequired">Whether this property must be provided. Default is false. ✅</param>
-/// <param name="DefaultValue">The default value if not provided. 💫</param>
-/// <param name="EditorType">The type of UI editor to use. 🖊️</param>
-/// <param name="AllowedValues">Allowed values for dropdown/enum properties. 🎭</param>
-/// <param name="ValidationRules">Immutable array of validation rules. 🛡️</param>
-/// <param name="DisplayMetadata">Additional metadata for UI display. 🎀</param>
+/// <param name="Name">The unique name of the property. 🏷️.</param>
+/// <param name="DisplayName">The display name shown in UI. 🎨.</param>
+/// <param name="DataType">The .NET type of this property. 📊.</param>
+/// <param name="Description">A human-readable description of what this property does. 📝.</param>
+/// <param name="IsRequired">Whether this property must be provided. Default is false. ✅.</param>
+/// <param name="DefaultValue">The default value if not provided. 💫.</param>
+/// <param name="EditorType">The type of UI editor to use. 🖊️.</param>
+/// <param name="AllowedValues">Allowed values for dropdown/enum properties. 🎭.</param>
+/// <param name="ValidationRules">Immutable array of validation rules. 🛡️.</param>
+/// <param name="DisplayMetadata">Additional metadata for UI display. 🎀.</param>
 /// <remarks>
 /// <para>
 /// CopilotNote: Properties are different from ports! Properties configure the node's
 /// behavior, while ports carry data between nodes. Properties are set at design time,
-/// while port values flow at runtime~ 💖
+/// while port values flow at runtime~ 💖.
 /// </para>
 /// </remarks>
 public record ModulePropertyDefinition(
@@ -175,40 +175,39 @@ public enum PropertyEditorType
 }
 
 /// <summary>
-/// Defines a validation rule for a property value. ✨
+/// Defines a validation rule for a property value. ✨.
 /// </summary>
-/// <param name="RuleType">The type of validation to perform. 🎯</param>
-/// <param name="Parameters">Immutable map of parameters for the validation rule. 📊</param>
-/// <param name="ErrorMessage">Custom error message if validation fails. 💬</param>
+/// <param name="RuleType">The type of validation to perform. 🎯.</param>
+/// <param name="Parameters">Immutable map of parameters for the validation rule. 📊.</param>
+/// <param name="ErrorMessage">Custom error message if validation fails. 💬.</param>
 public record ValidationRule(
     ValidationRuleType RuleType,
     HashMap<string, object>? Parameters = null,
     string? ErrorMessage = null);
 
 /// <summary>
-/// Types of validation rules that can be applied to properties. 🔍
+/// Types of validation rules that can be applied to properties. 🔍.
 /// </summary>
 public enum ValidationRuleType
 {
-    /// <summary>Minimum length for strings. 📏</summary>
+    /// <summary>Minimum length for strings. 📏.</summary>
     MinLength,
 
-    /// <summary>Maximum length for strings. 📐</summary>
+    /// <summary>Maximum length for strings. 📐.</summary>
     MaxLength,
 
-    /// <summary>Minimum value for numbers. ⬇️</summary>
+    /// <summary>Minimum value for numbers. ⬇️.</summary>
     Min,
 
-    /// <summary>Maximum value for numbers. ⬆️</summary>
+    /// <summary>Maximum value for numbers. ⬆️.</summary>
     Max,
 
-    /// <summary>Regular expression pattern matching. 🔤</summary>
+    /// <summary>Regular expression pattern matching. 🔤.</summary>
     Regex,
 
-    /// <summary>Must be one of the allowed values. 🎭</summary>
+    /// <summary>Must be one of the allowed values. 🎭.</summary>
     Enum,
 
-    /// <summary>Custom validation expression. 💫</summary>
+    /// <summary>Custom validation expression. 💫.</summary>
     Custom,
 }
-

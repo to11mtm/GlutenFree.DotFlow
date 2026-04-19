@@ -15,7 +15,7 @@ using Workflow.Modules.Abstractions;
 /// 🔌 A workflow validator that extends the base structural checks with
 /// module-aware validation: verifying that node <c>ModuleId</c> values exist
 /// in the registry, that configured properties are known to the module schema,
-/// and that connection port names match the module's declared ports~ ✨
+/// and that connection port names match the module's declared ports~ ✨.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,13 +23,13 @@ using Workflow.Modules.Abstractions;
 /// a standalone class in <c>Workflow.Modules</c> that wraps the base
 /// <see cref="WorkflowValidator"/> via composition. This avoids adding a
 /// dependency on <c>Workflow.Modules</c> to <c>Workflow.Core</c>,
-/// keeping the layering clean~ 💖
+/// keeping the layering clean~ 💖.
 /// </para>
 /// <para>
 /// Usage: when a <see cref="IModuleRegistry"/> is available (e.g., at API layer),
 /// use this validator instead of the base one. When no registry is available
 /// (e.g., unit tests that only care about structure), use the base
-/// <see cref="WorkflowValidator"/> directly~ 🎯
+/// <see cref="WorkflowValidator"/> directly~ 🎯.
 /// </para>
 /// <para>
 /// Module-aware error codes:
@@ -47,14 +47,14 @@ public sealed class ModuleAwareWorkflowValidator
     private readonly IModuleRegistry registry;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ModuleAwareWorkflowValidator"/> class~ 🌸
+    /// Initializes a new instance of the <see cref="ModuleAwareWorkflowValidator"/> class~ 🌸.
     /// </summary>
     /// <param name="registry">
     /// The module registry used to look up module schemas by <c>ModuleId</c>.
     /// Must not be null — if you don't have a registry, use <see cref="WorkflowValidator"/> directly.
     /// </param>
     /// <param name="baseValidator">
-    /// Optional base structural validator. If null, a default instance is created~ ✨
+    /// Optional base structural validator. If null, a default instance is created~ ✨.
     /// </param>
     public ModuleAwareWorkflowValidator(
         IModuleRegistry registry,
@@ -68,12 +68,12 @@ public sealed class ModuleAwareWorkflowValidator
     /// <summary>
     /// Validates the given workflow definition using both structural checks (from
     /// <see cref="WorkflowValidator"/>) and module-aware checks (registry lookups,
-    /// schema port validation)~ 🛡️
+    /// schema port validation)~ 🛡️.
     /// </summary>
     /// <param name="workflow">The workflow definition to validate.</param>
     /// <returns>
     /// A <see cref="ValidationResult"/> combining all structural and module-aware
-    /// errors and warnings~ 📋
+    /// errors and warnings~ 📋.
     /// </returns>
     public ValidationResult Validate(WorkflowDefinition workflow)
     {
@@ -129,7 +129,7 @@ public sealed class ModuleAwareWorkflowValidator
 
     /// <summary>
     /// Validates that the property keys configured on a node are all declared
-    /// in the module's <see cref="Core.Models.ModuleSchema.Properties"/>~ ⚙️
+    /// in the module's <see cref="Core.Models.ModuleSchema.Properties"/>~ ⚙️.
     /// </summary>
     /// <param name="node">The node to validate properties on.</param>
     /// <param name="module">The resolved module for this node.</param>
@@ -163,7 +163,7 @@ public sealed class ModuleAwareWorkflowValidator
 
     /// <summary>
     /// Validates that connection <c>SourcePortName</c> and <c>TargetPortName</c> match
-    /// the output/input ports declared in the respective module schemas~ 🔗
+    /// the output/input ports declared in the respective module schemas~ 🔗.
     /// </summary>
     /// <param name="workflow">The workflow being validated.</param>
     /// <param name="nodeModules">Pre-built map of nodeId to resolved module (only valid nodes).</param>
@@ -217,4 +217,3 @@ public sealed class ModuleAwareWorkflowValidator
         }
     }
 }
-

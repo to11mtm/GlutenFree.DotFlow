@@ -10,18 +10,18 @@ namespace Workflow.Engine.Serialization.JsonConverters;
 
 /// <summary>
 /// Extension methods for configuring JsonSerializerOptions with LanguageExt converters.
-/// Makes it super easy to register all the kawaii converters~ 💖
+/// Makes it super easy to register all the kawaii converters~ 💖.
 /// </summary>
 /// <remarks>
 /// CopilotNote: Use these extensions to configure System.Text.Json for REST APIs,
 /// SignalR, and any other external communication that needs human-readable JSON.
-/// MessagePack works out of the box for Akka.NET internal serialization!
+/// MessagePack works out of the box for Akka.NET internal serialization!.
 /// </remarks>
 public static class JsonSerializerOptionsExtensions
 {
     /// <summary>
     /// Adds all LanguageExt type converters to the JsonSerializerOptions.
-    /// This enables proper serialization of HashMap, Option, and Arr types~ ✨
+    /// This enables proper serialization of HashMap, Option, and Arr types~ ✨.
     /// </summary>
     /// <param name="options">The JsonSerializerOptions to configure.</param>
     /// <returns>The same options instance for fluent chaining.</returns>
@@ -41,7 +41,7 @@ public static class JsonSerializerOptionsExtensions
 
     /// <summary>
     /// Creates a new JsonSerializerOptions instance pre-configured for workflow serialization.
-    /// Includes all LanguageExt converters and sensible defaults for APIs~ 🎀
+    /// Includes all LanguageExt converters and sensible defaults for APIs~ 🎀.
     /// </summary>
     /// <param name="writeIndented">Whether to write indented JSON (default: false for production).</param>
     /// <returns>A configured JsonSerializerOptions instance.</returns>

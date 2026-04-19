@@ -9,14 +9,14 @@ using Workflow.Core.Models;
 namespace Workflow.Core.Abstractions;
 
 /// <summary>
-/// Validates workflow definitions to ensure they are safe and correct before execution. 🛡️
+/// Validates workflow definitions to ensure they are safe and correct before execution. 🛡️.
 /// </summary>
 /// <remarks>
 /// CopilotNote: This class performs comprehensive validation including:
 /// - Structural validation (nodes, connections, cycles)
 /// - Schema validation (properties match module schemas)
 /// - Reference validation (variables, ports, node IDs)
-/// Super important for preventing runtime errors, nya~! 💖
+/// Super important for preventing runtime errors, nya~! 💖.
 /// </remarks>
 public class WorkflowValidator
 {
@@ -24,10 +24,10 @@ public class WorkflowValidator
     private readonly List<ValidationWarning> _warnings = new();
 
     /// <summary>
-    /// Validates a workflow definition and returns the result. ✅
+    /// Validates a workflow definition and returns the result. ✅.
     /// </summary>
-    /// <param name="workflow">The workflow definition to validate. 🌸</param>
-    /// <returns>A validation result containing any errors or warnings. 📋</returns>
+    /// <param name="workflow">The workflow definition to validate. 🌸.</param>
+    /// <returns>A validation result containing any errors or warnings. 📋.</returns>
     public ValidationResult Validate(WorkflowDefinition workflow)
     {
         _errors.Clear();
@@ -47,7 +47,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Validates basic workflow structure (must have at least one node). 🎯
+    /// Validates basic workflow structure (must have at least one node). 🎯.
     /// </summary>
     private void ValidateBasicStructure(WorkflowDefinition workflow)
     {
@@ -67,7 +67,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Validates that all node IDs are unique within the workflow. 🆔
+    /// Validates that all node IDs are unique within the workflow. 🆔.
     /// </summary>
     private void ValidateNodeIds(WorkflowDefinition workflow)
     {
@@ -99,7 +99,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Validates all connections reference valid nodes and ports. 🔗
+    /// Validates all connections reference valid nodes and ports. 🔗.
     /// </summary>
     private void ValidateConnections(WorkflowDefinition workflow)
     {
@@ -154,7 +154,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Validates that workflow has at least one start node (no incoming connections). 🚀
+    /// Validates that workflow has at least one start node (no incoming connections). 🚀.
     /// </summary>
     private void ValidateStartNodes(WorkflowDefinition workflow)
     {
@@ -174,7 +174,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Validates there are no orphaned nodes (disconnected subgraphs). 🏝️
+    /// Validates there are no orphaned nodes (disconnected subgraphs). 🏝️.
     /// </summary>
     private void ValidateOrphanedNodes(WorkflowDefinition workflow)
     {
@@ -211,6 +211,7 @@ public class WorkflowValidator
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
+
             // ✨ Use TryGetValue to safely access adjacency list
             if (adjacency.TryGetValue(current, out var neighbors))
             {
@@ -236,7 +237,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Detects cycles in the workflow graph (infinite loops). 🔄
+    /// Detects cycles in the workflow graph (infinite loops). 🔄.
     /// </summary>
     private void ValidateCycles(WorkflowDefinition workflow)
     {
@@ -277,7 +278,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// DFS helper for cycle detection. Returns true if cycle found. 🔍
+    /// DFS helper for cycle detection. Returns true if cycle found. 🔍.
     /// </summary>
     private bool HasCycleDFS(
         string nodeId,
@@ -320,7 +321,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Validates that all variable references exist in workflow variables. 💾
+    /// Validates that all variable references exist in workflow variables. 💾.
     /// </summary>
     private void ValidateVariableReferences(WorkflowDefinition workflow)
     {
@@ -337,7 +338,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Validates error handler node references. 🚨
+    /// Validates error handler node references. 🚨.
     /// </summary>
     private void ValidateErrorHandlers(WorkflowDefinition workflow)
     {
@@ -371,7 +372,7 @@ public class WorkflowValidator
     }
 
     /// <summary>
-    /// Colors for graph traversal (White = unvisited, Gray = visiting, Black = visited). 🎨
+    /// Colors for graph traversal (White = unvisited, Gray = visiting, Black = visited). 🎨.
     /// </summary>
     private enum NodeColor
     {

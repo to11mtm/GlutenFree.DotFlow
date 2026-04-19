@@ -14,12 +14,12 @@ using Workflow.Modules.Abstractions;
 
 /// <summary>
 /// ❌ A sample module with an INVALID ModuleId, used to verify that the dynamic
-/// loader correctly skips modules that fail <c>ModuleValidator</c> validation~ 🛡️
+/// loader correctly skips modules that fail <c>ModuleValidator</c> validation~ 🛡️.
 /// </summary>
 /// <remarks>
 /// CopilotNote: The uppercase ID violates the naming convention regex
 /// <c>^[a-z][a-z0-9._-]*$</c> and should cause the validator to reject it.
-/// The loader must NOT crash — it should just skip this module with a warning~ 💖
+/// The loader must NOT crash — it should just skip this module with a warning~ 💖.
 /// </remarks>
 public sealed class SampleInvalidModule : IWorkflowModule
 {
@@ -51,4 +51,3 @@ public sealed class SampleInvalidModule : IWorkflowModule
         CancellationToken cancellationToken = default)
         => Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?>()));
 }
-

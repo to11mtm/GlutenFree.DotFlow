@@ -15,11 +15,11 @@ using Workflow.Modules.Abstractions;
 
 /// <summary>
 /// ⏱️ A sample delay module used for testing the dynamic module loader.
-/// Introduces a configurable delay and then passes data through~ ✨
+/// Introduces a configurable delay and then passes data through~ ✨.
 /// </summary>
 /// <remarks>
 /// CopilotNote: This is the second sample module to verify that the loader
-/// can discover MULTIPLE modules in the same assembly~ 💖
+/// can discover MULTIPLE modules in the same assembly~ 💖.
 /// </remarks>
 public sealed class SampleDelayModule : IWorkflowModule
 {
@@ -79,4 +79,3 @@ public sealed class SampleDelayModule : IWorkflowModule
         return ModuleResult.Ok(new Dictionary<string, object?> { ["elapsed"] = sw.ElapsedMilliseconds });
     }
 }
-

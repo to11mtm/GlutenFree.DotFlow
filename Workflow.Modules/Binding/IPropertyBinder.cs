@@ -13,7 +13,7 @@ using Workflow.Core.Models;
 /// <summary>
 /// 🔗 Binds raw property/input values to their final resolved forms.
 /// Handles variable reference resolution, type conversion, default application,
-/// and schema validation — the full binding pipeline! UwU ✨
+/// and schema validation — the full binding pipeline! UwU ✨.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -21,7 +21,7 @@ using Workflow.Core.Models;
 /// sits between raw dictionary values (from NodeDefinition or connections) and
 /// the strongly-typed values that modules expect. It resolves <c>{{Variable.Name}}</c>
 /// and <c>{{NodeId.OutputName}}</c> patterns, converts types, applies defaults,
-/// and validates everything against the port/property schema. 💖
+/// and validates everything against the port/property schema. 💖.
 /// </para>
 /// <para>
 /// Designed to be usable both in the engine (NodeExecutor) and in the UI
@@ -33,7 +33,7 @@ public interface IPropertyBinder
 {
     /// <summary>
     /// Binds raw property/input values against a port schema, resolving references,
-    /// converting types, applying defaults, and validating. 🎯
+    /// converting types, applying defaults, and validating. 🎯.
     /// </summary>
     /// <param name="rawValues">
     /// The unprocessed input/property values (may contain <c>{{...}}</c> references
@@ -50,7 +50,7 @@ public interface IPropertyBinder
     /// <returns>
     /// A <see cref="PropertyBindingResult"/> containing bound values or accumulated errors.
     /// </returns>
-    PropertyBindingResult BindProperties(
+    public PropertyBindingResult BindProperties(
         IReadOnlyDictionary<string, object?> rawValues,
         Arr<PortDefinition> schema,
         PropertyBindingContext context);
@@ -58,7 +58,7 @@ public interface IPropertyBinder
 
 /// <summary>
 /// 📦 Context provided to the property binder for resolving references.
-/// Contains workflow variables and predecessor node outputs. UwU ✨
+/// Contains workflow variables and predecessor node outputs. UwU ✨.
 /// </summary>
 /// <param name="Variables">
 /// Workflow-level variables available for <c>{{Variable.Name}}</c> resolution.
@@ -73,7 +73,7 @@ public interface IPropertyBinder
 /// <remarks>
 /// CopilotNote: Variables come from WorkflowDefinition.Variables + any runtime mutations.
 /// NodeOutputs come from WorkflowExecutor._nodeOutputs. Both are read-only snapshots
-/// at binding time — the binder doesn't mutate anything! Clean and pure. 💖
+/// at binding time — the binder doesn't mutate anything! Clean and pure. 💖.
 /// </remarks>
 public record PropertyBindingContext(
     IReadOnlyDictionary<string, object?> Variables,
@@ -82,7 +82,7 @@ public record PropertyBindingContext(
 {
     /// <summary>
     /// Creates an empty context with no variables or node outputs.
-    /// Useful for simple binding scenarios and testing. 🧪
+    /// Useful for simple binding scenarios and testing. 🧪.
     /// </summary>
     public static PropertyBindingContext Empty => new(
         new Dictionary<string, object?>(),
@@ -103,7 +103,7 @@ public record PropertyBindingContext(
 /// </param>
 /// <remarks>
 /// CopilotNote: We accumulate ALL errors rather than short-circuiting on the first one.
-/// This gives the caller (NodeExecutor or UI) a complete picture of what needs fixing! 💖
+/// This gives the caller (NodeExecutor or UI) a complete picture of what needs fixing! 💖.
 /// </remarks>
 public record PropertyBindingResult(
     bool Success,
@@ -111,7 +111,7 @@ public record PropertyBindingResult(
     Arr<string> Errors)
 {
     /// <summary>
-    /// Creates a successful binding result with the resolved values. ✨
+    /// Creates a successful binding result with the resolved values. ✨.
     /// </summary>
     /// <param name="boundValues">The fully resolved property values.</param>
     /// <returns>A successful <see cref="PropertyBindingResult"/>.</returns>
@@ -119,7 +119,7 @@ public record PropertyBindingResult(
         => new(true, boundValues, Arr<string>.Empty);
 
     /// <summary>
-    /// Creates a failed binding result with accumulated errors. 💥
+    /// Creates a failed binding result with accumulated errors. 💥.
     /// </summary>
     /// <param name="errors">The binding errors that occurred.</param>
     /// <returns>A failed <see cref="PropertyBindingResult"/>.</returns>
@@ -127,7 +127,7 @@ public record PropertyBindingResult(
         => new(false, new Dictionary<string, object?>(), errors);
 
     /// <summary>
-    /// Creates a failed binding result from a params array of error strings. 💥
+    /// Creates a failed binding result from a params array of error strings. 💥.
     /// </summary>
     /// <param name="errors">The binding errors.</param>
     /// <returns>A failed <see cref="PropertyBindingResult"/>.</returns>

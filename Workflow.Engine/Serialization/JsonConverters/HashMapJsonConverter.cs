@@ -12,7 +12,7 @@ namespace Workflow.Engine.Serialization.JsonConverters;
 
 /// <summary>
 /// Custom JSON converter for LanguageExt HashMap&lt;TKey, TValue&gt;.
-/// Serializes as a JSON object {"key1":"value1",...} and deserializes back to HashMap~ 🗺️
+/// Serializes as a JSON object {"key1":"value1",...} and deserializes back to HashMap~ 🗺️.
 /// </summary>
 /// <typeparam name="TKey">The type of keys in the HashMap.</typeparam>
 /// <typeparam name="TValue">The type of values in the HashMap.</typeparam>
@@ -20,7 +20,7 @@ namespace Workflow.Engine.Serialization.JsonConverters;
 /// CopilotNote: This converter is required because System.Text.Json cannot properly
 /// serialize/deserialize LanguageExt's HashMap type out of the box!
 /// The default serialization produces an array of objects which loses key-value semantics.
-/// We serialize it as a proper JSON object for human-readable APIs~ ✨
+/// We serialize it as a proper JSON object for human-readable APIs~ ✨.
 /// </remarks>
 public class HashMapJsonConverter<TKey, TValue> : JsonConverter<HashMap<TKey, TValue>>
     where TKey : notnull
@@ -96,7 +96,7 @@ public class HashMapJsonConverter<TKey, TValue> : JsonConverter<HashMap<TKey, TV
 
     /// <summary>
     /// Converts a string key to the target key type.
-    /// Supports common key types like string, Guid, int, etc~ 🔑
+    /// Supports common key types like string, Guid, int, etc~ 🔑.
     /// </summary>
     private static TKey ConvertKey(string keyString)
     {
@@ -132,11 +132,11 @@ public class HashMapJsonConverter<TKey, TValue> : JsonConverter<HashMap<TKey, TV
 
 /// <summary>
 /// Factory for creating HashMapJsonConverter instances for any key-value type combination.
-/// This allows the converter to be registered generically for all HashMap types~ 🏭
+/// This allows the converter to be registered generically for all HashMap types~ 🏭.
 /// </summary>
 /// <remarks>
 /// CopilotNote: Register this factory with JsonSerializerOptions to enable
-/// automatic HashMap serialization for any TKey/TValue combination!
+/// automatic HashMap serialization for any TKey/TValue combination!.
 /// </remarks>
 public class HashMapJsonConverterFactory : JsonConverterFactory
 {

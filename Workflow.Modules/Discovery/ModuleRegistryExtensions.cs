@@ -13,19 +13,19 @@ using Workflow.Modules.Abstractions;
 /// <summary>
 /// 🎀 Convenience extension methods for <see cref="IModuleRegistry"/> that integrate
 /// with the module discovery system. Provides one-liner methods for scanning and
-/// registering modules from assemblies~ ✨
+/// registering modules from assemblies~ ✨.
 /// </summary>
 /// <remarks>
 /// CopilotNote: These extensions make it super easy to wire up module discovery
 /// during app startup! Just call <c>registry.DiscoverAndRegisterFrom(assembly)</c>
-/// and you're done~ No need to manually create the discovery service. 💖
+/// and you're done~ No need to manually create the discovery service. 💖.
 /// </remarks>
 public static class ModuleRegistryExtensions
 {
     /// <summary>
     /// Scans the given assembly for <see cref="IWorkflowModule"/> implementations
     /// and registers them into this registry. Uses the default <see cref="ModuleDiscovery"/>
-    /// service internally~ 🔍
+    /// service internally~ 🔍.
     /// </summary>
     /// <param name="registry">The module registry to populate.</param>
     /// <param name="assembly">The assembly to scan.</param>
@@ -35,7 +35,7 @@ public static class ModuleRegistryExtensions
     /// <param name="logger">
     /// Optional logger for discovery diagnostics. If null, logging is silenced.
     /// </param>
-    /// <returns>The number of modules successfully registered. 🔢</returns>
+    /// <returns>The number of modules successfully registered. 🔢.</returns>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="registry"/> or <paramref name="assembly"/> is null.
     /// </exception>
@@ -62,7 +62,7 @@ public static class ModuleRegistryExtensions
 
     /// <summary>
     /// Scans the calling assembly for <see cref="IWorkflowModule"/> implementations
-    /// and registers them into this registry. Super convenient for app startup! 🚀
+    /// and registers them into this registry. Super convenient for app startup! 🚀.
     /// </summary>
     /// <param name="registry">The module registry to populate.</param>
     /// <param name="services">
@@ -71,7 +71,7 @@ public static class ModuleRegistryExtensions
     /// <param name="logger">
     /// Optional logger for discovery diagnostics.
     /// </param>
-    /// <returns>The number of modules successfully registered. 🔢</returns>
+    /// <returns>The number of modules successfully registered. 🔢.</returns>
     /// <example>
     /// <code>
     /// // 🌸 Register all modules from the current project~
@@ -84,7 +84,7 @@ public static class ModuleRegistryExtensions
     /// which assembly to scan. Make sure this is called from the assembly that
     /// actually contains your modules~ ✨ The <c>[MethodImpl(NoInlining)]</c>
     /// attribute ensures the calling assembly is correctly resolved even with
-    /// JIT inlining optimizations! 💖
+    /// JIT inlining optimizations! 💖.
     /// </remarks>
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static int DiscoverAndRegisterFromCallingAssembly(
@@ -98,4 +98,3 @@ public static class ModuleRegistryExtensions
         return registry.DiscoverAndRegisterFrom(callingAssembly, services, logger);
     }
 }
-

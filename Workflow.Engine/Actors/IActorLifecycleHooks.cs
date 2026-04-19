@@ -17,11 +17,11 @@ namespace Workflow.Engine.Actors;
 /// - Monitoring system notifications
 /// - Custom logging/metrics pipelines
 /// - State backup to external systems
-/// - Health check registration/deregistration
+/// - Health check registration/deregistration.
 /// </para>
 /// <para>
 /// Use <see cref="CompositeActorLifecycleHooks"/> to chain multiple hooks together,
-/// or <see cref="NullActorLifecycleHooks"/> as a no-op default. UwU 💖
+/// or <see cref="NullActorLifecycleHooks"/> as a no-op default. UwU 💖.
 /// </para>
 /// </remarks>
 public interface IActorLifecycleHooks
@@ -29,37 +29,37 @@ public interface IActorLifecycleHooks
     /// <summary>
     /// Called when an actor is starting for the first time (before any message is processed).
     /// Use this to perform custom initialization — e.g., register with external services,
-    /// open connections, or set up monitoring~ 🌸
+    /// open connections, or set up monitoring~ 🌸.
     /// </summary>
     /// <param name="context">Information about the actor that is starting.</param>
-    void OnPreStart(ActorLifecycleContext context);
+    public void OnPreStart(ActorLifecycleContext context);
 
     /// <summary>
     /// Called when an actor is permanently stopping.
     /// Use this to perform custom cleanup — e.g., deregister from services,
-    /// close connections, flush buffers, or release external resources~ 👋🧹
+    /// close connections, flush buffers, or release external resources~ 👋🧹.
     /// </summary>
     /// <param name="context">Information about the actor that is stopping.</param>
-    void OnPostStop(ActorLifecycleContext context);
+    public void OnPostStop(ActorLifecycleContext context);
 
     /// <summary>
     /// Called before an actor restarts due to a supervision directive.
     /// Use this to preserve external state, notify monitoring systems,
-    /// or perform pre-restart cleanup~ 🔄
+    /// or perform pre-restart cleanup~ 🔄.
     /// </summary>
     /// <param name="context">Information about the actor that is restarting.</param>
     /// <param name="reason">The exception that caused the restart.</param>
     /// <param name="message">The message being processed when the failure occurred (may be null).</param>
-    void OnPreRestart(ActorLifecycleContext context, Exception reason, object? message);
+    public void OnPreRestart(ActorLifecycleContext context, Exception reason, object? message);
 
     /// <summary>
     /// Called after an actor restarts (after constructor re-runs).
     /// Use this to restore external state, re-register with services,
-    /// or perform post-restart initialization~ 🌸✨
+    /// or perform post-restart initialization~ 🌸✨.
     /// </summary>
     /// <param name="context">Information about the actor that was restarted.</param>
     /// <param name="reason">The exception that caused the restart.</param>
-    void OnPostRestart(ActorLifecycleContext context, Exception reason);
+    public void OnPostRestart(ActorLifecycleContext context, Exception reason);
 }
 
 /// <summary>
@@ -69,11 +69,11 @@ public interface IActorLifecycleHooks
 /// <remarks>
 /// CopilotNote: This record is intentionally lightweight — just identity + services.
 /// Hooks shouldn't need to reach into actor internals. If they need more info,
-/// they can resolve it from the <see cref="Services"/> provider. UwU 💖
+/// they can resolve it from the <see cref="Services"/> provider. UwU 💖.
 /// </remarks>
-/// <param name="ActorPath">The full Akka.NET path of the actor (e.g., "akka://system/user/supervisor"). 📍</param>
-/// <param name="ActorType">The CLR type name of the actor (e.g., "WorkflowSupervisor"). 🏷️</param>
-/// <param name="Services">The DI service provider for resolving dependencies. 🔧</param>
+/// <param name="ActorPath">The full Akka.NET path of the actor (e.g., "akka://system/user/supervisor"). 📍.</param>
+/// <param name="ActorType">The CLR type name of the actor (e.g., "WorkflowSupervisor"). 🏷️.</param>
+/// <param name="Services">The DI service provider for resolving dependencies. 🔧.</param>
 public record ActorLifecycleContext(
     string ActorPath,
     string ActorType,
@@ -85,12 +85,12 @@ public record ActorLifecycleContext(
 /// </summary>
 /// <remarks>
 /// CopilotNote: Used as the fallback when <c>serviceProvider.GetService&lt;IActorLifecycleHooks&gt;()</c>
-/// returns null. All methods are empty, so there's zero overhead. Kawaii efficiency! 💖
+/// returns null. All methods are empty, so there's zero overhead. Kawaii efficiency! 💖.
 /// </remarks>
 public class NullActorLifecycleHooks : IActorLifecycleHooks
 {
     /// <summary>
-    /// Singleton instance to avoid unnecessary allocations~ ✨
+    /// Singleton instance to avoid unnecessary allocations~ ✨.
     /// </summary>
     public static readonly NullActorLifecycleHooks Instance = new();
 
@@ -130,7 +130,7 @@ public class NullActorLifecycleHooks : IActorLifecycleHooks
 ///         new MetricsLifecycleHooks(sp.GetRequiredService&lt;IMetrics&gt;()),
 ///         new HealthCheckLifecycleHooks(sp.GetRequiredService&lt;IHealthCheckService&gt;())));
 /// </code>
-/// UwU 💖
+/// UwU 💖.
 /// </para>
 /// </remarks>
 public class CompositeActorLifecycleHooks : IActorLifecycleHooks
@@ -138,7 +138,8 @@ public class CompositeActorLifecycleHooks : IActorLifecycleHooks
     private readonly IActorLifecycleHooks[] _hooks;
 
     /// <summary>
-    /// Creates a new composite that chains the given hooks~ 🔗
+    /// Initializes a new instance of the <see cref="CompositeActorLifecycleHooks"/> class.
+    /// Creates a new composite that chains the given hooks~.
     /// </summary>
     /// <param name="hooks">The hooks to chain, invoked in array order.</param>
     public CompositeActorLifecycleHooks(params IActorLifecycleHooks[] hooks)
@@ -182,4 +183,3 @@ public class CompositeActorLifecycleHooks : IActorLifecycleHooks
         }
     }
 }
-

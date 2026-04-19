@@ -11,7 +11,7 @@ using static LanguageExt.Prelude;
 
 /// <summary>
 /// Provides validation extension methods for workflow messages.
-/// Uses LanguageExt Validation for accumulating errors~ ✅
+/// Uses LanguageExt Validation for accumulating errors~ ✅.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,7 +19,7 @@ using static LanguageExt.Prelude;
 /// - Null checks on required fields
 /// - Empty GUID detection
 /// - Empty string detection for required strings
-/// - Collection null checks (empty is valid, null is not)
+/// - Collection null checks (empty is valid, null is not).
 /// </para>
 /// </remarks>
 public static class MessageValidation
@@ -378,4 +378,3 @@ public static class MessageValidation
 
     #endregion
 }
-

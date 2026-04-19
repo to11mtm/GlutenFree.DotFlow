@@ -18,14 +18,14 @@ using Workflow.Modules.Discovery;
 /// 📦 Default implementation of <see cref="IModuleLoader"/> that loads plugin assemblies
 /// from disk using isolated <see cref="PluginAssemblyLoadContext"/> instances.
 /// Delegates discovery to <see cref="ModuleDiscovery"/> and tracks loaded contexts
-/// for later unloading~ ✨
+/// for later unloading~ ✨.
 /// </summary>
 /// <remarks>
 /// <para>
 /// CopilotNote: One PluginAssemblyLoadContext is created per loaded assembly path.
 /// Loading the same path twice is a no-op (returns the existing result).
 /// Unloading removes all registered modules from the registry and initiates GC
-/// collection of the ALC. The actual memory release is async (GC-driven)~ 💖
+/// collection of the ALC. The actual memory release is async (GC-driven)~ 💖.
 /// </para>
 /// </remarks>
 public sealed class AssemblyModuleLoader : IModuleLoader
@@ -40,7 +40,7 @@ public sealed class AssemblyModuleLoader : IModuleLoader
         StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AssemblyModuleLoader"/> class~ 🌸
+    /// Initializes a new instance of the <see cref="AssemblyModuleLoader"/> class~ 🌸.
     /// </summary>
     /// <param name="registry">The module registry to register/unregister modules into.</param>
     /// <param name="discovery">Optional module discovery service. If null, creates a default instance.</param>
@@ -226,7 +226,7 @@ public sealed class AssemblyModuleLoader : IModuleLoader
         => _loaded.Keys.ToList().AsReadOnly();
 
     /// <summary>
-    /// Holds tracking data for a loaded assembly~ 🗂️
+    /// Holds tracking data for a loaded assembly~ 🗂️.
     /// </summary>
     private sealed class LoadedAssemblyEntry
     {
@@ -241,16 +241,16 @@ public sealed class AssemblyModuleLoader : IModuleLoader
             RegisteredModuleIds = registeredModuleIds;
         }
 
-        /// <summary>Gets the isolated ALC for this assembly~ 🔌</summary>
+        /// <summary>Gets the isolated ALC for this assembly~ 🔌.</summary>
         public PluginAssemblyLoadContext Context { get; }
 
-        /// <summary>Gets the IDs of modules registered from this assembly~ 📋</summary>
+        /// <summary>Gets the IDs of modules registered from this assembly~ 📋.</summary>
         public List<string> RegisteredModuleIds { get; }
     }
 
     /// <summary>
     /// 👀 Internal observer that captures module IDs as they are registered,
-    /// so we can know exactly which modules came from our load operation~ 🎯
+    /// so we can know exactly which modules came from our load operation~ 🎯.
     /// </summary>
     private sealed class RegistrationCapture : IModuleRegistryObserver
     {
@@ -272,4 +272,3 @@ public sealed class AssemblyModuleLoader : IModuleLoader
         }
     }
 }
-

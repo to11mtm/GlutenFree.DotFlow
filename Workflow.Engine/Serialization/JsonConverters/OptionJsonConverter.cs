@@ -12,7 +12,7 @@ namespace Workflow.Engine.Serialization.JsonConverters;
 
 /// <summary>
 /// Custom JSON converter for LanguageExt Option&lt;T&gt;.
-/// Serializes Some(value) as the value itself, and None as null~ 💫
+/// Serializes Some(value) as the value itself, and None as null~ 💫.
 /// </summary>
 /// <typeparam name="T">The type wrapped by Option.</typeparam>
 /// <remarks>
@@ -20,7 +20,7 @@ namespace Workflow.Engine.Serialization.JsonConverters;
 /// which is not useful for REST APIs! We want:
 /// - Some("hello") → "hello"
 /// - None → null
-/// Much more intuitive for API consumers~ 🎀
+/// Much more intuitive for API consumers~ 🎀.
 /// </remarks>
 public class OptionJsonConverter<T> : JsonConverter<Option<T>>
 {
@@ -55,11 +55,11 @@ public class OptionJsonConverter<T> : JsonConverter<Option<T>>
 
 /// <summary>
 /// Factory for creating OptionJsonConverter instances for any type T.
-/// Enables automatic Option serialization for all wrapped types~ 🏭
+/// Enables automatic Option serialization for all wrapped types~ 🏭.
 /// </summary>
 /// <remarks>
 /// CopilotNote: Register this factory with JsonSerializerOptions and
-/// all Option&lt;T&gt; types will be handled automatically!
+/// all Option&lt;T&gt; types will be handled automatically!.
 /// </remarks>
 public class OptionJsonConverterFactory : JsonConverterFactory
 {

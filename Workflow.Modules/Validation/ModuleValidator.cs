@@ -14,37 +14,37 @@ using Workflow.Modules.Abstractions;
 /// <summary>
 /// ✅ Validates that workflow modules are well-formed before registration.
 /// Checks module ID format, metadata completeness, schema correctness,
-/// and optionally enforces strict mode for production quality~ 💖
+/// and optionally enforces strict mode for production quality~ 💖.
 /// </summary>
 /// <remarks>
 /// <para>
 /// CopilotNote: This validator runs at registration time in InMemoryModuleRegistry.
 /// Modules that fail validation are rejected to prevent runtime surprises!
-/// Strict mode is opt-in and catches missing descriptions and icons. UwU ✨
+/// Strict mode is opt-in and catches missing descriptions and icons. UwU ✨.
 /// </para>
 /// </remarks>
 public class ModuleValidator
 {
     /// <summary>
     /// Module ID naming convention: lowercase letter start, then lowercase letters,
-    /// digits, dots, hyphens, or underscores. Max 128 chars~ 🏷️
+    /// digits, dots, hyphens, or underscores. Max 128 chars~ 🏷️.
     /// </summary>
     private static readonly Regex ModuleIdPattern = new(
         @"^[a-z][a-z0-9._-]*$",
         RegexOptions.Compiled);
 
     /// <summary>
-    /// Maximum allowed length for module IDs~ 📏
+    /// Maximum allowed length for module IDs~ 📏.
     /// </summary>
     private const int MaxModuleIdLength = 128;
 
     /// <summary>
-    /// Validates a workflow module for correctness and completeness. ✅
+    /// Validates a workflow module for correctness and completeness. ✅.
     /// </summary>
     /// <param name="module">The module to validate.</param>
     /// <param name="strict">
     /// If true, enforces stricter checks: descriptions on all ports/properties,
-    /// Icon must be set. Default is false for relaxed validation~ 🔒
+    /// Icon must be set. Default is false for relaxed validation~ 🔒.
     /// </param>
     /// <returns>A <see cref="ValidationResult"/> with errors and warnings.</returns>
     public ValidationResult Validate(IWorkflowModule module, bool strict = false)
@@ -62,7 +62,7 @@ public class ModuleValidator
     }
 
     /// <summary>
-    /// Validates the module ID format: not empty, matches pattern, within length~ 🏷️
+    /// Validates the module ID format: not empty, matches pattern, within length~ 🏷️.
     /// </summary>
     private static void ValidateModuleId(IWorkflowModule module, List<ValidationError> errors)
     {
@@ -90,7 +90,7 @@ public class ModuleValidator
     }
 
     /// <summary>
-    /// Validates module metadata: DisplayName, Description, Category, Version~ 📝
+    /// Validates module metadata: DisplayName, Description, Category, Version~ 📝.
     /// </summary>
     private static void ValidateMetadata(
         IWorkflowModule module,
@@ -136,7 +136,7 @@ public class ModuleValidator
     }
 
     /// <summary>
-    /// Validates the module schema: port and property definitions~ 📋
+    /// Validates the module schema: port and property definitions~ 📋.
     /// </summary>
     private static void ValidateSchema(
         IWorkflowModule module,
@@ -158,7 +158,7 @@ public class ModuleValidator
 
     /// <summary>
     /// Validates a collection of port definitions for null names, null DataType,
-    /// and duplicates~ 🔌
+    /// and duplicates~ 🔌.
     /// </summary>
     private static void ValidatePorts(
         IEnumerable<PortDefinition> ports,
@@ -206,7 +206,7 @@ public class ModuleValidator
     }
 
     /// <summary>
-    /// Validates property definitions for duplicates and completeness~ ⚙️
+    /// Validates property definitions for duplicates and completeness~ ⚙️.
     /// </summary>
     private static void ValidateProperties(
         IEnumerable<ModulePropertyDefinition> properties,
@@ -245,4 +245,3 @@ public class ModuleValidator
         }
     }
 }
-
