@@ -183,164 +183,96 @@ Providers are **composable**: you can use PostgreSQL for workflows + execution h
 
 ### Tasks:
 
-- [ ] **Create `Workflow.Persistence.Sqlite` project** 📁
-  - [ ] Add project to solution
-  - [ ] Reference `Workflow.Persistence`
-  - [ ] NuGet packages:
-    - [ ] `linq2db` (4.x)
-    - [ ] `linq2db.SQLite`
-    - [ ] `Microsoft.Data.Sqlite` (8.x)
-    - [ ] `FluentMigrator`
-    - [ ] `FluentMigrator.Runner`
-    - [ ] `FluentMigrator.Runner.SQLite`
-  - [ ] Add to `Directory.Packages.props`
+- [x] **Create `Workflow.Persistence.Sqlite` project** 📁
+  - [x] Add project to solution
+  - [x] Reference `Workflow.Persistence`
+  - [x] NuGet packages:
+    - [x] `linq2db` (4.x)
+    - [x] `linq2db.SQLite`
+    - [x] `Microsoft.Data.Sqlite` (8.x)
+    - [x] `FluentMigrator`
+    - [x] `FluentMigrator.Runner`
+    - [x] `FluentMigrator.Runner.SQLite`
+  - [x] Add to `Directory.Packages.props`
 
-- [ ] **Design and implement database schema migrations** 🔄
-  - [ ] New file: `Workflow.Persistence.Sqlite/Migrations/Migration_001_InitialSchema.cs`
-    - [ ] `workflows` table
-      - [ ] `id` (TEXT, primary key) — UUID as string
-      - [ ] `name` (TEXT NOT NULL)
-      - [ ] `description` (TEXT)
-      - [ ] `definition` (TEXT NOT NULL) — JSON blob
-      - [ ] `version` (TEXT NOT NULL)
-      - [ ] `is_active` (INTEGER NOT NULL DEFAULT 1) — boolean as 0/1
-      - [ ] `created_at` (TEXT NOT NULL) — ISO-8601 DateTimeOffset
-      - [ ] `updated_at` (TEXT NOT NULL)
-      - [ ] `tags` (TEXT) — comma-joined, nullable
-      - [ ] `metadata` (TEXT) — JSON blob, nullable
-    - [ ] `executions` table
-      - [ ] `id` (TEXT, primary key)
-      - [ ] `workflow_id` (TEXT NOT NULL)
-      - [ ] `state` (TEXT NOT NULL) — `ExecutionState` enum name
-      - [ ] `started_at` (TEXT NOT NULL)
-      - [ ] `completed_at` (TEXT)
-      - [ ] `inputs` (TEXT) — JSON
-      - [ ] `outputs` (TEXT) — JSON
-      - [ ] `error` (TEXT)
-      - [ ] `triggered_by` (TEXT)
-    - [ ] `execution_nodes` table
-      - [ ] `id` (INTEGER PRIMARY KEY AUTOINCREMENT)
-      - [ ] `execution_id` (TEXT NOT NULL)
-      - [ ] `node_id` (TEXT NOT NULL)
-      - [ ] `state` (TEXT NOT NULL)
-      - [ ] `started_at` (TEXT NOT NULL)
-      - [ ] `completed_at` (TEXT)
-      - [ ] `inputs` (TEXT) — JSON
-      - [ ] `outputs` (TEXT) — JSON
-      - [ ] `error` (TEXT)
-      - [ ] `duration_ms` (INTEGER)
-    - [ ] `variables` table
-      - [ ] `id` (INTEGER PRIMARY KEY AUTOINCREMENT)
-      - [ ] `scope_kind` (TEXT NOT NULL) — `VariableScopeKind` enum name
-      - [ ] `scope_id` (TEXT) — WorkflowId or ExecutionId, nullable for Global
-      - [ ] `name` (TEXT NOT NULL)
-      - [ ] `value` (TEXT) — JSON, null for explicit null entry
-      - [ ] `value_type` (TEXT NOT NULL)
-      - [ ] `version` (INTEGER NOT NULL)
-      - [ ] `created_at` (TEXT NOT NULL)
-      - [ ] `updated_at` (TEXT NOT NULL)
-  - [ ] New file: `Workflow.Persistence.Sqlite/Migrations/Migration_002_AddIndexes.cs`
-    - [ ] Index: `executions(workflow_id)`
-    - [ ] Index: `executions(state)`
-    - [ ] Index: `executions(started_at)`
-    - [ ] Index: `execution_nodes(execution_id)`
-    - [ ] Unique index: `variables(scope_kind, scope_id, name, version)`
-    - [ ] Index: `workflows(name)`
-  - [ ] New file: `Workflow.Persistence.Sqlite/SqliteMigrationRunner.cs`
-    - [ ] `RunMigrationsAsync(string connectionString)`
-    - [ ] `RollbackLastMigrationAsync(string connectionString)`
-    - [ ] Enable WAL mode after migration (`PRAGMA journal_mode=WAL`)
+- [x] **Design and implement database schema migrations** 🔄
+  - [x] New file: `Workflow.Persistence.Sqlite/Migrations/Migration_001_InitialSchema.cs`
+    - [x] `workflows` table
+    - [x] `executions` table
+    - [x] `execution_nodes` table
+    - [x] `variables` table
+  - [x] New file: `Workflow.Persistence.Sqlite/Migrations/Migration_002_AddIndexes.cs`
+    - [x] Index: `executions(workflow_id)`
+    - [x] Index: `executions(state)`
+    - [x] Index: `executions(started_at)`
+    - [x] Index: `execution_nodes(execution_id)`
+    - [x] Unique index: `variables(scope_kind, scope_id, name, version)`
+    - [x] Index: `workflows(name)`
+  - [x] New file: `Workflow.Persistence.Sqlite/SqliteMigrationRunner.cs`
+    - [x] `RunMigrationsAsync(string connectionString)`
+    - [x] `RollbackLastMigrationAsync(string connectionString)`
+    - [x] Enable WAL mode after migration (`PRAGMA journal_mode=WAL`)
 
-- [ ] **Shared base for SQL providers** 🧱
-  - [ ] New file: `Workflow.Persistence.Sqlite/Data/WorkflowDataConnection.cs`
-    - [ ] Extends `DataConnection` (`linq2db`)
-    - [ ] `ITable<WorkflowEntity> Workflows { get; }`
-    - [ ] `ITable<ExecutionEntity> Executions { get; }`
-    - [ ] `ITable<ExecutionNodeEntity> ExecutionNodes { get; }`
-    - [ ] `ITable<VariableEntity> Variables { get; }`
-  - [ ] New file: `Workflow.Persistence.Sqlite/Data/Entities/WorkflowEntity.cs`
-    - [ ] `[PrimaryKey] string Id`, `string Name`, `string? Description`
-    - [ ] `string Definition` (JSON), `string Version`
-    - [ ] `bool IsActive`, `string CreatedAt`, `string UpdatedAt`
-    - [ ] `string? Tags`, `string? Metadata`
-  - [ ] New file: `Workflow.Persistence.Sqlite/Data/Entities/ExecutionEntity.cs`
-  - [ ] New file: `Workflow.Persistence.Sqlite/Data/Entities/ExecutionNodeEntity.cs`
-  - [ ] New file: `Workflow.Persistence.Sqlite/Data/Entities/VariableEntity.cs`
-  - [ ] New file: `Workflow.Persistence.Sqlite/Data/WorkflowDataConnectionFactory.cs`
-    - [ ] Creates `DataConnection` from connection string
-    - [ ] Configures `SQLiteTools.ResolveSQLite()`
+- [x] **Shared base for SQL providers** 🧱
+  - [x] New file: `Workflow.Persistence.Sqlite/Data/WorkflowDataConnection.cs`
+  - [x] New file: `Workflow.Persistence.Sqlite/Data/Entities/WorkflowEntity.cs`
+  - [x] New file: `Workflow.Persistence.Sqlite/Data/Entities/ExecutionEntity.cs`
+  - [x] New file: `Workflow.Persistence.Sqlite/Data/Entities/ExecutionNodeEntity.cs`
+  - [x] New file: `Workflow.Persistence.Sqlite/Data/Entities/VariableEntity.cs`
+  - [x] New file: `Workflow.Persistence.Sqlite/Data/WorkflowDataConnectionFactory.cs`
 
-- [ ] **Implement `SqliteWorkflowRepository`** 📋
-  - [ ] New file: `Workflow.Persistence.Sqlite/Repositories/SqliteWorkflowRepository.cs`
-  - [ ] `CreateAsync` — insert, ID = `Guid.NewGuid().ToString()`
-  - [ ] `UpdateAsync` — update definition + updated_at; throw `InvalidOperationException` if not found
-  - [ ] `DeleteAsync` — soft delete (`is_active = 0`)
-  - [ ] `PurgeAsync` — hard delete row (no FK cascade in SQLite by default — delete related records first)
-  - [ ] `RestoreAsync` — set `is_active = 1`
-  - [ ] `GetByIdAsync(id)` — WHERE `is_active = 1`; deserialise definition JSON
-  - [ ] `GetByIdAsync(id, includeDeleted)` — no `is_active` filter
-  - [ ] `GetAllAsync` — LINQ filter on name (LIKE), is_active, tags (INSTR); Skip/Take for pagination
-  - [ ] `SearchAsync` — LIKE `%query%` on name and description
-  - [ ] JSON helpers: `WorkflowDefinition ↔ string` via `System.Text.Json`
+- [x] **Implement `SqliteWorkflowRepository`** 📋
+  - [x] `CreateAsync`, `UpdateAsync`, `DeleteAsync`, `PurgeAsync`, `RestoreAsync`
+  - [x] `GetByIdAsync(id)`, `GetByIdAsync(id, includeDeleted)`
+  - [x] `GetAllAsync`, `SearchAsync`, `ExistsAsync`
+  - [x] JSON helpers with LanguageExt converters (`Arr<T>`, `HashMap<string,V>`)
 
-- [ ] **Implement `SqliteExecutionHistoryRepository`** 📊
-  - [ ] New file: `Workflow.Persistence.Sqlite/Repositories/SqliteExecutionHistoryRepository.cs`
-  - [ ] `CreateExecutionAsync` — insert execution record
-  - [ ] `UpdateExecutionStatusAsync` — update state + completed_at + error
-  - [ ] `GetExecutionAsync` — by id
-  - [ ] `GetExecutionsForWorkflowAsync` — filter by workflow_id + state + date range; paginate
-  - [ ] `RecordNodeExecutionAsync` — upsert by (execution_id, node_id)
-  - [ ] `GetNodeExecutionsAsync` — all nodes for execution
+- [x] **Implement `SqliteExecutionHistoryRepository`** 📊
+  - [x] `CreateExecutionAsync`, `UpdateExecutionStatusAsync`, `GetExecutionAsync`
+  - [x] `GetExecutionsForWorkflowAsync`, `RecordNodeExecutionAsync`, `GetNodeExecutionsAsync`
 
-- [ ] **Implement `SqliteVariableStore`** 💾
-  - [ ] New file: `Workflow.Persistence.Sqlite/Repositories/SqliteVariableStore.cs`
-  - [ ] `SetVariableAsync` — INSERT new row with `version = MAX(version) + 1` (or 1 if first)
-  - [ ] `GetVariableAsync(version: null)` — SELECT WHERE `version = MAX(version)` for scope+name
-  - [ ] `GetVariableAsync(version: n)` — SELECT WHERE `version = n`
-  - [ ] `GetVariableHistoryAsync` — all rows for scope+name ORDER BY version ASC
-  - [ ] `DeleteVariableAsync` — DELETE all rows WHERE scope+name
-  - [ ] `GetAllVariablesAsync` — latest version per name via subquery; includes null-valued rows
-  - [ ] JSON serialization for `value` column: `object? ↔ string?` via `System.Text.Json`
-  - [ ] Note: `null` value → stored as `NULL` in value column; `value_type = "null"` — distinct from "not found"
+- [x] **Implement `SqliteVariableStore`** 💾
+  - [x] `SetVariableAsync` — versioned inserts, null-is-valid semantics
+  - [x] `GetVariableAsync(version: null)` — latest version
+  - [x] `GetVariableAsync(version: n)` — specific version
+  - [x] `GetVariableHistoryAsync`, `DeleteVariableAsync`, `GetAllVariablesAsync`
 
-- [ ] **Implement `SqlitePersistenceProvider`** 🪶
-  - [ ] New file: `Workflow.Persistence.Sqlite/SqlitePersistenceProvider.cs`
-  - [ ] `ProviderName = "sqlite"`
-  - [ ] `InitializeAsync` — run migrations; enable WAL
-  - [ ] `HealthCheckAsync` — execute `SELECT 1`; measure latency
-  - [ ] Exposes `IWorkflowRepository`, `IExecutionHistoryRepository`, `IVariableStore`
-  - [ ] `Blobs` → `null` (SQLite is not suitable for large blob storage)
-  - [ ] DI registration helper: `AddSqlitePersistence(string connectionString)`
-  - [ ] In-memory helper: `AddSqlitePersistenceInMemory()` — uses `"Data Source=:memory:;Cache=Shared;Mode=Memory"`
+- [x] **Implement `SqlitePersistenceProvider`** 🪶
+  - [x] `ProviderName = "sqlite"`, `InitializeAsync`, `HealthCheckAsync`
+  - [x] Exposes all repositories + `SqliteBlobStore`
+  - [x] DI helpers: `AddSqlitePersistence`, `AddSqlitePersistenceInMemory`
 
-**Tests (~25):** → `Workflow.Tests/Persistence/SqliteProviderTests.cs`
-> Uses `":memory:"` connection string — **no Docker required!** Runs on every machine~ 🧪
-- [ ] Provider initialises (migrations run) without error
-- [ ] Provider health check returns healthy
-- [ ] **Workflow CRUD:**
-  - [ ] `CreateAsync` → `GetByIdAsync` round-trip preserves all fields
-  - [ ] `UpdateAsync` changes definition
-  - [ ] `DeleteAsync` soft-deletes — `GetByIdAsync` returns null
-  - [ ] `GetByIdAsync(id, includeDeleted: true)` returns soft-deleted workflow
-  - [ ] `PurgeAsync` removes completely — `GetByIdAsync(includeDeleted: true)` returns null
-  - [ ] `RestoreAsync` brings back soft-deleted workflow
-  - [ ] `GetAllAsync` with `IsActive = true` excludes soft-deleted
-  - [ ] `SearchAsync` case-insensitive substring match
-  - [ ] Pagination: page 1 and page 2 return correct items
-- [ ] **Execution history:**
-  - [ ] `CreateExecutionAsync` → `GetExecutionAsync` round-trip
-  - [ ] `UpdateExecutionStatusAsync` Running → Completed sets completed_at
-  - [ ] `RecordNodeExecutionAsync` then `GetNodeExecutionsAsync`
-  - [ ] Execution filter by state
-- [ ] **Variable store:**
-  - [ ] `Set("x", "hello")` creates version 1
-  - [ ] `Set("x", "world")` creates version 2; `Get` returns `"world"`
-  - [ ] `Set("x", null)` creates version 3; `Get` returns `VariableEntry { Value = null }` (not null!)
-  - [ ] `Get(version: 1)` returns `"hello"`
-  - [ ] `GetHistory` returns 3 entries ordered
-  - [ ] `DeleteVariableAsync` removes all; subsequent `Get` returns null (not found)
-  - [ ] `GetAllVariablesAsync` includes null-valued variable
-  - [ ] Global, Workflow, Execution scopes isolated
+**Tests (25/25 passing):** → `Workflow.Tests/Persistence/SqliteProviderTests.cs` ✅
+> CopilotNote: Tests use a temp-file SQLite DB. FluentMigrator.Runner.SQLite uses System.Data.SQLite
+> while linq2db uses Microsoft.Data.Sqlite — two separate native runtimes that cannot share
+> in-memory databases. A temp file is visible to both~ 🗂️
+- [x] Provider initialises (migrations run) without error
+- [x] Provider health check returns healthy
+- [x] **Workflow CRUD:**
+  - [x] `CreateAsync` → `GetByIdAsync` round-trip preserves all fields
+  - [x] `UpdateAsync` changes definition
+  - [x] `DeleteAsync` soft-deletes — `GetByIdAsync` returns null
+  - [x] `GetByIdAsync(id, includeDeleted: true)` returns soft-deleted workflow
+  - [x] `PurgeAsync` removes completely — `GetByIdAsync(includeDeleted: true)` returns null
+  - [x] `RestoreAsync` brings back soft-deleted workflow
+  - [x] `GetAllAsync` with `IsActive = true` excludes soft-deleted
+  - [x] `SearchAsync` case-insensitive substring match
+  - [x] Pagination: page 1 and page 2 return correct items
+  - [x] `ExistsAsync` true/false
+- [x] **Execution history:**
+  - [x] `CreateExecutionAsync` → `GetExecutionAsync` round-trip
+  - [x] `UpdateExecutionStatusAsync` Running → Completed sets completed_at
+  - [x] `RecordNodeExecutionAsync` then `GetNodeExecutionsAsync`
+  - [x] Execution filter by state
+- [x] **Variable store:**
+  - [x] `Set("x", "hello")` creates version 1
+  - [x] `Set("x", "world")` creates version 2; `Get` returns `"world"`
+  - [x] `Set("x", null)` creates version 3; `Get` returns `VariableEntry { Value = null }` (not null!)
+  - [x] `Get(version: 1)` returns `"hello"`
+  - [x] `GetHistory` returns 3 entries ordered
+  - [x] `DeleteVariableAsync` removes all; subsequent `Get` returns null (not found)
+  - [x] `GetAllVariablesAsync` includes null-valued variable
+  - [x] Global, Workflow, Execution scopes isolated
 
 ---
 
