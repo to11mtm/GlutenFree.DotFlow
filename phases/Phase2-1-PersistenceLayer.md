@@ -56,239 +56,323 @@ Providers are **composable**: you can use PostgreSQL for workflows + execution h
 
 ### Tasks:
 
-- [ ] **Create `Workflow.Persistence` project** 📁
-  - [ ] Add `Workflow.Persistence.csproj` to solution
-  - [ ] Reference `Workflow.Core`
-  - [ ] Add to `Directory.Build.props` / `Directory.Packages.props`
+- [x] **Create `Workflow.Persistence` project** 📁 ✅
+  - [x] Add `Workflow.Persistence.csproj` to solution
+  - [x] Reference `Workflow.Core`
+  - [x] StyleCop configured, builds cleanly
 
-- [ ] **Define `IPersistenceProvider`** 🔌
-  - [ ] New file: `Workflow.Persistence/Abstractions/IPersistenceProvider.cs`
-  - [ ] `Task InitializeAsync(CancellationToken ct = default)` — run migrations, create buckets
-  - [ ] `Task<HealthCheckResult> HealthCheckAsync(CancellationToken ct = default)`
-  - [ ] `ValueTask DisposeAsync()` (implements `IAsyncDisposable`)
-  - [ ] `string ProviderName { get; }` — e.g. `"postgres"`, `"nats"`, `"s3"`
-  - [ ] `bool IsInitialized { get; }`
-  - [ ] XML documentation
+- [x] **Move `ExecutionState`/`NodeExecutionState` enums to `Workflow.Core`** 🔄 ✅
+  - [x] New file: `Workflow.Core/Models/ExecutionState.cs`
+  - [x] Removed from `Workflow.Engine/Messages/WorkflowMessages.cs`
+  - [x] Updated `using` in `WorkflowExecutionContext.cs`
+  - [x] Full solution builds cleanly, 395 tests passing
 
-- [ ] **Define `IWorkflowRepository`** 📋
-  - [ ] New file: `Workflow.Persistence/Abstractions/IWorkflowRepository.cs`
-  - [ ] `Task<Guid> CreateAsync(WorkflowDefinition definition, CancellationToken ct = default)`
-  - [ ] `Task UpdateAsync(Guid id, WorkflowDefinition definition, CancellationToken ct = default)`
-  - [ ] `Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)` — **soft delete** (`is_active = false`)
-  - [ ] `Task<bool> PurgeAsync(Guid id, CancellationToken ct = default)` — **hard delete**, removes all FK records
-  - [ ] `Task<WorkflowDefinition?> GetByIdAsync(Guid id, CancellationToken ct = default)` — only returns active workflows by default
-  - [ ] `Task<WorkflowDefinition?> GetByIdAsync(Guid id, bool includeDeleted, CancellationToken ct = default)` — overload for admin use
-  - [ ] `Task<PagedResult<WorkflowDefinition>> GetAllAsync(WorkflowFilter filter, Pagination pagination, CancellationToken ct = default)`
-  - [ ] `Task<IReadOnlyList<WorkflowDefinition>> SearchAsync(string query, CancellationToken ct = default)`
-  - [ ] `Task<bool> ExistsAsync(Guid id, CancellationToken ct = default)`
-  - [ ] `Task<bool> RestoreAsync(Guid id, CancellationToken ct = default)` — un-delete a soft-deleted workflow
-  - [ ] XML documentation
+- [x] **Define `IPersistenceProvider`** 🔌 ✅
+  - [x] New file: `Workflow.Persistence/Abstractions/IPersistenceProvider.cs`
+  - [x] `InitializeAsync`, `HealthCheckAsync`, `DisposeAsync`, `ProviderName`, `IsInitialized`
+  - [x] Exposes `Workflows`, `ExecutionHistory`, `Variables`, `Blobs` repository properties
+  - [x] XML documentation
 
-- [ ] **Define `IExecutionHistoryRepository`** 📊
-  - [ ] New file: `Workflow.Persistence/Abstractions/IExecutionHistoryRepository.cs`
-  - [ ] `Task<Guid> CreateExecutionAsync(ExecutionRecord record, CancellationToken ct = default)`
-  - [ ] `Task UpdateExecutionStatusAsync(Guid executionId, ExecutionState state, DateTimeOffset? endTime = null, string? error = null, CancellationToken ct = default)`
-  - [ ] `Task<ExecutionRecord?> GetExecutionAsync(Guid executionId, CancellationToken ct = default)`
-  - [ ] `Task<PagedResult<ExecutionRecord>> GetExecutionsForWorkflowAsync(Guid workflowId, ExecutionFilter filter, Pagination pagination, CancellationToken ct = default)`
-  - [ ] `Task RecordNodeExecutionAsync(NodeExecutionRecord nodeRecord, CancellationToken ct = default)`
-  - [ ] `Task<IReadOnlyList<NodeExecutionRecord>> GetNodeExecutionsAsync(Guid executionId, CancellationToken ct = default)`
-  - [ ] XML documentation
+- [x] **Define `IWorkflowRepository`** 📋 ✅
+  - [x] New file: `Workflow.Persistence/Abstractions/IWorkflowRepository.cs`
+  - [x] CRUD + soft delete + `PurgeAsync` + `RestoreAsync` + `GetByIdAsync(includeDeleted)`
+  - [x] Pagination, search, exists
+  - [x] XML documentation
 
-- [ ] **Define `IVariableStore`** 💾
-  - [ ] New file: `Workflow.Persistence/Abstractions/IVariableStore.cs`
-  - [ ] `Task SetVariableAsync(VariableScope scope, string name, object? value, CancellationToken ct = default)`
-    - [ ] **`null` value is a valid entry** — persisted as a null-valued version, NOT a delete
-    - [ ] Use `DeleteVariableAsync` to explicitly remove a variable
-  - [ ] `Task<VariableEntry?> GetVariableAsync(VariableScope scope, string name, int? version = null, CancellationToken ct = default)`
-    - [ ] Returns `null` (not found) vs `VariableEntry { Value = null }` (found, value is null) — distinct!
-  - [ ] `Task<IReadOnlyList<VariableEntry>> GetVariableHistoryAsync(VariableScope scope, string name, CancellationToken ct = default)`
-    - [ ] Includes null-valued versions in history
-  - [ ] `Task<bool> DeleteVariableAsync(VariableScope scope, string name, CancellationToken ct = default)`
-    - [ ] **Hard removes** the variable and all its history from scope
-    - [ ] Returns `false` if variable didn't exist
-  - [ ] `Task<IReadOnlyDictionary<string, object?>> GetAllVariablesAsync(VariableScope scope, CancellationToken ct = default)`
-    - [ ] Includes variables whose current value is `null`
-  - [ ] XML documentation
+- [x] **Define `IExecutionHistoryRepository`** 📊 ✅
+  - [x] New file: `Workflow.Persistence/Abstractions/IExecutionHistoryRepository.cs`
+  - [x] `CreateExecutionAsync`, `UpdateExecutionStatusAsync`, `GetExecutionAsync`
+  - [x] `GetExecutionsForWorkflowAsync`, `RecordNodeExecutionAsync`, `GetNodeExecutionsAsync`
+  - [x] XML documentation
 
-- [ ] **Define `IBlobStore`** 🗃️
-  - [ ] New file: `Workflow.Persistence/Abstractions/IBlobStore.cs`
-  - [ ] `Task<string> PutAsync(string key, Stream data, string? contentType = null, CancellationToken ct = default)` → returns ETag/version
-  - [ ] `Task<Stream?> GetAsync(string key, CancellationToken ct = default)`
-  - [ ] `Task<bool> DeleteAsync(string key, CancellationToken ct = default)`
-  - [ ] `Task<bool> ExistsAsync(string key, CancellationToken ct = default)`
-  - [ ] `Task<string> GeneratePresignedUrlAsync(string key, TimeSpan expiry, CancellationToken ct = default)`
-  - [ ] XML documentation
+- [x] **Define `IVariableStore`** 💾 ✅
+  - [x] New file: `Workflow.Persistence/Abstractions/IVariableStore.cs`
+  - [x] `null` value = valid entry semantics documented in XML docs
+  - [x] `SetVariableAsync`, `GetVariableAsync`, `GetVariableHistoryAsync`
+  - [x] `DeleteVariableAsync` (hard remove), `GetAllVariablesAsync`
+  - [x] XML documentation
 
-- [ ] **Define supporting DTOs and value objects** 📦
-  - [ ] New file: `Workflow.Persistence/Models/ExecutionRecord.cs`
-    - [ ] `Guid ExecutionId`, `Guid WorkflowId`, `ExecutionState State`
-    - [ ] `DateTimeOffset StartedAt`, `DateTimeOffset? CompletedAt`
-    - [ ] `IReadOnlyDictionary<string, object?> Inputs`, `Outputs`
-    - [ ] `string? Error`, `string? TriggeredBy`
-  - [ ] New file: `Workflow.Persistence/Models/NodeExecutionRecord.cs`
-    - [ ] `Guid ExecutionId`, `string NodeId`, `NodeExecutionState State`
-    - [ ] `DateTimeOffset StartedAt`, `DateTimeOffset? CompletedAt`
-    - [ ] `IReadOnlyDictionary<string, object?> Inputs`, `Outputs`
-    - [ ] `string? Error`, `TimeSpan Duration`
-  - [ ] New file: `Workflow.Persistence/Models/VariableScope.cs`
-    - [ ] `record VariableScope(VariableScopeKind Kind, Guid? WorkflowId = null, Guid? ExecutionId = null)`
-    - [ ] `enum VariableScopeKind { Global, Workflow, Execution }`
-    - [ ] Static factory: `VariableScope.Global`, `VariableScope.ForWorkflow(id)`, `VariableScope.ForExecution(id)`
-  - [ ] New file: `Workflow.Persistence/Models/VariableEntry.cs`
-    - [ ] `VariableScope Scope`, `string Name`, `object? Value`
-    - [ ] `string ValueTypeName`, `int Version`
-    - [ ] `DateTimeOffset CreatedAt`, `DateTimeOffset UpdatedAt`
-  - [ ] New file: `Workflow.Persistence/Models/PagedResult.cs`
-    - [ ] `IReadOnlyList<T> Items`, `int TotalCount`, `int Page`, `int PageSize`
-    - [ ] `bool HasNextPage { get; }`, `bool HasPreviousPage { get; }`
-  - [ ] New file: `Workflow.Persistence/Models/Pagination.cs`
-    - [ ] `int Page`, `int PageSize` (default 50, max 200)
-  - [ ] New file: `Workflow.Persistence/Models/WorkflowFilter.cs`
-    - [ ] `string? NameContains`, `bool? IsActive`, `string[]? Tags`
-    - [ ] `DateTimeOffset? CreatedAfter`, `DateTimeOffset? CreatedBefore`
-  - [ ] New file: `Workflow.Persistence/Models/ExecutionFilter.cs`
-    - [ ] `ExecutionState[]? States`, `DateTimeOffset? StartedAfter`, `DateTimeOffset? StartedBefore`
-  - [ ] New file: `Workflow.Persistence/Models/HealthCheckResult.cs`
-    - [ ] `bool IsHealthy`, `string ProviderName`, `TimeSpan Latency`
-    - [ ] `string? ErrorMessage`, `IReadOnlyDictionary<string, object?> Details`
+- [x] **Define `IBlobStore`** 🗃️ ✅
+  - [x] New file: `Workflow.Persistence/Abstractions/IBlobStore.cs`
+  - [x] `PutAsync`, `GetAsync`, `DeleteAsync`, `ExistsAsync`, `GeneratePresignedUrlAsync`
+  - [x] XML documentation
 
-- [ ] **Define `IPersistenceProviderFactory`** 🏭
-  - [ ] New file: `Workflow.Persistence/Abstractions/IPersistenceProviderFactory.cs`
-  - [ ] `IPersistenceProvider Create(PersistenceConfiguration config)`
-  - [ ] `bool CanHandle(string providerName)`
-  - [ ] New file: `Workflow.Persistence/PersistenceConfiguration.cs`
-    - [ ] `string ProviderName`, `string ConnectionString`
-    - [ ] `IReadOnlyDictionary<string, string> Options`
+- [x] **Define supporting DTOs and value objects** 📦 ✅
+  - [x] `ExecutionRecord.cs` — full record with state, timestamps, inputs/outputs, error
+  - [x] `NodeExecutionRecord.cs` — per-node execution tracking
+  - [x] `VariableScope.cs` — `Global`/`ForWorkflow`/`ForExecution` factories + `VariableScopeKind` enum
+  - [x] `VariableEntry.cs` — versioned entry with null-is-valid semantics
+  - [x] `PagedResult.cs` — generic paged result with `HasNextPage`/`HasPreviousPage`/`TotalPages`
+  - [x] `Pagination.cs` — clamped to max 200, `Skip` computed property
+  - [x] `WorkflowFilter.cs` — name, active, tags, date range filter
+  - [x] `ExecutionFilter.cs` — states, date range filter
+  - [x] `HealthCheckResult.cs` — healthy/unhealthy with latency and details
 
-- [ ] **Define `CompositePersistenceConfiguration`** 🔀
-  - [ ] New file: `Workflow.Persistence/Composite/CompositePersistenceConfiguration.cs`
-  - [ ] `PersistenceConfiguration WorkflowsProvider` — which provider handles `IWorkflowRepository`
-  - [ ] `PersistenceConfiguration ExecutionHistoryProvider` — which provider handles `IExecutionHistoryRepository`
-  - [ ] `PersistenceConfiguration VariablesProvider` — which provider handles `IVariableStore`
-  - [ ] `PersistenceConfiguration? BlobsProvider` — nullable, falls back to `WorkflowsProvider`
-  - [ ] Allows mixing providers (e.g. Postgres workflows + NATS variables)
+- [x] **Define `IPersistenceProviderFactory`** 🏭 ✅
+  - [x] New file: `Workflow.Persistence/Abstractions/IPersistenceProviderFactory.cs`
+  - [x] `PersistenceConfiguration.cs` — `ProviderName`, `ConnectionString`, `Options`, `Validate()`
 
-- [ ] **Implement `CompositePersistenceProvider`** 🔀
-  - [ ] New file: `Workflow.Persistence/Composite/CompositePersistenceProvider.cs`
-  - [ ] Implements `IPersistenceProvider`
-  - [ ] `ProviderName = "composite"`
-  - [ ] Holds a configured sub-provider per interface
-  - [ ] `InitializeAsync` — initialises all sub-providers in parallel
-  - [ ] `HealthCheckAsync` — aggregates health from all sub-providers
-  - [ ] Exposes each sub-provider's repository via the correct interface
+- [x] **Define `CompositePersistenceConfiguration`** 🔀 ✅
+  - [x] New file: `Workflow.Persistence/Composite/CompositePersistenceConfiguration.cs`
+  - [x] Per-interface provider routing with `Effective*` fallback properties
 
-- [ ] **DI extension methods** 💉
-  - [ ] New file: `Workflow.Persistence/ServiceCollectionExtensions.cs`
-  - [ ] `AddWorkflowPersistence(this IServiceCollection, PersistenceConfiguration config)` — single provider
-  - [ ] `AddWorkflowPersistence(this IServiceCollection, CompositePersistenceConfiguration config)` — composite
-  - [ ] Registers all interfaces against the selected provider(s)
+- [x] **Implement `CompositePersistenceProvider`** 🔀 ✅
+  - [x] New file: `Workflow.Persistence/Composite/CompositePersistenceProvider.cs`
+  - [x] Routes each interface to configured sub-provider
+  - [x] `InitializeAsync` — parallel init of unique providers (deduped by reference)
+  - [x] `HealthCheckAsync` — aggregates health from all sub-providers
+  - [x] `DisposeAsync` — disposes all unique providers
 
-**Tests (~18):** → `Workflow.Tests/Persistence/AbstractionTests.cs`
-- [ ] `PagedResult` computed properties (`HasNextPage`, `HasPreviousPage`) correct
-- [ ] `VariableScope` factory methods produce correct values
-- [ ] `VariableScope.Global` is singleton-like
-- [ ] `VariableScope.ForWorkflow(id)` carries WorkflowId
-- [ ] `VariableScope.ForExecution(id)` carries ExecutionId
-- [ ] `Pagination` clamps PageSize to max (200)
-- [ ] `PersistenceConfiguration` validates ProviderName not empty
-- [ ] `HealthCheckResult.IsHealthy = true` when no error
-- [ ] `ExecutionRecord` maps from `WorkflowExecutionContext` correctly
-- [ ] `VariableEntry` round-trip serialization (JSON)
-- [ ] `CompositePersistenceProvider` routes `IWorkflowRepository` to configured sub-provider
-- [ ] `CompositePersistenceProvider` routes `IVariableStore` to a different sub-provider
-- [ ] `CompositePersistenceProvider.HealthCheckAsync` aggregates healthy/unhealthy from all sub-providers
-- [ ] `CompositePersistenceProvider.InitializeAsync` initialises all sub-providers
-- [ ] Null variable: `VariableEntry { Value = null }` is distinct from `null` (not found)
+- [x] **DI extension methods** 💉 ✅
+  - [x] New file: `Workflow.Persistence/ServiceCollectionExtensions.cs`
+  - [x] `AddWorkflowPersistence(IPersistenceProvider)` — single provider
+  - [x] `AddWorkflowPersistence(CompositePersistenceConfiguration, IPersistenceProviderFactory)` — composite
+
+**Tests (22/22 passing):** → `Workflow.Tests/Persistence/AbstractionTests.cs` ✅
+- [x] `PagedResult.HasNextPage` true when more items
+- [x] `PagedResult.HasNextPage` false on last page
+- [x] `PagedResult.TotalPages` computes correctly
+- [x] `PagedResult.Empty` has zero items
+- [x] `VariableScope.Global` has Global kind
+- [x] `VariableScope.Global` is same instance (singleton-like)
+- [x] `VariableScope.ForWorkflow(id)` carries WorkflowId
+- [x] `VariableScope.ForExecution(id)` carries ExecutionId
+- [x] `Pagination` clamps PageSize to max (200)
+- [x] `Pagination` clamps PageSize to min (1)
+- [x] `Pagination.Skip` computes correctly
+- [x] `Pagination.Default` is page 1, size 50
+- [x] `PersistenceConfiguration.Validate` throws on empty ProviderName
+- [x] `PersistenceConfiguration.Validate` succeeds when valid
+- [x] `HealthCheckResult` healthy has null error
+- [x] `HealthCheckResult` unhealthy has error message
+- [x] `VariableEntry { Value = null }` is distinct from null (not found)
+- [x] `CompositePersistenceProvider` routes Workflows to configured provider
+- [x] `CompositePersistenceProvider.HealthCheckAsync` aggregates unhealthy
+- [x] `CompositePersistenceProvider.InitializeAsync` dedupes same instance
+- [x] `CompositePersistenceProvider.ProviderName` is "composite"
+- [x] `ExecutionRecord` JSON round-trip preserves fields
 
 ---
 
-## 2.1.1 In-Memory Persistence Provider 🧪
+## 2.1.1 SQLite Persistence Provider 🪶
 
-**Purpose:** A full in-memory implementation of all persistence interfaces — used for unit tests and local dev without Docker. Replaces the existing `InMemoryExecutionStateStore`~ ✨
+**Purpose:** A lightweight SQLite-backed implementation of all persistence interfaces. By using SQLite's **`:memory:`** mode for tests and a file path for local dev, we get full SQL coverage (real migrations, real queries) with zero infrastructure setup. The repository and migration patterns established here are then **directly reused** by the PostgreSQL provider (2.1.2) — it becomes a simple swap of the connection provider and a few SQL dialect differences~ 💖✨
 
-**Complexity:** 🟢 Low
+**Complexity:** 🟡 Low-Medium
 
-**New Project:** stays in `Workflow.Persistence` (no DB dependency)
+**New Project:** `Workflow.Persistence.Sqlite`
+
+> **CopilotNote:** The SQLite schema intentionally mirrors the Postgres schema (same table names,
+> same column names) but drops Postgres-specific types (`jsonb` → `TEXT`, `text[]` → `TEXT`,
+> `bigserial` → `INTEGER PRIMARY KEY AUTOINCREMENT`). This keeps the FluentMigrator migrations
+> and Linq2Db entity classes copy-paste-upgradeable to Postgres in 2.1.2~ 🐘
+>
+> For tests use `"Data Source=:memory:"` — SQLite in-memory databases are fast and isolated
+> per-connection. No Docker, no temp files, no cleanup needed~ 🧪
+
+### Design Decisions 🔧
+
+| Concern | SQLite choice | Postgres equivalent (2.1.2) |
+|---------|--------------|---------------------------|
+| JSON columns | `TEXT` with `System.Text.Json` serialization | `jsonb` |
+| Arrays (tags) | `TEXT` comma-joined | `text[]` |
+| Auto-increment PK | `INTEGER PRIMARY KEY AUTOINCREMENT` | `BIGSERIAL` |
+| UUID PK | `TEXT` (stored as string) | `UUID` |
+| Concurrent access | WAL mode (`PRAGMA journal_mode=WAL`) | native |
+| In-memory testing | `"Data Source=:memory:;Cache=Shared;Mode=Memory"` | Testcontainers |
 
 ### Tasks:
 
-- [ ] **Create `InMemoryPersistenceProvider`** 🧪
-  - [ ] New file: `Workflow.Persistence/InMemory/InMemoryPersistenceProvider.cs`
-  - [ ] Implements `IPersistenceProvider`
-  - [ ] `ProviderName = "memory"`
-  - [ ] Wires up all in-memory repositories
+- [ ] **Create `Workflow.Persistence.Sqlite` project** 📁
+  - [ ] Add project to solution
+  - [ ] Reference `Workflow.Persistence`
+  - [ ] NuGet packages:
+    - [ ] `linq2db` (4.x)
+    - [ ] `linq2db.SQLite`
+    - [ ] `Microsoft.Data.Sqlite` (8.x)
+    - [ ] `FluentMigrator`
+    - [ ] `FluentMigrator.Runner`
+    - [ ] `FluentMigrator.Runner.SQLite`
+  - [ ] Add to `Directory.Packages.props`
 
-- [ ] **Create `InMemoryWorkflowRepository`** 📋
-  - [ ] New file: `Workflow.Persistence/InMemory/InMemoryWorkflowRepository.cs`
-  - [ ] `ConcurrentDictionary<Guid, (WorkflowDefinition Definition, bool IsActive)>` as backing store
-  - [ ] `DeleteAsync` sets `IsActive = false` — soft delete only
-  - [ ] `PurgeAsync` physically removes entry from dictionary
-  - [ ] `RestoreAsync` sets `IsActive = true`
-  - [ ] `GetByIdAsync(id)` — returns null if soft-deleted; `GetByIdAsync(id, includeDeleted: true)` returns it
-  - [ ] All other `IWorkflowRepository` operations
-  - [ ] Search: substring match on name/description (active only by default)
-  - [ ] Pagination: in-memory paging via LINQ Skip/Take
+- [ ] **Design and implement database schema migrations** 🔄
+  - [ ] New file: `Workflow.Persistence.Sqlite/Migrations/Migration_001_InitialSchema.cs`
+    - [ ] `workflows` table
+      - [ ] `id` (TEXT, primary key) — UUID as string
+      - [ ] `name` (TEXT NOT NULL)
+      - [ ] `description` (TEXT)
+      - [ ] `definition` (TEXT NOT NULL) — JSON blob
+      - [ ] `version` (TEXT NOT NULL)
+      - [ ] `is_active` (INTEGER NOT NULL DEFAULT 1) — boolean as 0/1
+      - [ ] `created_at` (TEXT NOT NULL) — ISO-8601 DateTimeOffset
+      - [ ] `updated_at` (TEXT NOT NULL)
+      - [ ] `tags` (TEXT) — comma-joined, nullable
+      - [ ] `metadata` (TEXT) — JSON blob, nullable
+    - [ ] `executions` table
+      - [ ] `id` (TEXT, primary key)
+      - [ ] `workflow_id` (TEXT NOT NULL)
+      - [ ] `state` (TEXT NOT NULL) — `ExecutionState` enum name
+      - [ ] `started_at` (TEXT NOT NULL)
+      - [ ] `completed_at` (TEXT)
+      - [ ] `inputs` (TEXT) — JSON
+      - [ ] `outputs` (TEXT) — JSON
+      - [ ] `error` (TEXT)
+      - [ ] `triggered_by` (TEXT)
+    - [ ] `execution_nodes` table
+      - [ ] `id` (INTEGER PRIMARY KEY AUTOINCREMENT)
+      - [ ] `execution_id` (TEXT NOT NULL)
+      - [ ] `node_id` (TEXT NOT NULL)
+      - [ ] `state` (TEXT NOT NULL)
+      - [ ] `started_at` (TEXT NOT NULL)
+      - [ ] `completed_at` (TEXT)
+      - [ ] `inputs` (TEXT) — JSON
+      - [ ] `outputs` (TEXT) — JSON
+      - [ ] `error` (TEXT)
+      - [ ] `duration_ms` (INTEGER)
+    - [ ] `variables` table
+      - [ ] `id` (INTEGER PRIMARY KEY AUTOINCREMENT)
+      - [ ] `scope_kind` (TEXT NOT NULL) — `VariableScopeKind` enum name
+      - [ ] `scope_id` (TEXT) — WorkflowId or ExecutionId, nullable for Global
+      - [ ] `name` (TEXT NOT NULL)
+      - [ ] `value` (TEXT) — JSON, null for explicit null entry
+      - [ ] `value_type` (TEXT NOT NULL)
+      - [ ] `version` (INTEGER NOT NULL)
+      - [ ] `created_at` (TEXT NOT NULL)
+      - [ ] `updated_at` (TEXT NOT NULL)
+  - [ ] New file: `Workflow.Persistence.Sqlite/Migrations/Migration_002_AddIndexes.cs`
+    - [ ] Index: `executions(workflow_id)`
+    - [ ] Index: `executions(state)`
+    - [ ] Index: `executions(started_at)`
+    - [ ] Index: `execution_nodes(execution_id)`
+    - [ ] Unique index: `variables(scope_kind, scope_id, name, version)`
+    - [ ] Index: `workflows(name)`
+  - [ ] New file: `Workflow.Persistence.Sqlite/SqliteMigrationRunner.cs`
+    - [ ] `RunMigrationsAsync(string connectionString)`
+    - [ ] `RollbackLastMigrationAsync(string connectionString)`
+    - [ ] Enable WAL mode after migration (`PRAGMA journal_mode=WAL`)
 
-- [ ] **Create `InMemoryExecutionHistoryRepository`** 📊
-  - [ ] New file: `Workflow.Persistence/InMemory/InMemoryExecutionHistoryRepository.cs`
-  - [ ] Separate `ConcurrentDictionary` for executions and node executions
-  - [ ] All `IExecutionHistoryRepository` operations
-  - [ ] Filter/pagination via LINQ
+- [ ] **Shared base for SQL providers** 🧱
+  - [ ] New file: `Workflow.Persistence.Sqlite/Data/WorkflowDataConnection.cs`
+    - [ ] Extends `DataConnection` (`linq2db`)
+    - [ ] `ITable<WorkflowEntity> Workflows { get; }`
+    - [ ] `ITable<ExecutionEntity> Executions { get; }`
+    - [ ] `ITable<ExecutionNodeEntity> ExecutionNodes { get; }`
+    - [ ] `ITable<VariableEntity> Variables { get; }`
+  - [ ] New file: `Workflow.Persistence.Sqlite/Data/Entities/WorkflowEntity.cs`
+    - [ ] `[PrimaryKey] string Id`, `string Name`, `string? Description`
+    - [ ] `string Definition` (JSON), `string Version`
+    - [ ] `bool IsActive`, `string CreatedAt`, `string UpdatedAt`
+    - [ ] `string? Tags`, `string? Metadata`
+  - [ ] New file: `Workflow.Persistence.Sqlite/Data/Entities/ExecutionEntity.cs`
+  - [ ] New file: `Workflow.Persistence.Sqlite/Data/Entities/ExecutionNodeEntity.cs`
+  - [ ] New file: `Workflow.Persistence.Sqlite/Data/Entities/VariableEntity.cs`
+  - [ ] New file: `Workflow.Persistence.Sqlite/Data/WorkflowDataConnectionFactory.cs`
+    - [ ] Creates `DataConnection` from connection string
+    - [ ] Configures `SQLiteTools.ResolveSQLite()`
 
-- [ ] **Create `InMemoryVariableStore`** 💾
-  - [ ] New file: `Workflow.Persistence/InMemory/InMemoryVariableStore.cs`
-  - [ ] `ConcurrentDictionary<(VariableScope, string), List<VariableEntry>>` for version history
-  - [ ] `SetVariableAsync(null)` — appends a new `VariableEntry` with `Value = null` (valid, versioned entry)
-  - [ ] `DeleteVariableAsync` — removes the key entirely from the dictionary (hard removes all history)
-  - [ ] `GetVariableAsync` — returns `null` if key missing; returns `VariableEntry { Value = null }` if latest version has null value
-  - [ ] `GetAllVariablesAsync` — includes entries with null current value
-  - [ ] Thread-safe via `lock` on mutation per key
+- [ ] **Implement `SqliteWorkflowRepository`** 📋
+  - [ ] New file: `Workflow.Persistence.Sqlite/Repositories/SqliteWorkflowRepository.cs`
+  - [ ] `CreateAsync` — insert, ID = `Guid.NewGuid().ToString()`
+  - [ ] `UpdateAsync` — update definition + updated_at; throw `InvalidOperationException` if not found
+  - [ ] `DeleteAsync` — soft delete (`is_active = 0`)
+  - [ ] `PurgeAsync` — hard delete row (no FK cascade in SQLite by default — delete related records first)
+  - [ ] `RestoreAsync` — set `is_active = 1`
+  - [ ] `GetByIdAsync(id)` — WHERE `is_active = 1`; deserialise definition JSON
+  - [ ] `GetByIdAsync(id, includeDeleted)` — no `is_active` filter
+  - [ ] `GetAllAsync` — LINQ filter on name (LIKE), is_active, tags (INSTR); Skip/Take for pagination
+  - [ ] `SearchAsync` — LIKE `%query%` on name and description
+  - [ ] JSON helpers: `WorkflowDefinition ↔ string` via `System.Text.Json`
 
-- [ ] **Create `InMemoryBlobStore`** 🗃️
-  - [ ] New file: `Workflow.Persistence/InMemory/InMemoryBlobStore.cs`
-  - [ ] `ConcurrentDictionary<string, byte[]>` backing store
-  - [ ] PresignedUrl: returns fake URL with expiry embedded
+- [ ] **Implement `SqliteExecutionHistoryRepository`** 📊
+  - [ ] New file: `Workflow.Persistence.Sqlite/Repositories/SqliteExecutionHistoryRepository.cs`
+  - [ ] `CreateExecutionAsync` — insert execution record
+  - [ ] `UpdateExecutionStatusAsync` — update state + completed_at + error
+  - [ ] `GetExecutionAsync` — by id
+  - [ ] `GetExecutionsForWorkflowAsync` — filter by workflow_id + state + date range; paginate
+  - [ ] `RecordNodeExecutionAsync` — upsert by (execution_id, node_id)
+  - [ ] `GetNodeExecutionsAsync` — all nodes for execution
 
-**Tests (~25):** → `Workflow.Tests/Persistence/InMemoryProviderTests.cs`
-- [ ] Workflow CRUD round-trip
-- [ ] `DeleteAsync` soft-deletes — `GetByIdAsync` returns null, `GetByIdAsync(includeDeleted: true)` returns workflow
-- [ ] `PurgeAsync` hard-deletes — no longer returned even with `includeDeleted: true`
-- [ ] `RestoreAsync` brings back soft-deleted workflow
-- [ ] `GetAllAsync` with `IsActive = true` filter excludes soft-deleted
-- [ ] Search by name substring
-- [ ] Pagination returns correct page
-- [ ] Execution record create → get round-trip
-- [ ] Node execution records attached to correct execution
-- [ ] Execution filter by state
-- [ ] Variable `Set("x", "hello")` creates version 1
-- [ ] Variable `Set("x", "world")` creates version 2, `Get` returns `"world"`
-- [ ] Variable `Set("x", null)` creates version 3 — `Get` returns `VariableEntry { Value = null }` (not null!)
-- [ ] Variable `Get(version: 1)` returns original value `"hello"`
-- [ ] Variable `GetHistory` returns all 3 versions in order
-- [ ] Variable `DeleteVariableAsync` removes key; subsequent `Get` returns `null` (not found)
-- [ ] `GetAllVariablesAsync` includes variables with `null` current value
-- [ ] `GetAllVariablesAsync` scoped — global, workflow, execution scopes isolated
-- [ ] Blob `Put` → `Get` round-trip
-- [ ] Blob `Exists` returns true after Put
-- [ ] Blob `Delete` removes blob
-- [ ] Concurrent writes don't corrupt variable version list (parallel writes, then read)
-- [ ] `HealthCheck` always returns healthy for in-memory
+- [ ] **Implement `SqliteVariableStore`** 💾
+  - [ ] New file: `Workflow.Persistence.Sqlite/Repositories/SqliteVariableStore.cs`
+  - [ ] `SetVariableAsync` — INSERT new row with `version = MAX(version) + 1` (or 1 if first)
+  - [ ] `GetVariableAsync(version: null)` — SELECT WHERE `version = MAX(version)` for scope+name
+  - [ ] `GetVariableAsync(version: n)` — SELECT WHERE `version = n`
+  - [ ] `GetVariableHistoryAsync` — all rows for scope+name ORDER BY version ASC
+  - [ ] `DeleteVariableAsync` — DELETE all rows WHERE scope+name
+  - [ ] `GetAllVariablesAsync` — latest version per name via subquery; includes null-valued rows
+  - [ ] JSON serialization for `value` column: `object? ↔ string?` via `System.Text.Json`
+  - [ ] Note: `null` value → stored as `NULL` in value column; `value_type = "null"` — distinct from "not found"
+
+- [ ] **Implement `SqlitePersistenceProvider`** 🪶
+  - [ ] New file: `Workflow.Persistence.Sqlite/SqlitePersistenceProvider.cs`
+  - [ ] `ProviderName = "sqlite"`
+  - [ ] `InitializeAsync` — run migrations; enable WAL
+  - [ ] `HealthCheckAsync` — execute `SELECT 1`; measure latency
+  - [ ] Exposes `IWorkflowRepository`, `IExecutionHistoryRepository`, `IVariableStore`
+  - [ ] `Blobs` → `null` (SQLite is not suitable for large blob storage)
+  - [ ] DI registration helper: `AddSqlitePersistence(string connectionString)`
+  - [ ] In-memory helper: `AddSqlitePersistenceInMemory()` — uses `"Data Source=:memory:;Cache=Shared;Mode=Memory"`
+
+**Tests (~25):** → `Workflow.Tests/Persistence/SqliteProviderTests.cs`
+> Uses `":memory:"` connection string — **no Docker required!** Runs on every machine~ 🧪
+- [ ] Provider initialises (migrations run) without error
+- [ ] Provider health check returns healthy
+- [ ] **Workflow CRUD:**
+  - [ ] `CreateAsync` → `GetByIdAsync` round-trip preserves all fields
+  - [ ] `UpdateAsync` changes definition
+  - [ ] `DeleteAsync` soft-deletes — `GetByIdAsync` returns null
+  - [ ] `GetByIdAsync(id, includeDeleted: true)` returns soft-deleted workflow
+  - [ ] `PurgeAsync` removes completely — `GetByIdAsync(includeDeleted: true)` returns null
+  - [ ] `RestoreAsync` brings back soft-deleted workflow
+  - [ ] `GetAllAsync` with `IsActive = true` excludes soft-deleted
+  - [ ] `SearchAsync` case-insensitive substring match
+  - [ ] Pagination: page 1 and page 2 return correct items
+- [ ] **Execution history:**
+  - [ ] `CreateExecutionAsync` → `GetExecutionAsync` round-trip
+  - [ ] `UpdateExecutionStatusAsync` Running → Completed sets completed_at
+  - [ ] `RecordNodeExecutionAsync` then `GetNodeExecutionsAsync`
+  - [ ] Execution filter by state
+- [ ] **Variable store:**
+  - [ ] `Set("x", "hello")` creates version 1
+  - [ ] `Set("x", "world")` creates version 2; `Get` returns `"world"`
+  - [ ] `Set("x", null)` creates version 3; `Get` returns `VariableEntry { Value = null }` (not null!)
+  - [ ] `Get(version: 1)` returns `"hello"`
+  - [ ] `GetHistory` returns 3 entries ordered
+  - [ ] `DeleteVariableAsync` removes all; subsequent `Get` returns null (not found)
+  - [ ] `GetAllVariablesAsync` includes null-valued variable
+  - [ ] Global, Workflow, Execution scopes isolated
 
 ---
 
 ## 2.1.2 PostgreSQL Persistence Provider 🐘
 
-**Purpose:** Production-grade PostgreSQL persistence using Linq2Db with FluentMigrator migrations. This is the primary storage provider for production deployments~ 🗄️
+**Purpose:** Production-grade PostgreSQL persistence. Inherits the same migration structure, entity mappings, and repository pattern from the SQLite provider (2.1.1) — the key additions are Postgres-specific SQL types (`jsonb`, `text[]`, `UUID`), connection pooling via Npgsql, and Postgres-optimised index strategies~ 🗄️
 
-**Complexity:** 🔴 High
+**Complexity:** 🟡 Medium *(reduced from 🔴 High — SQLite provider establishes the pattern)*
 
 **Target:** PostgreSQL 15+ (uses `jsonb` operators, `text[]` arrays, `gen_random_uuid()`, expression indexes)
 
 **New Project:** `Workflow.Persistence.Postgres`
 
-> CopilotNote: Use TestContainers for integration tests — no manual Postgres setup needed.
-> Add `Testcontainers.PostgreSql` NuGet package to the test project.
-> Use `postgres:15-alpine` image for speed~ 🐳
+> **CopilotNote:** Most of the hard work is done in 2.1.1. For Postgres, the main changes are:
+> - Swap `Microsoft.Data.Sqlite` → `Npgsql` + `linq2db.PostgreSQL`
+> - Replace `TEXT` JSON columns with `jsonb` (enables GIN indexes and `@>` operator)
+> - Replace `TEXT` tag columns with `text[]` (enables `@>` array containment queries)
+> - Replace `INTEGER AUTOINCREMENT` with `BIGSERIAL`
+> - Replace `TEXT` UUID columns with native `UUID` type
+> - Use `Testcontainers.PostgreSql` for integration tests (requires Docker)~ 🐳
+
+### What changes vs. SQLite (2.1.1)
+
+| Concern | SQLite (2.1.1) | Postgres (2.1.2) |
+|---------|---------------|-----------------|
+| JSON columns | `TEXT` | `jsonb` |
+| Tag arrays | `TEXT` comma-joined | `text[]` with `@>` |
+| UUID type | `TEXT` | `UUID` |
+| Auto PK | `AUTOINCREMENT` | `BIGSERIAL` |
+| Tag search | `INSTR` | `@>` array operator |
+| Concurrent init | WAL pragma | N/A (Postgres native) |
+| Tests | `:memory:` (no Docker) | Testcontainers `postgres:15-alpine` |
 
 ### Tasks:
 
@@ -573,7 +657,8 @@ Providers are **composable**: you can use PostgreSQL for workflows + execution h
 
 - [ ] **Update DI registration in `Workflow.Api`** 💉
   - [ ] Wire `IPersistenceProvider` from appsettings `Persistence:Provider`
-  - [ ] Support `"memory"`, `"postgres"`, `"nats"`, `"composite"` values
+  - [ ] Support `"sqlite"`, `"postgres"`, `"nats"`, `"composite"` values
+  - [ ] For `"sqlite"`: use `"Data Source=:memory:;Cache=Shared;Mode=Memory"` when `ConnectionString` is `":memory:"`
   - [ ] For `"composite"`: read `Persistence:Composite:Workflows`, `Persistence:Composite:Variables`, etc.
   - [ ] Register all repositories from the selected provider(s)
   - [ ] Example appsettings for composite:
@@ -589,9 +674,10 @@ Providers are **composable**: you can use PostgreSQL for workflows + execution h
     ```
 
 **Tests (~10):** → `Workflow.Tests/Engine/PersistenceIntegrationTests.cs`
-- [ ] Engine with in-memory provider: workflow runs + execution record created
-- [ ] Engine with in-memory provider: node completions recorded
-- [ ] Engine with in-memory provider: failed workflow records error
+> Uses `SqlitePersistenceProvider` with `:memory:` connection — **no Docker required!**
+- [ ] Engine with SQLite `:memory:` provider: workflow runs + execution record created
+- [ ] Engine with SQLite `:memory:` provider: node completions recorded
+- [ ] Engine with SQLite `:memory:` provider: failed workflow records error
 - [ ] Engine without provider: runs correctly (null provider fallback)
 - [ ] Execution history captures correct node states
 - [ ] Execution history captures variable updates per node
@@ -602,7 +688,8 @@ Providers are **composable**: you can use PostgreSQL for workflows + execution h
 
 **Completion Criteria:**
 - [ ] `IPersistenceProvider` + all sub-interfaces defined and documented
-- [ ] `InMemoryPersistenceProvider` — full implementation for tests/dev
+- [ ] `InMemoryPersistenceProvider` — ~~full implementation for tests/dev~~ **replaced by SQLite `:memory:`**
+- [ ] `SqlitePersistenceProvider` — lightweight file/in-memory provider; establishes SQL pattern for Postgres
 - [ ] `PostgresPersistenceProvider` — production-grade with Linq2Db + migrations
 - [ ] `NatsPersistenceProvider` — lightweight cloud-native option
 - [ ] `S3BlobStore` — large object storage
@@ -681,7 +768,7 @@ Directory.Packages.props                      ← add new NuGet packages
 
 ---
 
-## New Projects Layout (updated for composite)
+## New Projects Layout (updated for SQLite + composite) 🗂️
 ```
 Workflow.Persistence/
   Abstractions/
@@ -704,28 +791,42 @@ Workflow.Persistence/
     WorkflowFilter.cs
     ExecutionFilter.cs
     HealthCheckResult.cs
-  InMemory/
-    InMemoryPersistenceProvider.cs
-    InMemoryWorkflowRepository.cs   ← + soft delete, PurgeAsync, RestoreAsync
-    InMemoryExecutionHistoryRepository.cs
-    InMemoryVariableStore.cs        ← + null-is-valid semantics
-    InMemoryBlobStore.cs
+  InMemory/ ← REMOVED (replaced by SQLite :memory: in 2.1.1)
   PersistenceConfiguration.cs
   ServiceCollectionExtensions.cs    ← + composite overload
 
+Workflow.Persistence.Sqlite/        ← NEW (replaces in-memory, enables :memory: testing)
+  Data/
+    WorkflowDataConnection.cs       ← base pattern reused by Postgres
+    WorkflowDataConnectionFactory.cs
+    Entities/
+      WorkflowEntity.cs
+      ExecutionEntity.cs
+      ExecutionNodeEntity.cs
+      VariableEntity.cs
+  Migrations/
+    Migration_001_InitialSchema.cs  ← mirrored in Postgres (different types)
+    Migration_002_AddIndexes.cs
+  SqliteMigrationRunner.cs
+  Repositories/
+    SqliteWorkflowRepository.cs     ← pattern reused by PostgresWorkflowRepository
+    SqliteExecutionHistoryRepository.cs
+    SqliteVariableStore.cs
+  SqlitePersistenceProvider.cs      ← AddSqlitePersistence() + AddSqlitePersistenceInMemory()
+
 Workflow.Persistence.Postgres/
   Data/
-    WorkflowDataConnection.cs
+    WorkflowDataConnection.cs       ← extends SQLite pattern, swaps provider
     WorkflowDataConnectionFactory.cs
-    Entities/ (5 entity files)
+    Entities/ (4 entity files, same structure, native Postgres types)
   Migrations/
-    Migration_001_InitialSchema.cs
-    Migration_002_AddIndexes.cs
-  MigrationRunner.cs
+    Migration_001_InitialSchema.cs  ← jsonb, text[], UUID, BIGSERIAL
+    Migration_002_AddIndexes.cs     ← GIN, @> operator indexes
+  PostgresMigrationRunner.cs
   Repositories/
-    PostgresWorkflowRepository.cs   ← + soft delete, PurgeAsync, RestoreAsync
+    PostgresWorkflowRepository.cs
     PostgresExecutionHistoryRepository.cs
-    PostgresVariableStore.cs        ← + null-is-valid, hard DeleteVariableAsync
+    PostgresVariableStore.cs
   PostgresPersistenceProvider.cs
 
 Workflow.Persistence.Nats/
@@ -744,12 +845,13 @@ Workflow.Persistence.S3/
 
 **Modified Files:**
 ```
+Workflow.Core/Models/ExecutionState.cs        ← moved enums here (done ✅)
 Workflow.Engine/Actors/WorkflowExecutor.cs    ← wire IExecutionHistoryRepository (PipeToSelf, awaited)
 Workflow.Engine/Actors/WorkflowSupervisor.cs  ← optionally use IWorkflowRepository
-Workflow.Api/Program.cs                       ← DI registration incl. composite config
+Workflow.Api/Program.cs                       ← DI registration incl. sqlite/composite config
 Workflow.Api/appsettings.json                 ← add Persistence section
 Workflow.sln                                  ← add new projects
-Directory.Packages.props                      ← add new NuGet packages
+Directory.Packages.props                      ← add linq2db, Sqlite, FluentMigrator packages
 ```
 
 ---
@@ -759,17 +861,19 @@ Directory.Packages.props                      ← add new NuGet packages
 | # | Question | Answer | Impact |
 |---|----------|--------|--------|
 | **Q1** | Soft vs hard delete | Soft delete (`is_active`) default + `PurgeAsync` hard delete | Added `PurgeAsync`, `RestoreAsync`, `GetByIdAsync(includeDeleted)` to `IWorkflowRepository` + all implementations |
-| **Q2** | `null` value = delete or valid? | Valid null-valued versioned entry; `DeleteVariableAsync` is the only delete | Updated `IVariableStore` docs, null semantics in Postgres (`SQL NULL`) and in-memory |
+| **Q2** | `null` value = delete or valid? | Valid null-valued versioned entry; `DeleteVariableAsync` is the only delete | Updated `IVariableStore` docs, null semantics in both SQLite (`NULL` column + `"null"` type) and Postgres |
 | **Q3** | Mutually exclusive or composable? | Composable via `CompositePersistenceProvider` | Added `CompositePersistenceProvider`, `CompositePersistenceConfiguration`, composite DI overload |
 | **Q4** | Postgres target version | Postgres 15+ | Added to Postgres section header; use `jsonb` operators, `text[]`, `gen_random_uuid()` freely |
 | **Q5** | Fire-and-forget or awaited? | **Awaited** for reliability | Added Akka `PipeToSelf` pattern to `WorkflowExecutor` wiring tasks |
+| **Revised** | In-Memory → SQLite | SQLite `:memory:` replaces pure in-memory; same SQL pattern feeds into Postgres | 2.1.1 rewritten as `Workflow.Persistence.Sqlite`; Postgres complexity reduced 🔴→🟡 |
 
 ---
 
-> 💖 **Ami's Phase 2.1 Tips:**
-> - Build 2.1.0 (abstractions) first — everything else depends on those interfaces~ ✨
-> - Build 2.1.1 (in-memory) second — gives you a way to test 2.1.5 (engine integration) without needing Docker~ 🧪
-> - Tackle 2.1.2 (Postgres) before 2.1.3 (NATS) — Postgres is the primary provider~ 🐘
-> - S3 (2.1.4) can be done in parallel with NATS (2.1.3) since they're independent~ ☁️
+> 💖 **Ami's Phase 2.1 Tips (revised):**
+> - 2.1.0 Abstractions ✅ Done! 22 tests passing~
+> - Build 2.1.1 (SQLite) next — use `:memory:` mode for fast zero-infra testing~ 🪶
+> - Build 2.1.5 (engine integration) after 2.1.1 — SQLite `:memory:` tests the full actor stack without Docker~ 🎭
+> - 2.1.2 (Postgres) will be fast since 2.1.1 establishes the pattern — just swap the types~ 🐘
+> - 2.1.3 (NATS) and 2.1.4 (S3) are independent — can be done in parallel~ ☁️ UwU 💖
 > - Test composite routing with in-memory providers before touching real infra~ 🔀 UwU 💖
 

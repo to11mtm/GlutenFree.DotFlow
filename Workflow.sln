@@ -19,6 +19,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "phases", "phases", "{AA4347
 		phases\Phase1-3-AkkaEngine.md = phases\Phase1-3-AkkaEngine.md
 		phases\Phase1-4-ModuleSystem.md = phases\Phase1-4-ModuleSystem.md
 		phases\Phase1-5-BuiltinModules.md = phases\Phase1-5-BuiltinModules.md
+		phases\Phase2-1-PersistenceLayer.md = phases\Phase2-1-PersistenceLayer.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ignore", "ignore", "{B9EB3407-915D-422B-8BD3-CE0DA7923FF3}"
@@ -105,6 +106,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Tests", "Workflow.Tests\Workflow.Tests.csproj", "{5E59C4BC-9F58-48E4-AFE1-5B24D65F0D7A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Tests.SampleModules", "Workflow.Tests.SampleModules\Workflow.Tests.SampleModules.csproj", "{83371E93-1A63-4014-8DE7-1F1EF39F2B53}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Persistence", "Workflow.Persistence\Workflow.Persistence.csproj", "{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Persistence.Sqlite", "Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj", "{3E387890-546C-4534-B304-C70E577B32BC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -212,6 +217,30 @@ Global
 		{83371E93-1A63-4014-8DE7-1F1EF39F2B53}.Release|x64.Build.0 = Release|Any CPU
 		{83371E93-1A63-4014-8DE7-1F1EF39F2B53}.Release|x86.ActiveCfg = Release|Any CPU
 		{83371E93-1A63-4014-8DE7-1F1EF39F2B53}.Release|x86.Build.0 = Release|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Debug|x64.Build.0 = Debug|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Debug|x86.Build.0 = Debug|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Release|x64.ActiveCfg = Release|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Release|x64.Build.0 = Release|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Release|x86.ActiveCfg = Release|Any CPU
+		{DA0B1339-6BE3-43C3-BDD6-EB1398557C17}.Release|x86.Build.0 = Release|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Debug|x64.Build.0 = Debug|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Debug|x86.Build.0 = Debug|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Release|x64.ActiveCfg = Release|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Release|x64.Build.0 = Release|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Release|x86.ActiveCfg = Release|Any CPU
+		{3E387890-546C-4534-B304-C70E577B32BC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

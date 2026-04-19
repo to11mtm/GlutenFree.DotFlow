@@ -5,6 +5,7 @@
 
 using LanguageExt;
 using MessagePack;
+using Workflow.Core.Models;
 using Workflow.Engine.Messages;
 
 namespace Workflow.Engine.Models;
