@@ -58,7 +58,7 @@
     <PackageVersion Include="FluentAssertions" Version="6.12.2" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="Akka.TestKit.Xunit2" Version="1.5.57" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.4.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.11.0" />
       <PackageVersion Include="Testcontainers.Minio" Version="4.11.0" />
     <!--  Code Quality & Analysis -->
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
