@@ -468,18 +468,18 @@ Directory.Packages.props                                ← + DynamicExpresso (p
 
 ## ✅ Resolved vs ❓ Open
 
-| # | Question | Status | Note |
-|---|----------|--------|------|
-| **Q1** | Sub-graph model | ✅ Inline tagged region via ports | Simpler than nested workflows; reuses existing schema |
-| **Q2** | Multi-port routing | ✅ Engine adds `ActivePorts` | Backwards compatible; default keeps current behaviour |
-| **Q3** | Expression language | ✅ Sandboxed | Implementation choice in Q7 |
-| **Q4** | Loop scope | ✅ Per-iteration variable subscope | Uses existing `IVariableStore` |
-| **Q5** | Error boundaries | ✅ Engine-managed zones | Not Akka supervision |
+| # | Question | Status                                      | Note |
+|---|----------|---------------------------------------------|------|
+| **Q1** | Sub-graph model | ✅ Inline tagged region via ports            | Simpler than nested workflows; reuses existing schema |
+| **Q2** | Multi-port routing | ✅ Engine adds `ActivePorts`                 | Backwards compatible; default keeps current behaviour |
+| **Q3** | Expression language | ✅ Sandboxed                                 | Implementation choice in Q7 |
+| **Q4** | Loop scope | ✅ Per-iteration variable subscope           | Uses existing `IVariableStore` |
+| **Q5** | Error boundaries | ✅ Engine-managed zones                      | Not Akka supervision |
 | **Q6** | Fan-out/Fan-in | ✅ Dedicated modules over shared coordinator | — |
-| **Q7** | Expression engine choice | ❓ DynamicExpresso vs in-house | Recommend DynamicExpresso behind interface |
-| **Q8** | Loop-body addressing | ❓ Ports vs RegionId | Recommend ports for v1 |
-| **Q9** | Parallel cancel semantics | ❓ Cooperative vs hard | Recommend cooperative + grace timeout |
-| **Q10** | `builtin.switch` in 2.2 | ❓ In or defer | Recommend in (shares routing work) |
+| **Q7** | Expression engine choice | Use DynamicExpresso for now                 | Recommend DynamicExpresso behind interface |
+| **Q8** | Loop-body addressing | Use Ports for now                           | Recommend ports for v1 |
+| **Q9** | Parallel cancel semantics | Use Cooperative plus grace timeout          | Recommend cooperative + grace timeout |
+| **Q10** | `builtin.switch` in 2.2 | Use In for now                              | Recommend in (shares routing work) |
 
 ---
 
