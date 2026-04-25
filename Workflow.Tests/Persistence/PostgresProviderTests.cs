@@ -32,7 +32,6 @@ public sealed class PostgresProviderTests : IAsyncLifetime
         .WithDatabase("workflow_test")
         .WithUsername("test")
         .WithPassword("test")
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(5432))
         .Build();
 
     private PostgresPersistenceProvider _provider = null!;
