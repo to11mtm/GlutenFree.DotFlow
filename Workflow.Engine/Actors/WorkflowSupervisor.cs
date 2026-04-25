@@ -9,8 +9,11 @@ using System.Collections.Generic;
 using System.Linq;
 using Akka.Actor;
 using Akka.Event;
+using Akka.Pattern;
 using Microsoft.Extensions.DependencyInjection;
+using Workflow.Core.Models;
 using Workflow.Engine.Messages;
+using Workflow.Persistence.Abstractions;
 
 /// <summary>
 /// Top-level supervisor actor responsible for managing workflow lifecycle.
@@ -34,6 +37,7 @@ public class WorkflowSupervisor : ReceiveActor
     private readonly IServiceProvider serviceProvider;
     private readonly Dictionary<Guid, IActorRef> activeWorkflows;
     private readonly IActorLifecycleHooks _lifecycleHooks;
+    private readonly IWorkflowRepository? _workflowRepository;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkflowSupervisor"/> class.
@@ -47,9 +51,11 @@ public class WorkflowSupervisor : ReceiveActor
         this.activeWorkflows = new Dictionary<Guid, IActorRef>();
         this._lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
             ?? NullActorLifecycleHooks.Instance;
+        this._workflowRepository = serviceProvider.GetService(typeof(IWorkflowRepository)) as IWorkflowRepository;
 
         // Handle workflow instance creation
         Receive<CreateWorkflowInstance>(msg => HandleCreateWorkflowInstance(msg));
+        Receive<CreateWorkflowInstanceResolved>(msg => HandleCreateWorkflowInstanceResolved(msg));
 
         // Handle workflow status queries
         Receive<GetWorkflowStatus>(msg => HandleGetWorkflowStatus(msg));
@@ -235,26 +241,65 @@ public class WorkflowSupervisor : ReceiveActor
     /// <param name="message">The create workflow message.</param>
     private void HandleCreateWorkflowInstance(CreateWorkflowInstance message)
     {
+        var requester = Sender;
+
+        if (this._workflowRepository == null)
+        {
+            this.HandleCreateWorkflowInstanceResolved(
+                new CreateWorkflowInstanceResolved(requester, message, message.Definition));
+            return;
+        }
+
+        Task.Run(
+            async () =>
+            {
+                try
+                {
+                    var storedDefinition = await this._workflowRepository.GetByIdAsync(message.WorkflowId)
+                        .ConfigureAwait(false);
+
+                    return new CreateWorkflowInstanceResolved(
+                        requester,
+                        message,
+                        storedDefinition ?? message.Definition);
+                }
+                catch (Exception ex)
+                {
+                    return new CreateWorkflowInstanceResolved(requester, message, message.Definition, ex.Message);
+                }
+            }).PipeTo(Self);
+    }
+
+    private void HandleCreateWorkflowInstanceResolved(CreateWorkflowInstanceResolved resolution)
+    {
         try
         {
+            if (!string.IsNullOrWhiteSpace(resolution.Error))
+            {
+                this.log.Warning(
+                    "⚠️ Failed to load stored workflow definition for {WorkflowId}: {Error}. Falling back to provided definition~",
+                    resolution.Message.WorkflowId,
+                    resolution.Error);
+            }
+
             this.log.Info(
                 "📝 Creating workflow instance for workflow {WorkflowId}: {WorkflowName}",
-                message.WorkflowId,
-                message.Definition.Name);
+                resolution.Message.WorkflowId,
+                resolution.Definition.Name);
 
             // Validate workflow definition
             var validator = this.serviceProvider.GetRequiredService<Workflow.Core.Abstractions.WorkflowValidator>();
-            var validationResult = validator.Validate(message.Definition);
+            var validationResult = validator.Validate(resolution.Definition);
 
             if (!validationResult.IsValid)
             {
                 var errorMessages = string.Join(", ", validationResult.Errors.Select(e => e.ToString()));
                 this.log.Error(
                     "❌ Workflow validation failed for {WorkflowId}: {Errors}",
-                    message.WorkflowId,
+                    resolution.Message.WorkflowId,
                     errorMessages);
 
-                Sender.Tell(new Status.Failure(
+                resolution.Requester.Tell(new Status.Failure(
                     new InvalidOperationException($"Workflow validation failed: {errorMessages}")));
                 return;
             }
@@ -265,9 +310,14 @@ public class WorkflowSupervisor : ReceiveActor
             // Create child WorkflowExecutor actor
             var executorName = $"executor-{executionId:N}";
             var inputsDict = new Dictionary<string, object?>(
-                message.Inputs.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
+                resolution.Message.Inputs.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
             var executor = Context.ActorOf(
-                WorkflowExecutor.Props(executionId, message.Definition, inputsDict, this.serviceProvider),
+                WorkflowExecutor.Props(
+                    executionId,
+                    resolution.Definition,
+                    inputsDict,
+                    this.serviceProvider,
+                    resolution.Message.StartOptions),
                 executorName);
 
             // Watch for child termination
@@ -282,7 +332,7 @@ public class WorkflowSupervisor : ReceiveActor
                 this.activeWorkflows.Count);
 
             // Reply with execution ID
-            Sender.Tell(new WorkflowInstanceCreated(executionId, message.WorkflowId));
+            resolution.Requester.Tell(new WorkflowInstanceCreated(executionId, resolution.Message.WorkflowId));
 
             // Automatically start execution
             executor.Tell(new StartExecution(executionId));
@@ -290,9 +340,15 @@ public class WorkflowSupervisor : ReceiveActor
         catch (Exception ex)
         {
             this.log.Error(ex, "💥 Failed to create workflow instance: {Error}", ex.Message);
-            Sender.Tell(new Status.Failure(ex));
+            resolution.Requester.Tell(new Status.Failure(ex));
         }
     }
+
+    private sealed record CreateWorkflowInstanceResolved(
+        IActorRef Requester,
+        CreateWorkflowInstance Message,
+        WorkflowDefinition Definition,
+        string? Error = null);
 
     /// <summary>
     /// Handles the GetWorkflowStatus message.

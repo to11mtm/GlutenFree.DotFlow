@@ -10,11 +10,14 @@ using System.Diagnostics;
 using System.Linq;
 using Akka.Actor;
 using Akka.Event;
+using Akka.Pattern;
 using LanguageExt;
 using Workflow.Core.Models;
 using Workflow.Engine.Messages;
 using Workflow.Engine.Models;
 using Workflow.Engine.Services;
+using Workflow.Persistence.Abstractions;
+using Workflow.Persistence.Models;
 
 /// <summary>
 /// Actor responsible for executing a single workflow instance.
@@ -46,6 +49,8 @@ public class WorkflowExecutor : ReceiveActor
     private readonly WorkflowDefinition _definition;
     private readonly Dictionary<string, object?> _workflowInputs;
     private readonly IServiceProvider _serviceProvider;
+    private readonly string _triggeredBy;
+    private readonly VariableWriteMode _variableWriteMode;
 
     /// <summary>
     /// The canonical execution state — immutable, snapshotable, and sugoi~ 📊✨
@@ -59,6 +64,7 @@ public class WorkflowExecutor : ReceiveActor
     // Node actor tracking (actor-local runtime refs, not persisted)
     private readonly Dictionary<string, IActorRef> _nodeActors = new();
     private readonly Dictionary<string, Dictionary<string, object?>> _nodeOutputs = new();
+    private readonly Dictionary<string, Dictionary<string, object?>> _nodeInputs = new();
     private LanguageExt.HashSet<string> _completedNodes;
     private LanguageExt.HashSet<string> _failedNodes;
     private LanguageExt.HashSet<string> _runningNodes;
@@ -86,6 +92,8 @@ public class WorkflowExecutor : ReceiveActor
 
     // State store for persistence snapshots (optional — resolved from DI)
     private readonly IExecutionStateStore? _stateStore;
+    private readonly IExecutionHistoryRepository? _executionHistoryRepository;
+    private readonly IVariableStore? _variableStore;
 
     /// <summary>
     /// Lifecycle hooks resolved from DI — allows consumers to inject custom behavior
@@ -106,6 +114,7 @@ public class WorkflowExecutor : ReceiveActor
     /// Without this, we'd accidentally kill child actors we wanted to survive! UwU 💕.
     /// </remarks>
     private bool _isRestarting;
+    private bool _executionRecordReady;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkflowExecutor"/> class.
@@ -119,16 +128,21 @@ public class WorkflowExecutor : ReceiveActor
         Guid executionId,
         WorkflowDefinition definition,
         Dictionary<string, object?> inputs,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ExecutionStartOptions? startOptions = null)
     {
         _log = Context.GetLogger();
         _executionId = executionId;
         _definition = definition;
         _workflowInputs = inputs;
         _serviceProvider = serviceProvider;
+        _triggeredBy = string.IsNullOrWhiteSpace(startOptions?.CallerId) ? "system" : startOptions!.CallerId!;
+        _variableWriteMode = startOptions?.VariableWriteMode ?? VariableWriteMode.Execution;
 
         // Try to resolve the state store from DI (optional)
         _stateStore = serviceProvider.GetService(typeof(IExecutionStateStore)) as IExecutionStateStore;
+        _executionHistoryRepository = serviceProvider.GetService(typeof(IExecutionHistoryRepository)) as IExecutionHistoryRepository;
+        _variableStore = serviceProvider.GetService(typeof(IVariableStore)) as IVariableStore;
         _lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
             ?? NullActorLifecycleHooks.Instance;
 
@@ -156,6 +170,11 @@ public class WorkflowExecutor : ReceiveActor
         Receive<GetExecutionSnapshot>(HandleGetSnapshot);
         Receive<RetryNode>(HandleRetryNode);
         Receive<Terminated>(HandleTerminated);
+        Receive<PersistenceExecutionCreated>(HandleExecutionRecordCreated);
+        Receive<PersistenceNodeRecorded>(HandlePersistenceNodeRecorded);
+        Receive<PersistenceExecutionStatusUpdated>(HandlePersistenceExecutionStatusUpdated);
+        Receive<PersistenceSnapshotSaved>(HandlePersistenceSnapshotSaved);
+        Receive<PersistenceVariableUpdatesSaved>(HandlePersistenceVariableUpdatesSaved);
 
         _log.Info(
             "🎬 WorkflowExecutor created for execution {ExecutionId}, workflow '{WorkflowName}' with {NodeCount} nodes",
@@ -172,10 +191,11 @@ public class WorkflowExecutor : ReceiveActor
         Guid executionId,
         WorkflowDefinition definition,
         Dictionary<string, object?> inputs,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ExecutionStartOptions? startOptions = null)
     {
         return Akka.Actor.Props.Create(
-            () => new WorkflowExecutor(executionId, definition, inputs, serviceProvider));
+            () => new WorkflowExecutor(executionId, definition, inputs, serviceProvider, startOptions));
     }
 
     /// <summary>
@@ -334,6 +354,31 @@ public class WorkflowExecutor : ReceiveActor
         _context = _context with { StartTime = Option<DateTimeOffset>.Some(now) };
         _executionTimer.Start();
 
+        QueueCreateExecutionRecord(now);
+    }
+
+    private void HandleExecutionRecordCreated(PersistenceExecutionCreated message)
+    {
+        _executionRecordReady = message.Success;
+
+        if (!message.Success)
+        {
+            _log.Warning(
+                "⚠️ Failed to persist execution start record for {ExecutionId}: {Error}. Continuing with in-memory execution~",
+                _executionId,
+                message.Error ?? "unknown error");
+        }
+
+        StartInitialNodes();
+    }
+
+    private void StartInitialNodes()
+    {
+        if (_context.State != ExecutionState.Running)
+        {
+            return;
+        }
+
         // Find and execute start nodes (nodes with no dependencies)
         var startNodes = GetStartNodes().ToList();
 
@@ -381,6 +426,7 @@ public class WorkflowExecutor : ReceiveActor
 
         // Gather inputs from workflow inputs and predecessor outputs
         var nodeInputs = GatherNodeInputs(nodeId);
+        _nodeInputs[nodeId] = new Dictionary<string, object?>(nodeInputs);
 
         // Update context: node → Running with timing~ 🔄
         var now = DateTimeOffset.UtcNow;
@@ -510,12 +556,36 @@ public class WorkflowExecutor : ReceiveActor
                     value);
                 _context = _context.WithVariable(name, value);
             }
+
+            QueuePersistVariableUpdates(nodeId, varUpdates);
         }
 
         _completedNodes = _completedNodes.Add(nodeId);
         _runningNodes = _runningNodes.Remove(nodeId);
         _nodeOutputs[nodeId] = new Dictionary<string, object?>(
             message.Outputs.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
+
+        var nodeStart = _context.NodeTimings.Find(nodeId)
+            .Bind(t => t.StartTime)
+            .IfNone(now.Add(-message.Duration));
+
+        var nodeInputs = _nodeInputs.TryGetValue(nodeId, out var capturedInputs)
+            ? new Dictionary<string, object?>(capturedInputs)
+            : null;
+
+        var nodeOutputs = message.Outputs
+            .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        QueueRecordNodeExecution(new NodeExecutionRecord(
+            ExecutionId: _executionId,
+            NodeId: nodeId,
+            State: NodeExecutionState.Completed,
+            StartedAt: nodeStart,
+            CompletedAt: now,
+            Inputs: nodeInputs,
+            Outputs: nodeOutputs,
+            Duration: message.Duration));
 
         // Clean up actor reference
         if (_nodeActors.TryGetValue(nodeId, out var actor))
@@ -524,6 +594,8 @@ public class WorkflowExecutor : ReceiveActor
             Context.Stop(actor);
             _nodeActors.Remove(nodeId);
         }
+
+        _nodeInputs.Remove(nodeId);
 
         // Check if workflow is complete
         if (IsWorkflowComplete())
@@ -603,6 +675,28 @@ public class WorkflowExecutor : ReceiveActor
         _failedNodes = _failedNodes.Add(nodeId);
         _runningNodes = _runningNodes.Remove(nodeId);
 
+        var nodeStart = _context.NodeTimings.Find(nodeId)
+            .Bind(t => t.StartTime)
+            .IfNone(now);
+
+        var nodeDuration = _context.NodeTimings.Find(nodeId)
+            .Bind(t => t.Duration)
+            .IfNone(_executionTimer.Elapsed);
+
+        var nodeInputs = _nodeInputs.TryGetValue(nodeId, out var capturedInputs)
+            ? new Dictionary<string, object?>(capturedInputs)
+            : null;
+
+        QueueRecordNodeExecution(new NodeExecutionRecord(
+            ExecutionId: _executionId,
+            NodeId: nodeId,
+            State: NodeExecutionState.Failed,
+            StartedAt: nodeStart,
+            CompletedAt: now,
+            Inputs: nodeInputs,
+            Error: error.Message,
+            Duration: nodeDuration));
+
         // Clean up actor reference
         if (_nodeActors.TryGetValue(nodeId, out var actor))
         {
@@ -610,6 +704,8 @@ public class WorkflowExecutor : ReceiveActor
             Context.Stop(actor);
             _nodeActors.Remove(nodeId);
         }
+
+        _nodeInputs.Remove(nodeId);
 
         // Get error handling configuration
         var nodeDef = GetNodeDefinition(nodeId);
@@ -874,6 +970,7 @@ public class WorkflowExecutor : ReceiveActor
         TransitionExecutionState(ExecutionState.Cancelled, now, "Cancelled by user");
         _context = _context with { EndTime = Option<DateTimeOffset>.Some(now) };
         _executionTimer.Stop();
+        QueueUpdateExecutionStatus(ExecutionState.Cancelled, now, "Cancelled by user");
 
         // Save final snapshot~ 💾
         SaveSnapshotAsync();
@@ -956,12 +1053,52 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void SaveSnapshotAsync()
     {
-        if (_stateStore != null)
+        if (_stateStore == null && _executionHistoryRepository == null)
         {
-            // Fire-and-forget — we don't block the actor for persistence
-            _ = _stateStore.SaveSnapshotAsync(_context);
-            _log.Debug("💾 Snapshot saved for execution {ExecutionId}", _executionId);
+            return;
         }
+
+        var snapshot = _context;
+
+        Task.Run(
+            async () =>
+            {
+                var errors = new List<string>();
+
+                if (_executionHistoryRepository != null
+                    && _executionRecordReady
+                    && snapshot.EndTime.IsSome)
+                {
+                    try
+                    {
+                        await _executionHistoryRepository.UpdateExecutionStatusAsync(
+                            _executionId,
+                            snapshot.State,
+                            snapshot.EndTime.Match(Some: x => (DateTimeOffset?)x, None: () => null),
+                            snapshot.Error.Match(Some: x => x, None: () => null)).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"execution history update failed: {ex.Message}");
+                    }
+                }
+
+                if (_stateStore != null)
+                {
+                    try
+                    {
+                        await _stateStore.SaveSnapshotAsync(snapshot).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"snapshot store save failed: {ex.Message}");
+                    }
+                }
+
+                return errors.Count == 0
+                    ? new PersistenceSnapshotSaved(true)
+                    : new PersistenceSnapshotSaved(false, string.Join(" | ", errors));
+            }).PipeTo(Self);
     }
 
     #endregion
@@ -1064,6 +1201,8 @@ public class WorkflowExecutor : ReceiveActor
             _completedNodes.Count,
             _definition.Nodes.Count);
 
+        QueueUpdateExecutionStatus(ExecutionState.Completed, now);
+
         // Save final snapshot~ 💾
         SaveSnapshotAsync();
 
@@ -1104,6 +1243,8 @@ public class WorkflowExecutor : ReceiveActor
             _executionId,
             _executionTimer.ElapsedMilliseconds,
             error.Message);
+
+        QueueUpdateExecutionStatus(ExecutionState.Failed, now, error.Message);
 
         // Save final snapshot~ 💾
         SaveSnapshotAsync();
@@ -1220,6 +1361,15 @@ public class WorkflowExecutor : ReceiveActor
         else
         {
             _log.Debug("⚠️ No state store registered — snapshots will be skipped");
+        }
+
+        if (_executionHistoryRepository != null)
+        {
+            _log.Debug("📊 Execution history repository available: {RepositoryType}", _executionHistoryRepository.GetType().Name);
+        }
+        else
+        {
+            _log.Debug("⚠️ No execution history repository registered — persistence integration disabled");
         }
 
         _lifecycleHooks.OnPreStart(CreateLifecycleContext());
@@ -1438,6 +1588,188 @@ public class WorkflowExecutor : ReceiveActor
             ActorType: nameof(WorkflowExecutor),
             Services: _serviceProvider);
     }
+
+    private void QueueCreateExecutionRecord(DateTimeOffset startedAt)
+    {
+        if (_executionHistoryRepository == null)
+        {
+            Self.Tell(new PersistenceExecutionCreated(true));
+            return;
+        }
+
+        var inputsCopy = new Dictionary<string, object?>(_workflowInputs);
+
+        Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await _executionHistoryRepository.CreateExecutionAsync(new ExecutionRecord(
+                        ExecutionId: _executionId,
+                        WorkflowId: _definition.Id,
+                        State: ExecutionState.Running,
+                        StartedAt: startedAt,
+                        Inputs: inputsCopy,
+                        TriggeredBy: _triggeredBy)).ConfigureAwait(false);
+
+                    return new PersistenceExecutionCreated(true);
+                }
+                catch (Exception ex)
+                {
+                    return new PersistenceExecutionCreated(false, ex.Message);
+                }
+            }).PipeTo(Self);
+    }
+
+    private void QueueRecordNodeExecution(NodeExecutionRecord nodeRecord)
+    {
+        if (_executionHistoryRepository == null || !_executionRecordReady)
+        {
+            return;
+        }
+
+        Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await _executionHistoryRepository.RecordNodeExecutionAsync(nodeRecord).ConfigureAwait(false);
+                    return new PersistenceNodeRecorded(nodeRecord.NodeId, true);
+                }
+                catch (Exception ex)
+                {
+                    return new PersistenceNodeRecorded(nodeRecord.NodeId, false, ex.Message);
+                }
+            }).PipeTo(Self);
+    }
+
+    private void QueuePersistVariableUpdates(string nodeId, HashMap<string, object?> updates)
+    {
+        if (_variableStore == null)
+        {
+            return;
+        }
+
+        var updatesCopy = updates
+            .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        Task.Run(
+            async () =>
+            {
+                try
+                {
+                    foreach (var (name, value) in updatesCopy)
+                    {
+                        if (_variableWriteMode is VariableWriteMode.Execution or VariableWriteMode.Dual)
+                        {
+                            await _variableStore.SetVariableAsync(VariableScope.ForExecution(_executionId), name, value)
+                                .ConfigureAwait(false);
+                        }
+
+                        if (_variableWriteMode is VariableWriteMode.Workflow or VariableWriteMode.Dual)
+                        {
+                            await _variableStore.SetVariableAsync(VariableScope.ForWorkflow(_definition.Id), name, value)
+                                .ConfigureAwait(false);
+                        }
+                    }
+
+                    return new PersistenceVariableUpdatesSaved(nodeId, true);
+                }
+                catch (Exception ex)
+                {
+                    return new PersistenceVariableUpdatesSaved(nodeId, false, ex.Message);
+                }
+            }).PipeTo(Self);
+    }
+
+    private void QueueUpdateExecutionStatus(ExecutionState state, DateTimeOffset? endTime = null, string? error = null)
+    {
+        if (_executionHistoryRepository == null || !_executionRecordReady)
+        {
+            return;
+        }
+
+        Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await _executionHistoryRepository.UpdateExecutionStatusAsync(
+                        _executionId,
+                        state,
+                        endTime,
+                        error).ConfigureAwait(false);
+
+                    return new PersistenceExecutionStatusUpdated(state, true);
+                }
+                catch (Exception ex)
+                {
+                    return new PersistenceExecutionStatusUpdated(state, false, ex.Message);
+                }
+            }).PipeTo(Self);
+    }
+
+    private void HandlePersistenceNodeRecorded(PersistenceNodeRecorded message)
+    {
+        if (!message.Success)
+        {
+            _log.Warning(
+                "⚠️ Failed to persist node execution record for node {NodeId} in execution {ExecutionId}: {Error}",
+                message.NodeId,
+                _executionId,
+                message.Error ?? "unknown error");
+        }
+    }
+
+    private void HandlePersistenceExecutionStatusUpdated(PersistenceExecutionStatusUpdated message)
+    {
+        if (!message.Success)
+        {
+            _log.Warning(
+                "⚠️ Failed to persist execution status {State} for {ExecutionId}: {Error}",
+                message.State,
+                _executionId,
+                message.Error ?? "unknown error");
+        }
+    }
+
+    private void HandlePersistenceSnapshotSaved(PersistenceSnapshotSaved message)
+    {
+        if (message.Success)
+        {
+            _log.Debug("💾 Snapshot persisted for execution {ExecutionId}", _executionId);
+        }
+        else
+        {
+            _log.Warning(
+                "⚠️ Snapshot persistence failed for execution {ExecutionId}: {Error}",
+                _executionId,
+                message.Error ?? "unknown error");
+        }
+    }
+
+    private void HandlePersistenceVariableUpdatesSaved(PersistenceVariableUpdatesSaved message)
+    {
+        if (!message.Success)
+        {
+            _log.Warning(
+                "⚠️ Failed to persist variable updates for node {NodeId} in execution {ExecutionId}: {Error}",
+                message.NodeId,
+                _executionId,
+                message.Error ?? "unknown error");
+        }
+    }
+
+    private sealed record PersistenceExecutionCreated(bool Success, string? Error = null);
+
+    private sealed record PersistenceNodeRecorded(string NodeId, bool Success, string? Error = null);
+
+    private sealed record PersistenceExecutionStatusUpdated(ExecutionState State, bool Success, string? Error = null);
+
+    private sealed record PersistenceSnapshotSaved(bool Success, string? Error = null);
+
+    private sealed record PersistenceVariableUpdatesSaved(string NodeId, bool Success, string? Error = null);
 
     #endregion
 }

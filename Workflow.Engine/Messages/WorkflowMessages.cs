@@ -68,11 +68,38 @@ public interface IWorkflowMessage
 /// <param name="WorkflowId">Unique identifier for the workflow definition.</param>
 /// <param name="Definition">The workflow definition containing nodes and connections.</param>
 /// <param name="Inputs">Initial input values for the workflow execution (immutable HashMap).</param>
+/// <param name="StartOptions">Optional execution start options (caller identity, variable write mode).</param>
 [MessagePackObject(keyAsPropertyName: true)]
 public record CreateWorkflowInstance(
     Guid WorkflowId,
     WorkflowDefinition Definition,
-    HashMap<string, object?> Inputs) : IWorkflowMessage;
+    HashMap<string, object?> Inputs,
+    ExecutionStartOptions? StartOptions = null) : IWorkflowMessage;
+
+/// <summary>
+/// Defines how variable updates emitted by modules should be persisted~ 💾.
+/// </summary>
+public enum VariableWriteMode
+{
+    /// <summary>Persist module variable updates to execution scope only.</summary>
+    Execution = 0,
+
+    /// <summary>Persist module variable updates to workflow scope only.</summary>
+    Workflow = 1,
+
+    /// <summary>Persist module variable updates to both execution and workflow scopes.</summary>
+    Dual = 2,
+}
+
+/// <summary>
+/// Optional settings provided when starting a workflow execution.
+/// </summary>
+/// <param name="CallerId">Identity of the API/internal caller used for execution audit fields.</param>
+/// <param name="VariableWriteMode">How variable updates are persisted. Defaults to execution scope.</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public record ExecutionStartOptions(
+    string? CallerId = null,
+    VariableWriteMode VariableWriteMode = VariableWriteMode.Execution);
 
 /// <summary>
 /// Response message containing the execution ID for a newly created workflow instance.

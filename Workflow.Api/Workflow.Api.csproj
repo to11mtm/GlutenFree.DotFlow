@@ -22,6 +22,10 @@
     <ItemGroup>
         <ProjectReference Include="..\Workflow.Engine\Workflow.Engine.csproj" />
         <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Postgres\Workflow.Persistence.Postgres.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Nats\Workflow.Persistence.Nats.csproj" />
     </ItemGroup>
 
     <ItemGroup>

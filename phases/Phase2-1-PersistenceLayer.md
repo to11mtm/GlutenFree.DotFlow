@@ -520,32 +520,35 @@ Providers are **composable**: you can use PostgreSQL for workflows + execution h
 
 ### Tasks:
 
-- [ ] **Update `WorkflowExecutor` to use `IExecutionHistoryRepository`** ⚡
-  - [ ] Resolve `IExecutionHistoryRepository` from `IServiceProvider`
-  - [ ] **All repository calls are awaited** (not fire-and-forget) to guarantee reliability
-  - [ ] Use Akka `PipeToSelf` pattern: wrap each async repo call in `Task.Run(...).PipeTo(Self)` to avoid blocking the actor mailbox
-  - [ ] On `StartExecution`: call `CreateExecutionAsync` (PipeTo self → handle `ExecutionCreated` internal message)
-  - [ ] On `NodeExecutionCompleted`: call `RecordNodeExecutionAsync`
-  - [ ] On `NodeExecutionFailed`: call `RecordNodeExecutionAsync` with error
-  - [ ] On `CompleteWorkflow`: call `UpdateExecutionStatusAsync(Completed)`
-  - [ ] On `FailWorkflow`: call `UpdateExecutionStatusAsync(Failed)` with error
-  - [ ] Fall back gracefully if repository is null (backwards compat)
+- [x] **Update `WorkflowExecutor` to use `IExecutionHistoryRepository`** ⚡
+  - [x] Resolve `IExecutionHistoryRepository` from `IServiceProvider`
+  - [x] **All repository calls are awaited** (not fire-and-forget) to guarantee reliability
+  - [x] Use Akka `PipeToSelf` pattern: wrap each async repo call in `Task.Run(...).PipeTo(Self)` to avoid blocking the actor mailbox
+  - [x] On `StartExecution`: call `CreateExecutionAsync` (PipeTo self → handle `ExecutionCreated` internal message)
+  - [x] On `NodeExecutionCompleted`: call `RecordNodeExecutionAsync`
+  - [x] On `NodeExecutionFailed`: call `RecordNodeExecutionAsync` with error
+  - [x] On `CompleteWorkflow`: call `UpdateExecutionStatusAsync(Completed)`
+  - [x] On `FailWorkflow`: call `UpdateExecutionStatusAsync(Failed)` with error
+  - [x] Fall back gracefully if repository is null (backwards compat)
 
-- [ ] **Update `WorkflowSupervisor` to use `IWorkflowRepository`** ️
-  - [ ] On `CreateWorkflowInstance`: optionally validate against stored definition
-  - [ ] Fall back to provided definition if repository is null
+- [x] **Update `WorkflowSupervisor` to use `IWorkflowRepository`** ️
+  - [x] On `CreateWorkflowInstance`: optionally validate against stored definition
+  - [x] Fall back to provided definition if repository is null
 
-- [ ] **Update `SaveSnapshotAsync` in `WorkflowExecutor`** 
-  - [ ] Currently writes to `InMemoryExecutionStateStore`
-  - [ ] Bridge to `IExecutionHistoryRepository` when available
-  - [ ] Keep `InMemoryExecutionStateStore` as fallback
+- [x] **Update `SaveSnapshotAsync` in `WorkflowExecutor`** 
+  - [x] Currently writes to `InMemoryExecutionStateStore`
+  - [x] Bridge to `IExecutionHistoryRepository` when available
+  - [x] Keep `InMemoryExecutionStateStore` as fallback
+  - [ ] Follow-up hardening: avoid duplicate terminal status persistence when completion/failure already queued a status update
+  - [ ] Follow-up hardening: treat benign/idempotent terminal update conflicts (including null-result provider responses) as debug/info, not warning
+  - [ ] Follow-up hardening: keep warning/error logs only for actionable data-loss paths, with structured fields (`ExecutionId`, `State`, provider type, exception type)
 
-- [ ] **Update DI registration in `Workflow.Api`** 
-  - [ ] Wire `IPersistenceProvider` from appsettings `Persistence:Provider`
-  - [ ] Support `"sqlite"`, `"postgres"`, `"nats"`, `"composite"` values
-  - [ ] For `"sqlite"`: use `"Data Source=:memory:;Cache=Shared;Mode=Memory"` when `ConnectionString` is `":memory:"`
-  - [ ] For `"composite"`: read `Persistence:Composite:Workflows`, `Persistence:Composite:Variables`, etc.
-  - [ ] Register all repositories from the selected provider(s)
+- [x] **Update DI registration in `Workflow.Api`** 
+  - [x] Wire `IPersistenceProvider` from appsettings `Persistence:Provider`
+  - [x] Support `"sqlite"`, `"postgres"`, `"nats"`, `"composite"` values
+  - [x] For `"sqlite"`: use `"Data Source=:memory:;Cache=Shared;Mode=Memory"` when `ConnectionString` is `":memory:"`
+  - [x] For `"composite"`: read `Persistence:Composite:Workflows`, `Persistence:Composite:Variables`, etc.
+  - [x] Register all repositories from the selected provider(s)
   - [ ] Example appsettings for composite:
     ```json
     "Persistence": {
@@ -558,14 +561,25 @@ Providers are **composable**: you can use PostgreSQL for workflows + execution h
     }
     ```
 
-**Tests (~10):** → `Workflow.Tests/Engine/PersistenceIntegrationTests.cs`
+- [ ] **Follow-up note closure (docs + API handoff)** 🔁
+  - [ ] Promote the composite `Persistence` example into API docs/config guidance, then mark the DI follow-up example item complete.
+  - [ ] Add explicit API identity flow for execution start: `X-Caller-Id` override → claims (`NameIdentifier`/`sub`) → `"system"` fallback.
+  - [ ] Pass `ExecutionStartOptions` from execution start endpoints into `CreateWorkflowInstance` (`CallerId` + runtime `VariableWriteMode`).
+  - [ ] Ensure `POST /api/v1/workflows/{id}/execute` returns the persisted execution ID from the repository-backed flow.
+  - [ ] Cross-reference endpoint delivery ownership to Phase 2.7 so 2.1.5 remains persistence integration focused.
+  - [ ] Add a short runbook note for snapshot-bridge outcomes: success vs benign duplicate terminal update vs true persistence regression.
+
+**Tests (6/6 passing):** → `Workflow.Tests/Engine/PersistenceIntegrationTests.cs` ✅
 > Uses `SqlitePersistenceProvider` with `:memory:` connection — **no Docker required!**
-- [ ] Engine with SQLite `:memory:` provider: workflow runs + execution record created
-- [ ] Engine with SQLite `:memory:` provider: node completions recorded
-- [ ] Engine with SQLite `:memory:` provider: failed workflow records error
-- [ ] Engine without provider: runs correctly (null provider fallback)
-- [ ] Execution history captures correct node states
-- [ ] Execution history captures variable updates per node
+- [x] Engine with SQLite `:memory:` provider: workflow runs + execution record created
+- [x] Engine with SQLite `:memory:` provider: node completions recorded
+- [x] Engine with SQLite `:memory:` provider: failed workflow records error
+- [x] Engine without provider: runs correctly (null provider fallback)
+- [x] Execution history captures correct node states
+- [x] Execution history captures variable updates per node
+- [ ] Follow-up hardening test: completed execution does not emit snapshot-bridge warning when terminal status already persisted
+- [ ] Follow-up hardening test: null-result/not-found terminal update path is handled without warning spam
+- [ ] Follow-up hardening test: terminal persisted state remains correct when snapshot fallback is used
 
 ---
 
@@ -578,7 +592,7 @@ Providers are **composable**: you can use PostgreSQL for workflows + execution h
 - [ ] `PostgresPersistenceProvider` — production-grade with Linq2Db + migrations
 - [ ] `NatsPersistenceProvider` — lightweight cloud-native option
 - [ ] `S3BlobStore` — large object storage
-- [ ] Engine (`WorkflowExecutor`) wired to `IExecutionHistoryRepository`
+- [x] Engine (`WorkflowExecutor`) wired to `IExecutionHistoryRepository`
 - [ ] ~118 unit + integration tests written and passing (revised up from ~107)
 - [ ] All providers implement full interface contract
 - [ ] DI registration for each provider

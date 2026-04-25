@@ -9,6 +9,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
         <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
     </ItemGroup>
 
     <ItemGroup>

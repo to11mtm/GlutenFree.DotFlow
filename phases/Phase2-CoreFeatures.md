@@ -50,68 +50,68 @@ Phase 2 builds upon the foundation with critical production features:
 
 > 📋 **See detailed sub-phases:** [Phase2-1-PersistenceLayer.md](./Phase2-1-PersistenceLayer.md)
 
-> **Sub-phases:** 2.1.0 Abstractions · 2.1.1 In-Memory · 2.1.2 PostgreSQL · 2.1.3 NATS KV · 2.1.4 S3 Blob · 2.1.5 Engine Integration
-> **Estimated tests:** ~107 | **New projects:** Workflow.Persistence, Workflow.Persistence.Postgres, Workflow.Persistence.Nats, Workflow.Persistence.S3
+> **Sub-phases:** 2.1.0 Abstractions · 2.1.1 SQLite · 2.1.2 PostgreSQL · 2.1.3 NATS KV · 2.1.4 S3 Blob · 2.1.5 Engine Integration
+> **Estimated tests:** ~118 | **New projects:** Workflow.Persistence, Workflow.Persistence.Sqlite, Workflow.Persistence.Postgres, Workflow.Persistence.Nats, Workflow.Persistence.S3
 
 **Tasks:**
-- [ ] **Implement pluggable persistence interface** 🔌
-    - [ ] Define `IPersistenceProvider` base interface
-        - [ ] Add `InitializeAsync()` method
-        - [ ] Add `HealthCheckAsync()` method
-        - [ ] Add `DisposeAsync()` method
-        - [ ] Add configuration properties
-    - [ ] Define persistence operations interfaces
-        - [ ] `IWorkflowRepository` - Workflow CRUD operations
-        - [ ] `IExecutionHistoryRepository` - Execution tracking
-        - [ ] `IVariableStore` - Variable storage with history
-        - [ ] `IBlobStore` - Large object storage
-    - [ ] Create provider factory pattern
-        - [ ] `IPersistenceProviderFactory`
-        - [ ] Registration mechanism for providers
-        - [ ] Configuration-based provider selection
-    - [ ] Add provider lifecycle management
-    - [ ] Implement provider health monitoring
+- [x] **Implement pluggable persistence interface** 🔌
+    - [x] Define `IPersistenceProvider` base interface
+        - [x] Add `InitializeAsync()` method
+        - [x] Add `HealthCheckAsync()` method
+        - [x] Add `DisposeAsync()` method
+        - [x] Add configuration properties
+    - [x] Define persistence operations interfaces
+        - [x] `IWorkflowRepository` - Workflow CRUD operations
+        - [x] `IExecutionHistoryRepository` - Execution tracking
+        - [x] `IVariableStore` - Variable storage with history
+        - [x] `IBlobStore` - Large object storage
+    - [x] Create provider factory pattern
+        - [x] `IPersistenceProviderFactory`
+        - [x] Registration mechanism for providers
+        - [x] Configuration-based provider selection
+    - [x] Add provider lifecycle management
+    - [x] Implement provider health monitoring
 
 - [ ] **Create PostgreSQL persistence provider (Linq2Db)** 🐘
-    - [ ] Install required NuGet packages
-        - [ ] `linq2db`
-        - [ ] `Npgsql`
-        - [ ] `FluentMigrator` for migrations
+    - [x] Install required NuGet packages
+        - [x] `linq2db`
+        - [x] `Npgsql`
+        - [x] `FluentMigrator` for migrations
     - [ ] Design database schema
-        - [ ] Create `workflows` table
-            - [ ] `id` (uuid, primary key)
-            - [ ] `name` (varchar, indexed)
-            - [ ] `description` (text)
-            - [ ] `definition` (jsonb) - Full workflow definition
-            - [ ] `version` (varchar)
-            - [ ] `is_active` (boolean)
-            - [ ] `created_at` (timestamptz)
-            - [ ] `updated_at` (timestamptz)
-            - [ ] `tags` (text array)
-            - [ ] `metadata` (jsonb)
-        - [ ] Create `executions` table
-            - [ ] `id` (uuid, primary key)
-            - [ ] `workflow_id` (uuid, foreign key)
-            - [ ] `status` (enum: pending, running, completed, failed, cancelled)
-            - [ ] `started_at` (timestamptz)
-            - [ ] `completed_at` (timestamptz, nullable)
-            - [ ] `inputs` (jsonb)
-            - [ ] `outputs` (jsonb)
-            - [ ] `error` (jsonb, nullable)
-            - [ ] `triggered_by` (varchar)
-            - [ ] Create indexes on workflow_id, status, started_at
-        - [ ] Create `execution_nodes` table (node-level tracking)
-            - [ ] `id` (bigserial, primary key)
-            - [ ] `execution_id` (uuid, foreign key)
-            - [ ] `node_id` (varchar)
-            - [ ] `status` (enum)
-            - [ ] `started_at` (timestamptz)
-            - [ ] `completed_at` (timestamptz, nullable)
-            - [ ] `inputs` (jsonb)
-            - [ ] `outputs` (jsonb)
-            - [ ] `error` (jsonb, nullable)
-            - [ ] `duration_ms` (int)
-            - [ ] Create index on execution_id
+        - [x] Create `workflows` table
+            - [x] `id` (uuid, primary key)
+            - [x] `name` (varchar, indexed)
+            - [x] `description` (text)
+            - [x] `definition` (jsonb) - Full workflow definition
+            - [x] `version` (varchar)
+            - [x] `is_active` (boolean)
+            - [x] `created_at` (timestamptz)
+            - [x] `updated_at` (timestamptz)
+            - [x] `tags` (text array)
+            - [x] `metadata` (jsonb)
+        - [x] Create `executions` table
+            - [x] `id` (uuid, primary key)
+            - [x] `workflow_id` (uuid, foreign key)
+            - [x] `status` (enum: pending, running, completed, failed, cancelled)
+            - [x] `started_at` (timestamptz)
+            - [x] `completed_at` (timestamptz, nullable)
+            - [x] `inputs` (jsonb)
+            - [x] `outputs` (jsonb)
+            - [x] `error` (jsonb, nullable)
+            - [x] `triggered_by` (varchar)
+            - [x] Create indexes on workflow_id, status, started_at
+        - [x] Create `execution_nodes` table (node-level tracking)
+            - [x] `id` (bigserial, primary key)
+            - [x] `execution_id` (uuid, foreign key)
+            - [x] `node_id` (varchar)
+            - [x] `status` (enum)
+            - [x] `started_at` (timestamptz)
+            - [x] `completed_at` (timestamptz, nullable)
+            - [x] `inputs` (jsonb)
+            - [x] `outputs` (jsonb)
+            - [x] `error` (jsonb, nullable)
+            - [x] `duration_ms` (int)
+            - [x] Create index on execution_id
         - [ ] Create `variables` table
             - [ ] `id` (bigserial, primary key)
             - [ ] `workflow_id` (uuid, nullable) - null for global
@@ -126,38 +126,38 @@ Phase 2 builds upon the foundation with critical production features:
         - [ ] Create `variable_history` table
             - [ ] Track all changes to variables over time
             - [ ] Include old value, new value, changed_at, changed_by
-    - [ ] Implement FluentMigrator migrations
-        - [ ] Migration_001_InitialSchema
-        - [ ] Migration_002_AddIndexes
-        - [ ] Add migration runner
+    - [x] Implement FluentMigrator migrations
+        - [x] Migration_001_InitialSchema
+        - [x] Migration_002_AddIndexes
+        - [x] Add migration runner
         - [ ] Test rollback functionality
-    - [ ] Implement Linq2Db data context
-        - [ ] Create `WorkflowDataConnection` class
-        - [ ] Map tables to entities
-        - [ ] Configure connection string
+    - [x] Implement Linq2Db data context
+        - [x] Create `WorkflowDataConnection` class
+        - [x] Map tables to entities
+        - [x] Configure connection string
         - [ ] Add connection pooling
-    - [ ] Implement `PostgresWorkflowRepository`
-        - [ ] Implement `CreateAsync(WorkflowDefinition)`
-        - [ ] Implement `UpdateAsync(Guid id, WorkflowDefinition)`
-        - [ ] Implement `DeleteAsync(Guid id)`
-        - [ ] Implement `GetByIdAsync(Guid id)`
-        - [ ] Implement `GetAllAsync(filter, pagination)`
-        - [ ] Implement `SearchAsync(query)`
+    - [x] Implement `PostgresWorkflowRepository`
+        - [x] Implement `CreateAsync(WorkflowDefinition)`
+        - [x] Implement `UpdateAsync(Guid id, WorkflowDefinition)`
+        - [x] Implement `DeleteAsync(Guid id)`
+        - [x] Implement `GetByIdAsync(Guid id)`
+        - [x] Implement `GetAllAsync(filter, pagination)`
+        - [x] Implement `SearchAsync(query)`
         - [ ] Add optimistic concurrency handling
-    - [ ] Implement `PostgresExecutionHistoryRepository`
-        - [ ] Implement `CreateExecutionAsync(Execution)`
-        - [ ] Implement `UpdateExecutionStatusAsync(Guid id, status)`
-        - [ ] Implement `GetExecutionAsync(Guid id)`
-        - [ ] Implement `GetExecutionsForWorkflowAsync(Guid workflowId)`
-        - [ ] Implement `RecordNodeExecutionAsync(NodeExecution)`
-        - [ ] Implement query methods with filtering
-        - [ ] Add pagination support
-    - [ ] Implement `PostgresVariableStore`
-        - [ ] Implement `SetVariableAsync(scope, name, value)`
-        - [ ] Implement `GetVariableAsync(scope, name, version?)`
-        - [ ] Implement `GetVariableHistoryAsync(scope, name)`
-        - [ ] Implement `DeleteVariableAsync(scope, name)`
-        - [ ] Support versioned reads (time-travel queries)
+    - [x] Implement `PostgresExecutionHistoryRepository`
+        - [x] Implement `CreateExecutionAsync(Execution)`
+        - [x] Implement `UpdateExecutionStatusAsync(Guid id, status)`
+        - [x] Implement `GetExecutionAsync(Guid id)`
+        - [x] Implement `GetExecutionsForWorkflowAsync(Guid workflowId)`
+        - [x] Implement `RecordNodeExecutionAsync(NodeExecution)`
+        - [x] Implement query methods with filtering
+        - [x] Add pagination support
+    - [x] Implement `PostgresVariableStore`
+        - [x] Implement `SetVariableAsync(scope, name, value)`
+        - [x] Implement `GetVariableAsync(scope, name, version?)`
+        - [x] Implement `GetVariableHistoryAsync(scope, name)`
+        - [x] Implement `DeleteVariableAsync(scope, name)`
+        - [x] Support versioned reads (time-travel queries)
     - [ ] Add transaction support
     - [ ] Implement retry logic for transient failures
     - [ ] Add query performance optimizations
@@ -174,10 +174,10 @@ Phase 2 builds upon the foundation with critical production features:
         - [ ] Allow rollback to previous version
 
 - [ ] **Implement execution history storage** 📊
-    - [ ] Store execution start/end times
-    - [ ] Store execution inputs/outputs
-    - [ ] Store node-level execution details
-    - [ ] Store error information with stack traces
+    - [x] Store execution start/end times
+    - [x] Store execution inputs/outputs
+    - [x] Store node-level execution details
+    - [x] Store error information with stack traces
     - [ ] Implement execution log aggregation
     - [ ] Add retention policies
         - [ ] Archive old executions
@@ -187,29 +187,29 @@ Phase 2 builds upon the foundation with critical production features:
         - [ ] Create replay functionality
 
 - [ ] **Add variable persistence with historical tracking** 🕰️
-    - [ ] Implement versioned variable storage
-    - [ ] Track all changes with timestamps
-    - [ ] Support point-in-time queries
-    - [ ] Implement variable scopes
-        - [ ] Global scope (across all workflows)
-        - [ ] Workflow scope (shared in workflow)
-        - [ ] Execution scope (single execution)
+    - [x] Implement versioned variable storage
+    - [x] Track all changes with timestamps
+    - [x] Support point-in-time queries
+    - [x] Implement variable scopes
+        - [x] Global scope (across all workflows)
+        - [x] Workflow scope (shared in workflow)
+        - [x] Execution scope (single execution)
     - [ ] Add variable expiration/TTL
     - [ ] Implement variable change notifications
     - [ ] Add audit trail for variable changes
 
 - [ ] **Implement NATS KV persistence provider** 🚀
-    - [ ] Install `NATS.Client` NuGet package
-    - [ ] Implement `NatsKVPersistenceProvider`
-    - [ ] Configure NATS connection
-        - [ ] Connection string
-        - [ ] Authentication
-        - [ ] TLS configuration
-    - [ ] Implement key-value operations
-        - [ ] Put (create/update)
-        - [ ] Get (with optional revision)
-        - [ ] Delete
-        - [ ] Watch (for changes)
+    - [x] Install `NATS.Net` NuGet package
+    - [x] Implement `NatsPersistenceProvider`
+    - [x] Configure NATS connection
+        - [x] Connection string
+        - [x] Authentication
+        - [x] TLS configuration
+    - [x] Implement key-value operations
+        - [x] Put (create/update)
+        - [x] Get (with optional revision)
+        - [x] Delete
+        - [x] Watch (for changes)
     - [ ] Implement workflow storage in KV buckets
         - [ ] Create bucket: `workflows`
         - [ ] Store as JSON with key pattern: `workflow:{id}`
@@ -225,25 +225,25 @@ Phase 2 builds upon the foundation with critical production features:
     - [ ] Add retry logic
 
 - [ ] **Implement S3 persistence provider (for large blobs)** ☁️
-    - [ ] Install `AWSSDK.S3` NuGet package
-    - [ ] Implement `S3PersistenceProvider`
-    - [ ] Configure S3 client
-        - [ ] Access key / Secret key
-        - [ ] Region
-        - [ ] Bucket name
-        - [ ] Endpoint URL (for S3-compatible services)
-    - [ ] Implement blob storage operations
-        - [ ] `PutObjectAsync` - Upload large data
-        - [ ] `GetObjectAsync` - Download data
-        - [ ] `DeleteObjectAsync` - Remove data
-        - [ ] `GeneratePresignedUrlAsync` - Temporary access URLs
+    - [x] Install `AWSSDK.S3` NuGet package
+    - [x] Implement `S3PersistenceProvider`
+    - [x] Configure S3 client
+        - [x] Access key / Secret key
+        - [x] Region
+        - [x] Bucket name
+        - [x] Endpoint URL (for S3-compatible services)
+    - [x] Implement blob storage operations
+        - [x] `PutObjectAsync` - Upload large data
+        - [x] `GetObjectAsync` - Download data
+        - [x] `DeleteObjectAsync` - Remove data
+        - [x] `GeneratePresignedUrlAsync` - Temporary access URLs
     - [ ] Define key patterns
         - [ ] Workflows: `workflows/{id}/definition.json`
         - [ ] Executions: `executions/{id}/data.json`
         - [ ] Large outputs: `executions/{id}/nodes/{nodeId}/output.bin`
         - [ ] Logs: `executions/{id}/logs/{timestamp}.log`
-    - [ ] Implement multipart upload for large files
-    - [ ] Add content-type detection
+    - [x] Implement multipart upload for large files
+    - [x] Add content-type detection
     - [ ] Implement server-side encryption
     - [ ] Add lifecycle policies
         - [ ] Transition to Glacier after 90 days
@@ -287,50 +287,50 @@ Phase 2 builds upon the foundation with critical production features:
     - [ ] Test configuration validation
 
 - [ ] **PostgreSQL integration tests (with TestContainers)** 🐘
-    - [ ] Setup PostgreSQL container for tests
-    - [ ] Test workflow CRUD operations
-        - [ ] Create workflow
-        - [ ] Read workflow by ID
-        - [ ] Update workflow
-        - [ ] Delete workflow
-        - [ ] List all workflows
-        - [ ] Search workflows
-    - [ ] Test execution history operations
-        - [ ] Create execution record
-        - [ ] Update execution status
-        - [ ] Record node executions
-        - [ ] Query execution history
-        - [ ] Filter by date range
-        - [ ] Pagination
-    - [ ] Test variable operations
-        - [ ] Set variable (create)
-        - [ ] Get variable (latest version)
-        - [ ] Get variable (specific version)
-        - [ ] Get variable history
-        - [ ] Delete variable
-    - [ ] Test concurrent operations
+    - [x] Setup PostgreSQL container for tests
+    - [x] Test workflow CRUD operations
+        - [x] Create workflow
+        - [x] Read workflow by ID
+        - [x] Update workflow
+        - [x] Delete workflow
+        - [x] List all workflows
+        - [x] Search workflows
+    - [x] Test execution history operations
+        - [x] Create execution record
+        - [x] Update execution status
+        - [x] Record node executions
+        - [x] Query execution history
+        - [x] Filter by date range
+        - [x] Pagination
+    - [x] Test variable operations
+        - [x] Set variable (create)
+        - [x] Get variable (latest version)
+        - [x] Get variable (specific version)
+        - [x] Get variable history
+        - [x] Delete variable
+    - [x] Test concurrent operations
     - [ ] Test transaction rollback
     - [ ] Test connection pool exhaustion
 
 - [ ] **NATS KV integration tests** 🚀
-    - [ ] Setup NATS container for tests
-    - [ ] Test KV bucket operations
-    - [ ] Test workflow storage/retrieval
-    - [ ] Test variable versioning
-    - [ ] Test watch functionality
+    - [x] Setup NATS container for tests
+    - [x] Test KV bucket operations
+    - [x] Test workflow storage/retrieval
+    - [x] Test variable versioning
+    - [x] Test watch functionality
     - [ ] Test connection resilience
 
 - [ ] **S3 integration tests** ☁️
-    - [ ] Setup MinIO container for tests (S3-compatible)
-    - [ ] Test object upload/download
-    - [ ] Test presigned URL generation
-    - [ ] Test large file upload (multipart)
-    - [ ] Test object deletion
+    - [x] Setup MinIO container for tests (S3-compatible)
+    - [x] Test object upload/download
+    - [x] Test presigned URL generation
+    - [x] Test large file upload (multipart)
+    - [x] Test object deletion
     - [ ] Test lifecycle policies
 
 - [ ] **Historical tracking tests** 🕰️
-    - [ ] Test variable version tracking
-    - [ ] Test point-in-time queries
+    - [x] Test variable version tracking
+    - [x] Test point-in-time queries
     - [ ] Test history retention
     - [ ] Test audit trail completeness
 
@@ -352,6 +352,11 @@ Phase 2 builds upon the foundation with critical production features:
 ---
 
 ### 2.2 Advanced Flow Control (Week 9-10)
+
+> 📋 **See detailed sub-phases:** [Phase2-2-AdvancedFlowControl.md](./Phase2-2-AdvancedFlowControl.md)
+
+> **Sub-phases:** 2.2.0 Engine Prep · 2.2.1 Conditional/Switch · 2.2.2 Loops · 2.2.3 Parallel + Fan-out/in · 2.2.4 Try/Catch · 2.2.5 Expression Evaluator · 2.2.6 E2E Demo
+> **Estimated tests:** ~76 | **New modules:** condition, switch, foreach, while, break, continue, parallel, fanout, fanin, trycatch, throw
 
 **Tasks:**
 - [ ] **Implement conditional branching (if/else)** 🔀
@@ -1749,6 +1754,8 @@ Phase 2 builds upon the foundation with critical production features:
     - [ ] Implement POST /api/v1/workflows/{id}/execute
         - [ ] Start workflow execution
         - [ ] Accept input parameters
+        - [ ] Resolve caller identity using `X-Caller-Id` override → claims (`NameIdentifier`/`sub`) → `"system"` fallback
+        - [ ] Pass `ExecutionStartOptions` (`CallerId`, `VariableWriteMode`) to `CreateWorkflowInstance`
         - [ ] Return execution ID
         - [ ] Return 202 Accepted
     - [ ] Implement POST /api/v1/workflows/execute/{name}
@@ -1772,10 +1779,13 @@ Phase 2 builds upon the foundation with critical production features:
         - [ ] Return execution result
     - [ ] Add comprehensive tests
         - [ ] Test async execution
+        - [ ] Test execution start persists `TriggeredBy` from caller identity resolution
+        - [ ] Test runtime `VariableWriteMode` maps to expected variable scope writes
         - [ ] Test sync execution
         - [ ] Test status query
         - [ ] Test cancel execution
         - [ ] Test list executions
+    - [ ] Reuse Phase 2.1.5 persistence wiring (`IExecutionHistoryRepository` / `IVariableStore`) for execution creation and status reads
 
 - [ ] **Create module schema DTO layer** 📐
   - [ ] `ModuleSchemaDto` record — serializable version of `ModuleSchema`
