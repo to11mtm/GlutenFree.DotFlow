@@ -176,6 +176,11 @@ public sealed class NatsVariableStore : IVariableStore
 
     // ── Data Helpers ──────────────────────────────────────────────────────────
 
+    private static bool IsNotFoundOrDeleted(Exception ex)
+    {
+	    return ex is NatsKVKeyNotFoundException or NatsKVKeyDeletedException;
+    }
+
     private async Task<VariableEntry?> GetLatestEntryAsync(
         string key,
         VariableScope scope,
@@ -184,14 +189,16 @@ public sealed class NatsVariableStore : IVariableStore
     {
         try
         {
-            var entry = await _store.GetEntryAsync<string>(key, cancellationToken: ct).ConfigureAwait(false);
+            var entry = await _store.TryGetEntryAsync<string>(key, cancellationToken: ct).ConfigureAwait(false);
 
-            if (entry.Operation != NatsKVOperation.Put || entry.Value is null)
+            if ((entry.Success &&  entry.Value.Operation != NatsKVOperation.Put)
+                || entry.Value.Value is null
+                || (entry.Success == false && IsNotFoundOrDeleted(entry.Error)))
             {
                 return null;
             }
 
-            var doc = NatsJsonHelper.Deserialize<NatsVariableDocument>(entry.Value);
+            var doc = NatsJsonHelper.Deserialize<NatsVariableDocument>(entry.Value.Value);
             return doc is null ? null : MapToEntry(doc, scope, name);
         }
         catch (NatsKVKeyNotFoundException)

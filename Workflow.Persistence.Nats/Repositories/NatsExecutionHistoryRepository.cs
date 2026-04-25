@@ -136,7 +136,7 @@ public sealed class NatsExecutionHistoryRepository : IExecutionHistoryRepository
         // CopilotNote: Key = {executionId}:{nodeId} — this is an upsert (Put always wins)~ 🔄
         var key = $"{nodeRecord.ExecutionId}-{nodeRecord.NodeId}";
 
-	    await _nodeStore.PutAsync(key, NatsJsonHelper.Serialize(nodeRecord), cancellationToken: ct)
+        await _nodeStore.PutAsync(key, NatsJsonHelper.Serialize(nodeRecord), cancellationToken: ct)
             .ConfigureAwait(false);
     }
 
@@ -170,6 +170,10 @@ public sealed class NatsExecutionHistoryRepository : IExecutionHistoryRepository
                 }
             }
             catch (NatsKVKeyNotFoundException)
+            {
+                // Key was deleted between listing and reading — skip it~ 🙈
+            }
+            catch (NatsKVKeyDeletedException)
             {
                 // Key was deleted between listing and reading — skip it~ 🙈
             }

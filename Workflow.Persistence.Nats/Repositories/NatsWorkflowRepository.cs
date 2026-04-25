@@ -241,29 +241,35 @@ public sealed class NatsWorkflowRepository : IWorkflowRepository
 
     // ── Private Helpers ───────────────────────────────────────────────────────
 
+    private static bool IsNotFoundOrDeleted(Exception ex)
+    {
+        return ex is NatsKVKeyNotFoundException or NatsKVKeyDeletedException;
+    }
+
     /// <summary>Tries to load and deserialise a workflow document by key~ 🔍.</summary>
     private async Task<NatsWorkflowDocument?> GetDocumentAsync(string key, CancellationToken ct)
     {
-	    // Note for Copilot: Should we be using TryGetEntryAsync here, using the result from that to bubble up?
-	    //   Case that comes to mind is Purging deletes keyes, which causes a NatsKVKeyDeletedException, we should handle that
-	    //   and return null instead of throwing.
-	    //   But also we should give internal callers more control over the exception types as needed.
-        try
-        {
-            var entry = await _store.GetEntryAsync<string>(key, cancellationToken: ct).ConfigureAwait(false);
+        // Note for Copilot: Should we be using TryGetEntryAsync here, using the result from that to bubble up?
+        //   Case that comes to mind is Purging deletes keyes, which causes a NatsKVKeyDeletedException, we should handle that
+        //   and return null instead of throwing.
+        //   But also we should give internal callers more control over the exception types as needed.
 
-            // CopilotNote: operation != Put means the key was deleted/purged~ 🗑️
-            if (entry.Operation != NatsKVOperation.Put || entry.Value is null)
-            {
-                return null;
-            }
+        var entry = await _store.TryGetEntryAsync<string>(key, cancellationToken: ct).ConfigureAwait(false);
+        // var entry = await _store.GetEntryAsync<string>(key, cancellationToken: ct).ConfigureAwait(false);
 
-            return NatsJsonHelper.Deserialize<NatsWorkflowDocument>(entry.Value);
-        }
-        catch (NatsKVKeyNotFoundException)
+        if (entry.Value.Operation != NatsKVOperation.Put
+            || (entry.Success && entry.Value.Value is null)
+            || (entry.Success == false && IsNotFoundOrDeleted(entry.Error)))
         {
             return null;
         }
+
+        if (!entry.Success)
+        {
+            throw entry.Error;
+        }
+
+        return NatsJsonHelper.Deserialize<NatsWorkflowDocument>(entry.Value.Value);
     }
 
     /// <summary>Loads all workflow documents from the KV bucket~ 📦.</summary>
