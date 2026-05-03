@@ -32,8 +32,8 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 - [X] **Q7 Expression engine choice:** ~~DynamicExpresso (battle-tested, MIT) vs in-house mini-parser (zero deps, fewer features).~~ **Resolved: Jint (JS/ES2020, BSD-2)** — preferred over DynamicExpresso because it ships a first-class `EvaluateAsync(script, ct)` with native `CancellationToken` support, full JS `async/await` + `Promise` semantics inside expressions, and richer built-in array/string transforms (`map`, `filter`, `reduce`, `?.`, `??`) with no helper registration needed. DynamicExpresso remains available as a lighter-weight fallback behind the same `IExpressionEvaluator` interface. See full analysis: [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md)~
 - [x] **Q8 Loop-body addressing:** ~~ports only vs explicit RegionId~~ **Resolved: Hybrid in 2.2** — ports drive execution (SubGraphExecutor gets entry node from `loopBody` connection, engine ignores `regionId` entirely), and `NodeDefinition` gains an optional `regionId?` hint field populated by author tooling / designer for future bounding-box rendering. Zero engine complexity added; schema is forward-compatible with Phase 3 visual designer. See full breakdown + diagrams: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md)~
-- [ ] **Q9 Cancellation semantics for parallel/loop:** when one branch fails with `failFast: true`, do siblings get a cooperative `CancellationToken` cancel, or hard kill? Recommend cooperative cancel + grace timeout.
-- [ ] **Q10 Switch module scope:** include `builtin.switch` in 2.2 (multi-way) or defer to 2.2.x add-on? Recommend including, since it shares the multi-port routing work.
+- [x] **Q9 Cancellation semantics for parallel/loop:** ~~hard kill vs cooperative?~~ **Resolved: cooperative `CancellationToken` cancel + configurable grace window (default 250 ms).** On first branch failure with `failFast: true`, the coordinator triggers the linked CTS from 2.2.0b's hierarchical cancellation contract. Siblings observe the token and wind down cooperatively; no hard-abort. Grace window is configurable per coordinator instance~
+- [x] **Q10 Switch module scope:** ~~defer or include?~~ **Resolved: `builtin.switch` included in 2.2.1** — shares the same multi-port routing work already shipped in 2.2.0a, adds negligible complexity, and gives authors multi-way branching alongside `builtin.condition` in the same PR~
 
 ---
 
@@ -166,7 +166,7 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
     - [ ] Set `ActivePorts = ["true"]` or `["false"]` so engine routes only one branch.
   - [ ] Diagnostics: log evaluated value + (if expression) source string.
 
-- [ ] **Create `SwitchModule`** 🔢 *(scope per Q10)*
+- [ ] **Create `SwitchModule`** 🔢
   - [ ] New file: `Workflow.Modules/Builtin/Flow/SwitchModule.cs`
   - [ ] `ModuleId: "builtin.switch"`, `Category: "Flow Control"`.
   - [ ] Schema:
@@ -259,7 +259,7 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 > **Why split:** the original 2.2.3 bundled three concerns — a brand-new actor (`ParallelExecutionCoordinator`) with non-trivial concurrency primitives (semaphore, fail-fast cooperative cancel, snapshot tracking), plus three modules with distinct semantics (static branches vs per-item fan-out vs barrier aggregation). Concurrency bugs in the coordinator would mask module bugs and vice versa, so we land them in two PRs: **2.2.3a** ships the coordinator + `ParallelModule` (the primitive + its most direct consumer), and **2.2.3b** ships `FanOutModule` + `FanInModule` (fan-shaped patterns built on the proven coordinator). This mirrors the 2.2.0a/2.2.0b split~ 🧠
 >
-> **Q-resolve hint (Q9):** cooperative cancel + grace timeout is the working assumption for 2.2.3a; if it changes, only 2.2.3a needs re-litigating. 🎀
+> **Q9 resolved:** cooperative cancel + configurable grace timeout (default 250 ms). Siblings observe the linked CTS from 2.2.0b's hierarchical cancellation contract — no hard-abort of in-flight nodes~ 🎀
 
 ---
 
@@ -275,7 +275,7 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
   - [ ] New file: `Workflow.Engine/Actors/ParallelExecutionCoordinator.cs`
   - [ ] Spawns N child `SubGraphExecutor`s (from 2.2.0a), tracks per-branch completion state.
   - [ ] Bounded parallelism: enforce `maxDegreeOfParallelism` via `SemaphoreSlim` around branch spawn.
-  - [ ] `failFast` cooperative cancellation (Q9): on first branch failure, trigger linked CTS from 2.2.0b's hierarchical cancellation contract; honour configurable grace window (default 250 ms).
+  - [ ] `failFast` cooperative cancellation: on first branch failure, trigger linked CTS from 2.2.0b's hierarchical cancellation contract; honour configurable grace window (default 250 ms). No hard-abort — siblings observe the token and wind down cooperatively.
   - [ ] Aggregates `(results, completedCount, failedCount)` and reports `ParallelCompleted` / `ParallelFailed` to caller.
   - [ ] New file: `Workflow.Engine/Messages/ParallelMessages.cs` — `StartParallel`, `BranchCompleted`, `BranchFailed`, `ParallelCompleted`, `ParallelFailed`.
 
@@ -588,8 +588,8 @@ Directory.Packages.props                                ← + Jint (default); Dy
 | **Q6** | Fan-out/Fan-in | ✅ Dedicated modules over shared coordinator | — |
 | **Q7** | Expression engine choice | ✅ **Jint (JS/ES2020)** — default; DynamicExpresso as `"csharp"` fallback | Native `EvaluateAsync` + CT + `async/await` — full analysis: [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md) |
 | **Q8** | Loop-body addressing | ✅ **Hybrid in 2.2** — ports drive execution; `NodeDefinition.RegionId?` hint field for visual designer | Engine ignores `regionId`; tooling auto-populates; Phase 3 designer reads for bounding box. Full analysis: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md) |
-| **Q9** | Parallel cancel semantics | Use Cooperative plus grace timeout          | Recommend cooperative + grace timeout |
-| **Q10** | `builtin.switch` in 2.2 | Use In for now                              | Recommend in (shares routing work) |
+| **Q9** | Parallel cancel semantics | ✅ **Cooperative `CancellationToken` cancel + 250 ms grace window** | Siblings observe linked CTS from 2.2.0b hierarchy; no hard-abort; grace window configurable per coordinator |
+| **Q10** | `builtin.switch` in 2.2 | ✅ **Included in 2.2.1** alongside `builtin.condition` | Shares multi-port routing from 2.2.0a; negligible added complexity; gives authors multi-way branching in the same PR |
 
 ---
 
