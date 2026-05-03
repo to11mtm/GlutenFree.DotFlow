@@ -456,23 +456,45 @@ This gives:
 
 | Option | When it wins | Risk |
 |--------|-------------|------|
-| **A — Ports only** | v1 / Phase 2.2 with no UI; engine simplicity is paramount | Visual grouping must be inferred; harder for Phase 3 designer |
-| **B — Regions only** | Phase 3+ visual-first designer; drag-drop authoring | Schema complexity now; two sources of truth |
-| **Hybrid — Ports + optional hint** | Best of both: simple engine + cheap visual grouping | `regionId` can drift (mitigated: engine ignores it, only UI reads it) |
+| **A — Ports only** | Engine simplicity; no UI work at all | Visual grouping must be inferred; harder for Phase 3 designer |
+| **B — Regions only** | Visual-first designer from day one | Schema complexity + two sources of truth |
+| **Hybrid — Ports + optional hint** | ✅ **Selected for Phase 2.2** — simple engine + cheap visual grouping + forward-compatible schema | `regionId` can drift from ports (mitigated: engine ignores it; only UI reads it; load-time warns on drift) |
+
+### ✅ Decision: Hybrid — shipped in Phase 2.2
+
+**Execution:** Port-driven (unchanged from Option A) — `SubGraphExecutor` receives the entry node from the `loopBody` connection. The engine **never reads `regionId`**.
+
+**Schema:** `NodeDefinition` gains a single optional field:
+```csharp
+/// <summary>
+/// Optional visual grouping hint for designer tooling~ 🗺️
+/// CopilotNote: The engine ignores this field entirely.
+/// Populated by author tooling / workflow serializer when a loopBody connection is drawn.
+/// Phase 3 visual designer reads this to render loop-body bounding boxes without graph traversal.
+/// </summary>
+public string? RegionId { get; init; }
+```
+
+**Load-time behaviour:**
+- ✅ Engine routes via port connections as always
+- ⚠️ Emit a structured **warning** (not validation error) if a node's `regionId` references a loop node whose `loopBody` port does not reach that node — indicates a designer drift that doesn't affect execution but should be fixed by the tooling
+
+**Why not defer `regionId` to Phase 3?**
+Adding it now costs one nullable field on `NodeDefinition` and one warning check. Deferring it means Phase 3 has a breaking schema change (existing workflows lack `regionId`). The cost of doing it now is ~1 day; the cost of doing it later is a migration + potential author confusion~ 🌷
 
 ### Ami's recommendation 🌸
 
-**Ship Option A (ports) for Phase 2.2** — zero schema changes, natural fit with SubGraphExecutor which already needs an entry node from a connection. The engine context stack solves break/continue with zero schema surface.
+~~**Ship Option A (ports) for Phase 2.2** — zero schema changes...~~
 
-**Plan for Hybrid during Phase 3 Visual Designer work** — when the designer is built, add `regionId` as an optional, auto-populated hint field. Make the authoring tool write it when it produces a `loopBody` connection, and read it when rendering the bounding box. The engine never changes; only the designer tooling layer cares about `regionId`.
+✅ **Ship Hybrid in Phase 2.2** — add `RegionId?` to `NodeDefinition` now (one field, engine ignores it), keep execution purely port-driven, and let author tooling auto-populate `regionId` as a derived hint from the `loopBody` connection. Phase 3 visual designer gets the bounding box feature for free without a schema migration~ 🧠
 
-The key insight: **regions are a rendering concern, not an execution concern**. Keeping them out of the execution engine and treating them as display metadata is the cleanest boundary~ 🧠
+The key insight remains: **regions are a rendering concern, not an execution concern**. The Hybrid honours that boundary by keeping `regionId` entirely out of the execution path while making it available in the data model~ ✨
 
 ---
 
 ## Open Sub-Questions 🙏
 
-- [ ] **LB1**: Should `regionId` be added as an optional/ignored field in Phase 2.2 schema to future-proof the JSON format, even if the engine doesn't read it until Phase 3?
+- [x] **LB1**: Should `regionId` be added as an optional/ignored field in Phase 2.2 schema to future-proof the JSON format, even if the engine doesn't read it until Phase 3? **→ Yes, adding in 2.2 as part of Hybrid decision. One nullable field, zero engine impact, avoids Phase 3 migration.**
 - [ ] **LB2**: If a loop has **multiple entry connections** to the body (e.g. `loopBody → nodeA` and `loopBody → nodeB` for a parallel-entry body), should that be a validation error or supported via a parallel split? *(v1 recommendation: validation error — require a `ParallelModule` as the single body entry)*
 - [ ] **LB3**: How does the `done` port interact with nodes that have no outgoing connections *within* the body? Should terminal body nodes implicitly trigger `done`, or must authors explicitly connect them back to a `merge` port on the loop module?
 - [ ] **LB4**: For the visual designer, should the bounding box auto-expand when a node is connected downstream of a body node (user adds to body via connection), or require an explicit "add to body" gesture?
@@ -483,4 +505,6 @@ The key insight: **regions are a rendering concern, not an execution concern**. 
 > - A `loopBody` port connection is the **minimum** schema change — the whole subgraph machinery works from just that one connection without touching `NodeDefinition`~ ✨
 > - Lock down `BreakModule`/`ContinueModule` at **load time** — if a break node isn't reachable from any loop's `loopBody` port, reject the workflow definition immediately with a helpful error message, nya~ 🛡️
 > - When Phase 3 designer arrives, auto-populate `regionId` from the connection graph — don't ask authors to set it manually. It should be an implementation detail of the designer tool, not of the workflow author~ 🎨 UwU
+
+
 

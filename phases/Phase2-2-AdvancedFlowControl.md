@@ -30,8 +30,8 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ### TO RESOLVE 🙏
 
-- [ ] **Q7 Expression engine choice:** ~~DynamicExpresso (battle-tested, MIT) vs in-house mini-parser (zero deps, fewer features).~~ **Resolved: Jint (JS/ES2020, BSD-2)** — preferred over DynamicExpresso because it ships a first-class `EvaluateAsync(script, ct)` with native `CancellationToken` support, full JS `async/await` + `Promise` semantics inside expressions, and richer built-in array/string transforms (`map`, `filter`, `reduce`, `?.`, `??`) with no helper registration needed. DynamicExpresso remains available as a lighter-weight fallback behind the same `IExpressionEvaluator` interface. See full analysis: [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md)~
-- [ ] **Q8 Loop-body addressing:** ports-on-loop-module (`loopBody` connection) vs explicit `RegionId` on `NodeDefinition` vs hybrid. See full breakdown + diagrams: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md). Recommendation: **ports for v1** (zero schema changes, engine uses SubGraphExecutor entry node from connection); add optional `regionId` hint in Phase 3 for visual designer bounding box rendering only~ 🗺️
+- [X] **Q7 Expression engine choice:** ~~DynamicExpresso (battle-tested, MIT) vs in-house mini-parser (zero deps, fewer features).~~ **Resolved: Jint (JS/ES2020, BSD-2)** — preferred over DynamicExpresso because it ships a first-class `EvaluateAsync(script, ct)` with native `CancellationToken` support, full JS `async/await` + `Promise` semantics inside expressions, and richer built-in array/string transforms (`map`, `filter`, `reduce`, `?.`, `??`) with no helper registration needed. DynamicExpresso remains available as a lighter-weight fallback behind the same `IExpressionEvaluator` interface. See full analysis: [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md)~
+- [x] **Q8 Loop-body addressing:** ~~ports only vs explicit RegionId~~ **Resolved: Hybrid in 2.2** — ports drive execution (SubGraphExecutor gets entry node from `loopBody` connection, engine ignores `regionId` entirely), and `NodeDefinition` gains an optional `regionId?` hint field populated by author tooling / designer for future bounding-box rendering. Zero engine complexity added; schema is forward-compatible with Phase 3 visual designer. See full breakdown + diagrams: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md)~
 - [ ] **Q9 Cancellation semantics for parallel/loop:** when one branch fails with `failFast: true`, do siblings get a cooperative `CancellationToken` cancel, or hard kill? Recommend cooperative cancel + grace timeout.
 - [ ] **Q10 Switch module scope:** include `builtin.switch` in 2.2 (multi-way) or defer to 2.2.x add-on? Recommend including, since it shares the multi-port routing work.
 
@@ -229,6 +229,13 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 - [ ] **Loop diagnostics & history**
   - [ ] Each iteration recorded as a `NodeExecutionRecord` with `Metadata: { loopId, iter }` so persistence/UI can replay.
+
+- [ ] **`regionId` hint field (Hybrid Q8 resolution)** 🗺️
+  - [ ] Add `RegionId? string` to `Workflow.Core/Models/NodeDefinition.cs` — optional, nullable, ignored by engine.
+  - [ ] Engine **never reads** `regionId` for routing or subgraph discovery — execution is always port-driven.
+  - [ ] Author tooling / workflow serializer should auto-populate `regionId = "{loopNodeId}-body"` when writing a `loopBody` connection for a node.
+  - [ ] Load-time: emit a **warning** (not error) if a node's `regionId` references a loop node whose `loopBody` port does not reach that node — indicates designer drift, execution still proceeds via ports.
+  - [ ] Schema is forward-compatible: Phase 3 visual designer reads `regionId` to render bounding boxes without engine changes.
 
 **Tests (target ~14):** → `Workflow.Tests/Modules/Flow/ForEachModuleTests.cs`, `Workflow.Tests/Modules/Flow/WhileModuleTests.cs`
 - [ ] Foreach over 10 items runs 10 iterations
@@ -524,6 +531,7 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 Workflow.Core/
   Abstractions/IExpressionEvaluator.cs                  ← new
   Models/WorkflowError.cs                               ← new
+  Models/NodeDefinition.cs                              ← + optional RegionId? hint (Hybrid Q8)
 
 Workflow.Engine/
   Actors/SubGraphExecutor.cs                            ← new
@@ -579,7 +587,7 @@ Directory.Packages.props                                ← + Jint (default); Dy
 | **Q5** | Error boundaries | ✅ Engine-managed zones                      | Not Akka supervision |
 | **Q6** | Fan-out/Fan-in | ✅ Dedicated modules over shared coordinator | — |
 | **Q7** | Expression engine choice | ✅ **Jint (JS/ES2020)** — default; DynamicExpresso as `"csharp"` fallback | Native `EvaluateAsync` + CT + `async/await` — full analysis: [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md) |
-| **Q8** | Loop-body addressing | ✅ **Ports for v1**; optional `regionId` hint deferred to Phase 3 visual designer | Full analysis + diagrams: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md) |
+| **Q8** | Loop-body addressing | ✅ **Hybrid in 2.2** — ports drive execution; `NodeDefinition.RegionId?` hint field for visual designer | Engine ignores `regionId`; tooling auto-populates; Phase 3 designer reads for bounding box. Full analysis: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md) |
 | **Q9** | Parallel cancel semantics | Use Cooperative plus grace timeout          | Recommend cooperative + grace timeout |
 | **Q10** | `builtin.switch` in 2.2 | Use In for now                              | Recommend in (shares routing work) |
 
