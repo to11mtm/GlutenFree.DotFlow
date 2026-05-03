@@ -30,8 +30,8 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ### TO RESOLVE 🙏
 
-- [ ] **Q7 Expression engine choice:** DynamicExpresso (battle-tested, MIT) vs in-house mini-parser (zero deps, fewer features). Recommend DynamicExpresso behind `IExpressionEvaluator` so it can be swapped.
-- [ ] **Q8 Loop-body addressing:** ports-on-loop-module (`loopBody` connection) vs explicit `RegionId` on `NodeDefinition`. Recommend ports for v1, regions later if we add visual grouping.
+- [ ] **Q7 Expression engine choice:** ~~DynamicExpresso (battle-tested, MIT) vs in-house mini-parser (zero deps, fewer features).~~ **Resolved: Jint (JS/ES2020, BSD-2)** — preferred over DynamicExpresso because it ships a first-class `EvaluateAsync(script, ct)` with native `CancellationToken` support, full JS `async/await` + `Promise` semantics inside expressions, and richer built-in array/string transforms (`map`, `filter`, `reduce`, `?.`, `??`) with no helper registration needed. DynamicExpresso remains available as a lighter-weight fallback behind the same `IExpressionEvaluator` interface. See full analysis: [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md)~
+- [ ] **Q8 Loop-body addressing:** ports-on-loop-module (`loopBody` connection) vs explicit `RegionId` on `NodeDefinition` vs hybrid. See full breakdown + diagrams: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md). Recommendation: **ports for v1** (zero schema changes, engine uses SubGraphExecutor entry node from connection); add optional `regionId` hint in Phase 3 for visual designer bounding box rendering only~ 🗺️
 - [ ] **Q9 Cancellation semantics for parallel/loop:** when one branch fails with `failFast: true`, do siblings get a cooperative `CancellationToken` cancel, or hard kill? Recommend cooperative cancel + grace timeout.
 - [ ] **Q10 Switch module scope:** include `builtin.switch` in 2.2 (multi-way) or defer to 2.2.x add-on? Recommend including, since it shares the multi-port routing work.
 
@@ -248,60 +248,96 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ---
 
-## 2.2.3 Parallel Execution & Fan-out / Fan-in (`builtin.parallel`, `builtin.fanout`, `builtin.fanin`) ⚡🌟
+## 2.2.3 Parallel Execution & Fan-out / Fan-in — Split Slices ⚡🌟
 
-**Purpose:** Run independent branches concurrently with bounded parallelism, optional fail-fast, and proper result aggregation~ 💫
+> **Why split:** the original 2.2.3 bundled three concerns — a brand-new actor (`ParallelExecutionCoordinator`) with non-trivial concurrency primitives (semaphore, fail-fast cooperative cancel, snapshot tracking), plus three modules with distinct semantics (static branches vs per-item fan-out vs barrier aggregation). Concurrency bugs in the coordinator would mask module bugs and vice versa, so we land them in two PRs: **2.2.3a** ships the coordinator + `ParallelModule` (the primitive + its most direct consumer), and **2.2.3b** ships `FanOutModule` + `FanInModule` (fan-shaped patterns built on the proven coordinator). This mirrors the 2.2.0a/2.2.0b split~ 🧠
+>
+> **Q-resolve hint (Q9):** cooperative cancel + grace timeout is the working assumption for 2.2.3a; if it changes, only 2.2.3a needs re-litigating. 🎀
 
-**Complexity:** 🔥 High
+---
 
-### Tasks:
+### 2.2.3a Parallel Coordinator & `ParallelModule` 🎛️⚡
+
+**Purpose:** Land the shared concurrency primitive (`ParallelExecutionCoordinator`) and prove it via the simplest consumer — a static N-branch parallel module with bounded parallelism and fail-fast semantics~ 💫
+
+**Complexity:** 🟡 Medium-High
+
+#### Tasks:
 
 - [ ] **`ParallelExecutionCoordinator` actor** 🎛️
   - [ ] New file: `Workflow.Engine/Actors/ParallelExecutionCoordinator.cs`
-  - [ ] Spawns N child sub-graph executors, tracks completion, enforces `maxDegreeOfParallelism` via `SemaphoreSlim`.
-  - [ ] Supports `failFast` cooperative cancellation (Q9).
+  - [ ] Spawns N child `SubGraphExecutor`s (from 2.2.0a), tracks per-branch completion state.
+  - [ ] Bounded parallelism: enforce `maxDegreeOfParallelism` via `SemaphoreSlim` around branch spawn.
+  - [ ] `failFast` cooperative cancellation (Q9): on first branch failure, trigger linked CTS from 2.2.0b's hierarchical cancellation contract; honour configurable grace window (default 250 ms).
+  - [ ] Aggregates `(results, completedCount, failedCount)` and reports `ParallelCompleted` / `ParallelFailed` to caller.
+  - [ ] New file: `Workflow.Engine/Messages/ParallelMessages.cs` — `StartParallel`, `BranchCompleted`, `BranchFailed`, `ParallelCompleted`, `ParallelFailed`.
 
 - [ ] **`ParallelModule`** ⚡
   - [ ] New file: `Workflow.Modules/Builtin/Flow/ParallelModule.cs`
+  - [ ] `ModuleId: "builtin.parallel"`, `Category: "Flow Control"`.
   - [ ] Schema:
-    - [ ] Output ports: `branch1..branchN` (declared dynamically based on connections)
+    - [ ] Output ports: `branch1..branchN` (declared dynamically based on connections at load)
     - [ ] Inputs: `maxDegreeOfParallelism` (int, optional), `waitForAll` (bool, default `true`), `failFast` (bool, default `true`)
     - [ ] Outputs: `results` (array), `completedCount` (int), `failedCount` (int)
-  - [ ] Activation: fires all branch ports, then waits via coordinator for completion.
+  - [ ] Activation: sets `ActivePorts = [all connected branches]`, then awaits coordinator for completion.
+
+- [ ] **Engine support**
+  - [ ] Track in-flight sub-graphs per parallel coordinator for snapshot/persistence (record `Metadata.parallelId` + `branchIndex` on `NodeExecutionRecord`).
+  - [ ] Hierarchical cancellation token plumbed via 2.2.0b — no new cancellation surface area.
+
+#### Tests (target ~7): → `Workflow.Tests/Engine/ParallelCoordinatorTests.cs`, `Workflow.Tests/Modules/Flow/ParallelModuleTests.cs`
+- [ ] 3-way parallel split runs concurrently (assert wall time < sum of branch times)
+- [ ] `maxDegreeOfParallelism = 2` over 5 branches enforces limit (observe at most 2 in-flight)
+- [ ] One branch fails + `failFast: true` → siblings receive cooperative cancel within grace window
+- [ ] One branch fails + `failFast: false` → others complete, error captured in `failedCount`
+- [ ] `waitForAll: false` returns when first branch completes; remaining branches drain or cancel
+- [ ] Unbalanced branch durations don't starve coordinator (slow branch finishes; fast branches don't block scheduling)
+- [ ] Cancellation tokens cleaned up after coordinator disposes (no leaked CTS — regression guard)
+
+---
+
+### 2.2.3b Fan-out / Fan-in Modules 🌟🪄
+
+**Purpose:** Build the dynamic fan-shaped patterns on top of the (now proven) `ParallelExecutionCoordinator` — `FanOutModule` for per-item parallel sub-graphs, `FanInModule` for barrier aggregation~ ✨
+
+**Complexity:** 🟡 Medium
+
+#### Tasks:
 
 - [ ] **`FanOutModule`** 🌟
   - [ ] New file: `Workflow.Modules/Builtin/Flow/FanOutModule.cs`
+  - [ ] `ModuleId: "builtin.fanout"`, `Category: "Flow Control"`.
   - [ ] Schema:
     - [ ] Input: `items` (array, required)
     - [ ] Input: `maxDegreeOfParallelism` (int, optional)
-    - [ ] Output port: `branch` (activation per item, with `item` payload)
-  - [ ] Behaviour: like `ForEach` but parallel; spawns one sub-graph per item.
+    - [ ] Input: `failFast` (bool, default `true`)
+    - [ ] Output port: `branch` (activation per item, payload = `{ item, index }`)
+    - [ ] Output port: `done` (after all items processed)
+    - [ ] Outputs: `results` (array), `completedCount` (int), `failedCount` (int)
+  - [ ] Behaviour: like `ForEachModule` (2.2.2) but parallel — spawns one sub-graph per item via `ParallelExecutionCoordinator`.
 
 - [ ] **`FanInModule`** 🪄
   - [ ] New file: `Workflow.Modules/Builtin/Flow/FanInModule.cs`
+  - [ ] `ModuleId: "builtin.fanin"`, `Category: "Flow Control"`.
   - [ ] Schema:
-    - [ ] Input: `branches` (array of inputs collected from upstream)
+    - [ ] Input: `branches` (array of inputs collected from upstream connections)
     - [ ] Input: `mode` (enum: `Concat`, `Merge`, `First`, `Last`, default `Concat`)
+    - [ ] Input: `timeout` (TimeSpan, optional — barrier safety net)
     - [ ] Output: `result` (aggregated)
-  - [ ] Behaviour: barrier — waits until all upstream branches complete, then aggregates.
+  - [ ] Behaviour: barrier — waits until all upstream branches complete (or timeout), then aggregates per `mode`.
+  - [ ] Engine hook: `WorkflowExecutor` must hold `FanIn` activation until **all** declared upstream connections have either delivered or been cancelled (new "barrier node" predicate).
 
 - [ ] **Engine support**
-  - [ ] Track in-flight sub-graphs per parallel coordinator for snapshot/persistence.
-  - [ ] Hierarchical cancellation token already provided by 2.2.0.
+  - [ ] Barrier-node activation gating in `WorkflowExecutor` (general primitive, but `FanIn` is currently the only consumer).
+  - [ ] No new persistence rows beyond what 2.2.3a already records.
 
-**Tests (target ~12):** → `Workflow.Tests/Modules/Flow/ParallelModuleTests.cs`, `Workflow.Tests/Modules/Flow/FanOutFanInTests.cs`
-- [ ] 3-way parallel split runs concurrently (assert wall time < sum of branch times)
-- [ ] `maxDegreeOfParallelism = 2` over 5 branches enforces limit
-- [ ] One branch fails + `failFast: true` → siblings cancel cooperatively
-- [ ] One branch fails + `failFast: false` → others complete, error captured
-- [ ] `waitForAll: false` returns when first completes
-- [ ] FanOut spawns one sub-graph per item
-- [ ] FanIn `Concat` preserves order
-- [ ] FanIn `Merge` deduplicates dictionary keys deterministically
-- [ ] FanIn `First`/`Last` semantics
-- [ ] Combined fan-out → work → fan-in produces aggregated result
-- [ ] Unbalanced branch durations don’t starve coordinator
-- [ ] Cancellation tokens cleaned up after coordinator disposes
+#### Tests (target ~6): → `Workflow.Tests/Modules/Flow/FanOutModuleTests.cs`, `Workflow.Tests/Modules/Flow/FanInModuleTests.cs`
+- [ ] FanOut spawns one sub-graph per item (10 items → 10 iterations recorded)
+- [ ] FanOut respects `maxDegreeOfParallelism` (delegated to 2.2.3a coordinator — smoke check only)
+- [ ] FanIn `Concat` preserves upstream connection order
+- [ ] FanIn `Merge` deduplicates dictionary keys deterministically (last writer wins, documented)
+- [ ] FanIn `First` / `Last` semantics return the first/last completed branch's payload
+- [ ] Combined `FanOut → work → FanIn` produces correctly aggregated result end-to-end
 
 ---
 
@@ -361,48 +397,68 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 **Purpose:** A safe, deterministic, sandboxed evaluator for `condition` / `switch` expressions and (later) data transformation modules~ 🌟
 
+**Companion analysis:** [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md) — side-by-side syntax comparison + integration sketches for DynamicExpresso vs JavaScript (Jint) vs Lua (MoonSharp). **Jint selected as default for v1** — native `EvaluateAsync` + CT support + full JS `async/await`~ 🧮
+
 **Complexity:** 🟡 Medium
 
 ### Tasks:
 
 - [ ] **Define `IExpressionEvaluator`**
   - [ ] New file: `Workflow.Core/Abstractions/IExpressionEvaluator.cs`
-  - [ ] API: `Evaluate<T>(string expression, IReadOnlyDictionary<string, object?> variables, CancellationToken)`.
-  - [ ] Errors: `ExpressionParseException`, `ExpressionRuntimeException`.
+  - [ ] API: `EvaluateAsync<T>(string expression, IReadOnlyDictionary<string, object?> variables, CancellationToken)` — returns `ValueTask<T>`.
+  - [ ] Object path: `EvaluateObjectAsync(...)` — returns `ValueTask<JsonElement>` for structured/array returns.
+  - [ ] Errors: `ExpressionParseException` (syntax / parse-time), `ExpressionRuntimeException` (runtime / timeout).
 
-- [ ] **Implement default evaluator**
-  - [ ] New file: `Workflow.Engine/Services/DynamicExpressoEvaluator.cs` *(per Q7 recommendation)*
-  - [ ] Whitelist of types/functions; reject reflection, I/O, `Process`, etc.
-  - [ ] Built-in helpers: `len(x)`, `contains(x,y)`, `lower(s)`, `upper(s)`, `now()`.
-  - [ ] Variable lookup wired to current node’s input scope + variable store snapshot.
+- [ ] **Implement default evaluator — Jint** *(per Q7 resolution)* 🟡
+  - [ ] New file: `Workflow.Engine/Services/JintExpressionEvaluator.cs`
+  - [ ] Engine config: `LimitMemory(4MB)`, `TimeoutInterval(250ms)` (secondary cap), `LimitRecursion(64)`, `Strict()`, `CatchClrExceptions()`.
+  - [ ] Use built-in `engine.EvaluateAsync(expression, ct)` — true async, CT is first-class, no `Task.Run` wrapper needed.
+  - [ ] Pool engine instances via `ObjectPool<Engine>` — instances are not thread-safe.
+  - [ ] Only inject safe projected DTOs into JS scope — never raw services, EF entities, or `IServiceProvider`.
+  - [ ] Pre-parse validation via Esprima `JavaScriptParser.ParseExpression()` — catches syntax errors before execution.
+  - [ ] `EvaluateObjectAsync` uses `JsValueToJsonNode` walker → `JsonElement` (no `ExpandoObject` leakage).
 
-- [ ] **DI wiring**
-  - [ ] Register `IExpressionEvaluator` as singleton in `Workflow.Api/Program.cs` and engine bootstrap.
+- [ ] **Keep `DynamicExpressoEvaluator` as opt-in fallback** *(C#-syntax, zero async overhead)*
+  - [ ] New file: `Workflow.Engine/Services/DynamicExpressoEvaluator.cs`
+  - [ ] Registered under keyed DI as `"csharp"` — not the default.
+  - [ ] `DisableReflection()` + whitelist helpers: `len(x)`, `contains(x,y)`, `lower(s)`, `upper(s)`, `now()`.
+  - [ ] Returns `ValueTask.FromResult(result)` (zero-alloc synchronous path).
 
-- [ ] **Operator coverage**
-  - [ ] Comparison: `>`, `<`, `>=`, `<=`, `==`, `!=`
-  - [ ] Logical: `&&`, `||`, `!`
+- [ ] **`IExpressionEvaluatorFactory` + DI wiring**
+  - [ ] New file: `Workflow.Engine/Services/KeyedExpressionEvaluatorFactory.cs`
+  - [ ] Resolves by `engineName` from `WorkflowDefinition` metadata (default: `"javascript"`).
+  - [ ] Register in `Workflow.Api/Program.cs`:
+    - [ ] `AddSingleton<IExpressionEvaluator, JintExpressionEvaluator>()` — default primary
+    - [ ] `AddKeyedSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>("csharp")` — opt-in fallback
+    - [ ] `AddSingleton<IExpressionEvaluatorFactory, KeyedExpressionEvaluatorFactory>()`
+
+- [ ] **Operator / feature coverage (Jint — JS/ES2020 native)**
+  - [ ] Comparison: `>`, `<`, `>=`, `<=`, `===`, `!==`
+  - [ ] Logical: `&&`, `||`, `!`, `??` (null coalescing), `?.` (optional chaining)
   - [ ] Arithmetic: `+`, `-`, `*`, `/`, `%`
-  - [ ] String + null-safe member access (`a?.b?.c`)
+  - [ ] Array transforms: `.map()`, `.filter()`, `.reduce()`, `.includes()`, `.find()`
+  - [ ] String helpers: `.toLowerCase()`, `.toUpperCase()`, `.includes()`, `.startsWith()`
+  - [ ] Ternary + template literals: `` `Hello ${name}` ``
+  - [ ] `async/await` + `Promise` — resolved natively via `EvaluateAsync`
 
 - [ ] **Determinism / safety**
-  - [ ] No reflection-based member resolution beyond whitelisted types
-  - [ ] Hard timeout per evaluation (configurable, default 250ms)
-  - [ ] No allocations of unbounded collections
+  - [ ] No CLR type injection beyond explicitly `SetValue`d safe DTOs
+  - [ ] Hard timeout via `TimeoutInterval` config (secondary) + `CancellationToken` (primary)
+  - [ ] Memory limit + recursion limit enforced by engine config
 
 **Tests (target ~12):** → `Workflow.Tests/Engine/ExpressionEvaluatorTests.cs`
 - [ ] Boolean comparisons evaluate correctly
-- [ ] Logical operators short-circuit
+- [ ] Logical operators short-circuit (`&&`, `||`)
+- [ ] Null coalescing (`??`) and optional chaining (`?.`) work correctly
 - [ ] Arithmetic with int/double mix
 - [ ] Variable lookup from supplied dictionary
-- [ ] Missing variable → `ExpressionRuntimeException`
-- [ ] Disallowed type access (e.g. `System.IO.File`) → `ExpressionParseException`
-- [ ] Helpers (`len`, `contains`, ...) work as documented
-- [ ] Timeout aborts long-running expression
-- [ ] Cancellation token honoured
-- [ ] Null-safe member access doesn’t throw on null
-- [ ] Expression errors include source position
-- [ ] Evaluator is thread-safe under parallel use
+- [ ] Missing variable in strict mode → `ExpressionRuntimeException` (ReferenceError)
+- [ ] Array `.map()` / `.filter()` return correctly projected results
+- [ ] `async` expression (`Promise.resolve(x)`) resolves correctly via `EvaluateAsync`
+- [ ] Timeout aborts long-running expression (infinite loop)
+- [ ] `CancellationToken` cancels mid-evaluation natively
+- [ ] `EvaluateObjectAsync` returns `JsonElement` for JS object literal return
+- [ ] Concurrent calls via pool don't share engine state (isolation regression guard)
 
 ---
 
@@ -456,9 +512,10 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 - [ ] Engine supports **port-aware connection activation** (selective output routing, additive default)
 - [ ] Engine supports **sub-graph execution**, **loop scopes**, **error boundaries**, **hierarchical cancellation**
 - [ ] 2.2.0 split shipped as **2.2.0a** (routing + sub-graphs) and **2.2.0b** (loop scope + error boundary + cancellation)
+- [ ] 2.2.3 split shipped as **2.2.3a** (coordinator + `ParallelModule`) and **2.2.3b** (`FanOutModule` + `FanInModule`)
 - [ ] Modules: `builtin.condition`, `builtin.switch`, `builtin.loop.foreach`, `builtin.loop.while`, `builtin.break`, `builtin.continue`, `builtin.parallel`, `builtin.fanout`, `builtin.fanin`, `builtin.trycatch`, `builtin.throw`
 - [ ] `IExpressionEvaluator` + safe default implementation registered via DI
-- [ ] ~76 unit + integration tests passing across 2.2.0a/2.2.0b–2.2.6 (target ~6 for 2.2.0a + ~7 for 2.2.0b ≈ 13, replacing the original ~12)
+- [ ] ~77 unit + integration tests passing across 2.2.0a/2.2.0b–2.2.6 (2.2.0a ~6 + 2.2.0b ~7 + 2.2.1 ~10 + 2.2.2 ~14 + 2.2.3a ~7 + 2.2.3b ~6 + 2.2.4 ~10 + 2.2.5 ~12 + 2.2.6 ~6, replacing the original ~12 for 2.2.3 with ~13 across the split)
 - [ ] XML docs + `docs/advanced-flow-control.md`
 - [ ] Sample workflow runs end-to-end on persistence + API stack
 
@@ -473,10 +530,13 @@ Workflow.Engine/
   Actors/ParallelExecutionCoordinator.cs                ← new
   Actors/WorkflowExecutor.cs                            ← port-aware routing, error boundary hooks
   Messages/SubGraphMessages.cs                          ← new
+  Messages/ParallelMessages.cs                          ← new (2.2.3a)
   Messages/WorkflowMessages.cs                          ← + ActivePorts, loop/error messages
   Models/LoopContext.cs                                 ← new
   Models/ErrorBoundary.cs                               ← new
-  Services/DynamicExpressoEvaluator.cs                  ← new
+  Services/JintExpressionEvaluator.cs                  ← new (default evaluator)
+  Services/DynamicExpressoEvaluator.cs                  ← new (opt-in "csharp" fallback)
+  Services/KeyedExpressionEvaluatorFactory.cs           ← new
 
 Workflow.Modules/Builtin/Flow/
   ConditionalModule.cs                                  ← new
@@ -494,6 +554,7 @@ Workflow.Modules/Builtin/Flow/
 Workflow.Tests/
   Engine/PortRoutingTests.cs                            ← new
   Engine/SubGraphExecutorTests.cs                       ← new
+  Engine/ParallelCoordinatorTests.cs                    ← new (2.2.3a)
   Engine/ErrorBoundaryTests.cs                          ← new
   Engine/ExpressionEvaluatorTests.cs                    ← new
   Engine/AdvancedFlowPersistenceTests.cs                ← new
@@ -502,7 +563,7 @@ Workflow.Tests/
 
 docs/advanced-flow-control.md                           ← new
 examples/definitions/flow-control-demo.json             ← new
-Directory.Packages.props                                ← + DynamicExpresso (pending Q7)
+Directory.Packages.props                                ← + Jint (default); DynamicExpresso.Core (opt-in fallback)
 ```
 
 ---
@@ -517,8 +578,8 @@ Directory.Packages.props                                ← + DynamicExpresso (p
 | **Q4** | Loop scope | ✅ Per-iteration variable subscope           | Uses existing `IVariableStore` |
 | **Q5** | Error boundaries | ✅ Engine-managed zones                      | Not Akka supervision |
 | **Q6** | Fan-out/Fan-in | ✅ Dedicated modules over shared coordinator | — |
-| **Q7** | Expression engine choice | Use DynamicExpresso for now                 | Recommend DynamicExpresso behind interface |
-| **Q8** | Loop-body addressing | Use Ports for now                           | Recommend ports for v1 |
+| **Q7** | Expression engine choice | ✅ **Jint (JS/ES2020)** — default; DynamicExpresso as `"csharp"` fallback | Native `EvaluateAsync` + CT + `async/await` — full analysis: [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md) |
+| **Q8** | Loop-body addressing | ✅ **Ports for v1**; optional `regionId` hint deferred to Phase 3 visual designer | Full analysis + diagrams: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md) |
 | **Q9** | Parallel cancel semantics | Use Cooperative plus grace timeout          | Recommend cooperative + grace timeout |
 | **Q10** | `builtin.switch` in 2.2 | Use In for now                              | Recommend in (shares routing work) |
 
@@ -527,7 +588,7 @@ Directory.Packages.props                                ← + DynamicExpresso (p
 > 💖 **Ami’s Phase 2.2 Tips:**
 > - Build **2.2.0a → 2.2.0b first** — every other sub-phase needs port-aware routing + sub-graph execution. 2.2.1 (conditional/switch) can ship right after 2.2.0a. Don’t skip ahead, nya~ 🧠
 > - Keep modules **declarative**: control-flow logic lives in the engine, not in module code beyond setting `ActivePorts` and asking for sub-graph runs~ ✨
-> - Pin `IExpressionEvaluator` behind an interface from day one — even if v1 is DynamicExpresso, swappability protects us if licensing/perf changes~ 🔌
+> - Pin `IExpressionEvaluator` behind an interface from day one — Jint is the default, but DynamicExpresso (`"csharp"`) and Lua (`"lua"`) can be added as keyed opt-ins without touching any module code~ 🔌
 > - Use the **SQLite `:memory:`** provider from Phase 2.1 for end-to-end tests — no Docker, fast, full persistence path exercised~ 💾
 > - Loop persistence rows = goldmine for the future UI replay timeline; record `loopId`/`iter` from day one~ 🎀 UwU
 
