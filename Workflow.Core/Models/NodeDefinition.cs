@@ -20,6 +20,14 @@ namespace Workflow.Core.Models;
 /// <param name="Timeout">Maximum execution time in milliseconds. Null means no timeout. ⏱️.</param>
 /// <param name="RetryPolicy">Retry behavior on errors. 🔄.</param>
 /// <param name="Metadata">Immutable map of additional metadata for extensibility. 💫.</param>
+/// <param name="RegionId">
+/// Optional visual grouping hint for the designer tool~ 🗺️.
+/// CopilotNote (Hybrid Q8): The engine ignores this field completely — execution is always
+/// port-driven via <c>loopBody</c> connections. Author tooling / workflow serializer should
+/// auto-populate <c>RegionId = "{loopNodeId}-body"</c> when drawing a loopBody connection.
+/// Phase 3 visual designer reads this to render loop-body bounding boxes without graph traversal.
+/// Leaving it null is always safe — no runtime impact~ 🌸.
+/// </param>
 /// <remarks>
 /// CopilotNote: Nodes are the "vertices" in our workflow graph!
 /// Properties are stored as JsonElements for maximum flexibility - they can be any JSON type!
@@ -35,4 +43,5 @@ public record NodeDefinition(
     ErrorHandling? ErrorHandling = null,
     int? Timeout = null,
     RetryPolicy? RetryPolicy = null,
-    HashMap<string, string>? Metadata = null);
+    HashMap<string, string>? Metadata = null,
+    string? RegionId = null);

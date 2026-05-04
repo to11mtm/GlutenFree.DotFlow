@@ -290,6 +290,12 @@ public record Execute(
 /// <param name="Duration">How long the node took to execute.</param>
 /// <param name="Metrics">Optional execution metrics (duration, memory, custom). 📊.</param>
 /// <param name="VariableUpdates">Optional workflow variable mutations from the module. 💾.</param>
+/// <param name="ActivePorts">
+/// Optional selective port activation for downstream routing~ 🎯.
+/// CopilotNote: When empty/default, the engine fires ALL outgoing connections (legacy behaviour).
+/// When non-empty, only connections whose SourcePortName appears in this list are activated.
+/// Populated by NodeExecutor from <see cref="Workflow.Modules.Abstractions.ModuleResult.ActivePorts"/>~ 🌸.
+/// </param>
 [MessagePackObject(keyAsPropertyName: true)]
 public record NodeExecutionCompleted(
     string NodeId,
@@ -297,7 +303,8 @@ public record NodeExecutionCompleted(
     Guid ExecutionId,
     TimeSpan Duration,
     ExecutionMetrics? Metrics = null,
-    HashMap<string, object?>? VariableUpdates = null) : IWorkflowMessage;
+    HashMap<string, object?>? VariableUpdates = null,
+    Arr<string> ActivePorts = default) : IWorkflowMessage;
 
 /// <summary>
 /// Message sent when a node execution fails.

@@ -236,6 +236,26 @@ public record ModuleResult
     public IReadOnlyDictionary<string, object?>? VariableUpdates { get; init; }
 
     /// <summary>
+    /// Gets the output ports to activate for downstream routing. 🎯
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// CopilotNote: This is the Phase 2.2.0a port-aware routing primitive~ ✨
+    /// When null or empty, the engine fires ALL outgoing connections (legacy/default behaviour —
+    /// backwards compatible with every Phase 1 module).
+    /// When non-empty, only connections whose <c>SourcePortName</c> appears in this collection
+    /// are activated; all other outgoing connections are skipped (downstream nodes are marked
+    /// <see cref="NodeExecutionState.Skipped"/> and their successors are recursively skipped too).
+    /// </para>
+    /// <para>
+    /// Used by: <c>builtin.condition</c> (true/false), <c>builtin.switch</c> (case ports),
+    /// <c>builtin.loop.foreach</c> (loopBody/done), <c>builtin.parallel</c> (branchN), etc.
+    /// Regular modules never need to set this — leave null for fire-all semantics~ 💖.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string>? ActivePorts { get; init; }
+
+    /// <summary>
     /// Creates a successful result with outputs.
     /// </summary>
     /// <param name="outputs">The output values.</param>
@@ -284,4 +304,20 @@ public record ModuleResult
     /// <returns>A failed ModuleResult.</returns>
     public static ModuleResult Fail(string message, Exception? ex = null)
         => new() { Success = false, ErrorMessage = message, Exception = ex };
+
+    /// <summary>
+    /// Creates a successful result with selective port activation for routing~ 🎯
+    /// </summary>
+    /// <param name="outputs">The output values.</param>
+    /// <param name="activePorts">Which output ports to fire (null/empty = fire all).</param>
+    /// <returns>A successful ModuleResult with port-aware routing.</returns>
+    /// <remarks>
+    /// CopilotNote: Use this overload for control-flow modules (condition, switch, loop).
+    /// The engine will only activate connections whose SourcePortName is in <paramref name="activePorts"/>.
+    /// Branches not in the list will have their downstream nodes marked as Skipped~ 🌸.
+    /// </remarks>
+    public static ModuleResult WithActivePorts(
+        Dictionary<string, object?> outputs,
+        IReadOnlyList<string> activePorts)
+        => new() { Success = true, Outputs = outputs, ActivePorts = activePorts };
 }

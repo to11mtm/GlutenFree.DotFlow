@@ -38,14 +38,20 @@ public class InMemoryModuleRegistry : IModuleRegistry
     private readonly ILogger _logger;
     private readonly ModuleValidator _validator = new();
 
+    // CopilotNote: skipValidation flag stored at registry level — set once at construction
+    // so test code using `new InMemoryModuleRegistry(skipValidation: true)` works cleanly~ 🧪
+    private readonly bool _skipValidation;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="InMemoryModuleRegistry"/> class
     /// with an optional logger~ 🌸.
     /// </summary>
     /// <param name="logger">Optional logger for observer error reporting.</param>
-    public InMemoryModuleRegistry(ILogger<InMemoryModuleRegistry>? logger = null)
+    /// <param name="skipValidation">When true, bypasses ModuleValidator for all registrations (useful in tests). 🧪.</param>
+    public InMemoryModuleRegistry(ILogger<InMemoryModuleRegistry>? logger = null, bool skipValidation = false)
     {
         _logger = logger ?? (ILogger)NullLogger.Instance;
+        _skipValidation = skipValidation;
     }
 
     /// <inheritdoc />
@@ -79,7 +85,7 @@ public class InMemoryModuleRegistry : IModuleRegistry
         }
 
         // Validate the module before registration (unless explicitly skipped)~ ✅
-        if (!skipValidation)
+        if (!skipValidation && !_skipValidation)
         {
             var validation = _validator.Validate(module);
             if (!validation.IsValid)

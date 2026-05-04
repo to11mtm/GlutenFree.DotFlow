@@ -246,7 +246,8 @@ public class NodeExecutor : ReceiveActor
                 SendSuccess(
                     enrichedResult.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value),
                     metrics,
-                    enrichedResult.VariableUpdates);
+                    enrichedResult.VariableUpdates,
+                    enrichedResult.ActivePorts);
             }
             else
             {
@@ -578,7 +579,8 @@ public class NodeExecutor : ReceiveActor
     private void SendSuccess(
         Dictionary<string, object?> outputs,
         ExecutionMetrics? metrics = null,
-        IReadOnlyDictionary<string, object?>? variableUpdates = null)
+        IReadOnlyDictionary<string, object?>? variableUpdates = null,
+        IReadOnlyList<string>? activePorts = null)
     {
         _isExecuting = false;
         Context.SetReceiveTimeout(null);
@@ -588,13 +590,19 @@ public class NodeExecutor : ReceiveActor
             ? variableUpdates.ToHashMap()
             : null;
 
+        // Convert active ports to Arr (empty = fire-all semantics)~ 🎯
+        var activePortsArr = activePorts is { Count: > 0 }
+            ? new LanguageExt.Arr<string>(activePorts)
+            : LanguageExt.Arr<string>.Empty;
+
         Context.Parent.Tell(new NodeExecutionCompleted(
             _nodeId,
             outputs.ToHashMap(),
             _executionId,
             _timer.Elapsed,
             metrics,
-            varUpdatesHashMap));
+            varUpdatesHashMap,
+            activePortsArr));
     }
 
     /// <summary>

@@ -16,6 +16,7 @@ using Workflow.Core.Models;
 using Workflow.Engine.Messages;
 using Workflow.Engine.Models;
 using Workflow.Engine.Services;
+using Workflow.Modules.Abstractions;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 
@@ -69,9 +70,23 @@ public class WorkflowExecutor : ReceiveActor
     private LanguageExt.HashSet<string> _failedNodes;
     private LanguageExt.HashSet<string> _runningNodes;
 
+    /// <summary>
+    /// Nodes skipped by port-aware routing — downstream of an unactivated port.
+    /// Counted as terminal for <see cref="IsWorkflowComplete"/> purposes~ ⏭️.
+    /// CopilotNote: Phase 2.2.0a — populated by <see cref="TrySkipNodeDownstream"/>.
+    /// </summary>
+    private LanguageExt.HashSet<string> _skippedNodes;
+
     // Retry tracking — how many attempts each node has used, and its last error~ 🔄
     private readonly Dictionary<string, int> _nodeRetryAttempts = new();
     private readonly Dictionary<string, Exception> _lastNodeErrors = new();
+
+    /// <summary>
+    /// Port name validation errors collected at graph-build time.
+    /// Checked in <see cref="HandleStartExecution"/> to fail fast before any node runs~ 🛡️.
+    /// CopilotNote: Phase 2.2.0a — populated by <see cref="ValidateConnectionPorts"/>.
+    /// </summary>
+    private readonly List<string> _portValidationErrors = new();
 
     /// <summary>
     /// Cancelable handles for pending scheduled retry messages.
@@ -305,6 +320,51 @@ public class WorkflowExecutor : ReceiveActor
             "📊 Execution graph built: {ConnectionCount} connections, start nodes: {StartNodes}",
             _definition.Connections.Count,
             string.Join(", ", GetStartNodes()));
+
+        // Phase 2.2.0a: Validate connection SourcePortNames against module schema declarations~ 🛡️
+        ValidateConnectionPorts();
+    }
+
+    /// <summary>
+    /// Validates that every connection's SourcePortName is declared in the source module's output schema.
+    /// Errors are stored in <see cref="_portValidationErrors"/> and surfaced at execution start time~ 🛡️✨.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Only validates if <see cref="IModuleRegistry"/> is registered in DI.
+    /// If the module isn't found in the registry, the connection is skipped (runtime will fail anyway).
+    /// This prevents typo port names from being silently ignored — fail fast, fail loud! UwU 💖.
+    /// </remarks>
+    private void ValidateConnectionPorts()
+    {
+        var registry = _serviceProvider.GetService(typeof(IModuleRegistry)) as IModuleRegistry;
+        if (registry == null)
+        {
+            _log.Debug("⚠️ No IModuleRegistry found — skipping port name validation at load time");
+            return;
+        }
+
+        var nodeModuleMap = _definition.Nodes.ToDictionary(n => n.Id, n => n.ModuleId);
+
+        foreach (var connection in _definition.Connections)
+        {
+            if (!nodeModuleMap.TryGetValue(connection.SourceNodeId, out var moduleId)) continue;
+
+            var module = registry.GetModule(moduleId);
+            if (module == null) continue; // Not registered — runtime execution will catch this
+
+            var declaredOutputs = module.Schema.Outputs.Select(p => p.Name).ToHashSet();
+
+            // Skip validation for modules with no declared outputs (dynamic-port modules like builtin.parallel)
+            if (declaredOutputs.Count == 0) continue;
+
+            if (!declaredOutputs.Contains(connection.SourcePortName))
+            {
+                _portValidationErrors.Add(
+                    $"Connection from '{connection.SourceNodeId}' uses undeclared output port " +
+                    $"'{connection.SourcePortName}' on module '{moduleId}'. " +
+                    $"Declared ports: [{string.Join(", ", declaredOutputs)}]");
+            }
+        }
     }
 
     /// <summary>
@@ -342,6 +402,15 @@ public class WorkflowExecutor : ReceiveActor
                 "⚠️ Cannot start execution {ExecutionId} - already in state {State}",
                 _executionId,
                 _context.State);
+            return;
+        }
+
+        // Phase 2.2.0a: Fail fast if port validation found errors at graph build time~ 🛡️
+        if (_portValidationErrors.Count > 0)
+        {
+            var errorMsg = "Workflow port validation failed: " + string.Join("; ", _portValidationErrors);
+            _log.Error("❌ {Error}", errorMsg);
+            FailWorkflow(new InvalidOperationException(errorMsg));
             return;
         }
 
@@ -604,41 +673,143 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
-        // Find and execute successor nodes whose dependencies are now satisfied
-        ExecuteReadySuccessors(nodeId);
+        // Find and execute successor nodes whose dependencies are now satisfied.
+        // Pass activePorts for port-aware routing (Phase 2.2.0a)~ 🎯
+        ExecuteReadySuccessors(nodeId, message.ActivePorts);
     }
 
     /// <summary>
     /// Checks which successor nodes are ready to execute and starts them.
-    /// A node is ready when all its predecessors have completed~ 🔄.
+    /// Phase 2.2.0a: Port-aware routing — when <paramref name="activePorts"/> is non-empty,
+    /// only activates successors reachable via those ports; deactivated branches are marked Skipped~ 🎯✨.
     /// </summary>
-    private void ExecuteReadySuccessors(string completedNodeId)
+    /// <param name="completedNodeId">The node that just completed.</param>
+    /// <param name="activePorts">
+    /// Which output ports to route through. Empty = fire all (legacy/default).
+    /// CopilotNote: Backwards-compatible contract — modules that don't set ActivePorts
+    /// (i.e. all Phase 1 modules) pass an empty Arr → all outgoing connections fire as before~ 💖.
+    /// </param>
+    private void ExecuteReadySuccessors(string completedNodeId, Arr<string> activePorts = default)
     {
-        if (!_nodeSuccessors.TryGetValue(completedNodeId, out var successors))
+        if (!_nodeSuccessors.TryGetValue(completedNodeId, out var successors) || successors.Count == 0)
         {
             return;
         }
 
-        foreach (var successorId in successors)
+        if (activePorts.Count == 0)
         {
-            // Check if already running, completed, or failed
-            if (_runningNodes.Contains(successorId) ||
-                _completedNodes.Contains(successorId) ||
-                _failedNodes.Contains(successorId))
+            // Legacy / fire-all: unchanged behaviour — every successor whose predecessors are satisfied runs~ ✅
+            foreach (var successorId in successors)
             {
-                continue;
+                TryFireSuccessor(successorId);
             }
 
-            // Check if all predecessors are complete
-            var predecessors = _nodePredecessors[successorId];
-            var allPredecessorsComplete = predecessors.All(p => _completedNodes.Contains(p));
+            return;
+        }
 
-            if (allPredecessorsComplete)
+        // Port-aware routing~ 🎯
+        // Build the set of targets activated via the selected ports
+        var activatedTargets = _definition.Connections
+            .Where(c => c.SourceNodeId == completedNodeId && activePorts.Contains(c.SourcePortName))
+            .Select(c => c.TargetNodeId)
+            .ToHashSet();
+
+        // Build the set of targets on deactivated ports (NOT in activatedTargets)
+        var deactivatedTargets = _definition.Connections
+            .Where(c => c.SourceNodeId == completedNodeId && !activePorts.Contains(c.SourcePortName))
+            .Select(c => c.TargetNodeId)
+            .Where(t => !activatedTargets.Contains(t)) // not also targeted via an active port
+            .ToHashSet();
+
+        // Fire activated branches
+        foreach (var targetId in activatedTargets)
+        {
+            TryFireSuccessor(targetId);
+        }
+
+        // Skip deactivated branches (propagates recursively downstream)~ ⏭️
+        foreach (var targetId in deactivatedTargets)
+        {
+            TrySkipNodeDownstream(targetId);
+        }
+
+        // After propagating skips, check if the entire workflow is now complete~ 🎉
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+        }
+    }
+
+    /// <summary>
+    /// Attempts to fire a successor node if all its predecessors are satisfied
+    /// (completed, failed-with-continue, or skipped)~ ✅.
+    /// </summary>
+    /// <param name="successorId">The candidate successor node ID.</param>
+    private void TryFireSuccessor(string successorId)
+    {
+        // Skip nodes already in a terminal or running state
+        if (_runningNodes.Contains(successorId) ||
+            _completedNodes.Contains(successorId) ||
+            _failedNodes.Contains(successorId) ||
+            _skippedNodes.Contains(successorId))
+        {
+            return;
+        }
+
+        // All predecessors must be in a "satisfied" state (complete, failed-continue, or skipped)
+        var predecessors = _nodePredecessors[successorId];
+        var allSatisfied = predecessors.All(p =>
+            _completedNodes.Contains(p) || _skippedNodes.Contains(p));
+
+        if (allSatisfied)
+        {
+            _log.Debug(
+                "🔗 Firing successor {SuccessorNode} (all predecessors satisfied)",
+                successorId);
+            ExecuteNode(successorId);
+        }
+    }
+
+    /// <summary>
+    /// Marks a node as Skipped and recursively skips all downstream nodes whose only
+    /// remaining path was through this node~ ⏭️✨.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Called when a module sets ActivePorts that don't include the connection
+    /// leading to this node. Only skips if ALL of the node's predecessors are now satisfied
+    /// (complete/failed/skipped) — protects against skipping a node that has another active
+    /// predecessor still pending. Recursion bottoms out at terminal nodes (no successors)~ 🌸.
+    /// </remarks>
+    private void TrySkipNodeDownstream(string nodeId)
+    {
+        // Don't skip a node already in any terminal or running state
+        if (_completedNodes.Contains(nodeId) ||
+            _failedNodes.Contains(nodeId) ||
+            _runningNodes.Contains(nodeId) ||
+            _skippedNodes.Contains(nodeId))
+        {
+            return;
+        }
+
+        // Only skip if ALL this node's predecessors are now satisfied (complete/failed/skipped).
+        // If a predecessor is still pending/running, that path could still activate this node.
+        var predecessors = _nodePredecessors.GetValueOrDefault(nodeId, new List<string>());
+        var allSatisfied = predecessors.All(p =>
+            _completedNodes.Contains(p) || _failedNodes.Contains(p) || _skippedNodes.Contains(p));
+
+        if (!allSatisfied) return;
+
+        _log.Debug("⏭️ Skipping node {NodeId} (all incoming paths deactivated by port routing)", nodeId);
+
+        _skippedNodes = _skippedNodes.Add(nodeId);
+        TransitionNodeState(nodeId, NodeExecutionState.Skipped, DateTimeOffset.UtcNow);
+
+        // Propagate skip to all downstream successors~ 🌊
+        if (_nodeSuccessors.TryGetValue(nodeId, out var ownSuccessors))
+        {
+            foreach (var successorId in ownSuccessors)
             {
-                _log.Debug(
-                    "🔗 Predecessor {CompletedNode} done, executing successor {SuccessorNode}",
-                    completedNodeId, successorId);
-                ExecuteNode(successorId);
+                TrySkipNodeDownstream(successorId);
             }
         }
     }
@@ -919,10 +1090,10 @@ public class WorkflowExecutor : ReceiveActor
                 continue;
             }
 
-            // Check if all predecessors are complete
+            // Check if all predecessors are complete or skipped (Phase 2.2.0a: skipped counts as satisfied)
             if (_nodePredecessors.TryGetValue(nodeId, out var predecessors))
             {
-                if (predecessors.All(p => _completedNodes.Contains(p)))
+                if (predecessors.All(p => _completedNodes.Contains(p) || _skippedNodes.Contains(p)))
                 {
                     ExecuteNode(nodeId);
                 }
@@ -1140,13 +1311,13 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>
     /// Checks if the workflow execution is complete.
-    /// Complete when all nodes are either completed, failed (with continue-on-error), or skipped~ ✅.
+    /// Phase 2.2.0a: Skipped nodes count as terminal (port-aware routing may skip entire branches)~ ⏭️.
     /// </summary>
     private bool IsWorkflowComplete()
     {
-        // All nodes must be in a terminal state (completed or failed with continue-on-error)
+        // All nodes must be in a terminal state (completed, failed-continue, or skipped)
         return _runningNodes.Count == 0 &&
-               _completedNodes.Count + _failedNodes.Count >= _definition.Nodes.Count;
+               _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _definition.Nodes.Count;
     }
 
     /// <summary>
@@ -1182,6 +1353,8 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void CompleteWorkflow()
     {
+        // Guard against double-completion (port-aware skip propagation may call this concurrently)~ 🛡️
+        if (_context.State == ExecutionState.Completed) return;
         var now = DateTimeOffset.UtcNow;
         _executionTimer.Stop();
 
@@ -1451,7 +1624,7 @@ public class WorkflowExecutor : ReceiveActor
             }
         }
 
-        // Rebuild running/completed/failed sets from the context's NodeStates~ 📊
+        // Rebuild running/completed/failed/skipped sets from the context's NodeStates~ 📊
         foreach (var (nodeId, state) in _context.NodeStates)
         {
             switch (state)
@@ -1465,6 +1638,10 @@ public class WorkflowExecutor : ReceiveActor
                     break;
                 case NodeExecutionState.Failed:
                     _failedNodes = _failedNodes.Add(nodeId);
+                    break;
+                case NodeExecutionState.Skipped:
+                    // Phase 2.2.0a: restore skipped nodes from snapshot~ ⏭️
+                    _skippedNodes = _skippedNodes.Add(nodeId);
                     break;
             }
         }
