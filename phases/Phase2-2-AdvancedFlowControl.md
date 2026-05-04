@@ -44,7 +44,7 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 | `PortDefinition` (multi-port schema) | `Workflow.Core/Models/ModuleSchema.cs` | ✅ Already supports multiple inputs/outputs |
 | `NodeDefinition` (id, module, inputs) | `Workflow.Core/Models/NodeDefinition.cs` | ✅ Existing |
 | `ConnectionDefinition` (source/target) | `Workflow.Core/Models/WorkflowDefinition.cs` | ✅ Connections already keyed by ports |
-| `WorkflowExecutor` (Akka actor) | `Workflow.Engine/Actors/WorkflowExecutor.cs` | ⚠️ Today fires **all** downstream connections — needs port-aware routing |
+| `WorkflowExecutor` (Akka actor) | `Workflow.Engine/Actors/WorkflowExecutor.cs` | ✅ Port-aware routing shipped in 2.2.0a — `ActivePorts` selective activation + `TrySkipNodeDownstream` + `ValidateConnectionPorts` at load time |
 | `IWorkflowModule` | `Workflow.Modules/Abstractions/IWorkflowModule.cs` | ✅ Module contract reused as-is |
 | `IExecutionHistoryRepository` | `Workflow.Persistence/Abstractions/IExecutionHistoryRepository.cs` | ✅ Records per-node executions (good for loop iterations) |
 
@@ -63,7 +63,7 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ---
 
-### 2.2.0a Port-Aware Routing & Sub-Graph Execution 🎯🌿
+### 2.2.0a Port-Aware Routing & Sub-Graph Execution 🎯🌿 ✅ COMPLETE
 
 **Purpose:** Teach the engine to (a) selectively activate downstream connections by port and (b) run a contained sub-graph on demand. These two together are the *minimum* primitives needed to ship `builtin.condition` / `builtin.switch` (2.2.1)~ ⚡
 
@@ -71,34 +71,37 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 #### Tasks:
 
-- [ ] **Port-aware connection activation in `WorkflowExecutor`** 🎯
-  - [ ] Add optional `ActivePorts: Arr<string>` to the node-completion message in `Workflow.Engine/Messages/WorkflowMessages.cs` (and the corresponding result type returned by `IWorkflowModule`).
-  - [ ] In `WorkflowExecutor`, when dispatching downstream connections:
-    - [ ] If `ActivePorts` is **empty/null** → fire all outgoing connections (today’s behaviour, no change for existing modules).
-    - [ ] If `ActivePorts` is **non-empty** → fire only connections whose `SourcePort` ∈ `ActivePorts`.
-  - [ ] Workflow load-time validation: every connection's `SourcePort` must reference a declared output port on the source node's module schema. Catch typos before execution.
-  - [ ] Update existing engine tests to assert the unchanged-default contract (no test should need to set `ActivePorts`).
+- [x] **Port-aware connection activation in `WorkflowExecutor`** 🎯
+  - [x] Add optional `ActivePorts: Arr<string>` to the node-completion message in `Workflow.Engine/Messages/WorkflowMessages.cs` (and the corresponding result type returned by `IWorkflowModule`).
+  - [x] In `WorkflowExecutor`, when dispatching downstream connections:
+    - [x] If `ActivePorts` is **empty/null** → fire all outgoing connections (today's behaviour, no change for existing modules).
+    - [x] If `ActivePorts` is **non-empty** → fire only connections whose `SourcePort` ∈ `ActivePorts`.
+  - [x] Workflow load-time validation: every connection's `SourcePort` must reference a declared output port on the source node's module schema. Catch typos before execution. (`ValidateConnectionPorts`)
+  - [x] Update existing engine tests to assert the unchanged-default contract (no test should need to set `ActivePorts`). (`NoActivePorts_FiresAllConnections_BackwardsCompatible`)
 
-- [ ] **Sub-graph execution primitive** 🌿
-  - [ ] New file: `Workflow.Engine/Actors/SubGraphExecutor.cs`
-    - [ ] Accepts `(parentExecutionId, entryNodeIds, inputs, parentScope)`.
-    - [ ] Re-uses the same dispatch protocol as `WorkflowExecutor` but with **isolated** node-state map and **scoped** to a subset of the workflow's nodes/connections.
-    - [ ] Reports `SubGraphCompleted(outputs)` / `SubGraphFailed(error)` to the caller actor.
-  - [ ] New file: `Workflow.Engine/Messages/SubGraphMessages.cs`
-    - [ ] `StartSubGraph`, `SubGraphCompleted`, `SubGraphFailed`.
-  - [ ] Refactor `WorkflowExecutor` to extract a small **dispatch core** that both it and `SubGraphExecutor` share (avoid copy-paste of routing logic).
+- [x] **Sub-graph execution primitive** 🌿
+  - [x] New file: `Workflow.Engine/Actors/SubGraphExecutor.cs`
+    - [x] Accepts `(parentExecutionId, entryNodeIds, inputs, parentScope)`.
+    - [x] Re-uses the same dispatch protocol as `WorkflowExecutor` but with **isolated** node-state map and **scoped** to a subset of the workflow's nodes/connections.
+    - [x] Reports `SubGraphCompleted(outputs)` / `SubGraphFailed(error)` to the caller actor.
+  - [x] New file: `Workflow.Engine/Messages/SubGraphMessages.cs`
+    - [x] `StartSubGraph`, `SubGraphCompleted`, `SubGraphFailed`.
+  - [ ] Refactor `WorkflowExecutor` to extract a small **dispatch core** that both it and `SubGraphExecutor` share (avoid copy-paste of routing logic). ⚠️ *Currently both have their own full implementations — extraction deferred.*
 
-- [ ] **Persistence & history**
-  - [ ] Sub-graph node executions persist to `IExecutionHistoryRepository` under the parent execution id with `Metadata.subGraphId` so 2.1.5 history queries still work.
-  - [ ] No new repository surface area required.
+- [x] **Persistence & history**
+  - [x] Sub-graph node executions persist to `IExecutionHistoryRepository` under the parent execution id so 2.1.5 history queries still work.
+  - [ ] `Metadata.subGraphId` tagging on `NodeExecutionRecord` — records use parent ID correctly but sub-graph ID tagging is not yet stored. ⚠️ *`NodeExecutionRecord` would need a new `Metadata` dictionary property — deferred.*
+  - [x] No new repository surface area required.
 
 **Tests (target ~6):** → `Workflow.Tests/Engine/PortRoutingTests.cs`, `Workflow.Tests/Engine/SubGraphExecutorTests.cs`
-- [ ] `ActivePorts = ["true"]` fires only `true` connections; `false` connections do not run
-- [ ] Backwards-compat: nodes without `ActivePorts` fire all outgoing connections
-- [ ] Connection referencing an undeclared `SourcePort` fails at workflow load with a clear error
-- [ ] Sub-graph runs entry → terminal nodes and returns aggregated outputs
-- [ ] Sub-graph failure surfaces as `SubGraphFailed` to caller without failing the parent execution by itself
-- [ ] Sub-graph node executions appear in history under the parent execution
+- [x] `ActivePorts = ["true"]` fires only `true` connections; `false` connections do not run (`ActivePorts_TrueOnly_FiresOnlyTrueConnection`)
+- [x] `ActivePorts = ["false"]` fires only `false` connections; `true` connections do not run (`ActivePorts_FalseOnly_FiresOnlyFalseConnection`)
+- [x] Backwards-compat: nodes without `ActivePorts` fire all outgoing connections (`NoActivePorts_FiresAllConnections_BackwardsCompatible`)
+- [x] Connection referencing an undeclared `SourcePort` fails at workflow load with a clear error (`UndeclaredSourcePort_FailsWorkflowAtLoadTime`)
+- [x] Sub-graph runs entry → terminal nodes and returns aggregated outputs (`SubGraph_RunsEntryToTerminalNodes_ReportsCompletion`)
+- [x] Sub-graph failure surfaces as `SubGraphFailed` to caller without failing the parent execution by itself (`SubGraph_NodeFailure_ReportsSubGraphFailed_NotKillingParent`)
+- [x] Sub-graph node executions appear in history under the parent execution (`SubGraph_NodeExecutions_PersistedUnderParentExecutionId`)
+- [x] ✨ BONUS: Port-aware routing inside sub-graphs works identically to `WorkflowExecutor` (`SubGraph_PortAwareRouting_SkipsDeactivatedBranches`)
 
 ---
 
@@ -588,7 +591,7 @@ Directory.Packages.props                                ← + Jint (default); Dy
 | **Q6** | Fan-out/Fan-in | ✅ Dedicated modules over shared coordinator | — |
 | **Q7** | Expression engine choice | ✅ **Jint (JS/ES2020)** — default; DynamicExpresso as `"csharp"` fallback | Native `EvaluateAsync` + CT + `async/await` — full analysis: [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md) |
 | **Q8** | Loop-body addressing | ✅ **Hybrid in 2.2** — ports drive execution; `NodeDefinition.RegionId?` hint field for visual designer | Engine ignores `regionId`; tooling auto-populates; Phase 3 designer reads for bounding box. Full analysis: [Phase2-2-LoopBodyAddressing.md](./Phase2-2-LoopBodyAddressing.md) |
-| **Q9** | Parallel cancel semantics | ✅ **Cooperative `CancellationToken` cancel + 250 ms grace window** | Siblings observe linked CTS from 2.2.0b hierarchy; no hard-abort; grace window configurable per coordinator |
+| **Q9** | Parallel cancel semantics | ✅ **Cooperative `CancellationToken` cancel + 250 ms grace window** | Siblings observe linked CTS from 2.2.0b hierarchy; no hard-abort of in-flight nodes |
 | **Q10** | `builtin.switch` in 2.2 | ✅ **Included in 2.2.1** alongside `builtin.condition` | Shares multi-port routing from 2.2.0a; negligible added complexity; gives authors multi-way branching in the same PR |
 
 ---
