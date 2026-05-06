@@ -36,7 +36,7 @@ using Workflow.Modules.Binding;
 /// </para>
 /// <para>
 /// CopilotNote: This actor bridges the Akka.NET actor world with the
-/// async module execution world. We use PipeTo for async operations~ 💖.
+/// async module execution world. We use PipeTo for async operations~ .
 /// </para>
 /// </remarks>
 public class NodeExecutor : ReceiveActor
@@ -49,15 +49,6 @@ public class NodeExecutor : ReceiveActor
     private readonly IServiceProvider _serviceProvider;
     private readonly Stopwatch _timer = new();
     private readonly IActorLifecycleHooks _lifecycleHooks;
-
-    /// <summary>
-    /// CopilotNote: Phase 2.2.0b — optional parent cancellation token (e.g. from the
-    /// WorkflowExecutor's <c>_executionCts</c> or a SubGraphExecutor's <c>_linkedCts</c>).
-    /// The node's own CTS is linked to this so that hierarchical cancellation propagates
-    /// automatically: cancel the parent → cancel this node's module execution~ 🔗
-    /// </summary>
-    private readonly CancellationToken _parentToken;
-
     private HashMap<string, object?> _workflowVariables;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isExecuting;
@@ -70,18 +61,12 @@ public class NodeExecutor : ReceiveActor
     /// <param name="inputs">Input values for the node.</param>
     /// <param name="executionId">The parent execution ID.</param>
     /// <param name="serviceProvider">Service provider for DI.</param>
-    /// <param name="parentToken">
-    /// Optional cancellation token from the owning executor (WorkflowExecutor or SubGraphExecutor).
-    /// When cancelled, the node's own CTS is also cancelled via a linked token source~ 🔗
-    /// CopilotNote: Phase 2.2.0b — hierarchical cancellation threading.
-    /// </param>
     public NodeExecutor(
         string nodeId,
         NodeDefinition nodeDefinition,
         Dictionary<string, object?> inputs,
         Guid executionId,
-        IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        IServiceProvider serviceProvider)
     {
         _log = Context.GetLogger();
         _nodeId = nodeId;
@@ -89,7 +74,6 @@ public class NodeExecutor : ReceiveActor
         _inputs = inputs;
         _executionId = executionId;
         _serviceProvider = serviceProvider;
-        _parentToken = parentToken;
         _lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
             ?? NullActorLifecycleHooks.Instance;
 
@@ -110,22 +94,16 @@ public class NodeExecutor : ReceiveActor
     /// <param name="inputs">Input values.</param>
     /// <param name="executionId">The execution ID.</param>
     /// <param name="serviceProvider">Service provider.</param>
-    /// <param name="parentToken">
-    /// Optional parent cancellation token for hierarchical cancellation~ 🔗
-    /// CopilotNote: Phase 2.2.0b — pass the WorkflowExecutor's <c>_executionCts.Token</c>
-    /// or SubGraphExecutor's <c>_linkedCts.Token</c> here~ 💖.
-    /// </param>
     /// <returns>Props for actor creation.</returns>
     public static Props Props(
         string nodeId,
         NodeDefinition nodeDefinition,
         Dictionary<string, object?> inputs,
         Guid executionId,
-        IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        IServiceProvider serviceProvider)
     {
         return Akka.Actor.Props.Create(
-            () => new NodeExecutor(nodeId, nodeDefinition, inputs, executionId, serviceProvider, parentToken));
+            () => new NodeExecutor(nodeId, nodeDefinition, inputs, executionId, serviceProvider));
     }
 
     /// <summary>
@@ -142,13 +120,7 @@ public class NodeExecutor : ReceiveActor
 
         _isExecuting = true;
         _timer.Start();
-
-        // Phase 2.2.0b: Create a CTS linked to the parent token so hierarchical cancellation
-        // propagates automatically from WorkflowExecutor/SubGraphExecutor → this node~ 🔗
-        _cancellationTokenSource = _parentToken == CancellationToken.None || !_parentToken.CanBeCanceled
-            ? new CancellationTokenSource()
-            : CancellationTokenSource.CreateLinkedTokenSource(_parentToken);
-
+        _cancellationTokenSource = new CancellationTokenSource();
         _workflowVariables = message.Variables;
 
         _log.Info("⚡ Executing node {NodeId} (module: {ModuleId})", _nodeId, _nodeDefinition.ModuleId);
@@ -174,9 +146,9 @@ public class NodeExecutor : ReceiveActor
                 return;
             }
 
-            _log.Debug("📦 Found module: {ModuleName} ({ModuleId})", module.DisplayName, module.ModuleId);
+            _log.Debug(" Found module: {ModuleName} ({ModuleId})", module.DisplayName, module.ModuleId);
 
-            // Bind inputs via PropertyBinder (resolves references, converts types, applies defaults). 🔗
+            // Bind inputs via PropertyBinder (resolves references, converts types, applies defaults).
             var binder = _serviceProvider.GetService<IPropertyBinder>() ?? new PropertyBinder();
             var bindingContext = BuildBindingContext();
             var bindingResult = binder.BindProperties(_inputs, module.Schema.Inputs, bindingContext);
@@ -309,7 +281,7 @@ public class NodeExecutor : ReceiveActor
     /// </summary>
     private void HandleCancel(CancelExecution message)
     {
-        _log.Info("🛑 Cancelling node {NodeId}", _nodeId);
+        _log.Info(" Cancelling node {NodeId}", _nodeId);
         Context.SetReceiveTimeout(null);
         _cancellationTokenSource?.Cancel();
         _timer.Stop();
@@ -319,7 +291,7 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Validates inputs against the module schema.
-    /// Checks for missing required inputs and validates data types~ 🔍✨.
+    /// Checks for missing required inputs and validates data types~ ✨.
     /// </summary>
     /// <param name="schema">The module schema to validate against.</param>
     /// <returns>List of validation error messages.</returns>
@@ -361,7 +333,7 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Gets an input value by name, checking both exact match and fuzzy match.
-    /// Supports "nodeName.portName" format for predecessor outputs~ 📥.
+    /// Supports "nodeName.portName" format for predecessor outputs~ .
     /// </summary>
     /// <param name="inputName">The input name to find.</param>
     /// <returns>The input value or null if not found.</returns>
@@ -388,7 +360,7 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Validates that an input value is compatible with the expected data type.
-    /// Returns an error message if validation fails, null if valid~ 🔍.
+    /// Returns an error message if validation fails, null if valid~ .
     /// </summary>
     /// <param name="inputName">The name of the input for error messages.</param>
     /// <param name="value">The actual value.</param>
@@ -467,12 +439,12 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Builds the <see cref="PropertyBindingContext"/> for the PropertyBinder.
-    /// Gathers workflow variables and predecessor node outputs for reference resolution. 🔗.
+    /// Gathers workflow variables and predecessor node outputs for reference resolution. .
     /// </summary>
     /// <remarks>
     /// CopilotNote: Variables come from the raw inputs dictionary (workflow-level),
     /// and node outputs are passed through prefixed keys like "nodeId.portName".
-    /// We extract those into the structured format the binder expects! UwU 💖.
+    /// We extract those into the structured format the binder expects! UwU .
     /// </remarks>
     private PropertyBindingContext BuildBindingContext()
     {
@@ -485,7 +457,7 @@ public class NodeExecutor : ReceiveActor
             var dotIndex = key.IndexOf('.', StringComparison.Ordinal);
             if (dotIndex > 0 && dotIndex < key.Length - 1)
             {
-                // Looks like "nodeId.portName" — add to node outputs. 📤
+                // Looks like "nodeId.portName" — add to node outputs.
                 var nodeId = key.Substring(0, dotIndex);
                 var portName = key.Substring(dotIndex + 1);
 
@@ -500,7 +472,7 @@ public class NodeExecutor : ReceiveActor
             }
             else
             {
-                // Plain key — treat as a variable. 💾
+                // Plain key — treat as a variable.
                 variables[key] = value;
             }
         }
@@ -542,7 +514,7 @@ public class NodeExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Safely converts a LanguageExt HashMap to a regular Dictionary~ 💾.
+    /// Safely converts a LanguageExt HashMap to a regular Dictionary~ .
     /// Handles default/empty HashMaps correctly without throwing.
     /// </summary>
     private static Dictionary<string, object?> ConvertHashMapToDictionary(HashMap<string, object?> hashMap)
@@ -577,11 +549,11 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Fallback stub execution when module is not found.
-    /// Allows the workflow engine to work even without registered modules~ 🧪.
+    /// Allows the workflow engine to work even without registered modules~ .
     /// </summary>
     private void ExecuteStubFallback()
     {
-        _log.Info("🧪 Using stub execution fallback for node {NodeId}", _nodeId);
+        _log.Info(" Using stub execution fallback for node {NodeId}", _nodeId);
 
         var outputs = new Dictionary<string, object?>
         {
@@ -613,12 +585,12 @@ public class NodeExecutor : ReceiveActor
         _isExecuting = false;
         Context.SetReceiveTimeout(null);
 
-        // Convert variable updates to HashMap if present~ 💾
+        // Convert variable updates to HashMap if present~
         HashMap<string, object?>? varUpdatesHashMap = variableUpdates is { Count: > 0 }
             ? variableUpdates.ToHashMap()
             : null;
 
-        // Convert active ports to Arr (empty = fire-all semantics)~ 🎯
+        // Convert active ports to Arr (empty = fire-all semantics)~
         var activePortsArr = activePorts is { Count: > 0 }
             ? new LanguageExt.Arr<string>(activePorts)
             : LanguageExt.Arr<string>.Empty;
@@ -651,17 +623,17 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called when the actor is starting for the first time.
-    /// Logs initialization and validates the service provider state~ 🌸✨.
+    /// Logs initialization and validates the service provider state~ ✨.
     /// </summary>
     /// <remarks>
     /// CopilotNote: PreStart runs before any message is delivered! We use it
-    /// to verify the DI container has what we need and log the node config. UwU 💖.
+    /// to verify the DI container has what we need and log the node config. UwU .
     /// </remarks>
     protected override void PreStart()
     {
         base.PreStart();
         _log.Info(
-            "🌸 NodeExecutor initializing for node {NodeId} (module: {ModuleId}, execution: {ExecutionId})",
+            " NodeExecutor initializing for node {NodeId} (module: {ModuleId}, execution: {ExecutionId})",
             _nodeId,
             _nodeDefinition.ModuleId,
             _executionId);
@@ -670,14 +642,14 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called before the actor restarts due to supervision.
-    /// Cancels any running execution and cleans up resources~ 🔄.
+    /// Cancels any running execution and cleans up resources~ .
     /// </summary>
     /// <remarks>
     /// <para>
     /// CopilotNote: When a NodeExecutor crashes mid-execution, we need to cancel any
     /// in-flight async work (module execution) to prevent dangling tasks. We dispose
     /// the CancellationTokenSource and reset the execution flag so PostRestart can
-    /// set up a clean slate for a fresh retry. Kawaii cleanup! 💕.
+    /// set up a clean slate for a fresh retry. Kawaii cleanup! .
     /// </para>
     /// </remarks>
     /// <param name="reason">The exception that caused the restart.</param>
@@ -685,13 +657,13 @@ public class NodeExecutor : ReceiveActor
     protected override void PreRestart(Exception reason, object message)
     {
         _log.Warning(
-            "🔄 NodeExecutor restarting for node {NodeId} due to: {Error}~ UwU",
+            " NodeExecutor restarting for node {NodeId} due to: {Error}~ UwU",
             _nodeId,
             reason.Message);
 
         _lifecycleHooks.OnPreRestart(CreateLifecycleContext(), reason, message);
 
-        // Cancel any in-flight execution to prevent dangling tasks~ 🛑
+        // Cancel any in-flight execution to prevent dangling tasks~
         _cancellationTokenSource?.Cancel();
         _cancellationTokenSource?.Dispose();
         _cancellationTokenSource = null;
@@ -707,12 +679,12 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called after the actor restarts.
-    /// Resets execution state for a clean retry~ 🌸✨.
+    /// Resets execution state for a clean retry~ ✨.
     /// </summary>
     /// <remarks>
     /// CopilotNote: After restart, the constructor runs again so most fields are fresh.
     /// We just reset <c>_isExecuting</c> in case state was partially set before the crash.
-    /// The parent WorkflowExecutor will re-send <see cref="Execute"/> if it wants a retry! 💖.
+    /// The parent WorkflowExecutor will re-send <see cref="Execute"/> if it wants a retry! .
     /// </remarks>
     /// <param name="reason">The exception that caused the restart.</param>
     protected override void PostRestart(Exception reason)
@@ -723,7 +695,7 @@ public class NodeExecutor : ReceiveActor
         _timer.Reset();
 
         _log.Info(
-            "🌸 NodeExecutor restarted for node {NodeId}. Ready for fresh execution~ ✨",
+            " NodeExecutor restarted for node {NodeId}. Ready for fresh execution~ ✨",
             _nodeId);
 
         _lifecycleHooks.OnPostRestart(CreateLifecycleContext(), reason);
@@ -731,17 +703,17 @@ public class NodeExecutor : ReceiveActor
 
     /// <summary>
     /// Lifecycle hook called when the actor is stopping.
-    /// Cancels running execution, disposes resources, and logs final state~ 👋🧹.
+    /// Cancels running execution, disposes resources, and logs final state~ .
     /// </summary>
     /// <remarks>
     /// CopilotNote: PostStop is the last chance to release resources!
-    /// We cancel the CTS, stop the timer, and log our farewell. Sayonara~ 💕.
+    /// We cancel the CTS, stop the timer, and log our farewell. Sayonara~ .
     /// </remarks>
     protected override void PostStop()
     {
         _timer.Stop();
 
-        // Cancel and dispose the CTS if it's still alive~ 🛑
+        // Cancel and dispose the CTS if it's still alive~
         if (_cancellationTokenSource != null)
         {
             _cancellationTokenSource.Cancel();
@@ -753,7 +725,7 @@ public class NodeExecutor : ReceiveActor
         Context.SetReceiveTimeout(null);
 
         _log.Info(
-            "👋 NodeExecutor stopping for node {NodeId} (was executing: {WasExecuting}, elapsed: {ElapsedMs}ms)",
+            " NodeExecutor stopping for node {NodeId} (was executing: {WasExecuting}, elapsed: {ElapsedMs}ms)",
             _nodeId,
             _isExecuting,
             _timer.ElapsedMilliseconds);
@@ -763,7 +735,7 @@ public class NodeExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ 🌸.
+    /// Creates an <see cref="ActorLifecycleContext"/> for passing to lifecycle hooks~ .
     /// </summary>
     /// <returns>A context describing this actor instance.</returns>
     private ActorLifecycleContext CreateLifecycleContext()

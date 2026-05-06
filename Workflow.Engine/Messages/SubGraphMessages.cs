@@ -9,25 +9,25 @@ using System.Collections.Generic;
 using Workflow.Core.Models;
 
 /// <summary>
-/// Message to start a sub-graph execution inside a running workflow~ 🌿✨
+/// Message to start a sub-graph execution inside a running workflow~ ✨
 /// </summary>
-/// <param name="ParentExecutionId">The parent execution ID for history correlation. 🆔.</param>
-/// <param name="Definition">The full workflow definition (sub-graph executor scopes using node IDs). 📋.</param>
+/// <param name="ParentExecutionId">The parent execution ID for history correlation. .</param>
+/// <param name="Definition">The full workflow definition (sub-graph executor scopes using node IDs). .</param>
 /// <param name="ScopeNodeIds">
 /// The set of node IDs that form this sub-graph.
 /// Only these nodes will be executed. Pass empty to run all nodes reachable from entry points.
 /// </param>
-/// <param name="EntryNodeIds">Node IDs to start executing from (the "first row" of the sub-graph). 🚀.</param>
-/// <param name="Inputs">Initial input values for the sub-graph entry nodes. 📥.</param>
+/// <param name="EntryNodeIds">Node IDs to start executing from (the "first row" of the sub-graph). .</param>
+/// <param name="Inputs">Initial input values for the sub-graph entry nodes. .</param>
 /// <param name="SubGraphId">
 /// Optional identifier for this sub-graph instance (e.g. loop iteration ID).
-/// Persisted on node execution records as metadata so history queries can correlate runs~ 🗂️.
+/// Persisted on node execution records as metadata so history queries can correlate runs~ ️.
 /// </param>
 /// <remarks>
 /// CopilotNote: SubGraphExecutor is spawned as a child actor and auto-starts on PreStart.
 /// This message type is used by loop/parallel modules (2.2.2, 2.2.3) when they ask WorkflowExecutor
 /// to spawn a sub-graph on their behalf. Not used by 2.2.0a directly — it's here as the
-/// canonical request shape for Phase 2.2.2+~ 💖.
+/// canonical request shape for Phase 2.2.2+~ .
 /// </remarks>
 public record StartSubGraph(
     Guid ParentExecutionId,
@@ -38,10 +38,10 @@ public record StartSubGraph(
     string? SubGraphId = null);
 
 /// <summary>
-/// Sent by SubGraphExecutor to its parent when all sub-graph nodes complete successfully~ 🎉✨
+/// Sent by SubGraphExecutor to its parent when all sub-graph nodes complete successfully~ ✨
 /// </summary>
-/// <param name="SubGraphId">The sub-graph identifier (matches <see cref="StartSubGraph.SubGraphId"/>). 🆔.</param>
-/// <param name="Outputs">Aggregated outputs from terminal sub-graph nodes. 📤.</param>
+/// <param name="SubGraphId">The sub-graph identifier (matches <see cref="StartSubGraph.SubGraphId"/>). .</param>
+/// <param name="Outputs">Aggregated outputs from terminal sub-graph nodes. .</param>
 public record SubGraphCompleted(
     string? SubGraphId,
     IReadOnlyDictionary<string, object?> Outputs);
@@ -49,28 +49,11 @@ public record SubGraphCompleted(
 /// <summary>
 /// Sent by SubGraphExecutor to its parent when the sub-graph fails~ ❌
 /// </summary>
-/// <param name="SubGraphId">The sub-graph identifier. 🆔.</param>
-/// <param name="Error">The exception that caused the failure. 💥.</param>
-/// <param name="FailedNodeId">The node ID that triggered the failure, if known. 🧩.</param>
+/// <param name="SubGraphId">The sub-graph identifier. .</param>
+/// <param name="Error">The exception that caused the failure. .</param>
+/// <param name="FailedNodeId">The node ID that triggered the failure, if known. .</param>
 public record SubGraphFailed(
     string? SubGraphId,
     Exception Error,
     string? FailedNodeId = null);
-
-/// <summary>
-/// Sent to a <see cref="Workflow.Engine.Actors.SubGraphExecutor"/> to request
-/// cooperative cancellation of the in-progress sub-graph~ 🛑✨
-/// </summary>
-/// <param name="SubGraphId">The sub-graph identifier to cancel. 🆔.</param>
-/// <param name="Reason">Optional human-readable reason for the cancellation. 📝.</param>
-/// <remarks>
-/// CopilotNote: Phase 2.2.0b — triggers <c>_linkedCts.Cancel()</c> inside SubGraphExecutor,
-/// which propagates the cancel signal to all child NodeExecutors (via their linked CTS).
-/// Nodes are expected to honour <c>CancellationToken</c> and throw <c>OperationCanceledException</c>,
-/// leading to a <see cref="SubGraphFailed"/> being sent to the parent automatically.
-/// No hard actor kills — fully cooperative~ 💖.
-/// </remarks>
-public record CooperativeCancelSubGraph(
-    string? SubGraphId,
-    string? Reason = null);
 
