@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using Akka.Actor;
 using Akka.Event;
 using Akka.Pattern;
@@ -100,6 +101,31 @@ public class WorkflowExecutor : ReceiveActor
     /// </remarks>
     private readonly Dictionary<string, ICancelable> _pendingRetryCancellations = new();
 
+    /// <summary>
+    /// Per-execution CancellationTokenSource — cancelled when the workflow stops or fails.
+    /// Passed to NodeExecutor children so cooperative cancellation propagates top-down~ 🔗.
+    /// CopilotNote: Phase 2.2.0b — hierarchical cancellation. Disposed in PostStop~ 💖.
+    /// </summary>
+    private readonly CancellationTokenSource _executionCts = new();
+
+    /// <summary>
+    /// Stack of active loop scopes, innermost loop at the top.
+    /// Pushed by PushLoopScope messages (sent by LoopModule in 2.2.2),
+    /// popped by PopLoopScope~ 🔁.
+    /// CopilotNote: Phase 2.2.0b infrastructure — NodeExecutionRecord is stamped with the
+    /// current top of the stack when a node completes or fails~ 💖.
+    /// </summary>
+    private readonly Stack<LoopContext> _loopContextStack = new();
+
+    /// <summary>
+    /// Stack of active error boundaries, innermost boundary at the top.
+    /// Pushed by PushErrorBoundary messages (sent by TryCatch module in 2.2.4),
+    /// popped by PopErrorBoundary~ 🛡️.
+    /// CopilotNote: Phase 2.2.0b infrastructure — HandleNodeFailure walks this stack
+    /// before entering the default fail-fast path~ 💖.
+    /// </summary>
+    private readonly Stack<ErrorBoundary> _boundaryStack = new();
+
     // Graph structure (built from connections, actor-local)
     private readonly Dictionary<string, List<string>> _nodeSuccessors = new();
     private readonly Dictionary<string, List<string>> _nodePredecessors = new();
@@ -190,6 +216,12 @@ public class WorkflowExecutor : ReceiveActor
         Receive<PersistenceExecutionStatusUpdated>(HandlePersistenceExecutionStatusUpdated);
         Receive<PersistenceSnapshotSaved>(HandlePersistenceSnapshotSaved);
         Receive<PersistenceVariableUpdatesSaved>(HandlePersistenceVariableUpdatesSaved);
+
+        // Phase 2.2.0b: Scope messages for loop and error boundary infrastructure~ 🔁🛡️
+        Receive<PushLoopScope>(HandlePushLoopScope);
+        Receive<PopLoopScope>(HandlePopLoopScope);
+        Receive<PushErrorBoundary>(HandlePushErrorBoundary);
+        Receive<PopErrorBoundary>(HandlePopErrorBoundary);
 
         _log.Info(
             "🎬 WorkflowExecutor created for execution {ExecutionId}, workflow '{WorkflowName}' with {NodeCount} nodes",
@@ -503,10 +535,10 @@ public class WorkflowExecutor : ReceiveActor
         _context = _context.WithNodeStarted(nodeId, now);
         _runningNodes = _runningNodes.Add(nodeId);
 
-        // Create NodeExecutor actor
+        // Create NodeExecutor actor — pass _executionCts.Token for hierarchical cancellation (Phase 2.2.0b)~ 🔗
         var executorName = $"node-{nodeId.Replace(".", "-")}";
         var nodeActor = Context.ActorOf(
-            NodeExecutor.Props(nodeId, nodeDef, nodeInputs, _executionId, _serviceProvider),
+            NodeExecutor.Props(nodeId, nodeDef, nodeInputs, _executionId, _serviceProvider, _executionCts.Token),
             executorName);
 
         // Watch for termination
@@ -654,7 +686,10 @@ public class WorkflowExecutor : ReceiveActor
             CompletedAt: now,
             Inputs: nodeInputs,
             Outputs: nodeOutputs,
-            Duration: message.Duration));
+            Duration: message.Duration,
+            // Phase 2.2.0b: Stamp loop scope metadata if a loop is active~ 🔁
+            LoopId: _loopContextStack.Count > 0 ? _loopContextStack.Peek().LoopId : null,
+            LoopIteration: _loopContextStack.Count > 0 ? _loopContextStack.Peek().Iteration : null));
 
         // Clean up actor reference
         if (_nodeActors.TryGetValue(nodeId, out var actor))
@@ -866,7 +901,10 @@ public class WorkflowExecutor : ReceiveActor
             CompletedAt: now,
             Inputs: nodeInputs,
             Error: error.Message,
-            Duration: nodeDuration));
+            Duration: nodeDuration,
+            // Phase 2.2.0b: Stamp loop scope metadata if a loop is active~ 🔁
+            LoopId: _loopContextStack.Count > 0 ? _loopContextStack.Peek().LoopId : null,
+            LoopIteration: _loopContextStack.Count > 0 ? _loopContextStack.Peek().Iteration : null));
 
         // Clean up actor reference
         if (_nodeActors.TryGetValue(nodeId, out var actor))
@@ -882,6 +920,13 @@ public class WorkflowExecutor : ReceiveActor
         var nodeDef = GetNodeDefinition(nodeId);
         var errorHandling = nodeDef?.ErrorHandling ?? _definition.ErrorHandling;
         var behavior = errorHandling?.OnErrorBehavior ?? ErrorBehavior.Fail;
+
+        // Phase 2.2.0b: Walk the active error boundary stack FIRST.
+        // If a boundary catches this exception, route to catch handler instead of falling through~ 🛡️
+        if (TryHandleWithBoundary(nodeId, error))
+        {
+            return;
+        }
 
         switch (behavior)
         {
@@ -982,6 +1027,167 @@ public class WorkflowExecutor : ReceiveActor
         var retryingEvent = new NodeRetrying(nodeId, _executionId, currentAttempt, retryPolicy.MaxAttempts, error);
         Context.Parent.Tell(retryingEvent);
         Context.System.EventStream.Publish(retryingEvent);
+    }
+
+    #endregion
+
+    #region Loop Scope & Error Boundary Handlers 🔁🛡️
+
+    /// <summary>
+    /// Pushes a new <see cref="LoopContext"/> onto the active loop scope stack~ 🔁✨
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.0b — sent by LoopModule (2.2.2) before it starts an iteration sub-graph.
+    /// The innermost loop context is always at the top of the stack~ 💖.
+    /// </remarks>
+    private void HandlePushLoopScope(PushLoopScope message)
+    {
+        _loopContextStack.Push(message.Context);
+        _log.Debug(
+            "🔁 Pushed loop scope '{LoopId}' (depth={Depth}, iter={Iter}) for execution {ExecutionId}",
+            message.Context.LoopId,
+            _loopContextStack.Count,
+            message.Context.Iteration,
+            _executionId);
+    }
+
+    /// <summary>
+    /// Pops the innermost loop scope off the stack~ ⬆️✨
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.0b — sanity-checks the LoopId against the top of the stack.
+    /// Logs a warning (and still pops) if values don't match, to prevent stack corruption~ 🛡️.
+    /// </remarks>
+    private void HandlePopLoopScope(PopLoopScope message)
+    {
+        if (_loopContextStack.Count == 0)
+        {
+            _log.Warning("⚠️ PopLoopScope received for '{LoopId}' but loop scope stack is empty! (execution {ExecutionId})", message.LoopId, _executionId);
+            return;
+        }
+
+        var top = _loopContextStack.Peek();
+        if (top.LoopId != message.LoopId)
+        {
+            _log.Warning(
+                "⚠️ PopLoopScope LoopId mismatch: expected '{Expected}' but got '{Got}' — popping anyway (execution {ExecutionId})",
+                top.LoopId,
+                message.LoopId,
+                _executionId);
+        }
+
+        _loopContextStack.Pop();
+        _log.Debug(
+            "⬆️ Popped loop scope '{LoopId}' (remaining depth={Depth}) for execution {ExecutionId}",
+            message.LoopId,
+            _loopContextStack.Count,
+            _executionId);
+    }
+
+    /// <summary>
+    /// Pushes a new <see cref="ErrorBoundary"/> onto the active boundary stack~ 🛡️✨
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.0b — sent by TryCatch module (2.2.4) when the try-body starts.
+    /// HandleNodeFailure walks this stack before entering the default fail-fast path~ 💖.
+    /// </remarks>
+    private void HandlePushErrorBoundary(PushErrorBoundary message)
+    {
+        _boundaryStack.Push(message.Boundary);
+        _log.Debug(
+            "🛡️ Pushed error boundary '{BoundaryId}' (depth={Depth}) for execution {ExecutionId}",
+            message.Boundary.BoundaryId,
+            _boundaryStack.Count,
+            _executionId);
+    }
+
+    /// <summary>
+    /// Pops the innermost error boundary off the stack~ ⬆️✨
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.0b — sanity-checks BoundaryId against the top of the stack.
+    /// Logs a warning and still pops to avoid permanent stack corruption~ 🛡️.
+    /// </remarks>
+    private void HandlePopErrorBoundary(PopErrorBoundary message)
+    {
+        if (_boundaryStack.Count == 0)
+        {
+            _log.Warning("⚠️ PopErrorBoundary received for '{BoundaryId}' but boundary stack is empty! (execution {ExecutionId})", message.BoundaryId, _executionId);
+            return;
+        }
+
+        var top = _boundaryStack.Peek();
+        if (top.BoundaryId != message.BoundaryId)
+        {
+            _log.Warning(
+                "⚠️ PopErrorBoundary BoundaryId mismatch: expected '{Expected}' but got '{Got}' — popping anyway (execution {ExecutionId})",
+                top.BoundaryId,
+                message.BoundaryId,
+                _executionId);
+        }
+
+        _boundaryStack.Pop();
+        _log.Debug(
+            "⬆️ Popped error boundary '{BoundaryId}' (remaining depth={Depth}) for execution {ExecutionId}",
+            message.BoundaryId,
+            _boundaryStack.Count,
+            _executionId);
+    }
+
+    /// <summary>
+    /// Attempts to handle a node failure using the active error boundary stack~ 🛡️✨
+    /// </summary>
+    /// <param name="nodeId">The node that failed.</param>
+    /// <param name="error">The exception that was thrown.</param>
+    /// <returns>
+    /// <see langword="true"/> if a boundary caught the failure and the node was routed to its
+    /// <see cref="ErrorBoundary.CatchEntryNodeId"/>. The parent execution stays <c>Running</c>.
+    /// <see langword="false"/> if no boundary matched — caller should use normal fail-fast path.
+    /// </returns>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.0b — walks the boundary stack from innermost (top) outward.
+    /// On a match, activates <c>CatchEntryNodeId</c> as a ready successor.
+    /// Does NOT emit UpdateExecutionStatus(Failed) for the parent, preserving the regression-guard
+    /// against double terminal writes (see 2.1.5 follow-up in the plan)~ 💖.
+    /// </remarks>
+    private bool TryHandleWithBoundary(string nodeId, Exception error)
+    {
+        if (_boundaryStack.Count == 0) return false;
+
+        // Walk from innermost outward
+        foreach (var boundary in _boundaryStack)
+        {
+            if (!boundary.Catches(error)) continue;
+
+            _log.Warning(
+                "🛡️ Error boundary '{BoundaryId}' caught exception from node '{NodeId}': {Error}. Routing to catch handler~ ✨",
+                boundary.BoundaryId,
+                nodeId,
+                error.Message);
+
+            // Route to the catch entry node, if one is specified
+            if (boundary.CatchEntryNodeId is { } catchNodeId)
+            {
+                // Treat the failing node as if it "completed" from a routing perspective —
+                // mark it completed so the workflow completion counter is correct,
+                // but it is already recorded as Failed above~ 🔄
+                _failedNodes = _failedNodes.Remove(nodeId);
+                _completedNodes = _completedNodes.Add(nodeId);
+
+                // Fire the catch handler node if its predecessors are now satisfied
+                TryFireSuccessor(catchNodeId);
+            }
+
+            // Route to finally node if one is specified (always runs for Phase 2.2.0b infra)
+            if (boundary.FinallyEntryNodeId is { } finallyNodeId)
+            {
+                TryFireSuccessor(finallyNodeId);
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     #endregion
@@ -1358,6 +1564,9 @@ public class WorkflowExecutor : ReceiveActor
         var now = DateTimeOffset.UtcNow;
         _executionTimer.Stop();
 
+        // Phase 2.2.0b: Cancel the execution CTS — no more nodes should start (cancels any in-flight too)~ 🔗
+        _executionCts.Cancel();
+
         var outputs = GatherWorkflowOutputs().ToHashMap();
 
         TransitionExecutionState(ExecutionState.Completed, now, "All nodes completed");
@@ -1390,6 +1599,9 @@ public class WorkflowExecutor : ReceiveActor
     {
         var now = DateTimeOffset.UtcNow;
         _executionTimer.Stop();
+
+        // Phase 2.2.0b: Cancel the execution CTS so all child NodeExecutors receive the cancel signal~ 🛑
+        _executionCts.Cancel();
 
         TransitionExecutionState(ExecutionState.Failed, now, $"Failed: {error.Message}");
         _context = _context with
@@ -1747,6 +1959,10 @@ public class WorkflowExecutor : ReceiveActor
             _isRestarting);
 
         _lifecycleHooks.OnPostStop(CreateLifecycleContext());
+
+        // Phase 2.2.0b: Dispose execution CTS to release token registrations~ 🧹
+        _executionCts.Dispose();
+
         base.PostStop();
     }
 

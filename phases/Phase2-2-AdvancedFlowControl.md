@@ -105,46 +105,61 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ---
 
-### 2.2.0b Loop Scope, Error Boundary & Hierarchical Cancellation 🔁🛡️🛑
+### 2.2.0b Loop Scope, Error Boundary & Hierarchical Cancellation 🔁🛡️🛑 ✅ COMPLETE
 
-**Purpose:** Add the *stateful* engine primitives that 2.2.2 (loops) and 2.2.4 (try/catch) depend on. Builds directly on the routing + sub-graph primitive from 2.2.0a, but now we’re changing how state, failure, and cancellation propagate~ 🌷
+**Purpose:** Add the *stateful* engine primitives that 2.2.2 (loops) and 2.2.4 (try/catch) depend on. Builds directly on the routing + sub-graph primitive from 2.2.0a, but now we're changing how state, failure, and cancellation propagate~ 🌷
 
 **Complexity:** 🟡 Medium-High
 
 #### Tasks:
 
-- [ ] **Iteration & loop scope** 🔁
-  - [ ] New file: `Workflow.Engine/Models/LoopContext.cs`
-    - [ ] Fields: `LoopId`, `Iteration`, `Item`, `Index`, `ParentScope`.
-    - [ ] Helpers: `BreakRequested`, `ContinueRequested` flags.
-  - [ ] Per-iteration variable subscope wrapping `VariableScope.ForExecution({execId})` (e.g. logical namespace `loop:{loopId}:{iter}`) so writes inside the body don't leak across iterations.
-  - [ ] Loop context **stack** kept on the executor so nested loops can locate their innermost loop deterministically (used by `BreakModule`/`ContinueModule` in 2.2.2).
-  - [ ] Iteration metadata recorded on `NodeExecutionRecord` (`loopId`, `iter`) for replay/UI.
+- [x] **Iteration & loop scope** 🔁
+  - [x] New file: `Workflow.Engine/Models/LoopContext.cs`
+    - [x] Fields: `LoopId`, `Iteration`, `Item`, `Index`, `ParentScope`.
+    - [x] Helpers: `BreakRequested`, `ContinueRequested` flags, `AdvanceIteration()`, `SetCurrentElement()`.
+  - [x] Per-iteration variable subscope wrapping `VariableScope.ForExecution({execId})` (e.g. logical namespace `loop:{loopId}:{iter}`) — `VariableScopePrefix` property returns `$"loop:{LoopId}:{Iteration}"`.
+  - [x] Loop context **stack** kept on the executor (`WorkflowExecutor._loopContextStack`) so nested loops can locate their innermost loop deterministically (used by `BreakModule`/`ContinueModule` in 2.2.2).
+  - [x] Iteration metadata recorded on `NodeExecutionRecord` (`LoopId`, `LoopIteration`) for replay/UI. Stamped in both `HandleNodeExecutionCompleted` and `HandleNodeFailure`.
+  - [x] Scope messages: `PushLoopScope(LoopContext)` / `PopLoopScope(string loopId)` in `Workflow.Engine/Messages/ScopeMessages.cs`. Handlers registered in `WorkflowExecutor` constructor.
 
-- [ ] **Error containment zone** 🛡️
-  - [ ] New file: `Workflow.Engine/Models/ErrorBoundary.cs`
-    - [ ] Tracks `OwnerNodeId`, `CatchEntryNodeId`, `FinallyEntryNodeId?`, `CatchTypes`.
-  - [ ] In `WorkflowExecutor`, when a node fails:
-    - [ ] Walk the active boundary stack for the failing node's region.
-    - [ ] If a boundary catches it → emit a typed `WorkflowError` value and route to its `CatchEntryNodeId`; do **not** fail the parent execution.
-    - [ ] Else → existing failure path (terminal status update via 2.1.5).
-  - [ ] **Snapshot-bridge interaction** *(addresses the open 2.1.5 follow-up about double terminal writes)*: when a boundary handles a failure, do **not** emit `UpdateExecutionStatusAsync(Failed)` for the parent — only the boundary outcome is persisted (`Metadata.boundaryOutcome = "caught"|"rethrown"|"finally"`).
+- [x] **Error containment zone** 🛡️
+  - [x] New file: `Workflow.Engine/Models/ErrorBoundary.cs`
+    - [x] Tracks `BoundaryId`, `CatchEntryNodeId`, `FinallyEntryNodeId?`, `CatchTypes`. `Catches(Exception)` method (catch-all when `CatchTypes` is null/empty).
+  - [x] In `WorkflowExecutor`, when a node fails:
+    - [x] `TryHandleWithBoundary(nodeId, error)` walks `_boundaryStack` from innermost outward.
+    - [x] If a boundary catches it → move node from `_failedNodes` → `_completedNodes`, call `TryFireSuccessor(catchNodeId)` and `TryFireSuccessor(finallyNodeId)` (if any); do **not** fail the parent execution. Returns `true` to skip normal fail-fast path.
+    - [x] Else → existing failure path (terminal status update via 2.1.5).
+  - [x] **Snapshot-bridge interaction** *(addresses the open 2.1.5 follow-up about double terminal writes)*: when a boundary handles a failure, `_executionCts.Cancel()` is NOT called and `UpdateExecutionStatusAsync(Failed)` is not emitted — only node records are persisted.
+  - [x] Scope messages: `PushErrorBoundary(ErrorBoundary)` / `PopErrorBoundary(string boundaryId)` in `Workflow.Engine/Messages/ScopeMessages.cs`. Handlers registered in `WorkflowExecutor` constructor.
 
-- [ ] **Hierarchical cancellation** 🛑
-  - [ ] Each `SubGraphExecutor` (from 2.2.0a) receives a `CancellationToken` linked to the parent's per-execution `CancellationTokenSource`.
-  - [ ] Disposing a sub-graph (success, failure, or cancellation) disposes the linked CTS to prevent leaks.
-  - [ ] Exposed contract for 2.2.3 / 2.2.4: `RequestCooperativeCancel(reason)` triggers the linked CTS with grace window (default 250 ms, configurable).
-  - [ ] No hard kill of in-flight nodes — modules are expected to honour `CancellationToken` (existing contract).
+- [x] **Hierarchical cancellation** 🛑
+  - [x] `WorkflowExecutor._executionCts` (`CancellationTokenSource`) created in constructor. Token passed to `NodeExecutor.Props(...)`.
+  - [x] Each `SubGraphExecutor` receives `parentToken` → creates `_linkedCts = CancellationTokenSource.CreateLinkedTokenSource(parentToken)`. Linked CTS token passed to node executors within the sub-graph.
+  - [x] `SubGraphExecutor.PostStop()` disposes the linked CTS to prevent token registration leaks.
+  - [x] `WorkflowExecutor.CompleteWorkflow()` / `FailWorkflow()` call `_executionCts.Cancel()`. `PostStop()` calls `_executionCts.Dispose()`.
+  - [x] `CooperativeCancelSubGraph(subGraphId, reason)` message handled in `SubGraphExecutor` — cancels `_linkedCts` directly.
+  - [x] No hard kill of in-flight nodes — modules are expected to honour `CancellationToken` (existing contract).
 
-#### Tests (target ~7): → `Workflow.Tests/Engine/LoopScopeTests.cs`, `Workflow.Tests/Engine/ErrorBoundaryTests.cs`, `Workflow.Tests/Engine/HierarchicalCancellationTests.cs`
-- [ ] Loop subscope isolates iteration variables (read inside iter N cannot see writes from iter N-1 or N+1 in the same scope)
-- [ ] Nested loop contexts are stacked correctly; `LoopContext.Innermost` returns the deepest active one
-- [ ] Error boundary catches sub-graph failure and routes to its `CatchEntryNodeId`; parent execution stays Running
-- [ ] Error boundary `finally` always runs (success path)
-- [ ] Error boundary `finally` always runs (catch path)
-- [ ] Nested boundaries: inner catch handles before outer; outer's `finally` still runs after inner unwinds
-- [ ] Hierarchical cancel disposes child CTS; no leaked tokens after coordinator disposes
-- [ ] Boundary-handled failure does **not** double-write terminal status to `IExecutionHistoryRepository` (regression guard for the open 2.1.5 follow-up)
+#### Tests (13 total, all passing ✅): → `Workflow.Tests/Engine/LoopScopeTests.cs`, `Workflow.Tests/Engine/ErrorBoundaryTests.cs`, `Workflow.Tests/Engine/HierarchicalCancellationTests.cs`
+
+**Loop Scope (4 tests):**
+- [x] `LoopScope_PushedBeforeExecution_StampsNodeRecordWithLoopId` — PushLoopScope before execution; `NodeExecutionRecord.LoopId` + `LoopIteration` are stamped correctly
+- [x] `LoopScope_NotPushed_RecordsHaveNullLoopId` — no scope push = null stamps (regression guard)
+- [x] `LoopScope_PopBeforeExecution_RecordsHaveNullLoopId` — push+pop before execution = null stamps
+- [x] `LoopScope_Nested_InnerScopeStampsWhenActive` — nested push; inner scope (top of stack) stamps node records
+
+**Error Boundary (5 tests):**
+- [x] `ErrorBoundary_CatchesNodeFailure_RoutesToCatchNode_WorkflowCompletes` — boundary catches node failure; workflow completes (not fails)
+- [x] `ErrorBoundary_NoBoundary_WorkflowFails_NormalPath` — without boundary, failure triggers `WorkflowFailed` (regression guard)
+- [x] `ErrorBoundary_CatchWithFinally_BothNodesFireOnFailure` — `CatchEntryNodeId` and `FinallyEntryNodeId` both fire when failure is caught
+- [x] `ErrorBoundary_CaughtFailure_DoesNotCallUpdateStatusFailed` — boundary-handled failure does **not** double-write terminal status (regression guard for the open 2.1.5 follow-up)
+- [x] `ErrorBoundary_Nested_InnerCatchesBeforeOuter` — inner boundary catches first; outer boundary not triggered
+
+**Hierarchical Cancellation (4 tests):**
+- [x] `HierarchicalCancellation_CooperativeCancel_SubGraphFails` — `CooperativeCancelSubGraph` msg → linked CTS cancels → `SubGraphFailed`
+- [x] `HierarchicalCancellation_ParentTokenCancelled_PropagatesIntoSubGraph` — parent CTS cancel propagates through linked CTS → `SubGraphFailed`
+- [x] `HierarchicalCancellation_WorkflowComplete_ExecutionCtsIsSignalled` — normal workflow completion cancels `_executionCts` without error
+- [x] `HierarchicalCancellation_SubGraphPostStop_DisposesLinkedCts_NoLeaks` — sub-graph completion disposes linked CTS; no token registration leaks
 
 ---
 

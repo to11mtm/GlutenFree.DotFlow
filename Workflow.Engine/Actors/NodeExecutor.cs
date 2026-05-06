@@ -49,6 +49,15 @@ public class NodeExecutor : ReceiveActor
     private readonly IServiceProvider _serviceProvider;
     private readonly Stopwatch _timer = new();
     private readonly IActorLifecycleHooks _lifecycleHooks;
+
+    /// <summary>
+    /// CopilotNote: Phase 2.2.0b — optional parent cancellation token (e.g. from the
+    /// WorkflowExecutor's <c>_executionCts</c> or a SubGraphExecutor's <c>_linkedCts</c>).
+    /// The node's own CTS is linked to this so that hierarchical cancellation propagates
+    /// automatically: cancel the parent → cancel this node's module execution~ 🔗
+    /// </summary>
+    private readonly CancellationToken _parentToken;
+
     private HashMap<string, object?> _workflowVariables;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isExecuting;
@@ -61,12 +70,18 @@ public class NodeExecutor : ReceiveActor
     /// <param name="inputs">Input values for the node.</param>
     /// <param name="executionId">The parent execution ID.</param>
     /// <param name="serviceProvider">Service provider for DI.</param>
+    /// <param name="parentToken">
+    /// Optional cancellation token from the owning executor (WorkflowExecutor or SubGraphExecutor).
+    /// When cancelled, the node's own CTS is also cancelled via a linked token source~ 🔗
+    /// CopilotNote: Phase 2.2.0b — hierarchical cancellation threading.
+    /// </param>
     public NodeExecutor(
         string nodeId,
         NodeDefinition nodeDefinition,
         Dictionary<string, object?> inputs,
         Guid executionId,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        CancellationToken parentToken = default)
     {
         _log = Context.GetLogger();
         _nodeId = nodeId;
@@ -74,6 +89,7 @@ public class NodeExecutor : ReceiveActor
         _inputs = inputs;
         _executionId = executionId;
         _serviceProvider = serviceProvider;
+        _parentToken = parentToken;
         _lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
             ?? NullActorLifecycleHooks.Instance;
 
@@ -94,16 +110,22 @@ public class NodeExecutor : ReceiveActor
     /// <param name="inputs">Input values.</param>
     /// <param name="executionId">The execution ID.</param>
     /// <param name="serviceProvider">Service provider.</param>
+    /// <param name="parentToken">
+    /// Optional parent cancellation token for hierarchical cancellation~ 🔗
+    /// CopilotNote: Phase 2.2.0b — pass the WorkflowExecutor's <c>_executionCts.Token</c>
+    /// or SubGraphExecutor's <c>_linkedCts.Token</c> here~ 💖.
+    /// </param>
     /// <returns>Props for actor creation.</returns>
     public static Props Props(
         string nodeId,
         NodeDefinition nodeDefinition,
         Dictionary<string, object?> inputs,
         Guid executionId,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        CancellationToken parentToken = default)
     {
         return Akka.Actor.Props.Create(
-            () => new NodeExecutor(nodeId, nodeDefinition, inputs, executionId, serviceProvider));
+            () => new NodeExecutor(nodeId, nodeDefinition, inputs, executionId, serviceProvider, parentToken));
     }
 
     /// <summary>
@@ -120,7 +142,13 @@ public class NodeExecutor : ReceiveActor
 
         _isExecuting = true;
         _timer.Start();
-        _cancellationTokenSource = new CancellationTokenSource();
+
+        // Phase 2.2.0b: Create a CTS linked to the parent token so hierarchical cancellation
+        // propagates automatically from WorkflowExecutor/SubGraphExecutor → this node~ 🔗
+        _cancellationTokenSource = _parentToken == CancellationToken.None || !_parentToken.CanBeCanceled
+            ? new CancellationTokenSource()
+            : CancellationTokenSource.CreateLinkedTokenSource(_parentToken);
+
         _workflowVariables = message.Variables;
 
         _log.Info("⚡ Executing node {NodeId} (module: {ModuleId})", _nodeId, _nodeDefinition.ModuleId);

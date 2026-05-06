@@ -57,3 +57,20 @@ public record SubGraphFailed(
     Exception Error,
     string? FailedNodeId = null);
 
+/// <summary>
+/// Sent to a <see cref="Workflow.Engine.Actors.SubGraphExecutor"/> to request
+/// cooperative cancellation of the in-progress sub-graph~ 🛑✨
+/// </summary>
+/// <param name="SubGraphId">The sub-graph identifier to cancel. 🆔.</param>
+/// <param name="Reason">Optional human-readable reason for the cancellation. 📝.</param>
+/// <remarks>
+/// CopilotNote: Phase 2.2.0b — triggers <c>_linkedCts.Cancel()</c> inside SubGraphExecutor,
+/// which propagates the cancel signal to all child NodeExecutors (via their linked CTS).
+/// Nodes are expected to honour <c>CancellationToken</c> and throw <c>OperationCanceledException</c>,
+/// leading to a <see cref="SubGraphFailed"/> being sent to the parent automatically.
+/// No hard actor kills — fully cooperative~ 💖.
+/// </remarks>
+public record CooperativeCancelSubGraph(
+    string? SubGraphId,
+    string? Reason = null);
+
