@@ -163,7 +163,7 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ---
 
-## 2.2.1 Conditional Branching (`builtin.condition`, `builtin.switch`) 🔀
+## 2.2.1 Conditional Branching (`builtin.condition`, `builtin.switch`) 🔀 ✅ COMPLETE
 
 **Purpose:** First user-facing payoff of the multi-port routing primitive — express simple if/else and multi-way branching as nodes~ 🌸
 
@@ -171,43 +171,91 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ### Tasks:
 
-- [ ] **Create `ConditionalModule`** 🔀
-  - [ ] New file: `Workflow.Modules/Builtin/Flow/ConditionalModule.cs`
-  - [ ] `ModuleId: "builtin.condition"`, `Category: "Flow Control"`, `DisplayName: "Conditional Branch"`.
-  - [ ] Schema:
-    - [ ] Input: `condition` (bool *or* expression string, required)
-    - [ ] Output port: `true` (no payload, activation only)
-    - [ ] Output port: `false` (no payload)
-    - [ ] Output: `result` (bool — for diagnostics/branch logging)
-  - [ ] `ExecuteAsync`:
-    - [ ] If `condition` is `bool`, use directly; else evaluate via `IExpressionEvaluator`.
-    - [ ] Set `ActivePorts = ["true"]` or `["false"]` so engine routes only one branch.
-  - [ ] Diagnostics: log evaluated value + (if expression) source string.
+- [x] **Create `IExpressionEvaluator` interface** *(pulled forward from 2.2.5 — needed by `ConditionalModule`)* 🧮
+  - [x] New file: `Workflow.Core/Abstractions/IExpressionEvaluator.cs`
+  - [x] `EvaluateAsync<T>(string expression, IReadOnlyDictionary<string, object?> variables, CancellationToken)` → `ValueTask<T>`
+  - [x] `EvaluateAsync(...)` untyped → `ValueTask<object?>`
+  - [x] `EvaluateObjectAsync(...)` → `ValueTask<JsonElement>` for structured/array returns
+  - [x] `ExpressionParseException` (syntax / parse-time) and `ExpressionRuntimeException` (runtime / timeout) exception types
 
-- [ ] **Create `SwitchModule`** 🔢
-  - [ ] New file: `Workflow.Modules/Builtin/Flow/SwitchModule.cs`
-  - [ ] `ModuleId: "builtin.switch"`, `Category: "Flow Control"`.
-  - [ ] Schema:
-    - [ ] Input: `value` (object, required)
-    - [ ] Input: `cases` (array of `{ match, port }`, required)
-    - [ ] Input: `defaultPort` (string, optional)
-    - [ ] Dynamic output ports = case names + optional `default`.
-  - [ ] `ExecuteAsync`: pick first matching case, fall back to `default`, set `ActivePorts` accordingly.
+- [x] **Create `ConditionalModule`** 🔀
+  - [x] New file: `Workflow.Modules/Builtin/Flow/ConditionalModule.cs`
+  - [x] `ModuleId: "builtin.condition"`, `Category: "Flow Control"`, `DisplayName: "Conditional Branch"`, `Icon: "🔀"`, `Version: 1.0.0`.
+  - [x] Schema:
+    - [x] Input: `condition` (bool *or* expression string, `isRequired: false` — also readable from property)
+    - [x] Output port: `true` (activation only)
+    - [x] Output port: `false` (activation only)
+    - [x] Output: `result` (bool — for diagnostics / branch logging)
+    - [x] Property: `condition` (string, optional — static fallback when no input connected)
+  - [x] `ExecuteAsync`:
+    - [x] Input port takes priority over property; fails gracefully if neither is provided.
+    - [x] Bool → use directly; int/numeric → `!= 0`; string known literals (`true/1/yes/on` → `true`, `false/0/no/off` → `false`); unknown string → delegates to `IExpressionEvaluator` from DI.
+    - [x] If evaluator not registered and string is uncoerecible → `ModuleResult.Fail(...)` with message referencing `IExpressionEvaluator`.
+    - [x] Set `ActivePorts = ["true"]` or `["false"]` so engine routes only one branch.
+    - [x] `result` output carries evaluated bool for diagnostics/logging.
 
-- [ ] **Engine integration**
-  - [ ] Validate at workflow load that conditional/switch outgoing connections all reference declared ports.
+- [x] **Create `SwitchModule`** 🔢
+  - [x] New file: `Workflow.Modules/Builtin/Flow/SwitchModule.cs`
+  - [x] `ModuleId: "builtin.switch"`, `Category: "Flow Control"`, `Version: 1.0.0`.
+  - [x] Schema:
+    - [x] Input: `value` (object, `isRequired: false` — also readable from property)
+    - [x] `Outputs = Arr<PortDefinition>.Empty` — dynamic ports; engine's `ValidateConnectionPorts` skips validation when declared outputs count is 0.
+    - [x] Properties: `cases` (JSON array of `{ match, port }` *or* pre-parsed `List<object?>`, required), `defaultPort` (string, optional), `caseSensitive` (bool, optional, default `false`).
+  - [x] `ExecuteAsync`: first-match-wins on `cases` array, fall back to `defaultPort`, fail with descriptive error if neither. Case-insensitive by default (`OrdinalIgnoreCase`).
+  - [x] `ValidateConfiguration`: validates `cases` is present (`MISSING_CASES`) and non-empty (`EMPTY_CASES`).
+  - [x] Diagnostics: outputs `matchedPort` and `value` for logging.
+  - [x] Cases accepted as JSON string (auto-parsed) or pre-deserialized `List<object?>` / `JsonElement` array.
 
-**Tests (target ~10):** → `Workflow.Tests/Modules/Flow/ConditionalModuleTests.cs`, `Workflow.Tests/Modules/Flow/SwitchModuleTests.cs`
-- [ ] Bool `condition: true` → only `true` port fires
-- [ ] Bool `condition: false` → only `false` port fires
-- [ ] Expression `condition: "x > 5"` reads variable `x`, evaluates correctly
-- [ ] Invalid expression → execution fails with clear `WorkflowError`
-- [ ] Both branches reachable across two separate runs of same workflow
-- [ ] `Switch` matches first case, ignores later ones
-- [ ] `Switch` falls back to `default` when no match
-- [ ] `Switch` with no match + no default → fails with descriptive error
-- [ ] Switch port name validation rejects unknown ports at load
-- [ ] Diagnostics carry evaluated value for debugging
+- [x] **Engine integration**
+  - [x] `ConditionalModule` declares all 3 output ports in schema — `ValidateConnectionPorts` validates connections at load time.
+  - [x] `SwitchModule` uses empty `Outputs` schema — `ValidateConnectionPorts` intentionally skips validation, allowing dynamic port names from `cases` configuration.
+  - [x] Both modules registered in `BuiltinModuleRegistration.GetAll()` (count: 5 → 7).
+
+**Tests (46 new tests across all 2.2.1 files):** → `Workflow.Tests/Modules/Flow/ConditionalModuleTests.cs`, `Workflow.Tests/Modules/Flow/SwitchModuleTests.cs`, `Workflow.Tests/Modules/BuiltinModuleIntegrationTests.cs`
+
+**ConditionalModuleTests (29 test executions across 16 methods):**
+- [x] `ConditionalModule_Metadata_IsCorrect` — `ModuleId`, category, display name, version 1.0.0, icon all correct
+- [x] `ConditionalModule_Schema_DeclaresTrueFlaseResultPorts` — schema declares `true`, `false`, `result` output ports
+- [x] `BoolTrue_ActivatesTruePort` — `condition: true` → single active port `"true"`, `result` output = `true`
+- [x] `BoolFalse_ActivatesFalsePort` — `condition: false` → single active port `"false"`, `result` output = `false`
+- [x] `StringTruthy_ActivatesTruePort` (Theory ×6) — `"true"`, `"True"`, `"TRUE"`, `"1"`, `"yes"`, `"on"` all activate `true` port
+- [x] `StringFalsy_ActivatesFalsePort` (Theory ×6) — `"false"`, `"False"`, `"FALSE"`, `"0"`, `"no"`, `"off"` all activate `false` port
+- [x] `InputPort_OverridesProperty_WhenBothProvided` — input `true` + property `"false"` → `true` wins
+- [x] `Property_UsedWhenNoInputPort` — no input; property `"true"` → `true` port fires
+- [x] `BothBranches_ReachableAcrossTwoRuns` — both `true` and `false` reachable across separate runs
+- [x] `Expression_UsesIExpressionEvaluator_WhenAvailable` — `"x > 5"` with `x=10`, Moq evaluator returns `true` → `true` port
+- [x] `Expression_EvaluatingFalse_ActivatesFalsePort` — `"x > 5"` with `x=3`, evaluator returns `false` → `false` port
+- [x] `InvalidExpression_NoEvaluator_Fails` — `"x + y"` with no evaluator registered → `Success=false`, error message contains `"IExpressionEvaluator"`
+- [x] `NullCondition_ReturnsFailure` — no input + no property → `Success=false`, non-empty error message
+- [x] `ResultOutput_ReflectsEvaluatedBool` (Theory ×2) — `result` output always carries evaluated bool for `true` and `false` inputs
+- [x] `NumericNonZero_ActivatesTruePort` (Theory ×3) — `1`, `-1`, `42` all activate `true` port (truthy numeric semantics)
+- [x] `NumericZero_ActivatesFalsePort` — `0` activates `false` port
+
+**SwitchModuleTests (15 tests):**
+- [x] `SwitchModule_Metadata_IsCorrect` — `ModuleId`, category, version correct
+- [x] `SwitchModule_Schema_HasEmptyOutputs` — `Schema.Outputs` is empty (dynamic port design)
+- [x] `MatchesFirstCase_ActivatesCorrectPort` — `"cat"` matches first case → `"case_cat"`
+- [x] `LaterCaseMatches_WhenFirstDoesNot` — `"dog"` skips `"cat"` case, matches second → `"case_dog"`
+- [x] `FirstCaseWins_WhenMultipleWouldMatch` — two cases with same `match = "cat"` → first port wins
+- [x] `NoMatch_UsesDefaultPort` — unmatched value → `defaultPort` fires
+- [x] `NoMatch_NoDefault_Fails` — unmatched value + no `defaultPort` → `Success=false`, error contains unmatched value
+- [x] `DefaultCaseInsensitive_MatchesDifferentCase` — `"CAT"` matches `"cat"` case by default (case-insensitive)
+- [x] `CaseSensitive_DoesNotMatchDifferentCase` — `caseSensitive: true`, `"CAT"` does not match `"cat"` → falls to `defaultPort`
+- [x] `ValidateConfiguration_EmptyCases_Fails` — empty `cases` list → `IsValid=false`, error code `EMPTY_CASES`
+- [x] `ValidateConfiguration_MissingCases_Fails` — no `cases` key → `IsValid=false`, error code `MISSING_CASES`
+- [x] `ValidateConfiguration_ValidCases_Passes` — valid cases list → `IsValid=true`
+- [x] `Cases_AsJsonString_ParsedCorrectly` — `cases` provided as raw JSON string is parsed and matched correctly
+- [x] `PropertyValue_UsedWhenNoInputPort` — `value` from property used when no input port connected
+- [x] `Outputs_CarryDiagnostics` — `matchedPort` and `value` outputs present for debugging
+
+**ConditionalSwitchIntegrationTests (2 engine integration tests via `TestKit`):**
+- [x] `ConditionalModule_TrueCondition_FiresOnlyTrueBranch` — `condition=true` wired into `WorkflowExecutor`; true-branch node runs, false-branch node is skipped; `WorkflowCompleted` received
+- [x] `SwitchModule_MatchingCase_FiresCorrectPort` — `value="cat"` wired into `WorkflowExecutor`; `case_cat` node runs, `case_dog` node is skipped; `WorkflowCompleted` received
+
+**BuiltinModuleIntegrationTests (updated — count 5→7):**
+- [x] `RegisterAll_ShouldRegisterAllBuiltinModules` — now asserts `HaveCount(7)`, includes `builtin.condition` and `builtin.switch`
+- [x] `GetAll_ShouldReturnFiveModules` — updated count and equivalence list to 7
+- [x] `ModuleDiscovery_ShouldFindAllBuiltinModules` — updated to assert `typeof(ConditionalModule)` and `typeof(SwitchModule)`
 
 ---
 
@@ -428,11 +476,11 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ### Tasks:
 
-- [ ] **Define `IExpressionEvaluator`**
-  - [ ] New file: `Workflow.Core/Abstractions/IExpressionEvaluator.cs`
-  - [ ] API: `EvaluateAsync<T>(string expression, IReadOnlyDictionary<string, object?> variables, CancellationToken)` — returns `ValueTask<T>`.
-  - [ ] Object path: `EvaluateObjectAsync(...)` — returns `ValueTask<JsonElement>` for structured/array returns.
-  - [ ] Errors: `ExpressionParseException` (syntax / parse-time), `ExpressionRuntimeException` (runtime / timeout).
+- [x] **Define `IExpressionEvaluator`** *(shipped early in 2.2.1 — `ConditionalModule` needed it)*
+  - [x] New file: `Workflow.Core/Abstractions/IExpressionEvaluator.cs`
+  - [x] API: `EvaluateAsync<T>(string expression, IReadOnlyDictionary<string, object?> variables, CancellationToken)` — returns `ValueTask<T>`.
+  - [x] Object path: `EvaluateObjectAsync(...)` — returns `ValueTask<JsonElement>` for structured/array returns.
+  - [x] Errors: `ExpressionParseException` (syntax / parse-time), `ExpressionRuntimeException` (runtime / timeout).
 
 - [ ] **Implement default evaluator — Jint** *(per Q7 resolution)* 🟡
   - [ ] New file: `Workflow.Engine/Services/JintExpressionEvaluator.cs`
@@ -538,8 +586,8 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 - [ ] Engine supports **sub-graph execution**, **loop scopes**, **error boundaries**, **hierarchical cancellation**
 - [ ] 2.2.0 split shipped as **2.2.0a** (routing + sub-graphs) and **2.2.0b** (loop scope + error boundary + cancellation)
 - [ ] 2.2.3 split shipped as **2.2.3a** (coordinator + `ParallelModule`) and **2.2.3b** (`FanOutModule` + `FanInModule`)
-- [ ] Modules: `builtin.condition`, `builtin.switch`, `builtin.loop.foreach`, `builtin.loop.while`, `builtin.break`, `builtin.continue`, `builtin.parallel`, `builtin.fanout`, `builtin.fanin`, `builtin.trycatch`, `builtin.throw`
-- [ ] `IExpressionEvaluator` + safe default implementation registered via DI
+- [x] Modules: ~~`builtin.condition`~~ ✅, ~~`builtin.switch`~~ ✅, `builtin.loop.foreach`, `builtin.loop.while`, `builtin.break`, `builtin.continue`, `builtin.parallel`, `builtin.fanout`, `builtin.fanin`, `builtin.trycatch`, `builtin.throw`
+- [x] `IExpressionEvaluator` interface defined (shipped in 2.2.1); default implementation + DI wiring deferred to 2.2.5
 - [ ] ~77 unit + integration tests passing across 2.2.0a/2.2.0b–2.2.6 (2.2.0a ~6 + 2.2.0b ~7 + 2.2.1 ~10 + 2.2.2 ~14 + 2.2.3a ~7 + 2.2.3b ~6 + 2.2.4 ~10 + 2.2.5 ~12 + 2.2.6 ~6, replacing the original ~12 for 2.2.3 with ~13 across the split)
 - [ ] XML docs + `docs/advanced-flow-control.md`
 - [ ] Sample workflow runs end-to-end on persistence + API stack

@@ -57,3 +57,17 @@ public record SubGraphFailed(
     Exception Error,
     string? FailedNodeId = null);
 
+/// <summary>
+/// Sent to a <see cref="Workflow.Engine.Actors.SubGraphExecutor"/> to cooperatively cancel
+/// its in-flight execution~ 🛑✨
+/// </summary>
+/// <param name="SubGraphId">The sub-graph instance ID (for logging correlation). 🆔.</param>
+/// <param name="Reason">Human-readable cancellation reason for logs/diagnostics. 💬.</param>
+/// <remarks>
+/// CopilotNote: Phase 2.2.0b hierarchical cancellation — this message triggers the sub-graph's
+/// linked <c>CancellationTokenSource</c>. Modules that honour their <c>CancellationToken</c>
+/// will throw <see cref="OperationCanceledException"/>, propagating as <see cref="SubGraphFailed"/>
+/// to the parent actor. No hard-kill of in-flight actors — fully cooperative~ 💖
+/// </remarks>
+public record CooperativeCancelSubGraph(string? SubGraphId, string? Reason = null);
+

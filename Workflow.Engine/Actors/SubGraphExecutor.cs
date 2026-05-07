@@ -7,6 +7,7 @@ namespace Workflow.Engine.Actors;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Akka.Actor;
 using Akka.Event;
 using LanguageExt;
@@ -51,6 +52,13 @@ public class SubGraphExecutor : ReceiveActor
     private readonly ILoggingAdapter _log;
     private readonly IExecutionHistoryRepository? _historyRepository;
 
+    /// <summary>
+    /// CopilotNote: Phase 2.2.0b hierarchical cancellation — linked to the parent executor's token.
+    /// When the parent workflow completes/fails, the linked CTS fires and in-flight node modules
+    /// observe their token and throw OperationCanceledException cooperatively~ 🔗🛑
+    /// </summary>
+    private readonly CancellationTokenSource _linkedCts;
+
     // ── Execution tracking (inlined: no WorkflowExecutionContext — lean on purpose) ─────────────
     private readonly Dictionary<string, IActorRef> _nodeActors = new();
     private readonly Dictionary<string, Dictionary<string, object?>> _nodeOutputs = new();
@@ -81,6 +89,11 @@ public class SubGraphExecutor : ReceiveActor
     /// <param name="inputs">Inputs available to all nodes in this sub-graph. .</param>
     /// <param name="serviceProvider">DI service provider for module resolution and persistence. .</param>
     /// <param name="subGraphId">Optional identifier persisted on node records for query correlation. ️.</param>
+    /// <param name="parentToken">
+    /// Optional parent cancellation token (Phase 2.2.0b).
+    /// When non-default, the sub-graph's linked CTS is chained to this token so the parent
+    /// workflow executor can cancel all in-flight sub-graph nodes cooperatively~ 🔗🛑
+    /// </param>
     public SubGraphExecutor(
         Guid parentExecutionId,
         WorkflowDefinition definition,
@@ -88,7 +101,8 @@ public class SubGraphExecutor : ReceiveActor
         IReadOnlyCollection<string> entryNodeIds,
         Dictionary<string, object?> inputs,
         IServiceProvider serviceProvider,
-        string? subGraphId = null)
+        string? subGraphId = null,
+        CancellationToken parentToken = default)
     {
         _parentExecutionId = parentExecutionId;
         _definition = definition;
@@ -100,11 +114,25 @@ public class SubGraphExecutor : ReceiveActor
         _log = Context.GetLogger();
         _historyRepository = serviceProvider.GetService(typeof(IExecutionHistoryRepository)) as IExecutionHistoryRepository;
 
+        // Phase 2.2.0b: create a linked CTS so parent cancellation propagates here~ 🔗🛑
+        _linkedCts = parentToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(parentToken)
+            : new CancellationTokenSource();
+
         // Message handlers
         Receive<NodeExecutionCompleted>(HandleNodeCompleted);
         Receive<NodeExecutionFailed>(HandleNodeFailed);
         Receive<Terminated>(HandleTerminated);
         Receive<NodePersisted>(_ => { }); // fire-and-forget persistence acknowledgement
+
+        // Phase 2.2.0b: cooperative cancel — cancels the linked CTS so in-flight nodes observe it~ 🛑
+        Receive<CooperativeCancelSubGraph>(msg =>
+        {
+            _log.Info(
+                "🛑 SubGraph {SubGraphId}: cooperative cancel requested (reason: {Reason})",
+                _subGraphId, msg.Reason ?? "none");
+            _linkedCts.Cancel();
+        });
     }
 
     /// <summary>
@@ -117,11 +145,12 @@ public class SubGraphExecutor : ReceiveActor
         IReadOnlyCollection<string> entryNodeIds,
         Dictionary<string, object?> inputs,
         IServiceProvider serviceProvider,
-        string? subGraphId = null)
+        string? subGraphId = null,
+        CancellationToken parentToken = default)
     {
         return Akka.Actor.Props.Create(() => new SubGraphExecutor(
             parentExecutionId, definition, scopeNodeIds, entryNodeIds,
-            inputs, serviceProvider, subGraphId));
+            inputs, serviceProvider, subGraphId, parentToken));
     }
 
     #region Lifecycle
@@ -156,6 +185,14 @@ public class SubGraphExecutor : ReceiveActor
             _subGraphId,
             _parentExecutionId,
             _nodeSuccessors.Count);
+    }
+
+    /// <inheritdoc/>
+    protected override void PostStop()
+    {
+        // Phase 2.2.0b: dispose linked CTS to unregister from parent token — prevents leaks~ 🧹💖
+        _linkedCts.Dispose();
+        base.PostStop();
     }
 
     #endregion
@@ -230,7 +267,7 @@ public class SubGraphExecutor : ReceiveActor
 
         var actorName = $"sgnode-{nodeId.Replace(".", "-")}";
         var nodeActor = Context.ActorOf(
-            NodeExecutor.Props(nodeId, nodeDef, nodeInputs, _parentExecutionId, _serviceProvider),
+            NodeExecutor.Props(nodeId, nodeDef, nodeInputs, _parentExecutionId, _serviceProvider, _linkedCts.Token),
             actorName);
 
         Context.Watch(nodeActor);

@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Workflow.Modules;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin;
+using Workflow.Modules.Builtin.Flow;
 using Workflow.Modules.Discovery;
 using Xunit;
 
@@ -51,7 +52,8 @@ public sealed class BuiltinModuleIntegrationTests
     #region Registration & Discovery Tests 📦
 
     /// <summary>
-    /// All 5 builtin modules should register successfully via <see cref="BuiltinModules.RegisterAll"/>~ 📦
+    /// All 7 builtin modules should register successfully via <see cref="BuiltinModules.RegisterAll"/>~ 📦
+    /// Phase 2.2.1 added builtin.condition and builtin.switch~ 🔀🔢
     /// </summary>
     [Fact]
     public void RegisterAll_ShouldRegisterAllBuiltinModules()
@@ -65,24 +67,29 @@ public sealed class BuiltinModuleIntegrationTests
         registry.HasModule("builtin.delay").Should().BeTrue();
         registry.HasModule("builtin.setvariable").Should().BeTrue();
         registry.HasModule("builtin.getvariable").Should().BeTrue();
-        registry.GetAllModules().Should().HaveCount(5);
+        registry.HasModule("builtin.condition").Should().BeTrue("Phase 2.2.1 condition module must register~ 🔀");
+        registry.HasModule("builtin.switch").Should().BeTrue("Phase 2.2.1 switch module must register~ 🔢");
+        registry.GetAllModules().Should().HaveCount(7, because: "7 builtin modules after Phase 2.2.1~ 💖");
     }
 
     /// <summary>
-    /// <see cref="BuiltinModules.GetAll"/> should return all 5 builtin modules~ 📦
+    /// <see cref="BuiltinModules.GetAll"/> should return all 7 builtin modules~ 📦
+    /// Phase 2.2.1 added builtin.condition and builtin.switch~ 🔀🔢
     /// </summary>
     [Fact]
     public void GetAll_ShouldReturnFiveModules()
     {
         var modules = BuiltinModules.GetAll();
-        modules.Should().HaveCount(5);
+        modules.Should().HaveCount(7, because: "7 builtin modules after Phase 2.2.1~ 💖");
         modules.Select(m => m.ModuleId).Should().BeEquivalentTo(
             "builtin.passthrough", "builtin.log", "builtin.delay",
-            "builtin.setvariable", "builtin.getvariable");
+            "builtin.setvariable", "builtin.getvariable",
+            "builtin.condition", "builtin.switch");
     }
 
     /// <summary>
-    /// <see cref="ModuleDiscovery"/> should auto-discover all 5 builtin modules from the assembly~ 🔍
+    /// <see cref="ModuleDiscovery"/> should auto-discover all 7 builtin modules from the assembly~ 🔍
+    /// Phase 2.2.1 added condition and switch modules~ 🔀🔢
     /// </summary>
     [Fact]
     public void ModuleDiscovery_ShouldFindAllBuiltinModules()
@@ -95,6 +102,8 @@ public sealed class BuiltinModuleIntegrationTests
         types.Should().Contain(typeof(DelayModule));
         types.Should().Contain(typeof(SetVariableModule));
         types.Should().Contain(typeof(GetVariableModule));
+        types.Should().Contain(typeof(ConditionalModule), "Phase 2.2.1 condition module must be discovered~ 🔀");
+        types.Should().Contain(typeof(SwitchModule), "Phase 2.2.1 switch module must be discovered~ 🔢");
     }
 
     #endregion
