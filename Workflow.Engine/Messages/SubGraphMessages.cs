@@ -42,9 +42,19 @@ public record StartSubGraph(
 /// </summary>
 /// <param name="SubGraphId">The sub-graph identifier (matches <see cref="StartSubGraph.SubGraphId"/>). .</param>
 /// <param name="Outputs">Aggregated outputs from terminal sub-graph nodes. .</param>
+/// <param name="BreakRequested">
+/// True when a <c>BreakModule</c> inside the sub-graph produced a <c>__loop_break__</c> sentinel output.
+/// CopilotNote: Phase 2.2.2 — <c>LoopExecutorActor</c> checks this to stop iteration early~ ⏹️.
+/// </param>
+/// <param name="ContinueRequested">
+/// True when a <c>ContinueModule</c> inside the sub-graph produced a <c>__loop_continue__</c> sentinel output.
+/// CopilotNote: Phase 2.2.2 — <c>LoopExecutorActor</c> checks this to skip the rest of the current iteration~ ⏭️.
+/// </param>
 public record SubGraphCompleted(
     string? SubGraphId,
-    IReadOnlyDictionary<string, object?> Outputs);
+    IReadOnlyDictionary<string, object?> Outputs,
+    bool BreakRequested = false,
+    bool ContinueRequested = false);
 
 /// <summary>
 /// Sent by SubGraphExecutor to its parent when the sub-graph fails~ ❌

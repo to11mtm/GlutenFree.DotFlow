@@ -322,6 +322,26 @@ public record NodeExecutionFailed(
     TimeSpan Duration) : IWorkflowMessage;
 
 /// <summary>
+/// 🔁 Sent by <see cref="Workflow.Engine.Actors.NodeExecutor"/> to <c>WorkflowExecutor</c>
+/// BEFORE <see cref="NodeExecutionCompleted"/> when a loop module returns a
+/// <see cref="Workflow.Core.Models.LoopRequest"/> in its <c>ModuleResult</c>~
+/// </summary>
+/// <remarks>
+/// CopilotNote: Phase 2.2.2 — WorkflowExecutor stores this in <c>_pendingLoops[NodeId]</c>.
+/// When the subsequent NodeExecutionCompleted arrives, it detects the stored LoopRequest
+/// and spawns a LoopExecutorActor instead of calling ExecuteReadySuccessors directly.
+/// Sending before NodeExecutionCompleted guarantees ordering (same sender → same receiver = FIFO)~ 💖.
+/// </remarks>
+public sealed class NodeLoopExecutionRequested
+{
+    /// <summary>Gets the node ID of the loop module~ 🆔.</summary>
+    public required string NodeId { get; init; }
+
+    /// <summary>Gets the loop execution specification~ 🔁.</summary>
+    public required Workflow.Core.Models.LoopRequest Loop { get; init; }
+}
+
+/// <summary>
 /// Message to retry a failed node.
 /// Used when retry policy is configured for the node~ 🔄.
 /// </summary>

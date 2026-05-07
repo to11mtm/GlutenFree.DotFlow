@@ -306,6 +306,18 @@ public record ModuleResult
         => new() { Success = false, ErrorMessage = message, Exception = ex };
 
     /// <summary>
+    /// Gets the loop execution request emitted by loop modules (<c>builtin.loop.foreach</c>,
+    /// <c>builtin.loop.while</c>).
+    /// When non-null, <c>WorkflowExecutor</c> spawns a <c>LoopExecutorActor</c>
+    /// to drive all iterations — the module stays declarative~ 🔁.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.2 — set via <see cref="WithLoop"/>. Engine checks this
+    /// in NodeExecutionCompleted and delegates iteration to LoopExecutorActor~ 💖.
+    /// </remarks>
+    public LoopRequest? Loop { get; init; }
+
+    /// <summary>
     /// Creates a successful result with selective port activation for routing~ 🎯
     /// </summary>
     /// <param name="outputs">The output values.</param>
@@ -320,4 +332,38 @@ public record ModuleResult
         Dictionary<string, object?> outputs,
         IReadOnlyList<string> activePorts)
         => new() { Success = true, Outputs = outputs, ActivePorts = activePorts };
+
+    /// <summary>
+    /// Creates a successful result that requests loop execution by the engine~ 🔁✨
+    /// </summary>
+    /// <param name="outputs">Initial outputs (e.g. collection metadata).</param>
+    /// <param name="loop">The loop specification (items, ports, limits, optional condition).</param>
+    /// <returns>A ModuleResult with a LoopRequest for the engine to process.</returns>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.2 — use this in ForEachModule / WhileModule.
+    /// WorkflowExecutor detects Loop != null and spawns LoopExecutorActor~ 🌸.
+    /// </remarks>
+    public static ModuleResult WithLoop(Dictionary<string, object?> outputs, LoopRequest loop)
+        => new() { Success = true, Outputs = outputs, Loop = loop };
+
+    /// <summary>
+    /// Creates a result that signals loop break to parent LoopExecutorActor~ ⏹️
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.2 — BreakModule returns this. The sentinel output key
+    /// <c>__loop_break__</c> is detected by SubGraphExecutor and propagated via
+    /// SubGraphCompleted.BreakRequested~ 💖.
+    /// </remarks>
+    public static ModuleResult Break()
+        => Ok(new Dictionary<string, object?> { ["__loop_break__"] = true });
+
+    /// <summary>
+    /// Creates a result that signals loop continue (skip rest of current iteration)~ ⏭️
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.2 — ContinueModule returns this. Detected via
+    /// <c>__loop_continue__</c> sentinel key in SubGraphCompleted.ContinueRequested~ 💖.
+    /// </remarks>
+    public static ModuleResult Continue()
+        => Ok(new Dictionary<string, object?> { ["__loop_continue__"] = true });
 }

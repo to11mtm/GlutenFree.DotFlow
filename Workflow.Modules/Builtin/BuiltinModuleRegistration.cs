@@ -20,6 +20,10 @@ using Workflow.Modules.Builtin.Flow;
 /// <para>
 /// Phase 2.2.1: Added flow control modules — <c>builtin.condition</c> and <c>builtin.switch</c>~ 🔀🔢
 /// </para>
+/// <para>
+/// Phase 2.2.2: Added loop control modules — <c>builtin.loop.foreach</c>,
+/// <c>builtin.loop.while</c>, <c>builtin.break</c>, <c>builtin.continue</c>~ 🔁🌀⏹️⏭️
+/// </para>
 /// </remarks>
 public static class BuiltinModules
 {
@@ -35,9 +39,15 @@ public static class BuiltinModules
         new SetVariableModule(),
         new GetVariableModule(),
 
-        // Phase 2.2.1 — Flow control modules~ 🔀
+        // Phase 2.2.1 — Conditional branching modules~ 🔀
         new ConditionalModule(),
         new SwitchModule(),
+
+        // Phase 2.2.2 — Loop control modules~ 🔁
+        new ForEachModule(),
+        new WhileModule(),
+        new BreakModule(),
+        new ContinueModule(),
     };
 
     /// <summary>

@@ -118,6 +118,20 @@ public class WorkflowExecutor : ReceiveActor
     private readonly Stack<LoopContext> _loopContextStack = new();
 
     /// <summary>
+    /// CopilotNote: Phase 2.2.2 — pending loop requests received from NodeExecutor
+    /// (via <c>NodeLoopExecutionRequested</c>) before the corresponding
+    /// <c>NodeExecutionCompleted</c> arrives. Keyed by loop node ID~ 🔁.
+    /// </summary>
+    private readonly Dictionary<string, Workflow.Core.Models.LoopRequest> _pendingLoops = new();
+
+    /// <summary>
+    /// CopilotNote: Phase 2.2.2 — node IDs of loop nodes whose <see cref="LoopExecutorActor"/>
+    /// is still running. Prevents <see cref="IsWorkflowComplete"/> from triggering prematurely
+    /// while iterations are in flight~ 🔁.
+    /// </summary>
+    private readonly System.Collections.Generic.HashSet<string> _pendingLoopNodes = new();
+
+    /// <summary>
     /// Stack of active error boundaries, innermost boundary at the top.
     /// Pushed by PushErrorBoundary messages (sent by TryCatch module in 2.2.4),
     /// popped by PopErrorBoundary~ 🛡️.
@@ -222,6 +236,11 @@ public class WorkflowExecutor : ReceiveActor
         Receive<PopLoopScope>(HandlePopLoopScope);
         Receive<PushErrorBoundary>(HandlePushErrorBoundary);
         Receive<PopErrorBoundary>(HandlePopErrorBoundary);
+
+        // Phase 2.2.2: Loop execution messages~ 🔁✨
+        Receive<NodeLoopExecutionRequested>(msg => _pendingLoops[msg.NodeId] = msg.Loop);
+        Receive<LoopCompleted>(HandleLoopCompleted);
+        Receive<LoopFailed>(HandleLoopFailed);
 
         _log.Info(
             "🎬 WorkflowExecutor created for execution {ExecutionId}, workflow '{WorkflowName}' with {NodeCount} nodes",
@@ -708,6 +727,15 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
+        // Phase 2.2.2: if a LoopRequest arrived before this completion, spawn LoopExecutorActor
+        // instead of routing successors directly — loop actor drives 'done' port activation~ 🔁
+        if (_pendingLoops.TryGetValue(nodeId, out var loopRequest))
+        {
+            _pendingLoops.Remove(nodeId);
+            SpawnLoopExecutor(nodeId, loopRequest);
+            return;
+        }
+
         // Find and execute successor nodes whose dependencies are now satisfied.
         // Pass activePorts for port-aware routing (Phase 2.2.0a)~ 🎯
         ExecuteReadySuccessors(nodeId, message.ActivePorts);
@@ -1082,6 +1110,150 @@ public class WorkflowExecutor : ReceiveActor
             message.LoopId,
             _loopContextStack.Count,
             _executionId);
+    }
+
+    // ── Phase 2.2.2: Loop Execution ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Spawns a <see cref="LoopExecutorActor"/> for a loop node and tracks it in
+    /// <c>_pendingLoopNodes</c> so <see cref="IsWorkflowComplete"/> waits for it~ 🔁✨.
+    /// </summary>
+    private void SpawnLoopExecutor(string loopNodeId, Workflow.Core.Models.LoopRequest loop)
+    {
+        // Resolve body entry nodes (targets of loopBodyPort connections from the loop node)
+        var bodyEntryNodeIds = _definition.Connections
+            .Where(c => c.SourceNodeId == loopNodeId && c.SourcePortName == loop.LoopBodyPort)
+            .Select(c => c.TargetNodeId)
+            .ToList();
+
+        if (bodyEntryNodeIds.Count == 0)
+        {
+            _log.Warning(
+                "⚠️ LoopExecutor spawn: loop node '{LoopNodeId}' has no connections via '{LoopBodyPort}' port — " +
+                "completing loop immediately with 0 iterations~ 🔁",
+                loopNodeId, loop.LoopBodyPort);
+
+            // Complete loop immediately — fire done port
+            _nodeOutputs[loopNodeId] = new Dictionary<string, object?>
+            {
+                ["results"] = new List<object?>(),
+                ["count"] = 0,
+                ["errors"] = new List<string>(),
+            };
+            ExecuteReadySuccessors(loopNodeId, new LanguageExt.Arr<string>(new[] { loop.DonePort }));
+            return;
+        }
+
+        var bodyScopeIds = LoopExecutorActor.ComputeBodyScope(_definition, loopNodeId, bodyEntryNodeIds);
+
+        // Snapshot current variables/inputs as the initial context for condition evaluation
+        var initialContext = new Dictionary<string, object?>(_workflowInputs);
+        foreach (var (k, v) in _context.Variables)
+            initialContext[k] = v;
+
+        _pendingLoopNodes.Add(loopNodeId);
+
+        var actorName = $"loop-{loopNodeId.Replace(".", "-")}";
+        var loopActor = Context.ActorOf(
+            LoopExecutorActor.Props(
+                loopNodeId, loop, _definition,
+                bodyEntryNodeIds, bodyScopeIds,
+                _executionId, initialContext,
+                _serviceProvider, _executionCts.Token),
+            actorName);
+
+        Context.Watch(loopActor);
+
+        _log.Info(
+            "🔁 Spawned LoopExecutorActor '{ActorName}' for node '{LoopNodeId}': " +
+            "{BodyEntryCount} body entry nodes, {ScopeCount} scope nodes",
+            actorName, loopNodeId, bodyEntryNodeIds.Count, bodyScopeIds.Count);
+    }
+
+    /// <summary>
+    /// Handles completion of all loop iterations — fires the <c>done</c> port successors~ ✅🔁.
+    /// </summary>
+    private void HandleLoopCompleted(LoopCompleted message)
+    {
+        var loopNodeId = message.LoopNodeId;
+        _pendingLoopNodes.Remove(loopNodeId);
+        Context.Unwatch(Sender);
+
+        _log.Info("✅ Loop '{LoopNodeId}' completed with {Count} iteration(s)", loopNodeId,
+            message.Outputs.TryGetValue("count", out var cnt) ? cnt : "?");
+
+        // Store aggregated outputs so downstream 'done' nodes can read them
+        _nodeOutputs[loopNodeId] = message.Outputs
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+            return;
+        }
+
+        // Compute the body scope (all nodes reachable from loopBody port before looping back).
+        // These nodes were executed by LoopExecutorActor — WorkflowExecutor never ran them directly.
+        // Mark them as skipped here so IsWorkflowComplete() counts them and we don't re-fire them~ 🔁✨
+        var allOutgoingTargets = _definition.Connections
+            .Where(c => c.SourceNodeId == loopNodeId)
+            .Select(c => c.TargetNodeId)
+            .ToList();
+
+        var bodyScope = LoopExecutorActor
+            .ComputeBodyScope(_definition, loopNodeId, allOutgoingTargets)
+            .ToHashSet();
+
+        // CopilotNote: skipping body-scope nodes prevents double-execution on the done-port routing below.
+        foreach (var bodyScopeNodeId in bodyScope)
+        {
+            if (!_completedNodes.Contains(bodyScopeNodeId)
+                && !_failedNodes.Contains(bodyScopeNodeId)
+                && !_skippedNodes.Contains(bodyScopeNodeId))
+            {
+                _skippedNodes = _skippedNodes.Add(bodyScopeNodeId);
+                _log.Debug(
+                    "⏭️ Marked body-scope node '{NodeId}' as skipped (handled by LoopExecutor)~ 🔁",
+                    bodyScopeNodeId);
+            }
+        }
+
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+            return;
+        }
+
+        // Fire only connections that are NOT body-scope targets (i.e., the 'done' port out-edges)~
+        var donePorts = _definition.Connections
+            .Where(c => c.SourceNodeId == loopNodeId && !bodyScope.Contains(c.TargetNodeId))
+            .Select(c => c.SourcePortName)
+            .Distinct()
+            .ToList();
+
+        if (donePorts.Count > 0)
+        {
+            ExecuteReadySuccessors(loopNodeId, new LanguageExt.Arr<string>(donePorts));
+        }
+        // If there are no done-port edges, all reachable work is body-scope → already complete above.
+    }
+
+    /// <summary>
+    /// Handles loop failure — routes via error boundary or fails the workflow~ ❌🔁.
+    /// </summary>
+    private void HandleLoopFailed(LoopFailed message)
+    {
+        var loopNodeId = message.LoopNodeId;
+        _pendingLoopNodes.Remove(loopNodeId);
+        Context.Unwatch(Sender);
+
+        _log.Error(
+            message.Error,
+            "❌ Loop '{LoopNodeId}' failed: {Error}",
+            loopNodeId, message.Error.Message);
+
+        // Reuse the shared node failure path (error boundary + fail-fast)
+        HandleNodeFailure(loopNodeId, message.Error);
     }
 
     /// <summary>
@@ -1521,8 +1693,10 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private bool IsWorkflowComplete()
     {
-        // All nodes must be in a terminal state (completed, failed-continue, or skipped)
+        // All nodes must be in a terminal state (completed, failed-continue, or skipped),
+        // AND no loop actors are still running iterations~ 🔁
         return _runningNodes.Count == 0 &&
+               _pendingLoopNodes.Count == 0 &&
                _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _definition.Nodes.Count;
     }
 

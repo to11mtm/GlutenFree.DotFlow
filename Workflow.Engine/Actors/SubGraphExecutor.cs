@@ -68,6 +68,20 @@ public class SubGraphExecutor : ReceiveActor
     private readonly System.Collections.Generic.HashSet<string> _runningNodes = new();
     private readonly System.Collections.Generic.HashSet<string> _skippedNodes = new();
 
+    /// <summary>
+    /// CopilotNote: Phase 2.2.2 — set to <see langword="true"/> when any node inside this
+    /// sub-graph emits the sentinel output key <c>__loop_break__</c> (from BreakModule).
+    /// Propagated to the parent via <see cref="SubGraphCompleted.BreakRequested"/>~ ⏹️.
+    /// </summary>
+    private bool _breakRequested;
+
+    /// <summary>
+    /// CopilotNote: Phase 2.2.2 — set to <see langword="true"/> when any node inside this
+    /// sub-graph emits the sentinel output key <c>__loop_continue__</c> (from ContinueModule).
+    /// Propagated to the parent via <see cref="SubGraphCompleted.ContinueRequested"/>~ ⏭️.
+    /// </summary>
+    private bool _continueRequested;
+
     // ── Graph (built from scoped connections in PreStart) ────────────────────────────────────────
     private readonly Dictionary<string, List<string>> _nodeSuccessors = new();
     private readonly Dictionary<string, List<string>> _nodePredecessors = new();
@@ -324,6 +338,10 @@ public class SubGraphExecutor : ReceiveActor
             .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
+        // Phase 2.2.2: detect loop break/continue sentinel keys from BreakModule/ContinueModule~ ⏹️⏭️
+        if (message.Outputs.ContainsKey("__loop_break__")) _breakRequested = true;
+        if (message.Outputs.ContainsKey("__loop_continue__")) _continueRequested = true;
+
         // Clean up actor ref
         if (_nodeActors.TryGetValue(nodeId, out var actor))
         {
@@ -504,7 +522,7 @@ public class SubGraphExecutor : ReceiveActor
             _completedNodes.Count,
             _skippedNodes.Count);
 
-        Context.Parent.Tell(new SubGraphCompleted(_subGraphId, outputs));
+        Context.Parent.Tell(new SubGraphCompleted(_subGraphId, outputs, _breakRequested, _continueRequested));
         Context.Stop(Self);
     }
 

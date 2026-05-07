@@ -52,8 +52,9 @@ public sealed class BuiltinModuleIntegrationTests
     #region Registration & Discovery Tests 📦
 
     /// <summary>
-    /// All 7 builtin modules should register successfully via <see cref="BuiltinModules.RegisterAll"/>~ 📦
+    /// All 11 builtin modules should register successfully via <see cref="BuiltinModules.RegisterAll"/>~ 📦
     /// Phase 2.2.1 added builtin.condition and builtin.switch~ 🔀🔢
+    /// Phase 2.2.2 added builtin.loop.foreach, builtin.loop.while, builtin.break, builtin.continue~ 🔁🌀
     /// </summary>
     [Fact]
     public void RegisterAll_ShouldRegisterAllBuiltinModules()
@@ -69,27 +70,35 @@ public sealed class BuiltinModuleIntegrationTests
         registry.HasModule("builtin.getvariable").Should().BeTrue();
         registry.HasModule("builtin.condition").Should().BeTrue("Phase 2.2.1 condition module must register~ 🔀");
         registry.HasModule("builtin.switch").Should().BeTrue("Phase 2.2.1 switch module must register~ 🔢");
-        registry.GetAllModules().Should().HaveCount(7, because: "7 builtin modules after Phase 2.2.1~ 💖");
+        registry.HasModule("builtin.loop.foreach").Should().BeTrue("Phase 2.2.2 foreach module must register~ 🔁");
+        registry.HasModule("builtin.loop.while").Should().BeTrue("Phase 2.2.2 while module must register~ 🌀");
+        registry.HasModule("builtin.break").Should().BeTrue("Phase 2.2.2 break module must register~ ⏹️");
+        registry.HasModule("builtin.continue").Should().BeTrue("Phase 2.2.2 continue module must register~ ⏭️");
+        registry.GetAllModules().Should().HaveCount(11, because: "11 builtin modules after Phase 2.2.2~ 💖");
     }
 
     /// <summary>
-    /// <see cref="BuiltinModules.GetAll"/> should return all 7 builtin modules~ 📦
+    /// <see cref="BuiltinModules.GetAll"/> should return all 11 builtin modules~ 📦
     /// Phase 2.2.1 added builtin.condition and builtin.switch~ 🔀🔢
+    /// Phase 2.2.2 added loop modules~ 🔁
     /// </summary>
     [Fact]
     public void GetAll_ShouldReturnFiveModules()
     {
         var modules = BuiltinModules.GetAll();
-        modules.Should().HaveCount(7, because: "7 builtin modules after Phase 2.2.1~ 💖");
+        modules.Should().HaveCount(11, because: "11 builtin modules after Phase 2.2.2~ 💖");
         modules.Select(m => m.ModuleId).Should().BeEquivalentTo(
             "builtin.passthrough", "builtin.log", "builtin.delay",
             "builtin.setvariable", "builtin.getvariable",
-            "builtin.condition", "builtin.switch");
+            "builtin.condition", "builtin.switch",
+            "builtin.loop.foreach", "builtin.loop.while",
+            "builtin.break", "builtin.continue");
     }
 
     /// <summary>
-    /// <see cref="ModuleDiscovery"/> should auto-discover all 7 builtin modules from the assembly~ 🔍
+    /// <see cref="ModuleDiscovery"/> should auto-discover all 11 builtin modules from the assembly~ 🔍
     /// Phase 2.2.1 added condition and switch modules~ 🔀🔢
+    /// Phase 2.2.2 added loop modules~ 🔁
     /// </summary>
     [Fact]
     public void ModuleDiscovery_ShouldFindAllBuiltinModules()
@@ -104,6 +113,10 @@ public sealed class BuiltinModuleIntegrationTests
         types.Should().Contain(typeof(GetVariableModule));
         types.Should().Contain(typeof(ConditionalModule), "Phase 2.2.1 condition module must be discovered~ 🔀");
         types.Should().Contain(typeof(SwitchModule), "Phase 2.2.1 switch module must be discovered~ 🔢");
+        types.Should().Contain(typeof(ForEachModule), "Phase 2.2.2 foreach module must be discovered~ 🔁");
+        types.Should().Contain(typeof(WhileModule), "Phase 2.2.2 while module must be discovered~ 🌀");
+        types.Should().Contain(typeof(BreakModule), "Phase 2.2.2 break module must be discovered~ ⏹️");
+        types.Should().Contain(typeof(ContinueModule), "Phase 2.2.2 continue module must be discovered~ ⏭️");
     }
 
     #endregion

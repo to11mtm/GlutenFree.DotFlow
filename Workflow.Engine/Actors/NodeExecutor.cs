@@ -289,7 +289,8 @@ public class NodeExecutor : ReceiveActor
                     enrichedResult.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value),
                     metrics,
                     enrichedResult.VariableUpdates,
-                    enrichedResult.ActivePorts);
+                    enrichedResult.ActivePorts,
+                    enrichedResult.Loop);
             }
             else
             {
@@ -622,10 +623,18 @@ public class NodeExecutor : ReceiveActor
         Dictionary<string, object?> outputs,
         ExecutionMetrics? metrics = null,
         IReadOnlyDictionary<string, object?>? variableUpdates = null,
-        IReadOnlyList<string>? activePorts = null)
+        IReadOnlyList<string>? activePorts = null,
+        Workflow.Core.Models.LoopRequest? loop = null)
     {
         _isExecuting = false;
         Context.SetReceiveTimeout(null);
+
+        // Phase 2.2.2: if a LoopRequest is present, send it BEFORE NodeExecutionCompleted so
+        // WorkflowExecutor stores it in _pendingLoops before processing the completion~ 🔁
+        if (loop != null)
+        {
+            Context.Parent.Tell(new NodeLoopExecutionRequested { NodeId = _nodeId, Loop = loop });
+        }
 
         // Convert variable updates to HashMap if present~
         HashMap<string, object?>? varUpdatesHashMap = variableUpdates is { Count: > 0 }
