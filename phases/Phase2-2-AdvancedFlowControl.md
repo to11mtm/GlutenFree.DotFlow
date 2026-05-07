@@ -259,65 +259,132 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 ---
 
-## 2.2.2 Loops (`builtin.loop.foreach`, `builtin.loop.while`, break/continue) 🔁
+## 2.2.2 Loops (`builtin.loop.foreach`, `builtin.loop.while`, break/continue) 🔁 ⚠️ IMPLEMENTATION COMPLETE — INTEGRATION TESTS PENDING FIX
 
 **Purpose:** Iterate over collections / repeat while a condition holds, leveraging the sub-graph executor + loop context~ ✨
 
-**Complexity:** 🟡 Medium
+**Complexity:** 🟡 Medium → 🔴 Medium-High *(engine orchestration via dedicated `LoopExecutorActor` proved more involved than original estimate)*
 
-### Tasks:
+> **CopilotNote:** Implementation is complete — all 4 modules + engine plumbing shipped. 3 integration tests are currently failing due to body-scope nodes being re-fired by `WorkflowExecutor.ExecuteReadySuccessors` after `HandleLoopCompleted`. Root cause: body-scope node IDs are **not** marked in `_completedNodes`/`_skippedNodes` at the `WorkflowExecutor` level (they ran inside `SubGraphExecutor`), so the done-port successor activation fires them again. Fix: mark all body-scope IDs as skipped in `SpawnLoopExecutor` before the loop actor runs~ 🧠
 
-- [ ] **`ForEachModule`** 🔁
-  - [ ] New file: `Workflow.Modules/Builtin/Flow/ForEachModule.cs`
-  - [ ] `ModuleId: "builtin.loop.foreach"`.
-  - [ ] Schema:
-    - [ ] Input: `collection` (`IEnumerable`, required)
-    - [ ] Input: `maxIterations` (int, optional, default `1000`)
-    - [ ] Input: `continueOnError` (bool, optional, default `false`)
-    - [ ] Output port: `loopBody` (activation per iteration)
-    - [ ] Output port: `done` (after all iterations)
-    - [ ] Outputs: `results` (array), `count` (int), `errors` (array)
-  - [ ] Execution:
-    - [ ] For each item: build `LoopContext`, run sub-graph rooted at downstream `loopBody` consumers.
-    - [ ] Honour `BreakRequested` / `ContinueRequested` flags from `BreakModule` / `ContinueModule`.
-    - [ ] Enforce `maxIterations`; on overflow, fail with `LoopLimitExceeded`.
-    - [ ] If `continueOnError`, capture per-iter error, continue; else propagate first error.
+### Engine Additions (beyond original plan):
 
-- [ ] **`WhileModule`** 🌀
-  - [ ] New file: `Workflow.Modules/Builtin/Flow/WhileModule.cs`
-  - [ ] Schema mirrors `ForEachModule`, plus Input: `condition` (bool/expression).
-  - [ ] Pre-iteration evaluate; same break/continue semantics.
+- [x] **`LoopRequest` model** 🗒️ *(new — `Workflow.Core/Models/LoopRequest.cs`)*
+  - [x] `Items` (IReadOnlyList), `LoopBodyPort`, `DonePort`, `MaxIterations` (default 1000), `ContinueOnError`, `ContinueCondition` (Func delegate — in-process only, for `WhileModule`)
 
-- [ ] **`BreakModule` / `ContinueModule`** ⏹️➡️
-  - [ ] New files: `Workflow.Modules/Builtin/Flow/BreakModule.cs`, `ContinueModule.cs`
-  - [ ] No outputs; set the corresponding flag on the **innermost** `LoopContext` for current execution.
-  - [ ] Validation: must be inside a loop region, else load-time error.
+- [x] **`ModuleResult` loop extensions** *(added to `Workflow.Modules/Abstractions/IWorkflowModule.cs`)*
+  - [x] `Loop` property (`LoopRequest? { get; init; }`)
+  - [x] `ModuleResult.WithLoop(outputs, loop)` — factory for module loop declaration
+  - [x] `ModuleResult.Break()` — sentinel output `{ "__loop_break__": true }`
+  - [x] `ModuleResult.Continue()` — sentinel output `{ "__loop_continue__": true }`
 
-- [ ] **Loop diagnostics & history**
-  - [ ] Each iteration recorded as a `NodeExecutionRecord` with `Metadata: { loopId, iter }` so persistence/UI can replay.
+- [x] **`LoopMessages.cs`** *(new — `Workflow.Engine/Messages/LoopMessages.cs`)*
+  - [x] `LoopCompleted(LoopNodeId, Outputs)`, `LoopFailed(LoopNodeId, Error, FailedNodeId?)`, `CooperativeCancelLoop(LoopNodeId, Reason?)`
 
-- [ ] **`regionId` hint field (Hybrid Q8 resolution)** 🗺️
-  - [ ] Add `RegionId? string` to `Workflow.Core/Models/NodeDefinition.cs` — optional, nullable, ignored by engine.
-  - [ ] Engine **never reads** `regionId` for routing or subgraph discovery — execution is always port-driven.
-  - [ ] Author tooling / workflow serializer should auto-populate `regionId = "{loopNodeId}-body"` when writing a `loopBody` connection for a node.
-  - [ ] Load-time: emit a **warning** (not error) if a node's `regionId` references a loop node whose `loopBody` port does not reach that node — indicates designer drift, execution still proceeds via ports.
-  - [ ] Schema is forward-compatible: Phase 3 visual designer reads `regionId` to render bounding boxes without engine changes.
+- [x] **`SubGraphMessages.cs` updated** — `SubGraphCompleted` gained `BreakRequested = false`, `ContinueRequested = false` optional params
 
-**Tests (target ~14):** → `Workflow.Tests/Modules/Flow/ForEachModuleTests.cs`, `Workflow.Tests/Modules/Flow/WhileModuleTests.cs`
-- [ ] Foreach over 10 items runs 10 iterations
-- [ ] Foreach with `break` stops early
-- [ ] Foreach with `continue` skips current iteration
-- [ ] Foreach over empty collection → `count: 0`, `done` fires
-- [ ] Foreach honours `maxIterations` (overflow → fail)
-- [ ] `continueOnError: true` collects errors, continues
-- [ ] `continueOnError: false` short-circuits on first error
-- [ ] While condition false from start → 0 iterations
-- [ ] While increments counter and exits at threshold
-- [ ] While honours `maxIterations`
-- [ ] Nested foreach (inner uses outer’s item) works
-- [ ] Iteration variables isolated per iteration (Q4)
-- [ ] Each iteration recorded individually in execution history
-- [ ] `Break`/`Continue` outside a loop fails load-time validation
+- [x] **`SubGraphExecutor.cs` updated** — detects `__loop_break__` / `__loop_continue__` sentinel keys in node outputs; sets `_breakRequested` / `_continueRequested`; propagates via `SubGraphCompleted`
+
+- [x] **`NodeLoopExecutionRequested` message** *(added to `WorkflowMessages.cs`)* — carries `NodeId` + `LoopRequest`; emitted **before** `NodeExecutionCompleted` from `NodeExecutor` (FIFO guarantee ensures `_pendingLoops` is populated before completion is handled)
+
+- [x] **`NodeExecutor.SendSuccess` updated** — passes `enrichedResult.Loop` when present, emitting `NodeLoopExecutionRequested`
+
+- [x] **`LoopExecutorActor.cs`** *(new — `Workflow.Engine/Actors/LoopExecutorActor.cs`, ~280 lines)*
+  - [x] Per-iteration: tells parent `PushLoopScope` → spawns `SubGraphExecutor` child for body nodes
+  - [x] Handles `SubGraphCompleted`/`Failed`, checks break/continue flags, enforces `maxIterations`
+  - [x] `ContinueOnError` support — collects errors and continues, or short-circuits on first error
+  - [x] `BecomeConditionAwaiting()` — async condition evaluation via `PipeTo` for `WhileModule` re-evaluation
+  - [x] `ComputeBodyScope(definition, loopNodeId, bodyEntryNodeIds)` static BFS helper
+  - [x] Reports `LoopCompleted`/`LoopFailed` to parent `WorkflowExecutor`
+
+- [x] **`WorkflowExecutor.cs` updated**
+  - [x] `_pendingLoops` dict + `_pendingLoopNodes` HashSet fields
+  - [x] Handlers: `Receive<NodeLoopExecutionRequested>`, `Receive<LoopCompleted>`, `Receive<LoopFailed>`
+  - [x] `IsWorkflowComplete()` guards on `_pendingLoopNodes.Count == 0`
+  - [x] `HandleNodeExecutionCompleted`: detects pending loop → `SpawnLoopExecutor()` instead of `ExecuteReadySuccessors`
+  - [x] `SpawnLoopExecutor()`, `HandleLoopCompleted()`, `HandleLoopFailed()` methods added
+
+### Module Tasks:
+
+- [x] **`ForEachModule`** 🔁
+  - [x] New file: `Workflow.Modules/Builtin/Flow/ForEachModule.cs`
+  - [x] `ModuleId: "builtin.loop.foreach"`.
+  - [x] Schema:
+    - [x] Input: `collection` (`IEnumerable`, required)
+    - [x] Input: `maxIterations` (int, optional, default `1000`)
+    - [x] Input: `continueOnError` (bool, optional, default `false`)
+    - [x] Output port: `loopBody` (activation per iteration)
+    - [x] Output port: `done` (after all iterations)
+    - [x] Outputs: `results` (array), `count` (int), `errors` (array)
+  - [x] Returns `ModuleResult.WithLoop` — engine spawns `LoopExecutorActor` to orchestrate iterations
+  - [x] `CoerceToList` helper handles: `IReadOnlyList`, `IEnumerable` (non-string), `JsonElement` array, JSON string, single-item wrap
+
+- [x] **`WhileModule`** 🌀
+  - [x] New file: `Workflow.Modules/Builtin/Flow/WhileModule.cs`
+  - [x] Schema mirrors `ForEachModule`, plus Input: `condition` (bool/expression).
+  - [x] Pre-iteration evaluate; same break/continue semantics.
+  - [x] Optimization: condition false from start → `ModuleResult.WithActivePorts(["done"])` (no loop actor spawned)
+  - [x] `ContinueCondition` delegate captures raw condition + evaluator reference for re-evaluation per iteration
+
+- [x] **`BreakModule` / `ContinueModule`** ⏹️➡️
+  - [x] New files: `Workflow.Modules/Builtin/Flow/BreakModule.cs`, `ContinueModule.cs`
+  - [x] `BreakModule.ExecuteAsync` → `ModuleResult.Break()` (sentinel `__loop_break__: true`)
+  - [x] `ContinueModule.ExecuteAsync` → `ModuleResult.Continue()` (sentinel `__loop_continue__: true`)
+  - [ ] Validation: must be inside a loop region — load-time validation **deferred** (requires loop scope inference at load time)
+
+- [x] **Loop diagnostics & history**
+  - [x] `LoopExecutorActor` calls `PushLoopScope` per iteration — `NodeExecutionRecord` stamped with `LoopId`/`LoopIteration` via 2.2.0b infrastructure
+
+- [x] **`regionId` hint field (Hybrid Q8 resolution)** 🗺️
+  - [x] `RegionId? string` already present in `Workflow.Core/Models/NodeDefinition.cs` (shipped in 2.2.0b)
+  - [x] Engine **never reads** `regionId` for routing or subgraph discovery — execution is port-driven
+  - [ ] Load-time warning for mismatched `regionId` vs actual port connectivity — **deferred to Phase 3**
+  - [x] Schema is forward-compatible: Phase 3 visual designer reads `regionId` to render bounding boxes
+
+- [x] **`BuiltinModuleRegistration.cs` updated** — count 7→11 (added `ForEachModule`, `WhileModule`, `BreakModule`, `ContinueModule`)
+
+**Tests (27 written — target was ~14):** → `Workflow.Tests/Modules/Flow/ForEachModuleTests.cs`, `Workflow.Tests/Modules/Flow/WhileModuleTests.cs`
+
+**ForEachModuleTests — unit tests (8, ✅ all passing):**
+- [x] `ForEachModule_Metadata_IsCorrect` — `ModuleId`, category, display name, icon, version
+- [x] `ForEachModule_Schema_DeclaresCorrectPorts` — `loopBody`, `done` output ports + `results`, `count`, `errors` outputs
+- [x] `ForEachModule_List_PackagesLoopRequest` — list input → `LoopRequest.Items` correctly set, `LoopBodyPort`/`DonePort` correct
+- [x] `ForEachModule_MaxIterations_PassedThrough` — custom `maxIterations` flows into `LoopRequest`
+- [x] `ForEachModule_EmptyCollection_ReturnsLoopRequestWithEmptyItems` — empty list → `LoopRequest` with empty items
+- [x] `ForEachModule_NullCollection_ReturnsFailure` — null `collection` → `ModuleResult.Fail`
+- [x] `ForEachModule_PropertyFallback_UsesCollectionProperty` — no input port → reads from `Properties`
+- [x] `ForEachModule_JsonStringCollection_ParsedCorrectly` — JSON string `"[1,2,3]"` → parsed to list
+
+**ForEachEngineIntegrationTests (4, ⚠️ 3 failing):**
+- [x] `ForEach_BodyFails_ContinueOnError_CollectsError` — ✅ passing
+- [ ] `ForEach_ThreeItems_RunsThreeIterations_WorkflowCompletes` — ❌ FAILING (got count=4, expected 3 — body nodes re-fired in `HandleLoopCompleted`)
+- [ ] `ForEach_EmptyCollection_WorkflowCompletes_ZeroBodyExecutions` — ❌ FAILING (wrong count or timeout)
+- [ ] `ForEach_BreakModule_StopsEarly` — ❌ FAILING (got count=2, expected 1)
+
+**WhileModuleTests — unit tests (10, ✅ all passing):**
+- [x] `WhileModule_Metadata_IsCorrect`
+- [x] `WhileModule_Schema_DeclaresCorrectPorts`
+- [x] `WhileModule_FalseCondition_ReturnsActivePorts_Done` — false from start → `WithActivePorts(["done"])` (no loop actor)
+- [x] `WhileModule_FalsyString_ReturnsDone` (Theory × falsy strings)
+- [x] `WhileModule_TrueCondition_ReturnsLoopRequest` — true → `LoopRequest` with `ContinueCondition`
+- [x] `WhileModule_TruthyValues_ReturnLoopRequest` (Theory × truthy values)
+- [x] `WhileModule_ContinueCondition_EvaluatesCorrectly` — delegate re-evaluates correctly
+- [x] `WhileModule_MaxIterations_PassedThrough`
+- [x] `WhileModule_NullCondition_ReturnsFailure`
+- [x] `WhileModule_PropertyFallback_UsesConditionProperty`
+
+**BreakContinueModuleTests (5, ✅ all passing):**
+- [x] `BreakModule_Metadata_IsCorrect`
+- [x] `ContinueModule_Metadata_IsCorrect`
+- [x] `BreakModule_ExecuteAsync_ReturnsBreakSentinel` — output contains `__loop_break__: true`
+- [x] `ContinueModule_ExecuteAsync_ReturnsContinueSentinel` — output contains `__loop_continue__: true`
+- [x] `BreakAndContinue_SentinelKeys_AreDistinct`
+
+**Remaining work (before marking ✅ COMPLETE):**
+- [ ] **Fix 3 failing integration tests** — `HandleLoopCompleted` re-fires body node successors. Fix: in `SpawnLoopExecutor`, mark all body-scope node IDs as skipped in `_skippedNodes` before spawning the loop actor so `ExecuteReadySuccessors` treats them as handled.
+- [ ] `Break`/`Continue` outside a loop — load-time validation (deferred to Phase 3, requires loop scope inference)
+- [ ] Nested foreach (inner uses outer's item) — integration test not yet written
+- [ ] `continueOnError: false` short-circuit integration test not yet written
 
 ---
 
@@ -470,7 +537,7 @@ Phase 2.2 turns the workflow engine from a **linear DAG runner** into a **proper
 
 **Purpose:** A safe, deterministic, sandboxed evaluator for `condition` / `switch` expressions and (later) data transformation modules~ 🌟
 
-**Companion analysis:** [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md) — side-by-side syntax comparison + integration sketches for DynamicExpresso vs JavaScript (Jint) vs Lua (MoonSharp). **Jint selected as default for v1** — native `EvaluateAsync` + CT support + full JS `async/await`~ 🧮
+**Companion analysis:** [Phase2-2-ExpressionEngine-Analysis.md](./Phase2-2-ExpressionEngine-Analysis.md) — side-by-side syntax comparison + integration sketches for DynamicExpresso vs JavaScript (Jint) vs Lua (MoonSharp). **Jint selected as default for v1** — native `EvaluateAsync` + CT support + `async/await`~ 🧮
 
 **Complexity:** 🟡 Medium
 
