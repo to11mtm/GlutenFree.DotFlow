@@ -132,6 +132,20 @@ public class WorkflowExecutor : ReceiveActor
     private readonly System.Collections.Generic.HashSet<string> _pendingLoopNodes = new();
 
     /// <summary>
+    /// CopilotNote: Phase 2.2.3a — pending parallel requests received from NodeExecutor
+    /// (via <c>NodeParallelExecutionRequested</c>) before the corresponding
+    /// <c>NodeExecutionCompleted</c> arrives. Keyed by parallel node ID~ 🌐.
+    /// </summary>
+    private readonly Dictionary<string, Workflow.Core.Models.ParallelRequest> _pendingParallels = new();
+
+    /// <summary>
+    /// CopilotNote: Phase 2.2.3a — node IDs of parallel nodes whose
+    /// <see cref="ParallelExecutionCoordinator"/> is still running. Prevents
+    /// <see cref="IsWorkflowComplete"/> from triggering prematurely while branches are in flight~ 🌐.
+    /// </summary>
+    private readonly System.Collections.Generic.HashSet<string> _pendingParallelNodes = new();
+
+    /// <summary>
     /// Stack of active error boundaries, innermost boundary at the top.
     /// Pushed by PushErrorBoundary messages (sent by TryCatch module in 2.2.4),
     /// popped by PopErrorBoundary~ 🛡️.
@@ -241,6 +255,11 @@ public class WorkflowExecutor : ReceiveActor
         Receive<NodeLoopExecutionRequested>(msg => _pendingLoops[msg.NodeId] = msg.Loop);
         Receive<LoopCompleted>(HandleLoopCompleted);
         Receive<LoopFailed>(HandleLoopFailed);
+
+        // Phase 2.2.3a: Parallel execution messages~ 🌐✨
+        Receive<NodeParallelExecutionRequested>(msg => _pendingParallels[msg.NodeId] = msg.Parallel);
+        Receive<ParallelCompleted>(HandleParallelCompleted);
+        Receive<ParallelFailed>(HandleParallelFailed);
 
         _log.Info(
             "🎬 WorkflowExecutor created for execution {ExecutionId}, workflow '{WorkflowName}' with {NodeCount} nodes",
@@ -594,6 +613,11 @@ public class WorkflowExecutor : ReceiveActor
             _workflowInputs.Count,
             incomingConnections.Count);
 
+        // Phase 2.2.3b: collect ordered per-branch payloads for barrier nodes (FanInModule)~ 🪄
+        // Each entry is the full source-node output dictionary, in declaration-order of connections.
+        // Standard modules ignore this key; FanIn aggregates it into 'result' per its mode~
+        var incomingBranches = new List<Dictionary<string, object?>>(incomingConnections.Count);
+
         foreach (var conn in incomingConnections)
         {
             if (_nodeOutputs.TryGetValue(conn.SourceNodeId, out var sourceOutputs))
@@ -622,6 +646,9 @@ public class WorkflowExecutor : ReceiveActor
                 {
                     inputs[$"{conn.SourceNodeId}.{key}"] = value;
                 }
+
+                // Phase 2.2.3b: also append the per-connection payload snapshot for FanIn~ 🪄
+                incomingBranches.Add(new Dictionary<string, object?>(sourceOutputs));
             }
             else
             {
@@ -629,8 +656,14 @@ public class WorkflowExecutor : ReceiveActor
                     "⚠️ No outputs available from predecessor node '{SourceNode}' for connection to '{TargetNode}'",
                     conn.SourceNodeId,
                     nodeId);
+
+                // Predecessor was skipped — record an empty payload to preserve branch positions
+                incomingBranches.Add(new Dictionary<string, object?>());
             }
         }
+
+        // Always expose the ordered branches collection — FanInModule reads this; everyone else ignores it~
+        inputs["__incomingBranches__"] = incomingBranches;
 
         _log.Debug(
             "📦 Node {NodeId} will receive {InputCount} total inputs: [{InputKeys}]",
@@ -733,6 +766,15 @@ public class WorkflowExecutor : ReceiveActor
         {
             _pendingLoops.Remove(nodeId);
             SpawnLoopExecutor(nodeId, loopRequest);
+            return;
+        }
+
+        // Phase 2.2.3a: same pattern for ParallelRequest — spawn coordinator and let it
+        // own all branches; we'll fire the done-port successors when ParallelCompleted arrives~ 🌐
+        if (_pendingParallels.TryGetValue(nodeId, out var parallelRequest))
+        {
+            _pendingParallels.Remove(nodeId);
+            SpawnParallelExecutor(nodeId, parallelRequest);
             return;
         }
 
@@ -1256,6 +1298,195 @@ public class WorkflowExecutor : ReceiveActor
         HandleNodeFailure(loopNodeId, message.Error);
     }
 
+    // ── Phase 2.2.3a: Parallel Execution ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Spawns a <see cref="ParallelExecutionCoordinator"/> for a parallel node and tracks it in
+    /// <c>_pendingParallelNodes</c> so <see cref="IsWorkflowComplete"/> waits for it~ 🌐✨.
+    /// </summary>
+    private void SpawnParallelExecutor(string parallelNodeId, Workflow.Core.Models.ParallelRequest parallel)
+    {
+        // Pre-compute the union of branch scopes — these nodes will be driven by SubGraphExecutors,
+        // not by us; we mark them skipped here to prevent double-execution from the done-port routing
+        // that follows ParallelCompleted (same fix as Phase 2.2.2 loops)~ 🌐✨
+        var unionScope = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+        var anyEntries = false;
+
+        // Phase 2.2.3b: detect overlap across branch scopes — convergent patterns must use FanInModule~ 🪄
+        var overlapping = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+
+        // Phase 2.2.3b: resolve branch ports — per-item mode uses the single BranchPort,
+        // static mode uses the BranchPorts list~ 🌟🌐
+        var portsToScope = parallel.Items is not null
+            ? new[] { parallel.BranchPort }
+            : parallel.BranchPorts;
+
+        foreach (var port in portsToScope)
+        {
+            var entries = _definition.Connections
+                .Where(c => c.SourceNodeId == parallelNodeId && c.SourcePortName == port)
+                .Select(c => c.TargetNodeId)
+                .ToList();
+            if (entries.Count == 0)
+            {
+                continue;
+            }
+
+            anyEntries = true;
+            var thisBranch = new System.Collections.Generic.HashSet<string>(
+                ParallelExecutionCoordinator.ComputeBranchScope(_definition, parallelNodeId, entries),
+                StringComparer.Ordinal);
+
+            // Detect overlap with any previously-seen branch~
+            foreach (var n in thisBranch)
+            {
+                if (!unionScope.Add(n))
+                {
+                    overlapping.Add(n);
+                }
+            }
+        }
+
+        // Per-item mode: an empty Items collection is a valid no-op (0 branches), distinct from
+        // "no connections" (degenerate). Treat as immediate-complete only when the port itself is unwired~
+        if (parallel.Items is not null && parallel.Items.Count == 0)
+        {
+            _log.Info(
+                "🌟 ParallelExecutor '{NodeId}' per-item fan-out: empty items collection — completing with 0 work~",
+                parallelNodeId);
+            _nodeOutputs[parallelNodeId] = new Dictionary<string, object?>
+            {
+                ["results"] = new List<object?>(),
+                ["count"] = 0,
+            };
+            ExecuteReadySuccessors(parallelNodeId, new LanguageExt.Arr<string>(new[] { parallel.DonePort }));
+            return;
+        }
+
+        if (overlapping.Count > 0)
+        {
+            // Defensive guard (Phase 2.2.3b carry-over): branch scopes overlap.
+            // Use builtin.fanin (2.2.3b) for convergent patterns instead of letting both branches
+            // claim the same nodes (which produces ambiguous skip-marking + double execution risk)~ 🪄
+            var nodes = string.Join(", ", overlapping);
+            _log.Warning(
+                "⚠️ ParallelExecutor '{NodeId}': branch scopes overlap on node(s) [{Overlap}]. " +
+                "For convergent patterns, terminate branches at a 'builtin.fanin' barrier node instead. " +
+                "Continuing with first-branch-wins skip-marking semantics for now~ 🪄",
+                parallelNodeId, nodes);
+        }
+
+        if (!anyEntries)
+        {
+            _log.Warning(
+                "⚠️ ParallelExecutor spawn: parallel node '{NodeId}' has no branch connections — " +
+                "completing immediately with 0 branches~ 🌐",
+                parallelNodeId);
+
+            _nodeOutputs[parallelNodeId] = new Dictionary<string, object?>
+            {
+                ["results"] = new List<object?>(),
+                ["count"] = 0,
+            };
+            ExecuteReadySuccessors(parallelNodeId, new LanguageExt.Arr<string>(new[] { parallel.DonePort }));
+            return;
+        }
+
+        // Pre-mark branch-scope nodes skipped so HandleParallelCompleted's done-port routing
+        // doesn't re-fire them~
+        foreach (var nid in unionScope)
+        {
+            if (!_completedNodes.Contains(nid)
+                && !_failedNodes.Contains(nid)
+                && !_skippedNodes.Contains(nid))
+            {
+                _skippedNodes = _skippedNodes.Add(nid);
+            }
+        }
+
+        // Snapshot inputs + variables as initial branch context~
+        var initialContext = new Dictionary<string, object?>(_workflowInputs);
+        foreach (var (k, v) in _context.Variables)
+            initialContext[k] = v;
+
+        _pendingParallelNodes.Add(parallelNodeId);
+
+        var actorName = $"par-{parallelNodeId.Replace(".", "-")}";
+        var coordinator = Context.ActorOf(
+            ParallelExecutionCoordinator.Props(
+                parallelNodeId, parallel, _definition,
+                _executionId, initialContext,
+                _serviceProvider, _executionCts.Token),
+            actorName);
+
+        Context.Watch(coordinator);
+
+        _log.Info(
+            "🌐 Spawned ParallelExecutionCoordinator '{ActorName}' for node '{ParallelNodeId}': " +
+            "{BranchCount} branch(es), {ScopeCount} scope nodes pre-marked",
+            actorName, parallelNodeId, parallel.BranchPorts.Count, unionScope.Count);
+    }
+
+    /// <summary>
+    /// Handles successful completion of all parallel branches — fires the <c>done</c> port successors~ ✅🌐.
+    /// </summary>
+    private void HandleParallelCompleted(ParallelCompleted message)
+    {
+        var parallelNodeId = message.ParallelNodeId;
+        _pendingParallelNodes.Remove(parallelNodeId);
+        Context.Unwatch(Sender);
+
+        _log.Info("✅ Parallel '{ParallelNodeId}' completed with {Count} branch(es)",
+            parallelNodeId,
+            message.Outputs.TryGetValue("count", out var cnt) ? cnt : "?");
+
+        _nodeOutputs[parallelNodeId] = message.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+            return;
+        }
+
+        // Done-port routing: only fire connections that aren't branch-scope (those are already skipped)~
+        // We compute the union scope again to filter out branch out-edges from the source node itself~
+        var unionScope = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+        foreach (var conn in _definition.Connections.Where(c => c.SourceNodeId == parallelNodeId))
+        {
+            // Any node we already marked skipped (pre-marked above) is in scope.
+            if (_skippedNodes.Contains(conn.TargetNodeId))
+                unionScope.Add(conn.TargetNodeId);
+        }
+
+        var donePorts = _definition.Connections
+            .Where(c => c.SourceNodeId == parallelNodeId && !unionScope.Contains(c.TargetNodeId))
+            .Select(c => c.SourcePortName)
+            .Distinct()
+            .ToList();
+
+        if (donePorts.Count > 0)
+        {
+            ExecuteReadySuccessors(parallelNodeId, new LanguageExt.Arr<string>(donePorts));
+        }
+    }
+
+    /// <summary>
+    /// Handles parallel failure — routes via error boundary or fails the workflow~ ❌🌐.
+    /// </summary>
+    private void HandleParallelFailed(ParallelFailed message)
+    {
+        var parallelNodeId = message.ParallelNodeId;
+        _pendingParallelNodes.Remove(parallelNodeId);
+        Context.Unwatch(Sender);
+
+        _log.Error(
+            message.Error,
+            "❌ Parallel '{ParallelNodeId}' failed: {Error}",
+            parallelNodeId, message.Error.Message);
+
+        HandleNodeFailure(parallelNodeId, message.Error);
+    }
+
     /// <summary>
     /// Pushes a new <see cref="ErrorBoundary"/> onto the active boundary stack~ 🛡️✨
     /// </summary>
@@ -1697,6 +1928,7 @@ public class WorkflowExecutor : ReceiveActor
         // AND no loop actors are still running iterations~ 🔁
         return _runningNodes.Count == 0 &&
                _pendingLoopNodes.Count == 0 &&
+               _pendingParallelNodes.Count == 0 &&
                _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _definition.Nodes.Count;
     }
 

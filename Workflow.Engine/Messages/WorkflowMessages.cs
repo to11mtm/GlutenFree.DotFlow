@@ -342,6 +342,26 @@ public sealed class NodeLoopExecutionRequested
 }
 
 /// <summary>
+/// 🌐 Sent by <see cref="Workflow.Engine.Actors.NodeExecutor"/> to <c>WorkflowExecutor</c>
+/// BEFORE <see cref="NodeExecutionCompleted"/> when the parallel module returns a
+/// <see cref="Workflow.Core.Models.ParallelRequest"/> in its <c>ModuleResult</c>~
+/// </summary>
+/// <remarks>
+/// CopilotNote: Phase 2.2.3a — WorkflowExecutor stores this in <c>_pendingParallels[NodeId]</c>.
+/// When the subsequent NodeExecutionCompleted arrives, it detects the stored ParallelRequest
+/// and spawns a ParallelExecutionCoordinator instead of calling ExecuteReadySuccessors directly.
+/// Sending before NodeExecutionCompleted guarantees ordering (same sender → same receiver = FIFO)~ 💖.
+/// </remarks>
+public sealed class NodeParallelExecutionRequested
+{
+    /// <summary>Gets the node ID of the parallel module~ 🆔.</summary>
+    public required string NodeId { get; init; }
+
+    /// <summary>Gets the parallel execution specification~ 🌐.</summary>
+    public required Workflow.Core.Models.ParallelRequest Parallel { get; init; }
+}
+
+/// <summary>
 /// Message to retry a failed node.
 /// Used when retry policy is configured for the node~ 🔄.
 /// </summary>

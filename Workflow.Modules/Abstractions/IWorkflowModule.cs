@@ -347,6 +347,30 @@ public record ModuleResult
         => new() { Success = true, Outputs = outputs, Loop = loop };
 
     /// <summary>
+    /// Gets the parallel fan-out request emitted by the <c>builtin.parallel</c> module~ 🌐✨
+    /// When non-null, <c>WorkflowExecutor</c> spawns a <c>ParallelExecutionCoordinator</c>
+    /// to drive all branches concurrently.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.3a — set via <see cref="WithParallel"/>. Engine checks this
+    /// in NodeExecutionCompleted and delegates branch fan-out to ParallelExecutionCoordinator~ 💖.
+    /// </remarks>
+    public ParallelRequest? Parallel { get; init; }
+
+    /// <summary>
+    /// Creates a successful result that requests parallel branch execution by the engine~ 🌐✨
+    /// </summary>
+    /// <param name="outputs">Initial outputs (typically empty for fan-out modules).</param>
+    /// <param name="parallel">The parallel specification (branch ports, concurrency, fail-fast).</param>
+    /// <returns>A ModuleResult with a ParallelRequest for the engine to process.</returns>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.3a — use this in ParallelModule.
+    /// WorkflowExecutor detects Parallel != null and spawns ParallelExecutionCoordinator~ 🌸.
+    /// </remarks>
+    public static ModuleResult WithParallel(Dictionary<string, object?> outputs, ParallelRequest parallel)
+        => new() { Success = true, Outputs = outputs, Parallel = parallel };
+
+    /// <summary>
     /// Creates a result that signals loop break to parent LoopExecutorActor~ ⏹️
     /// </summary>
     /// <remarks>

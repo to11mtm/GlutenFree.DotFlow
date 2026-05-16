@@ -290,7 +290,8 @@ public class NodeExecutor : ReceiveActor
                     metrics,
                     enrichedResult.VariableUpdates,
                     enrichedResult.ActivePorts,
-                    enrichedResult.Loop);
+                    enrichedResult.Loop,
+                    enrichedResult.Parallel);
             }
             else
             {
@@ -624,7 +625,8 @@ public class NodeExecutor : ReceiveActor
         ExecutionMetrics? metrics = null,
         IReadOnlyDictionary<string, object?>? variableUpdates = null,
         IReadOnlyList<string>? activePorts = null,
-        Workflow.Core.Models.LoopRequest? loop = null)
+        Workflow.Core.Models.LoopRequest? loop = null,
+        Workflow.Core.Models.ParallelRequest? parallel = null)
     {
         _isExecuting = false;
         Context.SetReceiveTimeout(null);
@@ -634,6 +636,13 @@ public class NodeExecutor : ReceiveActor
         if (loop != null)
         {
             Context.Parent.Tell(new NodeLoopExecutionRequested { NodeId = _nodeId, Loop = loop });
+        }
+
+        // Phase 2.2.3a: same FIFO trick for ParallelRequest — sent before completion so
+        // WorkflowExecutor populates _pendingParallels in time~ 🌐
+        if (parallel != null)
+        {
+            Context.Parent.Tell(new NodeParallelExecutionRequested { NodeId = _nodeId, Parallel = parallel });
         }
 
         // Convert variable updates to HashMap if present~

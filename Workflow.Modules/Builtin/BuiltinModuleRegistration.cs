@@ -24,6 +24,12 @@ using Workflow.Modules.Builtin.Flow;
 /// Phase 2.2.2: Added loop control modules — <c>builtin.loop.foreach</c>,
 /// <c>builtin.loop.while</c>, <c>builtin.break</c>, <c>builtin.continue</c>~ 🔁🌀⏹️⏭️
 /// </para>
+/// <para>
+/// Phase 2.2.3a: Added parallel fan-out module — <c>builtin.parallel</c>~ 🌐
+/// </para>
+/// <para>
+/// Phase 2.2.3b: Added fan-shaped pattern modules — <c>builtin.fanout</c>, <c>builtin.fanin</c>~ 🌟🪄
+/// </para>
 /// </remarks>
 public static class BuiltinModules
 {
@@ -48,6 +54,13 @@ public static class BuiltinModules
         new WhileModule(),
         new BreakModule(),
         new ContinueModule(),
+
+        // Phase 2.2.3a — Parallel fan-out module~ 🌐
+        new ParallelModule(),
+
+        // Phase 2.2.3b — Fan-shaped pattern modules~ 🌟🪄
+        new FanOutModule(),
+        new FanInModule(),
     };
 
     /// <summary>

@@ -18,7 +18,7 @@ indent_size = 4
 
 # 🎯 C# files - Detailed formatting rules
 [*.cs]
-
+dotnet_diagnostic.SA1117.severity = none
 dotnet_diagnostic.SA1101.severity = none
 dotnet_diagnostic.CA1852.severity = none
 dotnet_diagnostic.CA1707.severity = none
