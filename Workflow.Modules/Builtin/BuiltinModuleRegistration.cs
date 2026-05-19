@@ -30,6 +30,9 @@ using Workflow.Modules.Builtin.Flow;
 /// <para>
 /// Phase 2.2.3b: Added fan-shaped pattern modules — <c>builtin.fanout</c>, <c>builtin.fanin</c>~ 🌟🪄
 /// </para>
+/// <para>
+/// Phase 2.2.4: Added error handling modules — <c>builtin.trycatch</c>, <c>builtin.throw</c>~ 🛡️💥
+/// </para>
 /// </remarks>
 public static class BuiltinModules
 {
@@ -61,6 +64,10 @@ public static class BuiltinModules
         // Phase 2.2.3b — Fan-shaped pattern modules~ 🌟🪄
         new FanOutModule(),
         new FanInModule(),
+
+        // Phase 2.2.4 — Error handling modules~ 🛡️💥
+        new TryCatchModule(),
+        new ThrowModule(),
     };
 
     /// <summary>

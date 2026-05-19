@@ -22,6 +22,7 @@ using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
 using Workflow.Modules;
 using Workflow.Modules.Abstractions;
+using Workflow.Modules.Builtin.Flow;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 using Workflow.Persistence.Sqlite;
@@ -165,6 +166,98 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
 
         executionEntry.Should().NotBeNull();
         workflowEntry.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Engine_ParallelExecution_BranchNodesStampedWithParallelMetadata()
+    {
+        // Arrange — register ParallelModule + two distinguishable branch modules~
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(new ParallelModule());
+        registry.RegisterModule(new SimpleBranchModule("test.pp.a"));
+        registry.RegisterModule(new SimpleBranchModule("test.pp.b"));
+
+        var services = new ServiceCollection();
+        services.AddSingleton<WorkflowValidator>();
+        services.AddSingleton<IPersistenceProvider>(_provider);
+        services.AddSingleton<IWorkflowRepository>(_provider.Workflows);
+        services.AddSingleton<IExecutionHistoryRepository>(_provider.ExecutionHistory);
+        services.AddSingleton<IVariableStore>(_provider.Variables);
+        services.AddSingleton<IModuleRegistry>(registry);
+        var sp = services.BuildServiceProvider();
+
+        var supervisor = Sys.ActorOf(WorkflowSupervisor.Props(sp), "pp-supervisor");
+
+        var parallelProps = new Dictionary<string, JsonElement>
+        {
+            ["branches"] = JsonSerializer.SerializeToElement(new[] { "branchA", "branchB" }),
+        }.ToHashMap();
+
+        // CopilotNote: two-branch parallel workflow; each branch has exactly one body node.
+        // Both body nodes must be persisted with Metadata["parallelId"] == "par" and a valid branchIndex~ 🌐
+        var workflow = new WorkflowDefinition(
+            Id: Guid.NewGuid(),
+            Name: "parallel-persistence-test",
+            Description: null,
+            Version: new Version(1, 0),
+            Nodes: Arr.create(
+                new NodeDefinition("par", "builtin.parallel", "Parallel", parallelProps),
+                new NodeDefinition("a", "test.pp.a", "BranchA", HashMap<string, JsonElement>.Empty),
+                new NodeDefinition("b", "test.pp.b", "BranchB", HashMap<string, JsonElement>.Empty)),
+            Connections: Arr.create(
+                new ConnectionDefinition("par", "branchA", "a", "input"),
+                new ConnectionDefinition("par", "branchB", "b", "input")),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        supervisor.Tell(new CreateWorkflowInstance(
+            workflow.Id, workflow, HashMap<string, object?>.Empty));
+        var created = ExpectMsg<WorkflowInstanceCreated>(TimeSpan.FromSeconds(5));
+
+        // Act — run to completion
+        var terminal = await WaitForTerminalState(supervisor, created.ExecutionId, TimeSpan.FromSeconds(10));
+        terminal.State.Should().Be(ExecutionState.Completed,
+            because: "both branches should succeed and the workflow should complete~ ✅");
+
+        // Give async persistence writes a moment to land~ ⏰
+        await Task.Delay(350);
+
+        var nodeRecords = await _provider.ExecutionHistory.GetNodeExecutionsAsync(created.ExecutionId);
+
+        // Assert — branch body nodes must carry parallelId + branchIndex in Metadata~
+        var branchBodyRecords = nodeRecords.Where(r => r.NodeId is "a" or "b").ToList();
+        branchBodyRecords.Should().HaveCount(2,
+            because: "both branch body nodes must be persisted under the parent execution ID~ 🌐");
+
+        // CopilotNote: avoid 'out var' inside OnlyContain expression trees — use ContainsKey + indexer~ 🌿
+        branchBodyRecords.Should().OnlyContain(
+            r => r.Metadata != null && r.Metadata.ContainsKey("parallelId"),
+            because: "SubGraphExecutor.QueuePersistNode must stamp Metadata[\"parallelId\"] on every "
+                   + "node that executes inside a ParallelExecutionCoordinator branch~ 🌐");
+
+        branchBodyRecords.Should().OnlyContain(
+            r => r.Metadata != null
+                 && r.Metadata.ContainsKey("parallelId")
+                 && r.Metadata["parallelId"]!.ToString() == "par",
+            because: "Metadata[\"parallelId\"] must equal the parallel module's node ID ('par')~ 🌐");
+
+        branchBodyRecords.Should().OnlyContain(
+            r => r.Metadata != null && r.Metadata.ContainsKey("branchIndex"),
+            because: "SubGraphExecutor.QueuePersistNode must stamp Metadata[\"branchIndex\"] so history "
+                   + "queries can correlate records back to their branch origin~ 🔢");
+
+        // Branches 0 and 1 — verify the indices are valid 0-based integers~
+        // CopilotNote: after round-tripping through the JSON metadata blob, numeric values come back
+        // as JsonElement — unwrap with GetInt32() for ordering/comparison~ 🔢
+        static int ExtractBranchIndex(object? val) =>
+            val is System.Text.Json.JsonElement je ? je.GetInt32()
+            : Convert.ToInt32(val, System.Globalization.CultureInfo.InvariantCulture);
+
+        var branchIndices = branchBodyRecords
+            .Select(r => ExtractBranchIndex(r.Metadata!["branchIndex"]))
+            .OrderBy(i => i)
+            .ToList();
+        branchIndices.Should().BeEquivalentTo(new[] { 0, 1 },
+            because: "two branches → branchIndex 0 and 1 (0-based assignment by coordinator)~ 🔢");
     }
 
     private IServiceProvider BuildServiceProvider(
@@ -338,6 +431,31 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
             var varUpdates = new Dictionary<string, object?> { ["persistedVar"] = "uwu" };
             return Task.FromResult(ModuleResult.Ok(outputs, varUpdates));
         }
+    }
+
+    /// <summary>
+    /// 🔢 Simple success module for parallel branch bodies — succeeds immediately with a marker output~ 💖.
+    /// CopilotNote: Phase 2.2.3-followup — used by <c>Engine_ParallelExecution_BranchNodesStampedWithParallelMetadata</c>
+    /// to stand in for real branch work. The module ID is injected so the registry can distinguish branches~ 🌐.
+    /// </summary>
+    private sealed class SimpleBranchModule : IWorkflowModule
+    {
+        public SimpleBranchModule(string moduleId) => ModuleId = moduleId;
+
+        public string ModuleId { get; }
+        public string DisplayName => "Simple Branch";
+        public string Category => "Testing";
+        public string Description => "Succeeds immediately~ ✅";
+        public string Icon => "✅";
+        public Version Version => new(1, 0, 0);
+
+        public ModuleSchema Schema => new(
+            Inputs: Arr.create(PortDefinition.Create<object>("input", isRequired: false)),
+            Outputs: Arr.create(PortDefinition.Create<object>("output", isRequired: false)),
+            Properties: Arr<ModulePropertyDefinition>.Empty);
+
+        public Task<ModuleResult> ExecuteAsync(ModuleExecutionContext context, CancellationToken cancellationToken = default)
+            => Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?> { ["done"] = true }));
     }
 }
 

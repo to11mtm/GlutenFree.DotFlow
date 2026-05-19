@@ -62,5 +62,38 @@ public class ExecutionNodeEntity
     [Column("duration_ms")]
     [Nullable]
     public long? DurationMs { get; set; }
+
+    /// <summary>
+    /// Gets or sets the loop scope ID this node ran inside, if any~ 🔁.
+    /// CopilotNote: Phase 2.2.3-followup — persisted alongside <see cref="LoopIteration"/>
+    /// for per-iteration history correlation. Stamped by WorkflowExecutor via LoopContext~ 💖.
+    /// </summary>
+    [Column("loop_id")]
+    [Nullable]
+    public string? LoopId { get; set; }
+
+    /// <summary>Gets or sets the 1-based loop iteration number, if any~ 🔢.</summary>
+    [Column("loop_iteration")]
+    [Nullable]
+    public int? LoopIteration { get; set; }
+
+    /// <summary>
+    /// Gets or sets the sub-graph instance ID for nodes that executed inside a
+    /// <c>SubGraphExecutor</c>~ 🌿.
+    /// CopilotNote: Phase 2.2.3-followup — subGraphId tagging. Stored as a dedicated queryable
+    /// column rather than inside the JSON metadata blob so history queries can filter efficiently.
+    /// </summary>
+    [Column("sub_graph_id")]
+    [Nullable]
+    public string? SubGraphId { get; set; }
+
+    /// <summary>
+    /// Gets or sets arbitrary additional metadata as a JSON dictionary (nullable)~ 🗂️.
+    /// CopilotNote: Extensibility hook — future keys like <c>parallelId</c>, <c>branchIndex</c>
+    /// from Phase 2.2.3b parallel branch metadata can land here without a schema migration.
+    /// </summary>
+    [Column("metadata")]
+    [Nullable]
+    public string? MetadataJson { get; set; }
 }
 

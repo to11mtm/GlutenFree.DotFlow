@@ -1,8 +1,8 @@
-﻿// <copyright file="S3BlobStoreTests.cs" company="GlutenFree">
+// <copyright file="S3BlobStoreTests.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.Tests.Persistence;
+namespace Workflow.Tests.Integration.Persistence;
 
 using System;
 using System.IO;
@@ -15,11 +15,11 @@ using Workflow.Persistence.S3;
 using Xunit;
 
 /// <summary>
-/// ☁️ Phase 2.1.4 — Integration tests for the S3 blob store using MinIO~ ✨💖
+/// ?? Phase 2.1.4 � Integration tests for the S3 blob store using MinIO~ ???
 /// </summary>
 /// <remarks>
 /// CopilotNote: Spins up one MinIO container shared across all tests in this class.
-/// Tests are marked [Trait("Category", "Integration")] to allow skipping in CI without Docker~ 🐳
+/// Tests are marked [Trait("Category", "Integration")] to allow skipping in CI without Docker~ ??
 /// </remarks>
 [Trait("Category", "Integration")]
 public sealed class S3BlobStoreTests : IAsyncLifetime
@@ -41,8 +41,8 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         await _container.StartAsync();
 
         // CopilotNote: We construct the endpoint URL explicitly with http:// scheme to avoid
-        // surprises from MinioContainer.GetConnectionString() across Testcontainers versions —
-        // MinIO in this test setup serves plain HTTP, so we MUST request http://~ 🔓
+        // surprises from MinioContainer.GetConnectionString() across Testcontainers versions �
+        // MinIO in this test setup serves plain HTTP, so we MUST request http://~ ??
         var endpoint = $"http://{_container.Hostname}:{_container.GetMappedPublicPort(9000)}";
 
         _config = new S3Configuration
@@ -54,7 +54,7 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
             EndpointUrl = endpoint,
             UsePathStyle = true,
 
-            // Lower threshold so multipart paths are exercised in tests~ 📦
+            // Lower threshold so multipart paths are exercised in tests~ ??
             MultipartThresholdBytes = 5 * 1024 * 1024,
         };
 
@@ -69,14 +69,14 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         await _container.DisposeAsync();
     }
 
-    // ── Provider Lifecycle ────────────────────────────────────────────────────
+    // -- Provider Lifecycle ----------------------------------------------------
 
     [Fact]
     public void Provider_ShouldBeInitialized_AndCreateBucket()
     {
         _provider.IsInitialized.Should().BeTrue();
         _provider.ProviderName.Should().Be("s3");
-        _provider.Blobs.Should().NotBeNull("S3 provider's Blobs should be wired after InitializeAsync~ ☁️");
+        _provider.Blobs.Should().NotBeNull("S3 provider's Blobs should be wired after InitializeAsync~ ??");
     }
 
     [Fact]
@@ -112,17 +112,17 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         ((Action)(() => _ = _provider.Variables)).Should().Throw<NotSupportedException>();
     }
 
-    // ── Blob Operations ───────────────────────────────────────────────────────
+    // -- Blob Operations -------------------------------------------------------
 
     [Fact]
     public async Task Put_SmallFile_ThenGet_ShouldRoundTrip()
     {
         var key = $"small/{Guid.NewGuid():N}.txt";
-        var content = "Hello from Ami-chan~ uwu 💖";
+        var content = "Hello from Ami-chan~ uwu ??";
         var bytes = Encoding.UTF8.GetBytes(content);
 
         var etag = await _provider.Blobs!.PutAsync(key, new MemoryStream(bytes), "text/plain");
-        etag.Should().NotBeNullOrEmpty("PUT should return an ETag~ 🏷️");
+        etag.Should().NotBeNullOrEmpty("PUT should return an ETag~ ???");
 
         await using var stream = await _provider.Blobs.GetAsync(key);
         stream.Should().NotBeNull();
@@ -134,7 +134,7 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
     [Fact]
     public async Task Put_LargeFile_ViaMultipart_ShouldRoundTrip()
     {
-        // 6 MiB > 5 MiB multipart threshold → forces multipart upload~ 📦
+        // 6 MiB > 5 MiB multipart threshold ? forces multipart upload~ ??
         var key = $"large/{Guid.NewGuid():N}.bin";
         var bytes = new byte[6 * 1024 * 1024];
         new Random(42).NextBytes(bytes);
@@ -146,7 +146,7 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         stream.Should().NotBeNull();
         using var ms = new MemoryStream();
         await stream!.CopyToAsync(ms);
-        ms.ToArray().Should().BeEquivalentTo(bytes, "multipart upload must preserve byte-for-byte content~ 🧪");
+        ms.ToArray().Should().BeEquivalentTo(bytes, "multipart upload must preserve byte-for-byte content~ ??");
     }
 
     [Fact]
@@ -188,7 +188,7 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
     {
         var key = $"ghost/{Guid.NewGuid():N}.txt";
         var stream = await _provider.Blobs!.GetAsync(key);
-        stream.Should().BeNull("missing keys should return null instead of throwing~ 👻");
+        stream.Should().BeNull("missing keys should return null instead of throwing~ ??");
     }
 
     [Fact(Skip = "Needs real S3 or SSL debugging, skip for now")]
@@ -202,7 +202,7 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         url.Should().NotBeNullOrWhiteSpace();
         url.Should().Contain(BucketName);
 
-        // CopilotNote: presigned URLs should be directly fetchable without auth~ 🔗
+        // CopilotNote: presigned URLs should be directly fetchable without auth~ ??
         using var http = new HttpClient();
         var response = await http.GetAsync(new Uri(url));
         response.IsSuccessStatusCode.Should().BeTrue();
@@ -216,13 +216,13 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         var key = $"expired/{Guid.NewGuid():N}.txt";
         await _provider.Blobs!.PutAsync(key, new MemoryStream("data"u8.ToArray()));
 
-        // Generate URL valid for 1 second, then wait it out~ ⏱️
+        // Generate URL valid for 1 second, then wait it out~ ??
         var url = await _provider.Blobs.GeneratePresignedUrlAsync(key, TimeSpan.FromSeconds(1));
         await Task.Delay(TimeSpan.FromSeconds(2));
 
         using var http = new HttpClient();
         var response = await http.GetAsync(new Uri(url));
-        response.IsSuccessStatusCode.Should().BeFalse("expired presigned URLs should be rejected by S3~ ⛔");
+        response.IsSuccessStatusCode.Should().BeFalse("expired presigned URLs should be rejected by S3~ ?");
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         await _provider.Blobs!.PutAsync(key, new MemoryStream(Encoding.UTF8.GetBytes(json)), "application/json");
 
         // CopilotNote: The IBlobStore.GetAsync returns Stream only, not metadata. To verify
-        // ContentType we go through the underlying client directly~ 🔍
+        // ContentType we go through the underlying client directly~ ??
         var blobStore = (S3BlobStore)_provider.Blobs!;
         var head = await blobStore.Client.GetObjectMetadataAsync(blobStore.BucketName, key);
         head.Headers.ContentType.Should().Be("application/json");
@@ -248,7 +248,7 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
 
         var blobStore = (S3BlobStore)_provider.Blobs!;
         var head = await blobStore.Client.GetObjectMetadataAsync(blobStore.BucketName, key);
-        head.Headers.ContentType.Should().Be("application/json", "extension-based content-type detection~ 🏷️");
+        head.Headers.ContentType.Should().Be("application/json", "extension-based content-type detection~ ???");
     }
 }
 

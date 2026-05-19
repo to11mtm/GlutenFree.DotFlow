@@ -417,6 +417,115 @@ public sealed class SqliteProviderTests : IAsyncLifetime
             .Which.GetString().Should().Be("execution-val");
     }
 
+    // ── Parallel Metadata Round-trip ──────────────────────────────────────────
+
+    /// <summary>
+    /// 🌐 Verifies that <c>Metadata["parallelId"]</c>, <c>Metadata["branchIndex"]</c>, and
+    /// <c>Metadata["subGraphId"]</c> survive a full SQLite write → read round-trip.
+    /// These are the keys stamped by <see cref="Workflow.Engine.Actors.SubGraphExecutor.QueuePersistNode"/>
+    /// when sentinel inputs <c>__parallel_node_id__</c> and <c>__parallel_branch_index__</c> are present~
+    /// 🌐💖 Phase 2.2.3-followup: Persistence metadata stamps for parallel branches.
+    /// </summary>
+    [Fact]
+    public async Task NodeExecution_WithParallelMetadata_ShouldRoundTripAllMetadataFields()
+    {
+        // Arrange — prerequisite execution record
+        var workflowId = await _provider.Workflows.CreateAsync(MakeWorkflow());
+        var execId = await _provider.ExecutionHistory.CreateExecutionAsync(
+            new ExecutionRecord(Guid.NewGuid(), workflowId, ExecutionState.Running, DateTimeOffset.UtcNow));
+
+        const string ParallelNodeId = "par-node-1";
+        const int BranchIndex = 2;
+        var subGraphId = $"{ParallelNodeId}-branch-{BranchIndex}";
+
+        // CopilotNote: this metadata dict mirrors exactly what SubGraphExecutor.QueuePersistNode produces
+        // when __parallel_node_id__ and __parallel_branch_index__ sentinel inputs are present.
+        // subGraphId goes into the dedicated sub_graph_id column; parallelId + branchIndex go into
+        // the JSON metadata blob — both must survive round-trip~ 🗂️
+        var metadata = new Dictionary<string, object?>
+        {
+            ["subGraphId"] = subGraphId,
+            ["parallelId"] = ParallelNodeId,
+            ["branchIndex"] = BranchIndex,
+        };
+
+        var nodeRecord = new NodeExecutionRecord(
+            ExecutionId: execId,
+            NodeId: "branch-body-node",
+            State: NodeExecutionState.Completed,
+            StartedAt: DateTimeOffset.UtcNow,
+            CompletedAt: DateTimeOffset.UtcNow,
+            Duration: TimeSpan.FromMilliseconds(75),
+            Metadata: metadata);
+
+        // Act
+        await _provider.ExecutionHistory.RecordNodeExecutionAsync(nodeRecord);
+        var nodes = await _provider.ExecutionHistory.GetNodeExecutionsAsync(execId);
+
+        // Assert
+        nodes.Should().HaveCount(1);
+        var retrieved = nodes[0];
+
+        retrieved.Metadata.Should().NotBeNull(
+            because: "parallel metadata must survive the SQLite write → read round-trip~ 🌐");
+
+        retrieved.Metadata!.Should().ContainKey("parallelId",
+            because: "Metadata[\"parallelId\"] is stamped by SubGraphExecutor.QueuePersistNode when "
+                   + "the __parallel_node_id__ sentinel input is present~ 🌐");
+        retrieved.Metadata["parallelId"]?.ToString().Should().Be(ParallelNodeId,
+            because: "parallelId must equal the parallel node ID for history correlation~ 💖");
+
+        retrieved.Metadata.Should().ContainKey("branchIndex",
+            because: "Metadata[\"branchIndex\"] is stamped by SubGraphExecutor.QueuePersistNode when "
+                   + "__parallel_branch_index__ sentinel input is present~ 🔢");
+        // CopilotNote: after round-tripping through the JSON metadata blob, numeric values
+        // come back as JsonElement — use GetInt32() for robust extraction~ 🔢
+        var branchIndexRaw = retrieved.Metadata!["branchIndex"];
+        var branchIndexRestored = branchIndexRaw is System.Text.Json.JsonElement je
+            ? je.GetInt32()
+            : Convert.ToInt32(branchIndexRaw, System.Globalization.CultureInfo.InvariantCulture);
+        branchIndexRestored.Should().Be(BranchIndex,
+            because: "branchIndex must be the 0-based branch index~ 🔢");
+
+        retrieved.Metadata.Should().ContainKey("subGraphId",
+            because: "subGraphId is stored in its own dedicated column but must also be restored "
+                   + "into Metadata by BuildMetadata so consumers see a unified dict~ 🌿");
+        retrieved.Metadata["subGraphId"]!.ToString().Should().Be(subGraphId,
+            because: "subGraphId must equal the coordinator-assigned sub-graph ID~ 🌿");
+    }
+
+    /// <summary>
+    /// 🛡️ Regression guard — a plain node record with no parallel metadata must not
+    /// gain any phantom keys after a round-trip through SQLite~ 💖
+    /// Phase 2.2.3-followup: ensures the metadata serialization path is additive-only.
+    /// </summary>
+    [Fact]
+    public async Task NodeExecution_WithNoMetadata_ShouldRoundTripWithNullMetadata()
+    {
+        // Arrange
+        var workflowId = await _provider.Workflows.CreateAsync(MakeWorkflow());
+        var execId = await _provider.ExecutionHistory.CreateExecutionAsync(
+            new ExecutionRecord(Guid.NewGuid(), workflowId, ExecutionState.Running, DateTimeOffset.UtcNow));
+
+        var nodeRecord = new NodeExecutionRecord(
+            ExecutionId: execId,
+            NodeId: "plain-node",
+            State: NodeExecutionState.Completed,
+            StartedAt: DateTimeOffset.UtcNow,
+            CompletedAt: DateTimeOffset.UtcNow,
+            Duration: TimeSpan.FromMilliseconds(10));
+
+        // Act
+        await _provider.ExecutionHistory.RecordNodeExecutionAsync(nodeRecord);
+        var nodes = await _provider.ExecutionHistory.GetNodeExecutionsAsync(execId);
+
+        // Assert — no metadata keys should appear when none were written~ 🛡️
+        nodes.Should().HaveCount(1);
+        var retrieved = nodes[0];
+        retrieved.Metadata.Should().BeNull(
+            because: "a record written without metadata must not gain phantom keys on read~ 🛡️");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static WorkflowDefinition MakeWorkflow(

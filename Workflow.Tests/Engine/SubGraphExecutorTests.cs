@@ -169,6 +169,187 @@ public class SubGraphExecutorTests : TestKit
             because: "all sub-graph node records must use the PARENT execution ID");
     }
 
+    // ── Test 6b: Sub-graph node records are tagged with subGraphId in Metadata ───────────────────
+
+    /// <summary>
+    /// Each <see cref="NodeExecutionRecord"/> produced by <see cref="SubGraphExecutor"/> must
+    /// carry <c>Metadata["subGraphId"]</c> equal to the sub-graph's own ID~ 🌿
+    /// This enables Phase 2.2.6 history queries to correlate nodes back to their originating
+    /// sub-graph instance without a separate lookup~ ✨
+    /// CopilotNote: Phase 2.2.3-followup — the tagging happens inside QueuePersistNode; this
+    /// test verifies the tag is present and correct on every captured record.
+    /// </summary>
+    [Fact]
+    public void SubGraph_NodeExecutions_PersistedWithSubGraphIdTagInMetadata()
+    {
+        // Arrange
+        const string SubGraphId = "meta-tag-test";
+        var captured = new List<NodeExecutionRecord>();
+        var historyMock = new CapturingHistoryRepository(captured);
+
+        var modules = RegisterModules("sg.m1", "sg.m2");
+        var sp = new ServiceCollection()
+            .AddSingleton<IModuleRegistry>(modules)
+            .AddSingleton<IExecutionHistoryRepository>(historyMock)
+            .BuildServiceProvider();
+
+        var definition = BuildLinearDefinition(("nodeMeta1", "sg.m1"), ("nodeMeta2", "sg.m2"));
+        var parentId = Guid.NewGuid();
+
+        var parentProbe = CreateTestProbe("sg-meta-parent");
+        parentProbe.ChildActorOf(SubGraphExecutor.Props(
+            parentId,
+            definition,
+            scopeNodeIds: new[] { "nodeMeta1", "nodeMeta2" },
+            entryNodeIds: new[] { "nodeMeta1" },
+            inputs: new Dictionary<string, object?>(),
+            serviceProvider: sp,
+            subGraphId: SubGraphId), "sg-meta");
+
+        // Act
+        parentProbe.ExpectMsg<SubGraphCompleted>(TimeSpan.FromSeconds(5));
+
+        // Give async persistence a moment to complete~ ⏰
+        Thread.Sleep(200);
+
+        // Assert — every node record carries Metadata["subGraphId"] == SubGraphId
+        captured.Should().HaveCountGreaterThanOrEqualTo(2,
+            because: "both nodes in the sub-graph should be persisted");
+
+        // CopilotNote: avoid 'out var' inside the expression tree — FluentAssertions compiles
+        // OnlyContain as Expression<Func<T,bool>> so we use ContainsKey + direct indexer~ 🌿
+        captured.Should().OnlyContain(
+            r => r.Metadata != null
+                 && r.Metadata.ContainsKey("subGraphId")
+                 && r.Metadata["subGraphId"] != null
+                 && r.Metadata["subGraphId"]!.ToString() == SubGraphId,
+            because: "each sub-graph node record must be tagged with Metadata[\"subGraphId\"] so "
+                   + "history queries can correlate it back to its originating sub-graph instance~ 🌿");
+    }
+
+    // ── Test: Parallel branch metadata stamps (parallelId + branchIndex) ────────────────────────
+
+    /// <summary>
+    /// When a <see cref="SubGraphExecutor"/> is spawned by <c>ParallelExecutionCoordinator</c>
+    /// the sentinel inputs <c>__parallel_node_id__</c> and <c>__parallel_branch_index__</c> are
+    /// present in the branch inputs. QueuePersistNode must read them and stamp
+    /// <c>Metadata["parallelId"]</c> + <c>Metadata["branchIndex"]</c> on every record~ 🌐💖
+    /// CopilotNote: Phase 2.2.3-followup — parallel metadata stamps. We exercise this directly via
+    /// SubGraphExecutor (no need to go through the full coordinator) by injecting sentinel inputs~ 🧪
+    /// </summary>
+    [Fact]
+    public void SubGraph_WithParallelSentinelInputs_StampsParallelIdAndBranchIndexInMetadata()
+    {
+        // Arrange
+        const string ParallelNodeId = "parallel-node-1";
+        const int BranchIndex = 2;
+
+        var captured = new List<NodeExecutionRecord>();
+        var historyMock = new CapturingHistoryRepository(captured);
+
+        var modules = RegisterModules("sg.par1", "sg.par2");
+        var sp = new ServiceCollection()
+            .AddSingleton<IModuleRegistry>(modules)
+            .AddSingleton<IExecutionHistoryRepository>(historyMock)
+            .BuildServiceProvider();
+
+        var definition = BuildLinearDefinition(("parNode1", "sg.par1"), ("parNode2", "sg.par2"));
+        var parentId = Guid.NewGuid();
+
+        // CopilotNote: inject the same sentinel keys that ParallelExecutionCoordinator.SpawnBranch
+        // puts into branchInputs — this decouples the test from needing the full coordinator~ 🧪
+        var branchInputs = new Dictionary<string, object?>
+        {
+            ["__parallel_node_id__"] = ParallelNodeId,
+            ["__parallel_branch_index__"] = BranchIndex,
+            ["__parallel_branch_port__"] = "branch-2",
+        };
+
+        var parentProbe = CreateTestProbe("sg-par-meta-parent");
+        parentProbe.ChildActorOf(SubGraphExecutor.Props(
+            parentId,
+            definition,
+            scopeNodeIds: new[] { "parNode1", "parNode2" },
+            entryNodeIds: new[] { "parNode1" },
+            inputs: branchInputs,
+            serviceProvider: sp,
+            subGraphId: $"{ParallelNodeId}-branch-{BranchIndex}"), "sg-par-meta");
+
+        // Act
+        parentProbe.ExpectMsg<SubGraphCompleted>(TimeSpan.FromSeconds(5));
+
+        // Give async persistence a moment~ ⏰
+        Thread.Sleep(200);
+
+        // Assert — every record must carry parallelId and branchIndex in Metadata~ 🌐
+        captured.Should().HaveCountGreaterThanOrEqualTo(2,
+            because: "both nodes in the parallel branch should be persisted");
+
+        // CopilotNote: avoid 'out var' inside expression trees — use ContainsKey + indexer~ 🌿
+        captured.Should().OnlyContain(
+            r => r.Metadata != null
+                 && r.Metadata.ContainsKey("parallelId")
+                 && r.Metadata["parallelId"] != null
+                 && r.Metadata["parallelId"]!.ToString() == ParallelNodeId,
+            because: "Metadata[\"parallelId\"] must equal the parallel node ID on every branch record~ 🌐");
+
+        captured.Should().OnlyContain(
+            r => r.Metadata != null
+                 && r.Metadata.ContainsKey("branchIndex")
+                 && r.Metadata["branchIndex"] != null
+                 && Convert.ToInt32(r.Metadata["branchIndex"]) == BranchIndex,
+            because: "Metadata[\"branchIndex\"] must equal the 0-based branch index on every branch record~ 🔢");
+    }
+
+    /// <summary>
+    /// A regular (non-parallel) sub-graph with no sentinel keys should NOT have
+    /// <c>parallelId</c> or <c>branchIndex</c> in Metadata — only the <c>subGraphId</c>~ 💖
+    /// CopilotNote: regression guard — make sure we don't accidentally stamp parallel keys on
+    /// every record everywhere, only on actual parallel branch executions~ 🛡️
+    /// </summary>
+    [Fact]
+    public void SubGraph_WithoutParallelSentinelInputs_DoesNotStampParallelMetadata()
+    {
+        // Arrange
+        var captured = new List<NodeExecutionRecord>();
+        var historyMock = new CapturingHistoryRepository(captured);
+
+        var modules = RegisterModules("sg.np1", "sg.np2");
+        var sp = new ServiceCollection()
+            .AddSingleton<IModuleRegistry>(modules)
+            .AddSingleton<IExecutionHistoryRepository>(historyMock)
+            .BuildServiceProvider();
+
+        var definition = BuildLinearDefinition(("npNode1", "sg.np1"), ("npNode2", "sg.np2"));
+        var parentId = Guid.NewGuid();
+
+        var parentProbe = CreateTestProbe("sg-np-meta-parent");
+        parentProbe.ChildActorOf(SubGraphExecutor.Props(
+            parentId,
+            definition,
+            scopeNodeIds: new[] { "npNode1", "npNode2" },
+            entryNodeIds: new[] { "npNode1" },
+            inputs: new Dictionary<string, object?>(),
+            serviceProvider: sp,
+            subGraphId: "non-parallel-subgraph"), "sg-np-meta");
+
+        // Act
+        parentProbe.ExpectMsg<SubGraphCompleted>(TimeSpan.FromSeconds(5));
+        Thread.Sleep(200);
+
+        // Assert — records have subGraphId but NOT parallelId or branchIndex~ 🌿
+        captured.Should().HaveCountGreaterThanOrEqualTo(2);
+        captured.Should().OnlyContain(
+            r => r.Metadata != null && r.Metadata.ContainsKey("subGraphId"),
+            because: "subGraphId should always be stamped when subGraphId is provided~");
+        captured.Should().NotContain(
+            r => r.Metadata != null && r.Metadata.ContainsKey("parallelId"),
+            because: "parallelId must only appear on records from parallel branch sub-graphs~ 🌐");
+        captured.Should().NotContain(
+            r => r.Metadata != null && r.Metadata.ContainsKey("branchIndex"),
+            because: "branchIndex must only appear on records from parallel branch sub-graphs~ 🔢");
+    }
+
     // ── Test: Port-aware routing inside sub-graph works identically ─────────────────────────────
 
     /// <summary>

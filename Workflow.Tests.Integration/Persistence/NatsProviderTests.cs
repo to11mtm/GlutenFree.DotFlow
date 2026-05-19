@@ -1,8 +1,8 @@
-﻿// <copyright file="NatsProviderTests.cs" company="GlutenFree">
+// <copyright file="NatsProviderTests.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.Tests.Persistence;
+namespace Workflow.Tests.Integration.Persistence;
 
 using System;
 using System.Linq;
@@ -16,19 +16,19 @@ using Workflow.Persistence.Nats;
 using Xunit;
 
 /// <summary>
-/// 🚀 Phase 2.1.3 — Integration tests for the NATS KV persistence provider~ ✨💖
+/// ?? Phase 2.1.3 � Integration tests for the NATS KV persistence provider~ ???
 /// </summary>
 /// <remarks>
 /// CopilotNote: Requires Docker. Spins up one NATS container (with JetStream enabled)
 /// shared across all tests in the class for speed.
-/// Tests are marked [Trait("Category", "Integration")] to allow skipping in CI without Docker~ 🐳
+/// Tests are marked [Trait("Category", "Integration")] to allow skipping in CI without Docker~ ??
 /// </remarks>
 [Trait("Category", "Integration")]
 public sealed class NatsProviderTests : IAsyncLifetime
 {
     private readonly NatsContainer _container = new NatsBuilder()
         .WithImage("nats:2.10-alpine")
-        .WithCommand("-js") // CopilotNote: -js flag enables JetStream (required for KV)~ 🚀
+        .WithCommand("-js") // CopilotNote: -js flag enables JetStream (required for KV)~ ??
         .Build();
 
     private NatsPersistenceProvider _provider = null!;
@@ -48,7 +48,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
         await _container.DisposeAsync();
     }
 
-    // ── Provider Lifecycle ────────────────────────────────────────────────────
+    // -- Provider Lifecycle ----------------------------------------------------
 
     [Fact]
     public void Provider_ShouldBeInitialized_AfterInitializeAsync()
@@ -81,10 +81,10 @@ public sealed class NatsProviderTests : IAsyncLifetime
     [Fact]
     public void Provider_Blobs_ShouldBeNull()
     {
-        _provider.Blobs.Should().BeNull("NATS KV is not suitable for large blobs — use S3 instead~ ☁️");
+        _provider.Blobs.Should().BeNull("NATS KV is not suitable for large blobs � use S3 instead~ ??");
     }
 
-    // ── Workflow CRUD ─────────────────────────────────────────────────────────
+    // -- Workflow CRUD ---------------------------------------------------------
 
     [Fact]
     public async Task Workflow_CreateAndGet_ShouldRoundTrip()
@@ -120,7 +120,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
 
         deleted.Should().BeTrue();
         var retrieved = await _provider.Workflows.GetByIdAsync(id);
-        retrieved.Should().BeNull("soft-deleted workflows should not appear in normal Get~ 🗑️");
+        retrieved.Should().BeNull("soft-deleted workflows should not appear in normal Get~ ???");
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
         await _provider.Workflows.DeleteAsync(id);
 
         var retrieved = await _provider.Workflows.GetByIdAsync(id, includeDeleted: true);
-        retrieved.Should().NotBeNull("includeDeleted: true should return soft-deleted workflow~ 👀");
+        retrieved.Should().NotBeNull("includeDeleted: true should return soft-deleted workflow~ ??");
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
         await _provider.Workflows.PurgeAsync(id);
 
         var retrieved = await _provider.Workflows.GetByIdAsync(id, includeDeleted: true);
-        retrieved.Should().BeNull("purged workflows should be completely gone~ 💨");
+        retrieved.Should().BeNull("purged workflows should be completely gone~ ??");
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
 
         restored.Should().BeTrue();
         var retrieved = await _provider.Workflows.GetByIdAsync(id);
-        retrieved.Should().NotBeNull("restored workflow should be active again~ ♻️");
+        retrieved.Should().NotBeNull("restored workflow should be active again~ ??");
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
     public async Task Workflow_OptimisticConcurrency_UpdateWithStaleDocument_ShouldSucceed()
     {
         // CopilotNote: NATS KV is last-write-wins, not optimistic concurrency by default.
-        // This test validates that two sequential updates don't corrupt data~ 🔄
+        // This test validates that two sequential updates don't corrupt data~ ??
         var id = await _provider.Workflows.CreateAsync(MakeWorkflow("Concurrency"));
         await _provider.Workflows.UpdateAsync(id, MakeWorkflow("Updated-1") with { Id = id });
         await _provider.Workflows.UpdateAsync(id, MakeWorkflow("Updated-2") with { Id = id });
@@ -209,7 +209,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
         final!.Name.Should().Be("Updated-2");
     }
 
-    // ── Execution History ─────────────────────────────────────────────────────
+    // -- Execution History -----------------------------------------------------
 
     [Fact]
     public async Task Execution_CreateAndGet_ShouldRoundTrip()
@@ -281,7 +281,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
         result.Items.Should().OnlyContain(e => e.State == ExecutionState.Completed);
     }
 
-    // ── Variable Store ────────────────────────────────────────────────────────
+    // -- Variable Store --------------------------------------------------------
 
     [Fact]
     public async Task Variable_Set_ShouldCreateVersion1()
@@ -316,8 +316,8 @@ public sealed class NatsProviderTests : IAsyncLifetime
 
         var entry = await _provider.Variables.GetVariableAsync(scope, "nullvar");
 
-        // CopilotNote: null value is a VALID entry. entry != null, but entry.Value == null~ 💖
-        entry.Should().NotBeNull("variable entry with null value is distinct from 'not found'~ 🧪");
+        // CopilotNote: null value is a VALID entry. entry != null, but entry.Value == null~ ??
+        entry.Should().NotBeNull("variable entry with null value is distinct from 'not found'~ ??");
         entry!.Value.Should().BeNull();
         entry.Version.Should().Be(2);
     }
@@ -366,7 +366,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
 
         deleted.Should().BeTrue();
         var entry = await _provider.Variables.GetVariableAsync(scope, varName);
-        entry.Should().BeNull("deleted variable should not be found~ 🗑️");
+        entry.Should().BeNull("deleted variable should not be found~ ???");
     }
 
     [Fact]
@@ -388,7 +388,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
 
         all.Should().ContainKey("withValue");
         all.Should().ContainKey("withNull");
-        all["withNull"].Should().BeNull("null-valued variable should be present in GetAll~ 💾");
+        all["withNull"].Should().BeNull("null-valued variable should be present in GetAll~ ??");
     }
 
     [Fact]
@@ -415,8 +415,8 @@ public sealed class NatsProviderTests : IAsyncLifetime
     [Fact]
     public async Task Variable_Watch_ShouldFireOnChange()
     {
-        // CopilotNote: Basic watch test — confirm that after Set, the updated value is immediately readable.
-        // Full reactive watch (IAsyncEnumerable) is a more advanced usage~ ⚡
+        // CopilotNote: Basic watch test � confirm that after Set, the updated value is immediately readable.
+        // Full reactive watch (IAsyncEnumerable) is a more advanced usage~ ?
         var scope = VariableScope.ForExecution(Guid.NewGuid());
         var varName = $"watch_{Guid.NewGuid():N}";
 
@@ -427,7 +427,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
         entry!.Value!.ToString().Should().Be("after");
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // -- Helpers ---------------------------------------------------------------
 
     private static WorkflowDefinition MakeWorkflow(string name) => new(
         Id: Guid.NewGuid(),

@@ -243,6 +243,9 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         {
             ["__parallel_branch_index__"] = spec.Index,
             ["__parallel_branch_port__"] = spec.PortName,
+            // Phase 2.2.3-followup: parallelId stamp — read by SubGraphExecutor.QueuePersistNode
+            // to populate Metadata["parallelId"] on each NodeExecutionRecord~ 🌐💖
+            ["__parallel_node_id__"] = _parallelNodeId,
         };
 
         // Phase 2.2.3b: per-item fan-out — seed item + index inputs for the body sub-graph~ 🌟

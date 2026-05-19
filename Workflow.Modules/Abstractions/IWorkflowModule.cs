@@ -390,4 +390,28 @@ public record ModuleResult
     /// </remarks>
     public static ModuleResult Continue()
         => Ok(new Dictionary<string, object?> { ["__loop_continue__"] = true });
+
+    /// <summary>
+    /// Gets the try/catch execution request emitted by the <c>builtin.trycatch</c> module~ 🛡️✨
+    /// When non-null, <c>WorkflowExecutor</c> spawns a <c>TryCatchExecutorActor</c>
+    /// to orchestrate the try → catch? → finally? sequence.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.4 — set via <see cref="WithTryCatch"/>. Engine checks this
+    /// in NodeExecutionCompleted and delegates the sequence to TryCatchExecutorActor~ 💖.
+    /// </remarks>
+    public TryCatchRequest? TryCatch { get; init; }
+
+    /// <summary>
+    /// Creates a successful result that requests try/catch execution by the engine~ 🛡️✨
+    /// </summary>
+    /// <param name="outputs">Initial outputs (typically empty for trycatch modules).</param>
+    /// <param name="tryCatch">The try/catch specification (ports, rethrow, catchTypes).</param>
+    /// <returns>A ModuleResult with a TryCatchRequest for the engine to process.</returns>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.4 — use this in TryCatchModule.
+    /// WorkflowExecutor detects TryCatch != null and spawns TryCatchExecutorActor~ 🌸.
+    /// </remarks>
+    public static ModuleResult WithTryCatch(Dictionary<string, object?> outputs, TryCatchRequest tryCatch)
+        => new() { Success = true, Outputs = outputs, TryCatch = tryCatch };
 }

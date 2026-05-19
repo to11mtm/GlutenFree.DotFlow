@@ -52,9 +52,12 @@ public sealed class BuiltinModuleIntegrationTests
     #region Registration & Discovery Tests 📦
 
     /// <summary>
-    /// All 11 builtin modules should register successfully via <see cref="BuiltinModules.RegisterAll"/>~ 📦
+    /// All 16 builtin modules should register successfully via <see cref="BuiltinModules.RegisterAll"/>~ 📦
     /// Phase 2.2.1 added builtin.condition and builtin.switch~ 🔀🔢
     /// Phase 2.2.2 added builtin.loop.foreach, builtin.loop.while, builtin.break, builtin.continue~ 🔁🌀
+    /// Phase 2.2.3a added builtin.parallel~ 🌐
+    /// Phase 2.2.3b added builtin.fanout and builtin.fanin~ 🔀🔁
+    /// Phase 2.2.4 added builtin.trycatch and builtin.throw~ 🛡️💥
     /// </summary>
     [Fact]
     public void RegisterAll_ShouldRegisterAllBuiltinModules()
@@ -74,31 +77,45 @@ public sealed class BuiltinModuleIntegrationTests
         registry.HasModule("builtin.loop.while").Should().BeTrue("Phase 2.2.2 while module must register~ 🌀");
         registry.HasModule("builtin.break").Should().BeTrue("Phase 2.2.2 break module must register~ ⏹️");
         registry.HasModule("builtin.continue").Should().BeTrue("Phase 2.2.2 continue module must register~ ⏭️");
-        registry.GetAllModules().Should().HaveCount(11, because: "11 builtin modules after Phase 2.2.2~ 💖");
+        registry.HasModule("builtin.parallel").Should().BeTrue("Phase 2.2.3a parallel module must register~ 🌐");
+        registry.HasModule("builtin.fanout").Should().BeTrue("Phase 2.2.3b fanout module must register~ 🔀");
+        registry.HasModule("builtin.fanin").Should().BeTrue("Phase 2.2.3b fanin module must register~ 🔁");
+        registry.HasModule("builtin.trycatch").Should().BeTrue("Phase 2.2.4 trycatch module must register~ 🛡️");
+        registry.HasModule("builtin.throw").Should().BeTrue("Phase 2.2.4 throw module must register~ 💥");
+        registry.GetAllModules().Should().HaveCount(16, because: "16 builtin modules after Phase 2.2.4~ 💖");
     }
 
     /// <summary>
-    /// <see cref="BuiltinModules.GetAll"/> should return all 11 builtin modules~ 📦
+    /// <see cref="BuiltinModules.GetAll"/> should return all 16 builtin modules~ 📦
     /// Phase 2.2.1 added builtin.condition and builtin.switch~ 🔀🔢
     /// Phase 2.2.2 added loop modules~ 🔁
+    /// Phase 2.2.3a added builtin.parallel~ 🌐
+    /// Phase 2.2.3b added builtin.fanout and builtin.fanin~ 🔀🔁
+    /// Phase 2.2.4 added builtin.trycatch and builtin.throw~ 🛡️💥
     /// </summary>
     [Fact]
     public void GetAll_ShouldReturnFiveModules()
     {
         var modules = BuiltinModules.GetAll();
-        modules.Should().HaveCount(11, because: "11 builtin modules after Phase 2.2.2~ 💖");
+        modules.Should().HaveCount(16, because: "16 builtin modules after Phase 2.2.4~ 💖");
         modules.Select(m => m.ModuleId).Should().BeEquivalentTo(
             "builtin.passthrough", "builtin.log", "builtin.delay",
             "builtin.setvariable", "builtin.getvariable",
             "builtin.condition", "builtin.switch",
             "builtin.loop.foreach", "builtin.loop.while",
-            "builtin.break", "builtin.continue");
+            "builtin.break", "builtin.continue",
+            "builtin.parallel",
+            "builtin.fanout", "builtin.fanin",
+            "builtin.trycatch", "builtin.throw");
     }
 
     /// <summary>
-    /// <see cref="ModuleDiscovery"/> should auto-discover all 11 builtin modules from the assembly~ 🔍
+    /// <see cref="ModuleDiscovery"/> should auto-discover all 16 builtin modules from the assembly~ 🔍
     /// Phase 2.2.1 added condition and switch modules~ 🔀🔢
     /// Phase 2.2.2 added loop modules~ 🔁
+    /// Phase 2.2.3a added builtin.parallel~ 🌐
+    /// Phase 2.2.3b added fanout and fanin modules~ 🔀🔁
+    /// Phase 2.2.4 added trycatch and throw modules~ 🛡️💥
     /// </summary>
     [Fact]
     public void ModuleDiscovery_ShouldFindAllBuiltinModules()
@@ -117,6 +134,11 @@ public sealed class BuiltinModuleIntegrationTests
         types.Should().Contain(typeof(WhileModule), "Phase 2.2.2 while module must be discovered~ 🌀");
         types.Should().Contain(typeof(BreakModule), "Phase 2.2.2 break module must be discovered~ ⏹️");
         types.Should().Contain(typeof(ContinueModule), "Phase 2.2.2 continue module must be discovered~ ⏭️");
+        types.Should().Contain(typeof(ParallelModule), "Phase 2.2.3a parallel module must be discovered~ 🌐");
+        types.Should().Contain(typeof(FanOutModule), "Phase 2.2.3b fanout module must be discovered~ 🔀");
+        types.Should().Contain(typeof(FanInModule), "Phase 2.2.3b fanin module must be discovered~ 🔁");
+        types.Should().Contain(typeof(TryCatchModule), "Phase 2.2.4 trycatch module must be discovered~ 🛡️");
+        types.Should().Contain(typeof(ThrowModule), "Phase 2.2.4 throw module must be discovered~ 💥");
     }
 
     #endregion

@@ -146,6 +146,20 @@ public class WorkflowExecutor : ReceiveActor
     private readonly System.Collections.Generic.HashSet<string> _pendingParallelNodes = new();
 
     /// <summary>
+    /// CopilotNote: Phase 2.2.4 — pending trycatch requests received from NodeExecutor
+    /// (via <c>NodeTryCatchExecutionRequested</c>) before the corresponding
+    /// <c>NodeExecutionCompleted</c> arrives. Keyed by trycatch node ID~ 🛡️.
+    /// </summary>
+    private readonly Dictionary<string, Workflow.Core.Models.TryCatchRequest> _pendingTryCatches = new();
+
+    /// <summary>
+    /// CopilotNote: Phase 2.2.4 — node IDs of trycatch nodes whose
+    /// <see cref="TryCatchExecutorActor"/> is still running. Prevents
+    /// <see cref="IsWorkflowComplete"/> from triggering prematurely while the sequence is in flight~ 🛡️.
+    /// </summary>
+    private readonly System.Collections.Generic.HashSet<string> _pendingTryCatchNodes = new();
+
+    /// <summary>
     /// Stack of active error boundaries, innermost boundary at the top.
     /// Pushed by PushErrorBoundary messages (sent by TryCatch module in 2.2.4),
     /// popped by PopErrorBoundary~ 🛡️.
@@ -158,6 +172,14 @@ public class WorkflowExecutor : ReceiveActor
     private readonly Dictionary<string, List<string>> _nodeSuccessors = new();
     private readonly Dictionary<string, List<string>> _nodePredecessors = new();
     private readonly Dictionary<string, int> _inDegree = new();
+
+    /// <summary>
+    /// Shared port-aware routing core — initialised at the end of <see cref="BuildExecutionGraph"/>.
+    /// Delegates <c>ExecuteReadySuccessors</c>, <c>TryFireSuccessor</c>, and
+    /// <c>TrySkipNodeDownstream</c> to eliminate the copy-paste with <see cref="SubGraphExecutor"/>~ 🎯.
+    /// CopilotNote: Phase 2.2.3-followup — dispatch-core extraction; no behaviour change.
+    /// </summary>
+    private DispatchCore? _dispatchCore;
 
     // State store for persistence snapshots (optional — resolved from DI)
     private readonly IExecutionStateStore? _stateStore;
@@ -260,6 +282,11 @@ public class WorkflowExecutor : ReceiveActor
         Receive<NodeParallelExecutionRequested>(msg => _pendingParallels[msg.NodeId] = msg.Parallel);
         Receive<ParallelCompleted>(HandleParallelCompleted);
         Receive<ParallelFailed>(HandleParallelFailed);
+
+        // Phase 2.2.4: TryCatch execution messages~ 🛡️✨
+        Receive<NodeTryCatchExecutionRequested>(msg => _pendingTryCatches[msg.NodeId] = msg.TryCatch);
+        Receive<TryCatchCompleted>(HandleTryCatchCompleted);
+        Receive<TryCatchFailed>(HandleTryCatchFailed);
 
         _log.Info(
             "🎬 WorkflowExecutor created for execution {ExecutionId}, workflow '{WorkflowName}' with {NodeCount} nodes",
@@ -393,6 +420,29 @@ public class WorkflowExecutor : ReceiveActor
 
         // Phase 2.2.0a: Validate connection SourcePortNames against module schema declarations~ 🛡️
         ValidateConnectionPorts();
+
+        // Phase 2.2.3-followup: wire up the shared dispatch core now that graph data is populated~ 🎯
+        _dispatchCore = new DispatchCore(
+            definition: _definition,
+            nodeSuccessors: _nodeSuccessors,
+            nodePredecessors: _nodePredecessors,
+            isRunning: nodeId => _runningNodes.Contains(nodeId),
+            isCompleted: nodeId => _completedNodes.Contains(nodeId),
+            isFailed: nodeId => _failedNodes.Contains(nodeId),
+            isSkipped: nodeId => _skippedNodes.Contains(nodeId),
+            executeNode: ExecuteNode,
+            markNodeSkipped: nodeId =>
+            {
+                _skippedNodes = _skippedNodes.Add(nodeId);
+                TransitionNodeState(nodeId, NodeExecutionState.Skipped, DateTimeOffset.UtcNow);
+                _log.Debug("⏭️ Skipping node {NodeId} (all incoming paths deactivated by port routing)", nodeId);
+            },
+            checkCompletionAfterSkipPropagation: () =>
+            {
+                if (IsWorkflowComplete())
+                    CompleteWorkflow();
+            },
+            log: _log);
     }
 
     /// <summary>
@@ -778,6 +828,15 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
+        // Phase 2.2.4: same pattern for TryCatchRequest — spawn TryCatchExecutorActor and let it
+        // own the try/catch/finally sequence; we fire the done-port successors when TryCatchCompleted arrives~ 🛡️
+        if (_pendingTryCatches.TryGetValue(nodeId, out var tryCatchRequest))
+        {
+            _pendingTryCatches.Remove(nodeId);
+            SpawnTryCatchExecutor(nodeId, tryCatchRequest);
+            return;
+        }
+
         // Find and execute successor nodes whose dependencies are now satisfied.
         // Pass activePorts for port-aware routing (Phase 2.2.0a)~ 🎯
         ExecuteReadySuccessors(nodeId, message.ActivePorts);
@@ -788,6 +847,10 @@ public class WorkflowExecutor : ReceiveActor
     /// Phase 2.2.0a: Port-aware routing — when <paramref name="activePorts"/> is non-empty,
     /// only activates successors reachable via those ports; deactivated branches are marked Skipped~ 🎯✨.
     /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.3-followup — core logic lives in <see cref="DispatchCore"/>.
+    /// This method is a thin wrapper kept for call-site readability inside this file~ 💖.
+    /// </remarks>
     /// <param name="completedNodeId">The node that just completed.</param>
     /// <param name="activePorts">
     /// Which output ports to route through. Empty = fire all (legacy/default).
@@ -795,129 +858,30 @@ public class WorkflowExecutor : ReceiveActor
     /// (i.e. all Phase 1 modules) pass an empty Arr → all outgoing connections fire as before~ 💖.
     /// </param>
     private void ExecuteReadySuccessors(string completedNodeId, Arr<string> activePorts = default)
-    {
-        if (!_nodeSuccessors.TryGetValue(completedNodeId, out var successors) || successors.Count == 0)
-        {
-            return;
-        }
-
-        if (activePorts.Count == 0)
-        {
-            // Legacy / fire-all: unchanged behaviour — every successor whose predecessors are satisfied runs~ ✅
-            foreach (var successorId in successors)
-            {
-                TryFireSuccessor(successorId);
-            }
-
-            return;
-        }
-
-        // Port-aware routing~ 🎯
-        // Build the set of targets activated via the selected ports
-        var activatedTargets = _definition.Connections
-            .Where(c => c.SourceNodeId == completedNodeId && activePorts.Contains(c.SourcePortName))
-            .Select(c => c.TargetNodeId)
-            .ToHashSet();
-
-        // Build the set of targets on deactivated ports (NOT in activatedTargets)
-        var deactivatedTargets = _definition.Connections
-            .Where(c => c.SourceNodeId == completedNodeId && !activePorts.Contains(c.SourcePortName))
-            .Select(c => c.TargetNodeId)
-            .Where(t => !activatedTargets.Contains(t)) // not also targeted via an active port
-            .ToHashSet();
-
-        // Fire activated branches
-        foreach (var targetId in activatedTargets)
-        {
-            TryFireSuccessor(targetId);
-        }
-
-        // Skip deactivated branches (propagates recursively downstream)~ ⏭️
-        foreach (var targetId in deactivatedTargets)
-        {
-            TrySkipNodeDownstream(targetId);
-        }
-
-        // After propagating skips, check if the entire workflow is now complete~ 🎉
-        if (IsWorkflowComplete())
-        {
-            CompleteWorkflow();
-        }
-    }
+        => _dispatchCore!.ExecuteReadySuccessors(completedNodeId, activePorts);
 
     /// <summary>
     /// Attempts to fire a successor node if all its predecessors are satisfied
     /// (completed, failed-with-continue, or skipped)~ ✅.
     /// </summary>
+    /// <remarks>
+    /// CopilotNote: Phase 2.2.3-followup — delegates to <see cref="DispatchCore"/>~ 💖.
+    /// </remarks>
     /// <param name="successorId">The candidate successor node ID.</param>
     private void TryFireSuccessor(string successorId)
-    {
-        // Skip nodes already in a terminal or running state
-        if (_runningNodes.Contains(successorId) ||
-            _completedNodes.Contains(successorId) ||
-            _failedNodes.Contains(successorId) ||
-            _skippedNodes.Contains(successorId))
-        {
-            return;
-        }
-
-        // All predecessors must be in a "satisfied" state (complete, failed-continue, or skipped)
-        var predecessors = _nodePredecessors[successorId];
-        var allSatisfied = predecessors.All(p =>
-            _completedNodes.Contains(p) || _skippedNodes.Contains(p));
-
-        if (allSatisfied)
-        {
-            _log.Debug(
-                "🔗 Firing successor {SuccessorNode} (all predecessors satisfied)",
-                successorId);
-            ExecuteNode(successorId);
-        }
-    }
+        => _dispatchCore!.TryFireSuccessor(successorId);
 
     /// <summary>
     /// Marks a node as Skipped and recursively skips all downstream nodes whose only
     /// remaining path was through this node~ ⏭️✨.
     /// </summary>
     /// <remarks>
-    /// CopilotNote: Called when a module sets ActivePorts that don't include the connection
-    /// leading to this node. Only skips if ALL of the node's predecessors are now satisfied
-    /// (complete/failed/skipped) — protects against skipping a node that has another active
-    /// predecessor still pending. Recursion bottoms out at terminal nodes (no successors)~ 🌸.
+    /// CopilotNote: Phase 2.2.3-followup — delegates to <see cref="DispatchCore"/>.
+    /// The <c>markNodeSkipped</c> callback injected at construction handles
+    /// <c>TransitionNodeState</c> and set-mutation for this actor~ 🌸.
     /// </remarks>
     private void TrySkipNodeDownstream(string nodeId)
-    {
-        // Don't skip a node already in any terminal or running state
-        if (_completedNodes.Contains(nodeId) ||
-            _failedNodes.Contains(nodeId) ||
-            _runningNodes.Contains(nodeId) ||
-            _skippedNodes.Contains(nodeId))
-        {
-            return;
-        }
-
-        // Only skip if ALL this node's predecessors are now satisfied (complete/failed/skipped).
-        // If a predecessor is still pending/running, that path could still activate this node.
-        var predecessors = _nodePredecessors.GetValueOrDefault(nodeId, new List<string>());
-        var allSatisfied = predecessors.All(p =>
-            _completedNodes.Contains(p) || _failedNodes.Contains(p) || _skippedNodes.Contains(p));
-
-        if (!allSatisfied) return;
-
-        _log.Debug("⏭️ Skipping node {NodeId} (all incoming paths deactivated by port routing)", nodeId);
-
-        _skippedNodes = _skippedNodes.Add(nodeId);
-        TransitionNodeState(nodeId, NodeExecutionState.Skipped, DateTimeOffset.UtcNow);
-
-        // Propagate skip to all downstream successors~ 🌊
-        if (_nodeSuccessors.TryGetValue(nodeId, out var ownSuccessors))
-        {
-            foreach (var successorId in ownSuccessors)
-            {
-                TrySkipNodeDownstream(successorId);
-            }
-        }
-    }
+        => _dispatchCore!.TrySkipNodeDownstream(nodeId);
 
     /// <summary>
     /// Handles NodeExecutionFailed message.
@@ -1487,6 +1451,131 @@ public class WorkflowExecutor : ReceiveActor
         HandleNodeFailure(parallelNodeId, message.Error);
     }
 
+    // ── Phase 2.2.4: TryCatch Execution ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Spawns a <see cref="TryCatchExecutorActor"/> for a trycatch node and tracks it in
+    /// <c>_pendingTryCatchNodes</c> so <see cref="IsWorkflowComplete"/> waits for it~ 🛡️✨.
+    /// </summary>
+    private void SpawnTryCatchExecutor(string tryCatchNodeId, Workflow.Core.Models.TryCatchRequest request)
+    {
+        // Pre-compute union of all branch scopes (try + catch + finally) and pre-mark as skipped
+        // so IsWorkflowComplete() counts them once the executor completes~ 🛡️✨
+        var allBranchPorts = new[] { request.TryPort, request.CatchPort, request.FinallyPort };
+        var unionScope = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var port in allBranchPorts)
+        {
+            var entries = _definition.Connections
+                .Where(c => c.SourceNodeId == tryCatchNodeId && c.SourcePortName == port)
+                .Select(c => c.TargetNodeId)
+                .ToList();
+
+            if (entries.Count == 0) continue;
+
+            var branchScope = TryCatchExecutorActor.ComputeScope(_definition, tryCatchNodeId, entries);
+            foreach (var n in branchScope)
+            {
+                unionScope.Add(n);
+            }
+        }
+
+        // Pre-mark branch-scope nodes as skipped (TryCatchExecutorActor runs them internally)~
+        foreach (var scopeNodeId in unionScope)
+        {
+            if (!_completedNodes.Contains(scopeNodeId)
+                && !_failedNodes.Contains(scopeNodeId)
+                && !_skippedNodes.Contains(scopeNodeId))
+            {
+                _skippedNodes = _skippedNodes.Add(scopeNodeId);
+                _log.Debug(
+                    "⏭️ Pre-marked trycatch branch-scope node '{NodeId}' as skipped for '{TryCatchNodeId}'~ 🛡️",
+                    scopeNodeId, tryCatchNodeId);
+            }
+        }
+
+        _pendingTryCatchNodes.Add(tryCatchNodeId);
+
+        var actorName = $"tc-{tryCatchNodeId.Replace(".", "-")}";
+        var tcActor = Context.ActorOf(
+            TryCatchExecutorActor.Props(
+                tryCatchNodeId, request, _definition,
+                _executionId, _serviceProvider, _executionCts.Token),
+            actorName);
+
+        Context.Watch(tcActor);
+
+        _log.Info(
+            "🛡️ Spawned TryCatchExecutorActor '{ActorName}' for node '{TryCatchNodeId}' " +
+            "(rethrow={Rethrow}, catchTypes={CatchTypes}, {ScopeCount} branch-scope nodes pre-marked)",
+            actorName, tryCatchNodeId, request.Rethrow,
+            request.CatchTypes is null ? "any" : string.Join(",", request.CatchTypes),
+            unionScope.Count);
+    }
+
+    /// <summary>
+    /// Handles successful completion of a try/catch/finally sequence — fires the <c>done</c>
+    /// port successors of the trycatch node~ ✅🛡️.
+    /// </summary>
+    private void HandleTryCatchCompleted(TryCatchCompleted message)
+    {
+        var tryCatchNodeId = message.TryCatchNodeId;
+        _pendingTryCatchNodes.Remove(tryCatchNodeId);
+        Context.Unwatch(Sender);
+
+        _log.Info(
+            "✅ TryCatch '{TryCatchNodeId}' sequence completed (success={Success})",
+            tryCatchNodeId,
+            message.Outputs.TryGetValue("success", out var s) ? s : "?");
+
+        // Store outputs so downstream 'done' nodes can read them~
+        _nodeOutputs[tryCatchNodeId] = message.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+            return;
+        }
+
+        // Fire 'done' port connections (connections from tryCatchNode that don't target the branch scopes)~
+        var allBranchPorts = new[] { "try", "catch", "finally" };
+        var branchTargets = _definition.Connections
+            .Where(c => c.SourceNodeId == tryCatchNodeId && allBranchPorts.Contains(c.SourcePortName))
+            .Select(c => c.TargetNodeId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var donePorts = _definition.Connections
+            .Where(c => c.SourceNodeId == tryCatchNodeId && !branchTargets.Contains(c.TargetNodeId))
+            .Select(c => c.SourcePortName)
+            .Distinct()
+            .ToList();
+
+        if (donePorts.Count > 0)
+        {
+            ExecuteReadySuccessors(tryCatchNodeId, new LanguageExt.Arr<string>(donePorts));
+        }
+        // If no done-port connections, all work is in branch scope → completion check above handles it~
+    }
+
+    /// <summary>
+    /// Handles TryCatch failure (rethrow path or unhandled failure) — routes via error boundary
+    /// or fails the workflow~ ❌🛡️.
+    /// </summary>
+    private void HandleTryCatchFailed(TryCatchFailed message)
+    {
+        var tryCatchNodeId = message.TryCatchNodeId;
+        _pendingTryCatchNodes.Remove(tryCatchNodeId);
+        Context.Unwatch(Sender);
+
+        _log.Error(
+            message.Error,
+            "❌ TryCatch '{TryCatchNodeId}' failed (rethrow path): {Error}",
+            tryCatchNodeId, message.Error.Message);
+
+        // Reuse the shared node failure path (outer error boundary + fail-fast)~
+        HandleNodeFailure(tryCatchNodeId, message.Error);
+    }
+
     /// <summary>
     /// Pushes a new <see cref="ErrorBoundary"/> onto the active boundary stack~ 🛡️✨
     /// </summary>
@@ -1929,6 +2018,7 @@ public class WorkflowExecutor : ReceiveActor
         return _runningNodes.Count == 0 &&
                _pendingLoopNodes.Count == 0 &&
                _pendingParallelNodes.Count == 0 &&
+               _pendingTryCatchNodes.Count == 0 &&
                _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _definition.Nodes.Count;
     }
 

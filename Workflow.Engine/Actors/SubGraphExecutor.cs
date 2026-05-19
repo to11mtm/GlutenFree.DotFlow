@@ -86,6 +86,14 @@ public class SubGraphExecutor : ReceiveActor
     private readonly Dictionary<string, List<string>> _nodeSuccessors = new();
     private readonly Dictionary<string, List<string>> _nodePredecessors = new();
 
+    /// <summary>
+    /// Shared port-aware routing core — initialised at the end of <see cref="BuildGraph"/>.
+    /// Delegates <c>ExecuteReadySuccessors</c>, <c>TryFireSuccessor</c>, and
+    /// <c>TrySkipNodeDownstream</c> to eliminate the copy-paste with <see cref="WorkflowExecutor"/>~ 🎯.
+    /// CopilotNote: Phase 2.2.3-followup — dispatch-core extraction; no behaviour change.
+    /// </summary>
+    private DispatchCore? _dispatchCore;
+
     // ── Private persistence confirmation ────────────────────────────────────────────────────────
     private sealed record NodePersisted(string NodeId, bool Success);
 
@@ -251,6 +259,28 @@ public class SubGraphExecutor : ReceiveActor
             _subGraphId,
             _nodeSuccessors.Count,
             string.Join(", ", _entryNodeIds));
+
+        // Phase 2.2.3-followup: wire up the shared dispatch core now that the scoped graph is ready~ 🎯
+        _dispatchCore = new DispatchCore(
+            definition: _definition,
+            nodeSuccessors: _nodeSuccessors,
+            nodePredecessors: _nodePredecessors,
+            isRunning: nodeId => _runningNodes.Contains(nodeId),
+            isCompleted: nodeId => _completedNodes.Contains(nodeId),
+            isFailed: nodeId => _failedNodes.Contains(nodeId),
+            isSkipped: nodeId => _skippedNodes.Contains(nodeId),
+            executeNode: ExecuteNode,
+            markNodeSkipped: nodeId =>
+            {
+                _skippedNodes.Add(nodeId);
+                _log.Debug("⏭️ SubGraph {SubGraphId}: skipping node {NodeId}", _subGraphId, nodeId);
+            },
+            checkCompletionAfterSkipPropagation: () =>
+            {
+                if (IsComplete())
+                    ReportSuccess();
+            },
+            log: _log);
     }
 
     #endregion
@@ -411,83 +441,18 @@ public class SubGraphExecutor : ReceiveActor
     #region Port-Aware Routing
 
     /// <summary>
-    /// Port-aware successor routing — mirrors <see cref="WorkflowExecutor.ExecuteReadySuccessors"/> logic.
-    /// CopilotNote: Duplicated intentionally for 2.2.0a; shared dispatch core comes in 2.2.0b~ .
+    /// Port-aware successor routing — delegates to the shared <see cref="DispatchCore"/>~ 🎯.
+    /// CopilotNote: Phase 2.2.3-followup — logic extracted from here and from WorkflowExecutor
+    /// into DispatchCore; this wrapper preserves the call-site readability inside this file~ 💖.
     /// </summary>
     private void ExecuteReadySuccessors(string completedNodeId, Arr<string> activePorts = default)
-    {
-        if (!_nodeSuccessors.TryGetValue(completedNodeId, out var successors) || successors.Count == 0)
-        {
-            return;
-        }
-
-        if (activePorts.Count == 0)
-        {
-            foreach (var successorId in successors)
-                TryFireSuccessor(successorId);
-
-            return;
-        }
-
-        var activatedTargets = _definition.Connections
-            .Where(c => c.SourceNodeId == completedNodeId && activePorts.Contains(c.SourcePortName))
-            .Select(c => c.TargetNodeId)
-            .ToHashSet();
-
-        var deactivatedTargets = _definition.Connections
-            .Where(c => c.SourceNodeId == completedNodeId && !activePorts.Contains(c.SourcePortName))
-            .Select(c => c.TargetNodeId)
-            .Where(t => !activatedTargets.Contains(t))
-            .ToHashSet();
-
-        foreach (var targetId in activatedTargets)
-            TryFireSuccessor(targetId);
-
-        foreach (var targetId in deactivatedTargets)
-            TrySkipNodeDownstream(targetId);
-
-        if (IsComplete())
-            ReportSuccess();
-    }
+        => _dispatchCore!.ExecuteReadySuccessors(completedNodeId, activePorts);
 
     private void TryFireSuccessor(string successorId)
-    {
-        if (_runningNodes.Contains(successorId) ||
-            _completedNodes.Contains(successorId) ||
-            _failedNodes.Contains(successorId) ||
-            _skippedNodes.Contains(successorId))
-        {
-            return;
-        }
-
-        var preds = _nodePredecessors.GetValueOrDefault(successorId, new List<string>());
-        if (preds.All(p => _completedNodes.Contains(p) || _skippedNodes.Contains(p)))
-        {
-            ExecuteNode(successorId);
-        }
-    }
+        => _dispatchCore!.TryFireSuccessor(successorId);
 
     private void TrySkipNodeDownstream(string nodeId)
-    {
-        if (_completedNodes.Contains(nodeId) || _failedNodes.Contains(nodeId) ||
-            _runningNodes.Contains(nodeId) || _skippedNodes.Contains(nodeId))
-        {
-            return;
-        }
-
-        var preds = _nodePredecessors.GetValueOrDefault(nodeId, new List<string>());
-        if (!preds.All(p => _completedNodes.Contains(p) || _failedNodes.Contains(p) || _skippedNodes.Contains(p)))
-            return;
-
-        _skippedNodes.Add(nodeId);
-        _log.Debug("⏭️ SubGraph {SubGraphId}: skipping node {NodeId}", _subGraphId, nodeId);
-
-        if (_nodeSuccessors.TryGetValue(nodeId, out var ownSuccessors))
-        {
-            foreach (var successorId in ownSuccessors)
-                TrySkipNodeDownstream(successorId);
-        }
-    }
+        => _dispatchCore!.TrySkipNodeDownstream(nodeId);
 
     #endregion
 
@@ -554,6 +519,9 @@ public class SubGraphExecutor : ReceiveActor
 
     /// <summary>
     /// Persists a node execution record under the parent execution ID for history correlation (test 6)~ .
+    /// Stamps <c>Metadata["subGraphId"]</c> so history queries can correlate sub-graph records~ 🗂️.
+    /// CopilotNote: Phase 2.2.3-followup — subGraphId tagging. The Metadata dictionary is also the
+    /// extensibility hook for future keys (parallelId, branchIndex, etc.)~ 💖.
     /// </summary>
     private void QueuePersistNode(string nodeId, TimeSpan duration, NodeExecutionState state, string? error = null)
     {
@@ -567,6 +535,18 @@ public class SubGraphExecutor : ReceiveActor
             ? new Dictionary<string, object?>(outCaptured)
             : null;
 
+        // Phase 2.2.3-followup: build Metadata dict, merging subGraphId + parallel context keys.
+        // parallelId and branchIndex come from sentinel inputs injected by ParallelExecutionCoordinator
+        // so that history queries can correlate records back to their parallel branch origin~ 🌐🗂️
+        var metadataDict = new Dictionary<string, object?>();
+        if (_subGraphId is not null)
+            metadataDict["subGraphId"] = _subGraphId;
+        if (_inputs.TryGetValue("__parallel_node_id__", out var parallelId) && parallelId is not null)
+            metadataDict["parallelId"] = parallelId;
+        if (_inputs.TryGetValue("__parallel_branch_index__", out var branchIdx) && branchIdx is not null)
+            metadataDict["branchIndex"] = branchIdx;
+        IReadOnlyDictionary<string, object?>? metadata = metadataDict.Count > 0 ? metadataDict : null;
+
         var now = DateTimeOffset.UtcNow;
         var record = new NodeExecutionRecord(
             ExecutionId: _parentExecutionId,
@@ -577,7 +557,8 @@ public class SubGraphExecutor : ReceiveActor
             Inputs: inputs,
             Outputs: outputs,
             Error: error,
-            Duration: duration);
+            Duration: duration,
+            Metadata: metadata);
 
         Task.Run(async () =>
         {

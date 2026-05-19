@@ -291,7 +291,8 @@ public class NodeExecutor : ReceiveActor
                     enrichedResult.VariableUpdates,
                     enrichedResult.ActivePorts,
                     enrichedResult.Loop,
-                    enrichedResult.Parallel);
+                    enrichedResult.Parallel,
+                    enrichedResult.TryCatch);
             }
             else
             {
@@ -626,7 +627,8 @@ public class NodeExecutor : ReceiveActor
         IReadOnlyDictionary<string, object?>? variableUpdates = null,
         IReadOnlyList<string>? activePorts = null,
         Workflow.Core.Models.LoopRequest? loop = null,
-        Workflow.Core.Models.ParallelRequest? parallel = null)
+        Workflow.Core.Models.ParallelRequest? parallel = null,
+        Workflow.Core.Models.TryCatchRequest? tryCatch = null)
     {
         _isExecuting = false;
         Context.SetReceiveTimeout(null);
@@ -643,6 +645,13 @@ public class NodeExecutor : ReceiveActor
         if (parallel != null)
         {
             Context.Parent.Tell(new NodeParallelExecutionRequested { NodeId = _nodeId, Parallel = parallel });
+        }
+
+        // Phase 2.2.4: same FIFO trick for TryCatchRequest — sent before completion so
+        // WorkflowExecutor populates _pendingTryCatches in time~ 🛡️
+        if (tryCatch != null)
+        {
+            Context.Parent.Tell(new NodeTryCatchExecutionRequested { NodeId = _nodeId, TryCatch = tryCatch });
         }
 
         // Convert variable updates to HashMap if present~
