@@ -545,10 +545,49 @@ public class HttpRequestModule : IWorkflowModule
             var contentType = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
             object? decodedBody = ResponseBodyDecoder.Decode(responseBytes, contentType);
 
+            // Flatten headers once — reused by both the outputs dict and headerExtract below~
+            var flattenedResponseHeaders = FlattenHeaders(response);
+
+            // 🎯 Phase 2.3.5 — Run response transformations (JSONPath / regex / header extract)~
+            var responseExtractMap = ExtractStringMap(context.Properties, "responseExtract");
+            var responseRegexMap = ExtractStringMap(context.Properties, "responseRegex");
+            var headerExtractMap = ExtractStringMap(context.Properties, "headerExtract");
+            var extractRequired = TryParseBool(context.Properties, "responseExtractRequired") ?? false;
+
+            Dictionary<string, object?>? jsonPathExtractions = null;
+            Dictionary<string, object?>? regexExtractions = null;
+            Dictionary<string, object?>? headerExtractions = null;
+
+            if (responseExtractMap?.Count > 0)
+            {
+                var (extracted, extractError) = JsonPathExtractor.ExtractJsonPath(
+                    responseBytes, contentType, responseExtractMap, extractRequired, context.Logger);
+
+                if (extractError is not null)
+                {
+                    return ModuleResult.Fail(extractError);
+                }
+
+                jsonPathExtractions = extracted;
+            }
+
+            if (responseRegexMap?.Count > 0)
+            {
+                // For regex, give the extractor the raw body text (decode from bytes so non-JSON bodies work too)~
+                var bodyString = decodedBody as string
+                    ?? (responseBytes.Length > 0 ? Encoding.UTF8.GetString(responseBytes) : null);
+                regexExtractions = JsonPathExtractor.ExtractRegex(bodyString, responseRegexMap, context.Logger);
+            }
+
+            if (headerExtractMap?.Count > 0)
+            {
+                headerExtractions = JsonPathExtractor.ExtractHeaders(flattenedResponseHeaders, headerExtractMap);
+            }
+
             var outputs = new Dictionary<string, object?>
             {
                 ["statusCode"] = (int)response.StatusCode,
-                ["headers"] = FlattenHeaders(response),
+                ["headers"] = flattenedResponseHeaders,
                 ["body"] = decodedBody,
                 ["success"] = response.IsSuccessStatusCode,
                 ["durationMs"] = sw.ElapsedMilliseconds,
@@ -556,6 +595,32 @@ public class HttpRequestModule : IWorkflowModule
                 ["attemptCount"] = callState.AttemptCount,
                 ["circuitState"] = callState.CircuitState,
             };
+
+            // Merge extractions — extraction keys are additive; they can shadow existing keys
+            // (e.g. setting a custom "body" alias), which is intentional~ 🧠
+            if (jsonPathExtractions is not null)
+            {
+                foreach (var kv in jsonPathExtractions)
+                {
+                    outputs[kv.Key] = kv.Value;
+                }
+            }
+
+            if (regexExtractions is not null)
+            {
+                foreach (var kv in regexExtractions)
+                {
+                    outputs[kv.Key] = kv.Value;
+                }
+            }
+
+            if (headerExtractions is not null)
+            {
+                foreach (var kv in headerExtractions)
+                {
+                    outputs[kv.Key] = kv.Value;
+                }
+            }
 
             return ModuleResult.Ok(outputs);
         }
@@ -754,6 +819,35 @@ public class HttpRequestModule : IWorkflowModule
             _ => null,
         };
     }
+
+    /// <summary>
+    /// Parse a bool property from the properties dictionary — handles bool, string "true"/"false",
+    /// and int 0/1 shapes that JSON deserialisation might produce~ 🔧.
+    /// </summary>
+    private static bool? TryParseBool(IReadOnlyDictionary<string, object?> props, string key)
+    {
+        if (!props.TryGetValue(key, out var v) || v is null)
+        {
+            return null;
+        }
+
+        return v switch
+        {
+            bool b => b,
+            string s when bool.TryParse(s, out var parsed) => parsed,
+            int i => i != 0,
+            long l => l != 0,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// Extract a <c>Dictionary&lt;string, string&gt;</c> from a properties entry — the generalised
+    /// version of <see cref="ExtractHeaderMap"/> used for <c>responseExtract</c>, <c>responseRegex</c>,
+    /// and <c>headerExtract</c> maps~ 🔧.
+    /// </summary>
+    private static Dictionary<string, string>? ExtractStringMap(IReadOnlyDictionary<string, object?> props, string key)
+        => ExtractHeaderMap(props, key);
 }
 
 

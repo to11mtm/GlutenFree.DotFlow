@@ -16,6 +16,8 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <!-- 🔄 Phase 2.3.4 — Polly v8 resilience pipelines~ -->
         <PackageReference Include="Polly.Core" />
+        <!-- 🎯 Phase 2.3.5 — JSONPath extraction via JsonPath.Net (json-everything, MIT)~ -->
+        <PackageReference Include="JsonPath.Net" />
         <PackageReference Include="StyleCop.Analyzers">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

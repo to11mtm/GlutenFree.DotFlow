@@ -274,7 +274,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.4 Retry, Timeout & Circuit Breaker via Polly 🔄
+## 2.3.4 Retry, Timeout & Circuit Breaker via Polly 🔄 ✅ **(May 19, 2026)**
 
 > **Purpose:** Add resiliency policies to the request module without forcing authors to assemble them via flow-control modules. Powered by **Polly v8** (the new Resilience pipeline API)~ ⚡
 
@@ -282,50 +282,55 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ### Tasks
 
-- [ ] **Polly integration** 📦
-  - [ ] Add `Polly.Core` (v8+) to `Directory.Packages.props`
-  - [ ] New file: `Workflow.Modules/Builtin/Http/Resilience/HttpResiliencePipelineFactory.cs`
-  - [ ] Build per-request pipeline from input properties (cached when properties are stable):
-    - [ ] Retry policy
-    - [ ] Circuit breaker policy
-    - [ ] Timeout policy
+- [x] **Polly integration** 📦 ✅
+  - [x] Added `Polly.Core` v8.6.6 to `Directory.Packages.props` + `Workflow.Modules.csproj`
+  - [x] New file: `Workflow.Modules/Builtin/Http/Resilience/HttpResiliencePipelineFactory.cs`
+  - [x] Factory caches built `ResiliencePipeline<HttpResponseMessage>` per-config-hash on each `HttpRequestModule` instance — vital so circuit breaker state actually persists across calls
+  - [x] Per-call state (attempt count, current circuit state) threaded through `ResilienceContext.Properties` via `StateKey`
+  - [x] Retry policy, circuit breaker policy
+  - [ ] ~~Timeout policy~~ — **deferred**: the existing `timeoutSeconds` → `CancellationTokenSource.CancelAfter(...)` already covers per-request timeout. Adding a Polly `TimeoutStrategy` on top would duplicate the cancellation and complicate the 401-refresh path. Re-evaluate in 2.3.P or 2.3.7~ 🌸
 
-- [ ] **`HttpRequestModule` schema additions** 🎀
-  - [ ] Input: `retryCount` (int, optional, default `0` — opt-in)
-  - [ ] Input: `retryBackoff` (string enum: `linear`/`exponential`/`fibonacci`, default `exponential`)
-  - [ ] Input: `retryDelaySeconds` (double, optional, default `1.0`)
-  - [ ] Input: `maxRetryBackoffSeconds` (double, optional, default `60.0`) — hard cap on per-attempt sleep (also caps `Retry-After`)
-  - [ ] Input: `retryOnStatusCodes` (`Arr<int>`, optional, default `[408, 429, 500, 502, 503, 504]`)
-  - [ ] Input: `circuitBreakerFailureThreshold` (int, optional, default `0` — disabled)
-  - [ ] Input: `circuitBreakerSamplingDurationSeconds` (double, optional, default `30`)
+- [x] **`HttpRequestModule` schema additions** 🎀 ✅
+  - [x] `retryCount` (int, default `0` — opt-in)
+  - [x] `retryBackoff` (`linear`/`exponential`/`constant`, default `exponential`; *fibonacci* not in Polly v8 — falls back to exponential with a friendly note)
+  - [x] `retryDelaySeconds` (double, default `1.0`)
+  - [x] `maxRetryBackoffSeconds` (double, default `60.0`) — hard cap on per-attempt sleep + Retry-After header
+  - [x] `retryOnStatusCodes` (int[], default `[408, 429, 500, 502, 503, 504]`)
+  - [x] `circuitBreakerFailureThreshold` (int, default `0` — disabled)
+  - [x] `circuitBreakerSamplingDurationSeconds` (double, default `30`)
+  - [x] Pipeline also retries on `HttpRequestException` (network-level failures) automatically
 
-- [ ] **Retry-after header support** *(Q4 resolved: honour up to `maxRetryBackoffSeconds` cap)* 🎀
-  - [ ] When response is `429`/`503` and `Retry-After` header present → use `min(headerValue, maxRetryBackoffSeconds)` as the delay
-  - [ ] If `headerValue > maxRetryBackoffSeconds` → log a warning + fall back to configured backoff strategy
-  - [ ] Supports both seconds-form (`Retry-After: 120`) and HTTP-date form (`Retry-After: Wed, 21 Oct 2026 07:28:00 GMT`)
-  - [ ] Add jitter to non-Retry-After delays (Polly's `Jitter` setting)
+- [x] **Retry-After header support** 🎀 ✅
+  - [x] Polly `DelayGenerator` reads `Retry-After` via `response.Headers.RetryAfter` (handles both `Delta` and `Date` forms)
+  - [x] `headerDelay > maxRetryBackoffSeconds` → log warning + fall back to Polly's configured backoff (return `null` from generator)
+  - [x] Jitter on default backoff (`UseJitter = true`)
 
-- [ ] **Outputs on retry** 📊
-  - [ ] Add output: `attemptCount` (int) — actual attempts made before success/failure
-  - [ ] Add output: `circuitState` (string) — `closed`/`open`/`halfopen` (if circuit configured)
+- [x] **Outputs on retry** 📊 ✅
+  - [x] `attemptCount` (int) — total send attempts (1 = no retry)
+  - [x] `circuitState` (string) — `closed` / `open` / `halfopen` (closed when circuit not configured)
 
-### Tests (target ~11): → `Workflow.Tests/Modules/Http/HttpRetryTests.cs`
+- [x] **Architecture refactor** ♻️ ✅
+  - [x] `HttpRequestModule.ExecuteAsync` no longer holds a single `HttpRequestMessage` — requests are rebuilt per attempt inside the pipeline delegate (HTTP requests aren't resendable)
+  - [x] New `SendThroughPipelineAsync` static helper accepts `Func<HttpRequestMessage> buildRequest` + auth strategy + module context; each retry rebuilds + re-applies auth (so refreshed OAuth2 tokens propagate transparently)
+  - [x] `BrokenCircuitException` → `ModuleResult.Fail("…blocked by open circuit breaker…")`
 
-- [ ] `Retry_OnTransient500_RetriesAndSucceeds` *(WireMock with response sequence)*
-- [ ] `Retry_OnPermanent404_DoesNotRetry`
-- [ ] `Retry_MaxAttemptsExceeded_FailsWithLastError`
-- [ ] `Retry_ExponentialBackoff_DelaysIncrease` *(time-based assertion with tolerance)*
-- [ ] `Retry_RetryAfterHeader_WithinCap_HonouredOverBackoff`
-- [ ] `Retry_RetryAfterHeader_ExceedsCap_FallsBackToConfiguredBackoff` — header says 600s, cap is 60s → use 60s + log warning
-- [ ] `Timeout_AbortsRequestAfterDuration`
-- [ ] `Timeout_CancellationToken_Honoured`
-- [ ] `CircuitBreaker_OpensAfterThresholdFailures`
-- [ ] `CircuitBreaker_HalfOpenAllowsTestRequest`
-- [ ] `AttemptCount_OutputReflectsActualAttempts`
+### Tests (target ~11): → `Workflow.Tests/Modules/Http/HttpRetryTests.cs` ✅ **11/11 passing**
+
+- [x] `Retry_OnTransient500_RetriesAndSucceeds` ✅ *(WireMock scenario: 500-then-200; attemptCount=2)*
+- [x] `Retry_OnPermanent404_DoesNotRetry` ✅ *(404 not in default retry set; attemptCount=1)*
+- [x] `Retry_MaxAttemptsExceeded_FailsWithLastError` ✅ *(retryCount=2 → 3 total attempts → final 500 surfaced)*
+- [x] `Retry_ExponentialBackoff_DelaysIncrease` ✅ *(time-bounded with generous tolerance)*
+- [x] `Retry_RetryAfterHeader_WithinCap_HonouredOverBackoff` ✅ *(`Retry-After: 1` → ~1s wait, not 10ms backoff)*
+- [x] `Retry_RetryAfterHeader_ExceedsCap_FallsBackToConfiguredBackoff` ✅ *(`Retry-After: 600` + cap=1s → ~10ms backoff)*
+- [x] `Timeout_AbortsRequestAfterDuration` ✅ *(parent CT cancellation)*
+- [x] `Timeout_CancellationToken_Honoured` ✅ *(cancellation beats retry budget)*
+- [x] `CircuitBreaker_OpensAfterThresholdFailures` ✅ *(3 consecutive 500s → 4th call short-circuited)*
+- [x] `CircuitBreaker_HalfOpenAllowsTestRequest` ✅ *(breaker opens, BreakDuration elapses, probe succeeds via half-open state)*
+- [x] `AttemptCount_OutputReflectsActualAttempts` ✅
 
 ---
 
-## 2.3.5 Request/Response Transformation 🔀
+## 2.3.5 Request/Response Transformation 🔀 ✅ **(May 20, 2026)**
 
 > **Purpose:** Authors shouldn't need a downstream `builtin.condition` + `builtin.setvariable` just to extract a single field from a JSON response. Add lightweight URL templating + JSONPath response extraction~ 🌟
 
@@ -333,38 +338,59 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ### Tasks
 
-- [ ] **URL & body templating** 🪄
-  - [ ] Reuse existing `PropertyBinder` `{{variable.name}}` syntax for `url`, `headers`, string `body` properties
-  - [ ] *(Already shipped — just confirm and document)*
-  - [ ] Add explicit test: `Url_WithDoubleBraceVariable_Resolved`
+- [x] **URL & body templating** 🪄 ✅ **(May 20, 2026)**
+  - [x] Reuse existing `PropertyBinder` `{{variable.name}}` syntax for `url`, `headers`, string `body` properties
+  - [x] *(Already shipped — confirmed with test below)*
+  - [x] Add explicit test: `Url_WithDoubleBraceVariable_Resolved`
 
-- [ ] **JSONPath response extraction** 🎯
-  - [ ] Add `JsonPath.Net` package to `Directory.Packages.props` *(MIT, well-maintained)*
-  - [ ] New file: `Workflow.Modules/Builtin/Http/Internal/JsonPathExtractor.cs`
-  - [ ] Schema addition: `responseExtract` (`HashMap<string,string>`, optional) — keys = output port names, values = JSONPath expressions
-  - [ ] On JSON response, evaluate each path → add to outputs under the keyed name
-  - [ ] Missing paths → `null` (don't fail unless `responseExtractRequired: true`)
+- [x] **JSONPath response extraction** 🎯 ✅ **(May 20, 2026)**
+  - [x] Add `JsonPath.Net` package to `Directory.Packages.props` *(v0.8.1, MIT)*
+  - [x] New file: `Workflow.Modules/Builtin/Http/Internal/JsonPathExtractor.cs`
+  - [x] Schema addition: `responseExtract` (`HashMap<string,string>`, optional) — keys = output port names, values = JSONPath expressions
+  - [x] Schema addition: `responseExtractRequired` (bool, optional, default false) — fail module when required paths miss
+  - [x] On JSON response, evaluate each path → add to outputs under the keyed name
+  - [x] Missing paths → `null` (don't fail unless `responseExtractRequired: true`)
 
-- [ ] **Regex extraction** *(for text/HTML responses)* 🔍
-  - [ ] Schema addition: `responseRegex` (`HashMap<string,string>`, optional) — keys = output names, values = regex patterns with named capture group `(?<value>...)`
-  - [ ] Run against `body` when it's a string; surface captured value(s) as outputs
+  > **📝 Clarification — multi-value & composite JSONPath results:**
+  >
+  > `JsonPath.Net` returns a `NodeList` per expression — a single expression **can** yield multiple values
+  > (e.g. `$.items[*].id` → `["a","b","c"]`). V1 behaviour:
+  >
+  > | JSONPath result | Output port value |
+  > |---|---|
+  > | Single scalar | The scalar value itself (unwrapped) |
+  > | Multiple nodes / array match | The `NodeList` serialised as a JSON array |
+  > | No match | `null` (or error if `responseExtractRequired: true`) |
+  >
+  > **Composite objects** (assembling `{ id: $.id, name: $.name }` into a single output port from two paths)
+  > are **not** supported in V1 — each key in `responseExtract` maps to exactly one expression and one output.
+  > Authors who need a composite object can combine two extractions with a downstream
+  > `builtin.setvariable` or JavaScript expression. Full composite-extract support is tracked in
+  > **2.3.P7 Composite JSONPath Extract** post-MVP slice~ 🌷
+  >
+  > *CopilotNotes: unwrap single-element NodeList → scalar so that `$.user.id` gives `"abc"` not `["abc"]`.*
 
-- [ ] **Header extraction** 🏷️
-  - [ ] Schema addition: `headerExtract` (`HashMap<string,string>`, optional) — keys = output names, values = response header names
-  - [ ] Common case: extract `Location` from `201 Created`, ETag from `200`, etc.
+- [x] **Regex extraction** *(for text/HTML responses)* 🔍 ✅ **(May 20, 2026)**
+  - [x] Schema addition: `responseRegex` (`HashMap<string,string>`, optional) — keys = output names, values = regex patterns with named capture group `(?<value>...)`
+  - [x] Run against `body` when it's a string; surface captured value(s) as outputs
+  - [x] Regex match timeout (5s) guards against catastrophic backtracking~ 🛡️
+
+- [x] **Header extraction** 🏷️ ✅ **(May 20, 2026)**
+  - [x] Schema addition: `headerExtract` (`HashMap<string,string>`, optional) — keys = output names, values = response header names
+  - [x] Common case: extract `Location` from `201 Created`, ETag from `200`, etc.
 
 > **Deferred to a follow-up slice:** XPath for XML responses (low demand; can be added later under the same interface)~
 
-### Tests (target ~8): → `Workflow.Tests/Modules/Http/HttpTransformationTests.cs`
+### Tests (target ~8): → `Workflow.Tests/Modules/Http/HttpTransformationTests.cs` ✅ **8/8 (May 20, 2026)**
 
-- [ ] `Url_WithDoubleBraceVariable_Resolved` *(WireMock)*
-- [ ] `JsonPath_ExtractSingleField_PopulatesOutput` *(WireMock)*
-- [ ] `JsonPath_ExtractNestedField_PopulatesOutput`
-- [ ] `JsonPath_MissingPath_OutputIsNull`
-- [ ] `JsonPath_ArrayQuery_ReturnsList`
-- [ ] `Regex_NamedCapture_PopulatesOutput`
-- [ ] `Regex_NoMatch_OutputIsNull`
-- [ ] `HeaderExtract_LocationFrom201_Populated` *(WireMock)*
+- [x] `Url_WithDoubleBraceVariable_Resolved` *(WireMock)* ✅
+- [x] `JsonPath_ExtractSingleField_PopulatesOutput` *(WireMock)* ✅
+- [x] `JsonPath_ExtractNestedField_PopulatesOutput` ✅
+- [x] `JsonPath_MissingPath_OutputIsNull` ✅
+- [x] `JsonPath_ArrayQuery_ReturnsList` ✅
+- [x] `Regex_NamedCapture_PopulatesOutput` ✅
+- [x] `Regex_NoMatch_OutputIsNull` ✅
+- [x] `HeaderExtract_LocationFrom201_Populated` *(WireMock)* ✅
 
 ---
 
@@ -689,6 +715,36 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
+### 2.3.P7 Composite JSONPath Extract 🧩 *(post-MVP, expands 2.3.5 clarification)*
+
+**Purpose:** Allow a single output port to be assembled from **multiple** JSONPath expressions — e.g.
+`{ "userId": "$.user.id", "userName": "$.user.name" }` → output port `profile = { userId: "…", userName: "…" }`.
+In V1 each `responseExtract` key maps to exactly one JSONPath and one port; this slice adds a parallel
+`responseExtractComposite` schema key that maps a port name to a *set* of `(fieldName → JSONPath)` pairs
+and merges the results into a single object output~ 🌸
+
+**Complexity:** 🟢 Low *(additive — no breaking changes to V1 `responseExtract`)*
+
+#### Tasks
+
+- [ ] **Schema addition:** `responseExtractComposite` (`HashMap<string, HashMap<string,string>>`, optional)
+  - Outer key = output port name
+  - Inner map = `{ outputFieldName: "$.json.path" }` — one JSONPath per field of the assembled object
+- [ ] **`JsonPathExtractor` extension** — new `ExtractComposite(json, fieldMap)` method alongside existing `Extract`
+  - Evaluates each inner path, assembles into `Dictionary<string, object?>`; missing paths → `null` field (not error)
+- [ ] **`HttpRequestModule`** integration — evaluate `responseExtractComposite` after `responseExtract` (non-overlapping output names enforced at schema-validation time)
+- [ ] **Conflict detection** — if an output port name appears in both `responseExtract` and `responseExtractComposite`, return a schema-validation error (not a runtime error)
+
+#### Tests (target ~5) → `Workflow.Tests/Modules/Http/HttpTransformationTests.cs`
+
+- [ ] `CompositeExtract_TwoPaths_AssemblesObject`
+- [ ] `CompositeExtract_MissingPath_FieldIsNull`
+- [ ] `CompositeExtract_ArrayPath_FieldIsArray`
+- [ ] `CompositeExtract_ConflictWithResponseExtract_FailsValidation`
+- [ ] `CompositeExtract_CoexistsWithSimpleExtract_BothPopulated`
+
+---
+
 ## Phase 2.3 Deliverables ✅
 
 **V1 (MVP) Completion Criteria:**
@@ -697,12 +753,12 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 - [x] 2.3.2 shipped: Basic, Bearer, API Key auth + header redaction ✅ **(May 19, 2026)**
 - [x] 2.3.3 shipped: OAuth2 client credentials + selectable `module`/`pipeline` token cache scope + refresh-on-401 ✅ **(May 19, 2026)**
 - [ ] 2.3.4 shipped: Polly retry + timeout + circuit breaker + Retry-After honouring (capped by `maxRetryBackoffSeconds`)
-- [ ] 2.3.5 shipped: URL templating + JSONPath/regex/header response extraction
+- [x] 2.3.5 shipped: URL templating + JSONPath/regex/header response extraction ✅ **(May 20, 2026)**
 - [ ] 2.3.6 shipped: `WebhookTriggerModule` + `IWebhookRegistrationRepository` + `WebhookDispatcher` + `IWebhookResponseStrategy` (default async-202) + API endpoints
 - [ ] 2.3.7 shipped: HMAC/GitHub/Stripe signature validation + replay protection
 - [ ] 2.3.8 shipped: end-to-end demo + persistence test + `docs/http-and-network.md`
 - [ ] Modules: `builtin.http.request`, `builtin.http.webhook`
-- [ ] ~82 unit + integration tests passing across 2.3.0–2.3.8 (2.3.0 ~10 + 2.3.1 ~8 + 2.3.2 ~9 + 2.3.3 ~10 + 2.3.4 ~11 + 2.3.5 ~8 + 2.3.6 ~12 + 2.3.7 ~7 + 2.3.8 ~4)
+- [ ] ~82 unit + integration tests passing across 2.3.0–2.3.8 (2.3.0 ~10 + 2.3.1 ~8 + 2.3.2 ~9 + 2.3.3 ~10 + 2.3.4 ~11 + **2.3.5 ✅ 8/8** + 2.3.6 ~12 + 2.3.7 ~7 + 2.3.8 ~4) — **60 passing so far**
 - [ ] XML docs + `docs/http-and-network.md`
 - [ ] Sample workflow runs end-to-end on persistence + API stack
 
@@ -713,6 +769,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 - [ ] **2.3.P4** Multipart Stream Support (expands Q5) — ~4 tests
 - [ ] **2.3.P5** Multipart File-Path Support (expands Q5) — ~6 tests
 - [ ] **2.3.P6** GraphQL Module (resolves Q6) — ~6 tests
+- [ ] **2.3.P7** Composite JSONPath Extract (expands 2.3.5) — ~5 tests
 
 **New / Modified Files (planned):**
 ```
