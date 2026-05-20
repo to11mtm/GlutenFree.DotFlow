@@ -38,6 +38,8 @@ This directory contains individual phase breakdown files to make it easier to na
 
 #### Sub-Phase Breakdowns:
 - [Phase2-1-PersistenceLayer.md](Phase2-1-PersistenceLayer.md) ⏳ — 6 sub-phases, detailed breakout ready!
+- [Phase2-2-AdvancedFlowControl.md](Phase2-2-AdvancedFlowControl.md) 🔄 — 10 sub-phases, mostly complete (2.3.6 API smoke tests pending)
+- [Phase2-3-HttpAndNetworkModules.md](Phase2-3-HttpAndNetworkModules.md) ⏳ — 10 sub-phases, detailed plan ready!
 
 ### [Phase3-AdvancedFeatures.md](Phase3-AdvancedFeatures.md) 🎨
 **Weeks 15-22** - Advanced Features and UI

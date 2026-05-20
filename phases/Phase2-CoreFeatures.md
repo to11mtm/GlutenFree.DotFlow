@@ -611,6 +611,10 @@ Phase 2 builds upon the foundation with critical production features:
 
 ### 2.3 HTTP & Network Modules (Week 10-11)
 
+> 📖 **Detailed sub-phase breakdown:** See [Phase2-3-HttpAndNetworkModules.md](Phase2-3-HttpAndNetworkModules.md) for the full slice plan (2.3.0–2.3.9), design decisions, file lists, and per-slice test targets~ 🌷
+>
+> **Sub-phases:** 2.3.0 Infra + core `HttpRequestModule` · 2.3.1 Body/Response formats · 2.3.2 Basic/Bearer/API Key auth · 2.3.3 OAuth2 client credentials · 2.3.4 Polly retry/timeout/circuit · 2.3.5 Request/response transformation · 2.3.6 Webhook trigger + API · 2.3.7 Webhook signature validation · 2.3.8 GraphQL *(optional)* · 2.3.9 E2E demo + docs
+
 **Tasks:**
 - [ ] **Implement `HttpRequestModule` - Full HTTP client** 🌐
     - [ ] Create `HttpRequestModule` class
