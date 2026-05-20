@@ -60,6 +60,10 @@
     <PackageVersion Include="Akka.TestKit.Xunit2" Version="1.5.57" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.11.0" />
       <PackageVersion Include="Testcontainers.Minio" Version="4.11.0" />
+    <!-- 🧮 Expression Evaluators (Phase 2.2.5) -->
+    <PackageVersion Include="Jint" Version="4.9.2" />
+    <PackageVersion Include="DynamicExpresso.Core" Version="2.19.3" />
+    <PackageVersion Include="Microsoft.Extensions.ObjectPool" Version="8.0.11" />
     <!--  Code Quality & Analysis -->
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.22" />

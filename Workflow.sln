@@ -122,6 +122,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Persistence.S3", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Tests.Integration", "Workflow.Tests.Integration\Workflow.Tests.Integration.csproj", "{F2700A5B-806C-415A-989B-2C2A6D9B9A04}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "more-features", "more-features", "{B1C9ADDD-0456-43A1-BD8B-BB4322D9A8FA}"
+	ProjectSection(SolutionItems) = preProject
+		new-feature-design\sqlModuleHandler.md = new-feature-design\sqlModuleHandler.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -315,5 +320,6 @@ Global
 		{2B7DE58B-6F04-4ADF-9986-C2CF95BCC975} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
 		{27D5434B-1962-4AB1-8DAC-68DAD4F998C0} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
 		{C7D924E2-B5A1-420E-B3C3-EE647AD90F8E} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
+		{B1C9ADDD-0456-43A1-BD8B-BB4322D9A8FA} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
 	EndGlobalSection
 EndGlobal

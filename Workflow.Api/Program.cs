@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Workflow.Core.Abstractions;
 using Workflow.Engine.Services;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Composite;
@@ -12,6 +13,11 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddSingleton<IExecutionStateStore, InMemoryExecutionStateStore>();
+
+// 🧮 Expression Evaluators (Phase 2.2.5)~ — default: Jint (JS/ES2020); opt-in fallback: DynamicExpresso (C#)
+builder.Services.AddSingleton<IExpressionEvaluator, JintExpressionEvaluator>();
+builder.Services.AddKeyedSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>("csharp");
+builder.Services.AddSingleton<IExpressionEvaluatorFactory, KeyedExpressionEvaluatorFactory>();
 
 var persistenceProvider = BuildPersistenceProvider(builder.Configuration);
 if (persistenceProvider is not null)

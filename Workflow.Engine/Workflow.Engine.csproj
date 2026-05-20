@@ -24,6 +24,9 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Serilog" />
+        <PackageReference Include="Jint" />
+        <PackageReference Include="DynamicExpresso.Core" />
+        <PackageReference Include="Microsoft.Extensions.ObjectPool" />
         <PackageReference Include="StyleCop.Analyzers">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
