@@ -19,6 +19,7 @@
     <PackageVersion Include="MessagePack.Annotations" Version="3.1.4" />
     <!--  Microsoft Extensions -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
@@ -31,7 +32,7 @@
     <PackageVersion Include="NATS.Net" Version="2.7.3" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <!--  Logging - Serilog is super kawaii! -->
-      <PackageVersion Include="AWSSDK.S3" Version="4.0.22.1" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.22.1" />
     <PackageVersion Include="Serilog" Version="4.1.0" />
     <PackageVersion Include="Serilog.Extensions.Hosting" Version="8.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
@@ -59,7 +60,9 @@
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="Akka.TestKit.Xunit2" Version="1.5.57" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.11.0" />
-      <PackageVersion Include="Testcontainers.Minio" Version="4.11.0" />
+    <!-- 🌐 HTTP test infrastructure (Phase 2.3) — in-process mock HTTP server, Docker-free~ -->
+    <PackageVersion Include="WireMock.Net" Version="2.6.0" />
+    <PackageVersion Include="Testcontainers.Minio" Version="4.11.0" />
     <!-- 🧮 Expression Evaluators (Phase 2.2.5) -->
     <PackageVersion Include="Jint" Version="4.9.2" />
     <PackageVersion Include="DynamicExpresso.Core" Version="2.19.3" />

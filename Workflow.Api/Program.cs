@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Workflow.Core.Abstractions;
 using Workflow.Engine.Services;
+using Workflow.Modules;
+using Workflow.Modules.Builtin.Http;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Composite;
 using Workflow.Persistence.Nats;
@@ -18,6 +20,10 @@ builder.Services.AddSingleton<IExecutionStateStore, InMemoryExecutionStateStore>
 builder.Services.AddSingleton<IExpressionEvaluator, JintExpressionEvaluator>();
 builder.Services.AddKeyedSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>("csharp");
 builder.Services.AddSingleton<IExpressionEvaluatorFactory, KeyedExpressionEvaluatorFactory>();
+
+// 🌐 HTTP built-in modules (Phase 2.3.0)~ — IHttpClientFactory named client "dotflow.http"
+// (was: builder.Services.AddHttpModules(); — now aggregated under AddWorkflowModules)
+builder.Services.AddWorkflowModules();
 
 var persistenceProvider = BuildPersistenceProvider(builder.Configuration);
 if (persistenceProvider is not null)

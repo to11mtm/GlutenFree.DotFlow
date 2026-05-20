@@ -7,6 +7,7 @@ namespace Workflow.Modules.Builtin;
 using System.Collections.Generic;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.Flow;
+using Workflow.Modules.Builtin.Http;
 
 /// <summary>
 /// 📦 Convenience class for registering all built-in modules at once~ ✨💖.
@@ -32,6 +33,10 @@ using Workflow.Modules.Builtin.Flow;
 /// </para>
 /// <para>
 /// Phase 2.2.4: Added error handling modules — <c>builtin.trycatch</c>, <c>builtin.throw</c>~ 🛡️💥
+/// </para>
+/// <para>
+/// Phase 2.3.0: Added HTTP request module — <c>builtin.http.request</c>~ 🌐
+/// (requires <c>services.AddWorkflowModules()</c> at host startup for <c>IHttpClientFactory</c>)
 /// </para>
 /// </remarks>
 public static class BuiltinModules
@@ -68,6 +73,9 @@ public static class BuiltinModules
         // Phase 2.2.4 — Error handling modules~ 🛡️💥
         new TryCatchModule(),
         new ThrowModule(),
+
+        // Phase 2.3.0 — HTTP request module~ 🌐
+        new HttpRequestModule(),
     };
 
     /// <summary>
