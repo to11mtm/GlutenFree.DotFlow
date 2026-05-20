@@ -765,37 +765,51 @@ Also resolves the **two scope-level items deferred from 2.2.3a** (see _Carry-ove
 
 **Purpose:** Prove the new control-flow primitives compose cleanly via realistic sample workflows + integration tests with persistence + API~ 💖
 
-**Status (May 19, 2026):** Persistence integration tests complete (6/6 ✅). API smoke tests + docs + demo workflow JSON still pending~
+**Status (May 19, 2026):** Persistence integration tests complete (6/6 ✅), end-to-end sample workflow JSON shipped (`flow-control-demo.json`) ✅, and full authoring guide shipped (`docs/advanced-flow-control.md`) ✅. Only API smoke tests remain (blocked on workflow HTTP endpoints)~
 
 **Complexity:** 🟡 Medium
 
 ### Tasks:
 
-- [ ] **End-to-end sample workflow** 🌈
-  - [ ] New file: `examples/definitions/flow-control-demo.json`
-  - [ ] Shape:
+- [x] **End-to-end sample workflow** ✅ **COMPLETE (May 19, 2026)**
+  - [x] New file: `examples/definitions/flow-control-demo.json` (12 nodes, 11 connections, 3 workflow variables)
+  - [x] Shape *(uses only built-in modules available in Phase 2.2 — no HttpRequest)*:
     ```
-    Start → ForEach(items)
-              ├─ loopBody → Condition(item.priority > 5)
-              │                ├─ true  → Parallel
-              │                │            ├─ branch1 → HttpRequest
-              │                │            └─ branch2 → SetVariable
-              │                └─ false → Log
-              └─ done    → FanIn → SetVariable("summary")
+    Start → ForEach(items=[1,2,3,4,5])
+              ├─ loopBody → TryCatch
+              │                ├─ try     → Condition(item > threshold)
+              │                │              ├─ true  → Parallel
+              │                │              │            ├─ notify  → Log("notifying")
+              │                │              │            └─ persist → SetVariable("last_processed")
+              │                │              └─ false → Throw("BelowThreshold")
+              │                ├─ catch   → Log("item skipped: {{error.message}}")
+              │                ├─ finally → Log("iteration done")
+              │                └─ done    → (next iteration continues)
+              └─ done  → SetVariable("summary") → Log(final)
     ```
+  - > **Modules used:** `builtin.loop.foreach`, `builtin.trycatch`, `builtin.condition`, `builtin.parallel`, `builtin.throw`, `builtin.log`, `builtin.setvariable` — all shipped ✅
+  - > **Expected runtime behaviour** (with default `threshold=2`, items=[1,2,3,4,5]): items 1 and 2 throw → caught by TryCatch (logged as `Warning`); items 3, 4, 5 succeed via the parallel notify+persist; `last_processed` ends as `"accepted"`; `summary` ends as `"all items processed"`; workflow `Completed`~ 🎀
 
 - [x] **Persistence integration tests** ✅ **COMPLETE (May 19, 2026)**
   - [x] New file: `Workflow.Tests/Engine/AdvancedFlowPersistenceTests.cs`
   - [x] Run demo workflow on `SqlitePersistenceProvider` (`:memory:`); assert conditional branching + trycatch node records.
   - [x] Verify try/catch error boundary outcomes recorded (success path, error path, rethrow path, combined).
 
-- [ ] **API smoke tests**
-  - [ ] New file: `Workflow.Tests/Api/AdvancedFlowApiTests.cs`
-  - [ ] POST execute → 202 → poll status → completed; assert `Outputs` includes aggregated results.
+- [ ] **API smoke tests** ⚠️ *Blocked — workflow API endpoints not yet implemented (`Workflow.Api/Controllers/` is empty)*
+  - [ ] **Prerequisite:** Implement workflow HTTP endpoints first (planned for Phase 2.x / 3):
+    - `POST /workflows/{definitionId}/execute` → `202 Accepted` + `{ executionId }`
+    - `GET  /workflows/executions/{executionId}/status` → `WorkflowStatusResponse`
+    - `DELETE /workflows/executions/{executionId}` → cancel
+  - [ ] New file: `Workflow.Tests/Api/AdvancedFlowApiTests.cs` *(write once endpoints exist)*
+  - [ ] Scenarios to cover *(using the `flow-control-demo` workflow shape)*:
+    - [ ] `POST` demo workflow → `202` → poll status → `Completed`; assert `last_processed` + `summary` variables set
+    - [ ] Same run with `items=[1]` (all items below threshold) → all caught by `TryCatch` → workflow still `Completed` (not `Failed`)
+    - [ ] `DELETE` (cancel) while ForEach is mid-iteration → execution reaches `Cancelled` state
+    - [ ] `GET status` for non-existent execution → `404`
 
-- [ ] **Docs**
-  - [ ] New file: `docs/advanced-flow-control.md`
-  - [ ] Cover: condition, switch, foreach/while + break/continue, parallel/fanout/fanin, try/catch + throw, expression cheatsheet, common patterns.
+- [x] **Docs** ✅ **COMPLETE (May 19, 2026)**
+  - [x] New file: `docs/advanced-flow-control.md` — comprehensive authoring guide (~430 lines)
+  - [x] Covers: core concepts (port routing, sub-graphs, loop scope, error boundaries, hierarchical cancellation), all 11 flow-control modules with full property/port reference tables, Jint expression cheatsheet, 6 common patterns/recipes, links to phase docs + demo workflow.
 
 **Tests (6 written — target was ~6):** → `Workflow.Tests/Engine/AdvancedFlowPersistenceTests.cs`, `Workflow.Tests/Api/AdvancedFlowApiTests.cs`
 - [x] `AdvancedFlow_Condition_TrueBranch_PersistsOnlyTruePathNodes` — condition=true; true-branch node persisted, false-branch node NOT persisted ✅
@@ -806,8 +820,10 @@ Also resolves the **two scope-level items deferred from 2.2.3a** (see _Carry-ove
 - [x] `AdvancedFlow_Combined_LowScore_CaughtByTryCatch_WorkflowCompletes` — Condition→Throw inside TryCatch; catch recovers; end node persisted ✅
 - [ ] Per-iteration loop node executions recorded with `loopId`/`iter` *(deferred)*
 - [ ] Parallel branches recorded with concurrent timestamps *(deferred)*
-- [ ] API run returns aggregated outputs *(see 2.2.6 API smoke tests)*
-- [ ] Cancellation via API cancels in-flight parallel branches *(see 2.2.6 API smoke tests)*
+- [ ] API run returns aggregated outputs (`last_processed` + `summary`) *(blocked — workflow API endpoints not yet implemented)*
+- [ ] All-below-threshold run → TryCatch catches all → workflow still Completes *(blocked — same)*
+- [ ] Cancellation via API cancels in-flight ForEach execution *(blocked — same)*
+- [ ] `GET status` 404 for unknown execution *(blocked — same)*
 
 ---
 
@@ -825,7 +841,7 @@ Also resolves the **two scope-level items deferred from 2.2.3a** (see _Carry-ove
 - [x] Modules: ~~`builtin.condition`~~ ✅, ~~`builtin.switch`~~ ✅, ~~`builtin.loop.foreach`~~ ✅, ~~`builtin.loop.while`~~ ✅, ~~`builtin.break`~~ ✅, ~~`builtin.continue`~~ ✅, ~~`builtin.parallel`~~ ✅, ~~`builtin.fanout`~~ ✅, ~~`builtin.fanin`~~ ✅, ~~`builtin.trycatch`~~ ✅, ~~`builtin.throw`~~ ✅
 - [x] `IExpressionEvaluator` interface defined (shipped in 2.2.1); default implementation + DI wiring deferred to 2.2.5
 - [ ] ~82 unit + integration tests passing across 2.2.0a/2.2.0b–2.2.6 (2.2.0a ~8 + 2.2.0b ~13 + 2.2.1 ~46 + 2.2.2 ~27 + **2.2.3a 11** ✅ + **2.2.3b 31** ✅ + 2.2.3-followup ~5 + **2.2.4 18** ✅ + 2.2.5 ~12 + **2.2.6 persistence 6** ✅ + 2.2.6 API ~4 pending) — **607 total currently passing**
-- [ ] XML docs + `docs/advanced-flow-control.md`
+- [x] XML docs + `docs/advanced-flow-control.md` ✅ (May 19, 2026) — comprehensive authoring guide covering all 11 flow-control modules + expression cheatsheet + 6 patterns
 - [ ] Sample workflow runs end-to-end on persistence + API stack
 
 **Infrastructure improvements (not in original scope — shipped May 2026):**
@@ -895,8 +911,8 @@ Workflow.Tests.Integration/                            ← ✅ NEW PROJECT (May 
   Persistence/S3BlobStoreTests.cs                      ← moved from Workflow.Tests
   README.md                                             ← documents Docker-test split
 
-docs/advanced-flow-control.md                           ← new (2.2.6)
-examples/definitions/flow-control-demo.json             ← new (2.2.6)
+docs/advanced-flow-control.md                           ← ✅ shipped (2.2.6, May 19 2026) — comprehensive authoring guide (~430 lines)
+examples/definitions/flow-control-demo.json             ← ✅ shipped (2.2.6, May 19 2026) — 12 nodes, 11 connections; ForEach+TryCatch+Condition+Parallel+Throw+Log+SetVariable
 Directory.Packages.props                                ← + Jint (default); DynamicExpresso.Core (opt-in fallback) [2.2.5]
 ```
 
