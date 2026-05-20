@@ -38,6 +38,17 @@ public interface IHttpAuthStrategy
     /// <param name="cancellationToken">Cancellation token (used by async strategies like OAuth2 token-fetch).</param>
     /// <returns>A task that completes when auth has been applied.</returns>
     Task ApplyAsync(HttpRequestMessage request, ModuleExecutionContext context, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Phase 2.3.3 — hook for refresh-on-401 logic. The module calls this after a 401 response;
+    /// implementations should invalidate any cached credentials and return <c>true</c> if a
+    /// re-apply-and-retry is warranted. Default: <c>false</c> (no retry)~ 🔄.
+    /// </summary>
+    /// <param name="context">Module execution context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><c>true</c> when the caller should re-apply auth + resend once; <c>false</c> otherwise.</returns>
+    Task<bool> InvalidateAndPrepareRetryAsync(ModuleExecutionContext context, CancellationToken cancellationToken)
+        => Task.FromResult(false);
 }
 
 /// <summary>
@@ -187,6 +198,21 @@ public static class HttpAuthStrategyFactory
     public static IHttpAuthStrategy? FromProperties(
         System.Collections.Generic.IReadOnlyDictionary<string, object?> properties,
         out string? error)
+        => FromProperties(properties, context: null, perModuleCache: null, out error);
+
+    /// <summary>
+    /// Phase 2.3.3 overload — accepts execution context + per-module cache for OAuth2 strategies~ 🔑.
+    /// </summary>
+    /// <param name="properties">The module properties.</param>
+    /// <param name="context">Module execution context (required for OAuth2 — gives DI + ExecutionId).</param>
+    /// <param name="perModuleCache">Per-module OAuth2 token cache (used when <c>oauth2TokenCacheScope = module</c>).</param>
+    /// <param name="error">When the return is null, this carries a user-readable error message.</param>
+    /// <returns>The selected strategy, or null when auth could not be configured.</returns>
+    public static IHttpAuthStrategy? FromProperties(
+        System.Collections.Generic.IReadOnlyDictionary<string, object?> properties,
+        ModuleExecutionContext? context,
+        IOAuth2TokenCache? perModuleCache,
+        out string? error)
     {
         error = null;
         var authType = GetString(properties, "authType")?.Trim().ToLowerInvariant();
@@ -238,14 +264,76 @@ public static class HttpAuthStrategyFactory
                 return new ApiKeyAuthStrategy(key!, headerName, location);
 
             case "oauth2":
-                // OAuth2 ships in Phase 2.3.3 — surface a clear "not yet" until then~ 🚧
-                error = "OAuth2 auth is not yet implemented (Phase 2.3.3)~ 🚧";
-                return null;
+                return BuildOAuth2Strategy(properties, context, perModuleCache, out error);
 
             default:
                 error = $"Unknown authType '{authType}' (valid: none/basic/bearer/apikey/oauth2)~ 💔";
                 return null;
         }
+    }
+
+    /// <summary>Build the OAuth2 client-credentials strategy from properties + chosen cache scope~ 🔑.</summary>
+    private static IHttpAuthStrategy? BuildOAuth2Strategy(
+        System.Collections.Generic.IReadOnlyDictionary<string, object?> properties,
+        ModuleExecutionContext? context,
+        IOAuth2TokenCache? perModuleCache,
+        out string? error)
+    {
+        error = null;
+
+        if (context is null)
+        {
+            error = "OAuth2 requires a ModuleExecutionContext (use the 4-arg FromProperties overload)~ 💔";
+            return null;
+        }
+
+        var tokenUrl = GetString(properties, "oauth2TokenUrl");
+        var clientId = GetString(properties, "oauth2ClientId");
+        var clientSecret = GetString(properties, "oauth2ClientSecret");
+
+        if (string.IsNullOrWhiteSpace(tokenUrl) || string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+        {
+            error = "OAuth2 requires 'oauth2TokenUrl', 'oauth2ClientId' and 'oauth2ClientSecret' properties~ 💔";
+            return null;
+        }
+
+        var settings = new OAuth2Settings(
+            tokenUrl!,
+            clientId!,
+            clientSecret!,
+            Scope: GetString(properties, "oauth2Scope"),
+            Audience: GetString(properties, "oauth2Audience"));
+
+        // Pick cache by scope (default: module)~
+        var scope = (GetString(properties, "oauth2TokenCacheScope") ?? "module").Trim().ToLowerInvariant();
+        IOAuth2TokenCache? cache;
+        switch (scope)
+        {
+            case "module":
+                cache = perModuleCache;
+                if (cache is null)
+                {
+                    error = "OAuth2 module-scope cache is null — caller must supply a PerModuleOAuth2TokenCache~ 💔";
+                    return null;
+                }
+
+                break;
+            case "pipeline":
+                cache = context.Services.GetService(typeof(PerPipelineOAuth2TokenCache)) as IOAuth2TokenCache
+                    ?? context.Services.GetService(typeof(IOAuth2TokenCache)) as IOAuth2TokenCache;
+                if (cache is null)
+                {
+                    error = "OAuth2 pipeline-scope requires PerPipelineOAuth2TokenCache in DI (registered by AddHttpModules)~ 💔";
+                    return null;
+                }
+
+                break;
+            default:
+                error = $"Unknown oauth2TokenCacheScope '{scope}' (valid: module/pipeline; singleton/persisted ship in 2.3.P3)~ 💔";
+                return null;
+        }
+
+        return new OAuth2ClientCredentialsStrategy(settings, cache);
     }
 
     /// <summary>Returns true if a header name carries credentials that must be redacted from logs~ 🔒.</summary>

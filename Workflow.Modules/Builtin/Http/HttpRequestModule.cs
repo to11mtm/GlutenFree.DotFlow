@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -48,6 +49,16 @@ public class HttpRequestModule : IWorkflowModule
     {
         "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS",
     };
+
+    /// <summary>
+    /// 🔑 Per-module OAuth2 token cache — fresh dictionary tied to *this* module instance lifetime.
+    /// Used when <c>oauth2TokenCacheScope = module</c> (the default scope)~
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Pipeline-scope cache lives in DI (<see cref="PerPipelineOAuth2TokenCache"/>) and
+    /// is resolved per-call via <see cref="ModuleExecutionContext.Services"/>~ 🌸
+    /// </remarks>
+    private readonly PerModuleOAuth2TokenCache _oauth2ModuleCache = new();
 
     /// <inheritdoc />
     public string ModuleId => "builtin.http.request";
@@ -213,6 +224,56 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Where to put the API key: 'header' (default) or 'query'~ 📍",
                 IsRequired: false,
                 DefaultValue: "header",
+                EditorType: PropertyEditorType.Dropdown),
+
+            // 🔑 Phase 2.3.3 — OAuth2 Client Credentials properties~
+            new ModulePropertyDefinition(
+                Name: "oauth2TokenUrl",
+                DisplayName: "OAuth2 Token URL",
+                DataType: typeof(string),
+                Description: "OAuth2 token endpoint URL (e.g. https://auth.example.com/oauth/token)~ 🌐",
+                IsRequired: false,
+                DefaultValue: null,
+                EditorType: PropertyEditorType.Text),
+            new ModulePropertyDefinition(
+                Name: "oauth2ClientId",
+                DisplayName: "OAuth2 Client ID",
+                DataType: typeof(string),
+                Description: "OAuth2 client identifier~ 👤",
+                IsRequired: false,
+                DefaultValue: null,
+                EditorType: PropertyEditorType.Text),
+            new ModulePropertyDefinition(
+                Name: "oauth2ClientSecret",
+                DisplayName: "OAuth2 Client Secret",
+                DataType: typeof(string),
+                Description: "OAuth2 client secret~ 🔑",
+                IsRequired: false,
+                DefaultValue: null,
+                EditorType: PropertyEditorType.Text),
+            new ModulePropertyDefinition(
+                Name: "oauth2Scope",
+                DisplayName: "OAuth2 Scope",
+                DataType: typeof(string),
+                Description: "Optional space-separated OAuth2 scopes~ 🎯",
+                IsRequired: false,
+                DefaultValue: null,
+                EditorType: PropertyEditorType.Text),
+            new ModulePropertyDefinition(
+                Name: "oauth2Audience",
+                DisplayName: "OAuth2 Audience",
+                DataType: typeof(string),
+                Description: "Optional audience parameter (Auth0-style; not part of core RFC)~ 🎭",
+                IsRequired: false,
+                DefaultValue: null,
+                EditorType: PropertyEditorType.Text),
+            new ModulePropertyDefinition(
+                Name: "oauth2TokenCacheScope",
+                DisplayName: "OAuth2 Token Cache Scope",
+                DataType: typeof(string),
+                Description: "Cache scope: 'module' (default — per HttpRequestModule instance) or 'pipeline' (shared across nodes in same WorkflowExecution). Singleton/persisted ship in 2.3.P3~ 💾",
+                IsRequired: false,
+                DefaultValue: "module",
                 EditorType: PropertyEditorType.Dropdown)));
 
     /// <inheritdoc />
@@ -293,48 +354,52 @@ public class HttpRequestModule : IWorkflowModule
             return ModuleResult.Fail($"timeoutSeconds must be > 0 (got {timeoutSeconds})~ 💔");
         }
 
-        // 3️⃣ Build the request~ 🛠️
+        // 3️⃣ Build the request — extracted into a local function so it can be rebuilt for 401-retry~ 🛠️
         var client = factory.CreateClient(HttpModuleServiceCollectionExtensions.HttpClientName);
-        using var request = new HttpRequestMessage(new HttpMethod(methodStr.ToUpperInvariant()), uri);
-
-        // Headers (request-level)~ 🏷️
         var headers = ExtractHeaderMap(context.Properties, "headers");
-        if (headers is not null)
+        var requestedContentType = GetString(context.Properties, "contentType");
+        var hasBody = context.Properties.TryGetValue("body", out var bodyObj)
+            && bodyObj is not null
+            && !IsMethodWithoutBody(methodStr);
+
+        HttpRequestMessage BuildRequest()
         {
-            foreach (var kv in headers)
-            {
-                // Try the standard headers collection first; on failure fall back to content headers (added below w/ body)~
-                if (!request.Headers.TryAddWithoutValidation(kv.Key, kv.Value))
-                {
-                    context.Logger.LogDebug("🏷️ Header '{Name}' deferred to content (will attach with body)~", kv.Key);
-                }
-            }
-        }
-
-        // Body — delegate to RequestBodyEncoder (Phase 2.3.1)~ 📤
-        if (context.Properties.TryGetValue("body", out var bodyObj) && bodyObj is not null && !IsMethodWithoutBody(methodStr))
-        {
-            var requestedContentType = GetString(context.Properties, "contentType");
-            var encodeResult = RequestBodyEncoder.Encode(bodyObj, requestedContentType);
-            if (!encodeResult.IsSuccess)
-            {
-                return ModuleResult.Fail($"Body encode failed: {encodeResult.Error}");
-            }
-
-            request.Content = encodeResult.Content!;
-
-            // Re-apply any content-typed headers that failed earlier (Content-Type override, Content-Length, etc.)~ 🩹
+            var req = new HttpRequestMessage(new HttpMethod(methodStr.ToUpperInvariant()), uri);
             if (headers is not null)
             {
                 foreach (var kv in headers)
                 {
-                    if (IsContentHeader(kv.Key))
+                    if (!req.Headers.TryAddWithoutValidation(kv.Key, kv.Value))
                     {
-                        request.Content.Headers.Remove(kv.Key);
-                        request.Content.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
+                        context.Logger.LogDebug("🏷️ Header '{Name}' deferred to content (will attach with body)~", kv.Key);
                     }
                 }
             }
+
+            if (hasBody)
+            {
+                var encodeResult = RequestBodyEncoder.Encode(bodyObj!, requestedContentType);
+                if (!encodeResult.IsSuccess)
+                {
+                    throw new InvalidOperationException($"Body encode failed: {encodeResult.Error}");
+                }
+
+                req.Content = encodeResult.Content!;
+
+                if (headers is not null)
+                {
+                    foreach (var kv in headers)
+                    {
+                        if (IsContentHeader(kv.Key))
+                        {
+                            req.Content.Headers.Remove(kv.Key);
+                            req.Content.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
+                        }
+                    }
+                }
+            }
+
+            return req;
         }
 
         // 4️⃣ Send with linked CTS for timeout + parent cancellation~ ⏱️🛑
@@ -342,35 +407,73 @@ public class HttpRequestModule : IWorkflowModule
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
         // 🔐 Phase 2.3.2 — Apply auth strategy (mutates headers and/or URI)~
-        var strategy = HttpAuthStrategyFactory.FromProperties(context.Properties, out var authError);
+        // Phase 2.3.3 — pass context + per-module OAuth2 cache so the factory can build OAuth2 strategies~
+        var strategy = HttpAuthStrategyFactory.FromProperties(context.Properties, context, _oauth2ModuleCache, out var authError);
         if (strategy is null)
         {
             return ModuleResult.Fail(authError ?? "Failed to configure auth strategy~ 💔");
         }
 
-        await strategy.ApplyAsync(request, context, timeoutCts.Token).ConfigureAwait(false);
-
-        // Debug log — redact credentials (Authorization / X-API-Key / Cookie / etc.)~ 🔒
-        if (context.Logger.IsEnabled(LogLevel.Debug))
-        {
-            var headerSnapshot = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var h in request.Headers)
-            {
-                headerSnapshot[h.Key] = HttpAuthStrategyFactory.RedactForLog(h.Key, string.Join(", ", h.Value));
-            }
-
-            context.Logger.LogDebug(
-                "🔐 Request headers (redacted): {Headers}",
-                string.Join(", ", headerSnapshot.Select(kv => $"{kv.Key}={kv.Value}")));
-        }
-
         var sw = Stopwatch.StartNew();
+        HttpRequestMessage? request = null;
         HttpResponseMessage? response = null;
         try
         {
+            try
+            {
+                request = BuildRequest();
+            }
+            catch (InvalidOperationException ioe)
+            {
+                return ModuleResult.Fail(ioe.Message);
+            }
+
+            try
+            {
+                await strategy.ApplyAsync(request, context, timeoutCts.Token).ConfigureAwait(false);
+            }
+            catch (OAuth2AuthorizationException oae)
+            {
+                return ModuleResult.Fail(
+                    $"OAuth2 token fetch failed [{oae.ErrorCode}]: {oae.Description ?? oae.Message}~ 💔",
+                    oae);
+            }
+
+            LogRedactedHeaders(context.Logger, request);
+
             context.Logger.LogDebug("🌐 {Method} {Url} (timeout {TimeoutSec}s)~", methodStr, uri, timeoutSeconds);
             response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
                 .ConfigureAwait(false);
+
+            // 🔄 Phase 2.3.3 — Refresh-on-401 retry (one attempt only)~
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                bool shouldRetry = await strategy.InvalidateAndPrepareRetryAsync(context, timeoutCts.Token)
+                    .ConfigureAwait(false);
+
+                if (shouldRetry)
+                {
+                    context.Logger.LogDebug("🔄 Received 401 — invalidating credentials and retrying once~");
+                    response.Dispose();
+                    request.Dispose();
+                    request = BuildRequest();
+
+                    try
+                    {
+                        await strategy.ApplyAsync(request, context, timeoutCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OAuth2AuthorizationException oae)
+                    {
+                        return ModuleResult.Fail(
+                            $"OAuth2 refresh token fetch failed [{oae.ErrorCode}]: {oae.Description ?? oae.Message}~ 💔",
+                            oae);
+                    }
+
+                    LogRedactedHeaders(context.Logger, request);
+                    response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
+                        .ConfigureAwait(false);
+                }
+            }
 
             sw.Stop();
 
@@ -393,7 +496,6 @@ public class HttpRequestModule : IWorkflowModule
         }
         catch (OperationCanceledException oce) when (!cancellationToken.IsCancellationRequested)
         {
-            // Inner timeout (timeoutCts fired before parent ct)~ ⏱️
             sw.Stop();
             return ModuleResult.Fail(
                 $"HTTP request timed out after {timeoutSeconds}s — {methodStr} {uri}~ 💔",
@@ -401,7 +503,6 @@ public class HttpRequestModule : IWorkflowModule
         }
         catch (OperationCanceledException oce)
         {
-            // Parent cancellation — surface as fail (caller can decide)~ 🛑
             sw.Stop();
             return ModuleResult.Fail($"HTTP request cancelled — {methodStr} {uri}~ 🛑", oce);
         }
@@ -413,7 +514,27 @@ public class HttpRequestModule : IWorkflowModule
         finally
         {
             response?.Dispose();
+            request?.Dispose();
         }
+    }
+
+    /// <summary>Emit a debug log line with redacted headers~ 🔒.</summary>
+    private static void LogRedactedHeaders(ILogger logger, HttpRequestMessage request)
+    {
+        if (!logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var snap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var h in request.Headers)
+        {
+            snap[h.Key] = HttpAuthStrategyFactory.RedactForLog(h.Key, string.Join(", ", h.Value));
+        }
+
+        logger.LogDebug(
+            "🔐 Request headers (redacted): {Headers}",
+            string.Join(", ", snap.Select(kv => $"{kv.Key}={kv.Value}")));
     }
 
     /// <summary>Returns true for HTTP methods that conventionally carry no body~ 🚫.</summary>

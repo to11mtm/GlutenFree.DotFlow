@@ -7,6 +7,7 @@ namespace Workflow.Modules.Builtin.Http;
 using System.Net;
 using System.Net.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Workflow.Modules.Builtin.Http.Auth;
 
 /// <summary>
 /// 🌐 DI registration helpers for the HTTP built-in module family~ ✨💖.
@@ -73,6 +74,12 @@ public static class HttpModuleServiceCollectionExtensions
                     // Inherits system cert store — no custom roots set here
                 },
             });
+
+        // 🔑 Phase 2.3.3 — Pipeline-scoped OAuth2 token cache (DI singleton)~
+        // Keyed on (executionId, authority, clientId, scope); tokens are shared across HTTP nodes
+        // inside a single WorkflowExecution but never leak across workflows in V1~
+        services.AddSingleton<PerPipelineOAuth2TokenCache>();
+        services.AddSingleton<IOAuth2TokenCache>(sp => sp.GetRequiredService<PerPipelineOAuth2TokenCache>());
 
         return services;
     }

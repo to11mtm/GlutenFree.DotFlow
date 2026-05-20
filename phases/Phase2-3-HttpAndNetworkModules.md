@@ -224,7 +224,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.3 OAuth2 Client Credentials Flow 🔑
+## 2.3.3 OAuth2 Client Credentials Flow 🔑 ✅ **(May 19, 2026)**
 
 > **Purpose:** Implement the most common machine-to-machine OAuth2 flow (client credentials grant). Token caching + automatic refresh. Other flows (auth code, device flow) deferred~ 🌷
 
@@ -232,42 +232,45 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ### Tasks
 
-- [ ] **OAuth2 token cache** 💾
-  - [ ] New file: `Workflow.Modules/Builtin/Http/Auth/IOAuth2TokenCache.cs`
-  - [ ] Two built-in implementations (selectable via `oauth2TokenCacheScope` property — see schema additions below):
-    - [ ] `PerModuleOAuth2TokenCache` — fresh cache per `HttpRequestModule` instance (no cross-call reuse); simplest, safest default
-    - [ ] `PerPipelineOAuth2TokenCache` — scoped to a single `WorkflowExecution`; tokens reused across all HTTP calls inside the same execution. Implementation: resolved per-execution via `ctx.ExecutionId` keyed dictionary on a scoped DI service
-  - [ ] Both keyed on `(authority, clientId, scope)`, TTL = `expires_in - 30s` safety margin
-  - [ ] Cross-workflow singleton scope **deferred to 2.3.P3** (post-MVP)
-  - [ ] Resolves **Q1**: selectable scope, no cross-workflow leakage in V1
+- [x] **OAuth2 token cache** 💾 ✅
+  - [x] New files:
+    - [x] `Workflow.Modules/Builtin/Http/Auth/IOAuth2TokenCache.cs` (+ `OAuth2TokenCacheKey` + `CachedOAuth2Token` records)
+    - [x] `Workflow.Modules/Builtin/Http/Auth/PerModuleOAuth2TokenCache.cs` — `ConcurrentDictionary` held on a `HttpRequestModule` instance; two module instances → two caches → two token fetches
+    - [x] `Workflow.Modules/Builtin/Http/Auth/PerPipelineOAuth2TokenCache.cs` — DI singleton with composite key `(executionId, OAuth2TokenCacheKey)`; tokens shared within one `WorkflowExecution`, never across workflows in V1
+  - [x] Both keyed on `(authority, clientId, scope)`, TTL = `expires_in - 30s` safety margin (expired entries eagerly evicted on `GetAsync`)
+  - [x] Cross-workflow singleton + persisted scopes deferred to **2.3.P3** (return a friendly `"Unknown oauth2TokenCacheScope"` error today)
+  - [x] DI: `PerPipelineOAuth2TokenCache` registered as singleton (and as `IOAuth2TokenCache`) inside `AddHttpModules`
+  - [x] Resolves **Q1**: selectable scope, no cross-workflow leakage in V1
 
-- [ ] **OAuth2 strategy** 🔧
-  - [ ] New file: `Workflow.Modules/Builtin/Http/Auth/OAuth2ClientCredentialsStrategy.cs`
-  - [ ] Inputs (on `HttpRequestModule`): `oauth2TokenUrl`, `oauth2ClientId`, `oauth2ClientSecret`, `oauth2Scope`, optional `oauth2Audience`
-  - [ ] Input: `oauth2TokenCacheScope` (string enum: `module`/`pipeline`, default `module`) — selects cache implementation
-  - [ ] Flow:
-    - [ ] Check cache for unexpired token
-    - [ ] If miss/expired → `POST {tokenUrl}` with `grant_type=client_credentials` (`application/x-www-form-urlencoded`)
-    - [ ] Parse response: `access_token`, `expires_in`, `token_type` (must be `Bearer`)
-    - [ ] Cache + apply as `Authorization: Bearer {access_token}`
-  - [ ] Failures: structured error mapping (`invalid_client`, `invalid_scope`, etc. → `ModuleResult.Fail` with code)
+- [x] **OAuth2 strategy** 🔧 ✅
+  - [x] New file: `Workflow.Modules/Builtin/Http/Auth/OAuth2ClientCredentialsStrategy.cs`
+  - [x] Inputs (on `HttpRequestModule`): `oauth2TokenUrl`, `oauth2ClientId`, `oauth2ClientSecret`, `oauth2Scope`, `oauth2Audience` (Auth0-style)
+  - [x] Input: `oauth2TokenCacheScope` (`module`/`pipeline`, default `module`)
+  - [x] Flow:
+    - [x] Check cache for unexpired token
+    - [x] If miss/expired → `POST {tokenUrl}` with form-encoded `grant_type=client_credentials` (+ client creds + scope/audience when set) via the same named `IHttpClientFactory` client (shares connection pool)
+    - [x] Parse response: `access_token`, `expires_in`, `token_type` (must be `Bearer` — V1 rejects anything else)
+    - [x] Cache + apply as `Authorization: Bearer {access_token}`
+  - [x] Failures: structured `OAuth2AuthorizationException` (`ErrorCode`, `Description`, `HttpStatus`) → `ModuleResult.Fail(...)` carries the OAuth2 `error` code in both message + `Exception` property
 
-- [ ] **Refresh-on-401 retry** 🔄
-  - [ ] If a request fails with `401 Unauthorized` and `authType == oauth2`, invalidate cache + retry once
-  - [ ] Hard fail on second `401`
+- [x] **Refresh-on-401 retry** 🔄 ✅
+  - [x] `IHttpAuthStrategy.InvalidateAndPrepareRetryAsync` default-`false` interface method; OAuth2 strategy overrides to `true`
+  - [x] On `401 Unauthorized`: dispose response + request, invalidate cache, rebuild request, re-apply auth, resend ONCE
+  - [x] Hard fail on second `401` (surfaces as `success=false`, `statusCode=401` — module didn't throw)
+  - [x] `HttpRequestModule` refactored: request construction extracted to a local `BuildRequest()` function so retry can re-create the message (HTTP requests aren't resendable)
 
-### Tests (target ~10): → `Workflow.Tests/Modules/Http/OAuth2Tests.cs`
+### Tests (target ~10): → `Workflow.Tests/Modules/Http/OAuth2Tests.cs` ✅ **10/10 passing**
 
-- [ ] `OAuth2_FirstCall_FetchesTokenFromAuthority` *(WireMock for token endpoint + protected endpoint)*
-- [ ] `OAuth2_SecondCall_UsesCachedToken_NoTokenFetch`
-- [ ] `OAuth2_TokenExpired_RefetchesToken`
-- [ ] `OAuth2_401Response_InvalidatesCacheAndRetries`
-- [ ] `OAuth2_DoubleAuth401_Fails`
-- [ ] `OAuth2_InvalidClient_ReturnsFail`
-- [ ] `OAuth2_DifferentScopes_CachedSeparately`
-- [ ] `OAuth2_TokenCache_EvictionTimingRespectsExpiresIn`
-- [ ] `OAuth2_ModuleScope_FreshCachePerModuleInstance` — two modules → two token fetches
-- [ ] `OAuth2_PipelineScope_SharesCacheAcrossModulesInSameExecution` — two modules in same workflow → one token fetch
+- [x] `OAuth2_FirstCall_FetchesTokenFromAuthority` ✅ *(WireMock for token endpoint + protected endpoint)*
+- [x] `OAuth2_SecondCall_UsesCachedToken_NoTokenFetch` ✅
+- [x] `OAuth2_TokenExpired_RefetchesToken` ✅
+- [x] `OAuth2_401Response_InvalidatesCacheAndRetries` ✅ *(WireMock scenario: 401-then-200; verifies 2 protected calls + 2 token fetches)*
+- [x] `OAuth2_DoubleAuth401_Fails` ✅ *(exactly 1 retry; second 401 surfaces as `success=false`, `statusCode=401`)*
+- [x] `OAuth2_InvalidClient_ReturnsFail` ✅ *(structured `OAuth2AuthorizationException.ErrorCode == "invalid_client"`)*
+- [x] `OAuth2_DifferentScopes_CachedSeparately` ✅
+- [x] `OAuth2_TokenCache_EvictionTimingRespectsExpiresIn` ✅ *(expires_in:1 + 30s safety margin → instantly expired → refetch)*
+- [x] `OAuth2_ModuleScope_FreshCachePerModuleInstance` ✅ *(2 modules → 2 token fetches)*
+- [x] `OAuth2_PipelineScope_SharesCacheAcrossModulesInSameExecution` ✅ *(2 modules + same `ExecutionId` → 1 token fetch)*
 
 ---
 
@@ -692,7 +695,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 - [ ] 2.3.0 shipped: `HttpRequestModule` core (GET/POST/JSON minimum) + DI infra + `AddWorkflowModules()` aggregate registration
 - [x] 2.3.1 shipped: form/multipart-byte[]/XML/raw body + content-type-aware response decoding ✅ **(May 19, 2026)**
 - [x] 2.3.2 shipped: Basic, Bearer, API Key auth + header redaction ✅ **(May 19, 2026)**
-- [ ] 2.3.3 shipped: OAuth2 client credentials + selectable `module`/`pipeline` token cache scope + refresh-on-401
+- [x] 2.3.3 shipped: OAuth2 client credentials + selectable `module`/`pipeline` token cache scope + refresh-on-401 ✅ **(May 19, 2026)**
 - [ ] 2.3.4 shipped: Polly retry + timeout + circuit breaker + Retry-After honouring (capped by `maxRetryBackoffSeconds`)
 - [ ] 2.3.5 shipped: URL templating + JSONPath/regex/header response extraction
 - [ ] 2.3.6 shipped: `WebhookTriggerModule` + `IWebhookRegistrationRepository` + `WebhookDispatcher` + `IWebhookResponseStrategy` (default async-202) + API endpoints
