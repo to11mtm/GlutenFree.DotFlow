@@ -62,6 +62,8 @@
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.11.0" />
     <!-- 🌐 HTTP test infrastructure (Phase 2.3) — in-process mock HTTP server, Docker-free~ -->
     <PackageVersion Include="WireMock.Net" Version="2.6.0" />
+    <!-- 🔄 HTTP resilience (Phase 2.3.4) — retry / timeout / circuit breaker via Polly v8~ -->
+    <PackageVersion Include="Polly.Core" Version="8.6.6" />
     <PackageVersion Include="Testcontainers.Minio" Version="4.11.0" />
     <!-- 🧮 Expression Evaluators (Phase 2.2.5) -->
     <PackageVersion Include="Jint" Version="4.9.2" />

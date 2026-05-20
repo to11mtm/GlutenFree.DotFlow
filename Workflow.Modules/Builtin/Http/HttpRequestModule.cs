@@ -22,6 +22,9 @@ using Workflow.Core.Models;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.Http.Auth;
 using Workflow.Modules.Builtin.Http.Internal;
+using Workflow.Modules.Builtin.Http.Resilience;
+using Polly;
+using Polly.CircuitBreaker;
 
 /// <summary>
 /// 🌐 Built-in HTTP request module (<c>builtin.http.request</c>) — Phase 2.3.0 v1~ ✨💖.
@@ -59,6 +62,12 @@ public class HttpRequestModule : IWorkflowModule
     /// is resolved per-call via <see cref="ModuleExecutionContext.Services"/>~ 🌸
     /// </remarks>
     private readonly PerModuleOAuth2TokenCache _oauth2ModuleCache = new();
+
+    /// <summary>
+    /// 🔄 Per-module Polly resilience pipeline factory — caches built pipelines per config-hash so
+    /// circuit breakers maintain state across calls within the same module instance lifetime~
+    /// </summary>
+    private readonly HttpResiliencePipelineFactory _resilienceFactory = new();
 
     /// <inheritdoc />
     public string ModuleId => "builtin.http.request";
@@ -117,6 +126,18 @@ public class HttpRequestModule : IWorkflowModule
                 DisplayName: "Response Content-Type",
                 DataType: typeof(string),
                 Description: "Response Content-Type media type — useful for downstream switching~ 🏷️",
+                IsRequired: false),
+            new PortDefinition(
+                Name: "attemptCount",
+                DisplayName: "Attempt Count",
+                DataType: typeof(int),
+                Description: "Total send attempts (1 = no retry; 2 = retried once, etc.)~ 🔢",
+                IsRequired: false),
+            new PortDefinition(
+                Name: "circuitState",
+                DisplayName: "Circuit State",
+                DataType: typeof(string),
+                Description: "Current circuit-breaker state: closed/open/halfopen (when circuit configured)~ 🚦",
                 IsRequired: false)),
         Properties: Arr.create(
             new ModulePropertyDefinition(
@@ -274,7 +295,65 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Cache scope: 'module' (default — per HttpRequestModule instance) or 'pipeline' (shared across nodes in same WorkflowExecution). Singleton/persisted ship in 2.3.P3~ 💾",
                 IsRequired: false,
                 DefaultValue: "module",
-                EditorType: PropertyEditorType.Dropdown)));
+                EditorType: PropertyEditorType.Dropdown),
+
+            // 🔄 Phase 2.3.4 — Resilience properties (Polly v8 retry / circuit-breaker)~
+            new ModulePropertyDefinition(
+                Name: "retryCount",
+                DisplayName: "Retry Count",
+                DataType: typeof(int),
+                Description: "Number of retry attempts after the initial send (0 = no retries)~ 🔁",
+                IsRequired: false,
+                DefaultValue: 0,
+                EditorType: PropertyEditorType.Number),
+            new ModulePropertyDefinition(
+                Name: "retryBackoff",
+                DisplayName: "Retry Backoff Strategy",
+                DataType: typeof(string),
+                Description: "Backoff curve: linear/exponential/constant (default exponential)~ 📈",
+                IsRequired: false,
+                DefaultValue: "exponential",
+                EditorType: PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition(
+                Name: "retryDelaySeconds",
+                DisplayName: "Retry Initial Delay (s)",
+                DataType: typeof(double),
+                Description: "Initial backoff delay in seconds (default 1.0). Subsequent attempts scale per the chosen backoff~ ⏱️",
+                IsRequired: false,
+                DefaultValue: 1.0,
+                EditorType: PropertyEditorType.Number),
+            new ModulePropertyDefinition(
+                Name: "maxRetryBackoffSeconds",
+                DisplayName: "Max Retry Backoff (s)",
+                DataType: typeof(double),
+                Description: "Hard cap on any per-attempt sleep — also caps server-supplied Retry-After header (default 60s)~ 🛡️",
+                IsRequired: false,
+                DefaultValue: 60.0,
+                EditorType: PropertyEditorType.Number),
+            new ModulePropertyDefinition(
+                Name: "retryOnStatusCodes",
+                DisplayName: "Retry On Status Codes",
+                DataType: typeof(int[]),
+                Description: "Status codes that trigger a retry (default [408,429,500,502,503,504])~ 📋",
+                IsRequired: false,
+                DefaultValue: null,
+                EditorType: PropertyEditorType.Json),
+            new ModulePropertyDefinition(
+                Name: "circuitBreakerFailureThreshold",
+                DisplayName: "Circuit Breaker Threshold",
+                DataType: typeof(int),
+                Description: "Number of failures within the sampling window that trip the circuit (0 = disabled)~ 🛑",
+                IsRequired: false,
+                DefaultValue: 0,
+                EditorType: PropertyEditorType.Number),
+            new ModulePropertyDefinition(
+                Name: "circuitBreakerSamplingDurationSeconds",
+                DisplayName: "Circuit Breaker Window (s)",
+                DataType: typeof(double),
+                Description: "Sliding window for failure counting (default 30s)~ ⏰",
+                IsRequired: false,
+                DefaultValue: 30.0,
+                EditorType: PropertyEditorType.Number)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -414,38 +493,31 @@ public class HttpRequestModule : IWorkflowModule
             return ModuleResult.Fail(authError ?? "Failed to configure auth strategy~ 💔");
         }
 
+        // 🔄 Phase 2.3.4 — Parse + cache the Polly resilience pipeline (retry / circuit breaker)~
+        var resilienceConfig = HttpResiliencePipelineFactory.ParseFromProperties(context.Properties, out var resilienceError);
+        if (resilienceConfig is null)
+        {
+            return ModuleResult.Fail(resilienceError ?? "Failed to configure resilience pipeline~ 💔");
+        }
+
+        var resiliencePipeline = _resilienceFactory.GetOrBuild(resilienceConfig, context.Logger);
+        var callState = new ResilienceCallState();
+
         var sw = Stopwatch.StartNew();
-        HttpRequestMessage? request = null;
         HttpResponseMessage? response = null;
         try
         {
-            try
-            {
-                request = BuildRequest();
-            }
-            catch (InvalidOperationException ioe)
-            {
-                return ModuleResult.Fail(ioe.Message);
-            }
+            // First send: pipeline handles retry/circuit-breaker; each attempt rebuilds the request + re-applies auth
+            response = await SendThroughPipelineAsync(
+                client,
+                resiliencePipeline,
+                callState,
+                BuildRequest,
+                strategy,
+                context,
+                timeoutCts.Token).ConfigureAwait(false);
 
-            try
-            {
-                await strategy.ApplyAsync(request, context, timeoutCts.Token).ConfigureAwait(false);
-            }
-            catch (OAuth2AuthorizationException oae)
-            {
-                return ModuleResult.Fail(
-                    $"OAuth2 token fetch failed [{oae.ErrorCode}]: {oae.Description ?? oae.Message}~ 💔",
-                    oae);
-            }
-
-            LogRedactedHeaders(context.Logger, request);
-
-            context.Logger.LogDebug("🌐 {Method} {Url} (timeout {TimeoutSec}s)~", methodStr, uri, timeoutSeconds);
-            response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
-                .ConfigureAwait(false);
-
-            // 🔄 Phase 2.3.3 — Refresh-on-401 retry (one attempt only)~
+            // 🔄 Phase 2.3.3 — Refresh-on-401 retry (one attempt only, OUTSIDE the resilience pipeline)~
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 bool shouldRetry = await strategy.InvalidateAndPrepareRetryAsync(context, timeoutCts.Token)
@@ -455,23 +527,14 @@ public class HttpRequestModule : IWorkflowModule
                 {
                     context.Logger.LogDebug("🔄 Received 401 — invalidating credentials and retrying once~");
                     response.Dispose();
-                    request.Dispose();
-                    request = BuildRequest();
-
-                    try
-                    {
-                        await strategy.ApplyAsync(request, context, timeoutCts.Token).ConfigureAwait(false);
-                    }
-                    catch (OAuth2AuthorizationException oae)
-                    {
-                        return ModuleResult.Fail(
-                            $"OAuth2 refresh token fetch failed [{oae.ErrorCode}]: {oae.Description ?? oae.Message}~ 💔",
-                            oae);
-                    }
-
-                    LogRedactedHeaders(context.Logger, request);
-                    response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
-                        .ConfigureAwait(false);
+                    response = await SendThroughPipelineAsync(
+                        client,
+                        resiliencePipeline,
+                        callState,
+                        BuildRequest,
+                        strategy,
+                        context,
+                        timeoutCts.Token).ConfigureAwait(false);
                 }
             }
 
@@ -490,9 +553,28 @@ public class HttpRequestModule : IWorkflowModule
                 ["success"] = response.IsSuccessStatusCode,
                 ["durationMs"] = sw.ElapsedMilliseconds,
                 ["contentType"] = contentType,
+                ["attemptCount"] = callState.AttemptCount,
+                ["circuitState"] = callState.CircuitState,
             };
 
             return ModuleResult.Ok(outputs);
+        }
+        catch (InvalidOperationException ioe) when (ioe.Message.StartsWith("Body encode failed:", StringComparison.Ordinal))
+        {
+            sw.Stop();
+            return ModuleResult.Fail(ioe.Message);
+        }
+        catch (OAuth2AuthorizationException oae)
+        {
+            sw.Stop();
+            return ModuleResult.Fail(
+                $"OAuth2 token fetch failed [{oae.ErrorCode}]: {oae.Description ?? oae.Message}~ 💔",
+                oae);
+        }
+        catch (BrokenCircuitException bce)
+        {
+            sw.Stop();
+            return ModuleResult.Fail($"HTTP request blocked by open circuit breaker — {methodStr} {uri}~ 🛑", bce);
         }
         catch (OperationCanceledException oce) when (!cancellationToken.IsCancellationRequested)
         {
@@ -514,7 +596,51 @@ public class HttpRequestModule : IWorkflowModule
         finally
         {
             response?.Dispose();
-            request?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 🔄 Phase 2.3.4 — Run the request through the Polly resilience pipeline.
+    /// Each attempt rebuilds the <see cref="HttpRequestMessage"/> (they aren't resendable) and
+    /// re-applies the auth strategy so refreshed OAuth2 tokens propagate transparently~
+    /// </summary>
+    private static async Task<HttpResponseMessage> SendThroughPipelineAsync(
+        HttpClient client,
+        ResiliencePipeline<HttpResponseMessage> pipeline,
+        ResilienceCallState callState,
+        Func<HttpRequestMessage> buildRequest,
+        IHttpAuthStrategy strategy,
+        ModuleExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        var pollyContext = ResilienceContextPool.Shared.Get(cancellationToken);
+        pollyContext.Properties.Set(HttpResiliencePipelineFactory.StateKey, callState);
+
+        try
+        {
+            return await pipeline.ExecuteAsync(
+                static async (ctx, state) =>
+                {
+                    var (client, buildRequest, strategy, moduleCtx) = state;
+                    var attemptRequest = buildRequest();
+                    try
+                    {
+                        await strategy.ApplyAsync(attemptRequest, moduleCtx, ctx.CancellationToken).ConfigureAwait(false);
+                        LogRedactedHeaders(moduleCtx.Logger, attemptRequest);
+                        return await client.SendAsync(attemptRequest, HttpCompletionOption.ResponseHeadersRead, ctx.CancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        attemptRequest.Dispose();
+                    }
+                },
+                pollyContext,
+                (client, buildRequest, strategy, context)).ConfigureAwait(false);
+        }
+        finally
+        {
+            ResilienceContextPool.Shared.Return(pollyContext);
         }
     }
 
