@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Workflow.Api.Webhooks;
 using Workflow.Core.Abstractions;
 using Workflow.Engine.Services;
 using Workflow.Modules;
@@ -24,6 +25,12 @@ builder.Services.AddSingleton<IExpressionEvaluatorFactory, KeyedExpressionEvalua
 // 🌐 HTTP built-in modules (Phase 2.3.0)~ — IHttpClientFactory named client "dotflow.http"
 // (was: builder.Services.AddHttpModules(); — now aggregated under AddWorkflowModules)
 builder.Services.AddWorkflowModules();
+
+// 🪝 Webhook services (Phase 2.3.6)~ — registration repository + dispatcher + response strategy
+builder.Services.AddSingleton<IWebhookRegistrationRepository, InMemoryWebhookRegistrationRepository>();
+builder.Services.AddSingleton<IWorkflowLauncher, NullWorkflowLauncher>();      // replaced in 2.3.8 with ActorWorkflowLauncher~
+builder.Services.AddSingleton<IWebhookResponseStrategy, Async202ResponseStrategy>();
+builder.Services.AddSingleton<WebhookDispatcher>();
 
 var persistenceProvider = BuildPersistenceProvider(builder.Configuration);
 if (persistenceProvider is not null)
@@ -51,6 +58,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// 🪝 Phase 2.3.6 — Webhook trigger + management endpoints~
+app.MapWebhookEndpoints();
 
 if (persistenceProvider is not null)
 {

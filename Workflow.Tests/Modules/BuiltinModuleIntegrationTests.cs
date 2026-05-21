@@ -14,6 +14,7 @@ using Workflow.Modules;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin;
 using Workflow.Modules.Builtin.Flow;
+using Workflow.Modules.Builtin.Http;
 using Workflow.Modules.Discovery;
 using Xunit;
 
@@ -52,12 +53,14 @@ public sealed class BuiltinModuleIntegrationTests
     #region Registration & Discovery Tests 📦
 
     /// <summary>
-    /// All 16 builtin modules should register successfully via <see cref="BuiltinModules.RegisterAll"/>~ 📦
+    /// All 18 builtin modules should register successfully via <see cref="BuiltinModules.RegisterAll"/>~ 📦
     /// Phase 2.2.1 added builtin.condition and builtin.switch~ 🔀🔢
     /// Phase 2.2.2 added builtin.loop.foreach, builtin.loop.while, builtin.break, builtin.continue~ 🔁🌀
     /// Phase 2.2.3a added builtin.parallel~ 🌐
     /// Phase 2.2.3b added builtin.fanout and builtin.fanin~ 🔀🔁
     /// Phase 2.2.4 added builtin.trycatch and builtin.throw~ 🛡️💥
+    /// Phase 2.3.0 added builtin.http.request~ 🌐
+    /// Phase 2.3.6 added builtin.http.webhook~ 🪝
     /// </summary>
     [Fact]
     public void RegisterAll_ShouldRegisterAllBuiltinModules()
@@ -82,22 +85,26 @@ public sealed class BuiltinModuleIntegrationTests
         registry.HasModule("builtin.fanin").Should().BeTrue("Phase 2.2.3b fanin module must register~ 🔁");
         registry.HasModule("builtin.trycatch").Should().BeTrue("Phase 2.2.4 trycatch module must register~ 🛡️");
         registry.HasModule("builtin.throw").Should().BeTrue("Phase 2.2.4 throw module must register~ 💥");
-        registry.GetAllModules().Should().HaveCount(16, because: "16 builtin modules after Phase 2.2.4~ 💖");
+        registry.HasModule("builtin.http.request").Should().BeTrue("Phase 2.3.0 http.request must register~ 🌐");
+        registry.HasModule("builtin.http.webhook").Should().BeTrue("Phase 2.3.6 http.webhook must register~ 🪝");
+        registry.GetAllModules().Should().HaveCount(18, because: "18 builtin modules after Phase 2.3.6~ 💖");
     }
 
     /// <summary>
-    /// <see cref="BuiltinModules.GetAll"/> should return all 16 builtin modules~ 📦
+    /// <see cref="BuiltinModules.GetAll"/> should return all 18 builtin modules~ 📦
     /// Phase 2.2.1 added builtin.condition and builtin.switch~ 🔀🔢
     /// Phase 2.2.2 added loop modules~ 🔁
     /// Phase 2.2.3a added builtin.parallel~ 🌐
     /// Phase 2.2.3b added builtin.fanout and builtin.fanin~ 🔀🔁
     /// Phase 2.2.4 added builtin.trycatch and builtin.throw~ 🛡️💥
+    /// Phase 2.3.0 added builtin.http.request~ 🌐
+    /// Phase 2.3.6 added builtin.http.webhook~ 🪝
     /// </summary>
     [Fact]
     public void GetAll_ShouldReturnFiveModules()
     {
         var modules = BuiltinModules.GetAll();
-        modules.Should().HaveCount(16, because: "16 builtin modules after Phase 2.2.4~ 💖");
+        modules.Should().HaveCount(18, because: "18 builtin modules after Phase 2.3.6~ 💖");
         modules.Select(m => m.ModuleId).Should().BeEquivalentTo(
             "builtin.passthrough", "builtin.log", "builtin.delay",
             "builtin.setvariable", "builtin.getvariable",
@@ -106,16 +113,19 @@ public sealed class BuiltinModuleIntegrationTests
             "builtin.break", "builtin.continue",
             "builtin.parallel",
             "builtin.fanout", "builtin.fanin",
-            "builtin.trycatch", "builtin.throw");
+            "builtin.trycatch", "builtin.throw",
+            "builtin.http.request", "builtin.http.webhook");
     }
 
     /// <summary>
-    /// <see cref="ModuleDiscovery"/> should auto-discover all 16 builtin modules from the assembly~ 🔍
+    /// <see cref="ModuleDiscovery"/> should auto-discover all 18 builtin modules from the assembly~ 🔍
     /// Phase 2.2.1 added condition and switch modules~ 🔀🔢
     /// Phase 2.2.2 added loop modules~ 🔁
     /// Phase 2.2.3a added builtin.parallel~ 🌐
     /// Phase 2.2.3b added fanout and fanin modules~ 🔀🔁
     /// Phase 2.2.4 added trycatch and throw modules~ 🛡️💥
+    /// Phase 2.3.0 added builtin.http.request~ 🌐
+    /// Phase 2.3.6 added builtin.http.webhook~ 🪝
     /// </summary>
     [Fact]
     public void ModuleDiscovery_ShouldFindAllBuiltinModules()
@@ -139,6 +149,8 @@ public sealed class BuiltinModuleIntegrationTests
         types.Should().Contain(typeof(FanInModule), "Phase 2.2.3b fanin module must be discovered~ 🔁");
         types.Should().Contain(typeof(TryCatchModule), "Phase 2.2.4 trycatch module must be discovered~ 🛡️");
         types.Should().Contain(typeof(ThrowModule), "Phase 2.2.4 throw module must be discovered~ 💥");
+        types.Should().Contain(typeof(HttpRequestModule), "Phase 2.3.0 http.request must be discovered~ 🌐");
+        types.Should().Contain(typeof(WebhookTriggerModule), "Phase 2.3.6 http.webhook must be discovered~ 🪝");
     }
 
     #endregion

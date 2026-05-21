@@ -38,6 +38,9 @@ using Workflow.Modules.Builtin.Http;
 /// Phase 2.3.0: Added HTTP request module — <c>builtin.http.request</c>~ 🌐
 /// (requires <c>services.AddWorkflowModules()</c> at host startup for <c>IHttpClientFactory</c>)
 /// </para>
+/// <para>
+/// Phase 2.3.6: Added webhook trigger module — <c>builtin.http.webhook</c>~ 🪝
+/// </para>
 /// </remarks>
 public static class BuiltinModules
 {
@@ -76,6 +79,9 @@ public static class BuiltinModules
 
         // Phase 2.3.0 — HTTP request module~ 🌐
         new HttpRequestModule(),
+
+        // Phase 2.3.6 — Webhook trigger module~ 🪝
+        new WebhookTriggerModule(),
     };
 
     /// <summary>
