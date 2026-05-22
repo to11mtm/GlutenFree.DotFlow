@@ -6,6 +6,7 @@ namespace Workflow.Api.Webhooks;
 
 using System;
 using System.Linq;
+using LanguageExt;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -117,12 +118,35 @@ public static class WebhookEndpoints
             return Results.BadRequest(new { error = "WorkflowDefinitionId must not be Guid.Empty." });
         }
 
+        // 🔒 Phase 2.3.7 — Validate signature scheme at registration time~
+        if (req.SignatureScheme is { Length: > 0 })
+        {
+            if (string.IsNullOrWhiteSpace(req.SecretKey))
+            {
+                return Results.BadRequest(new { error = "SecretKey is required when SignatureScheme is specified." });
+            }
+
+            if (!WebhookSignatureValidatorRegistry.IsKnownScheme(req.SignatureScheme))
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"Unknown signature scheme '{req.SignatureScheme}'. Known schemes: hmac-sha256, github, stripe.",
+                });
+            }
+        }
+
         var registration = WebhookRegistration.Create(
             req.WebhookId,
             req.WorkflowDefinitionId,
             req.AllowedMethods) with
         {
             Enabled = req.Enabled ?? true,
+            SecretKey = req.SecretKey is { Length: > 0 } sk
+                ? Option<string>.Some(sk)
+                : Option<string>.None,
+            SignatureScheme = req.SignatureScheme is { Length: > 0 } ss
+                ? Option<string>.Some(ss)
+                : Option<string>.None,
         };
 
         var result = await repo.RegisterAsync(registration, ct).ConfigureAwait(false);
@@ -163,6 +187,23 @@ public static class WebhookEndpoints
             return Results.NotFound(new { error = $"Webhook '{webhookId}' not found." });
         }
 
+        // 🔒 Phase 2.3.7 — Validate signature scheme on update too~
+        if (req.SignatureScheme is { Length: > 0 })
+        {
+            if (string.IsNullOrWhiteSpace(req.SecretKey))
+            {
+                return Results.BadRequest(new { error = "SecretKey is required when SignatureScheme is specified." });
+            }
+
+            if (!WebhookSignatureValidatorRegistry.IsKnownScheme(req.SignatureScheme))
+            {
+                return Results.BadRequest(new
+                {
+                    error = $"Unknown signature scheme '{req.SignatureScheme}'. Known schemes: hmac-sha256, github, stripe.",
+                });
+            }
+        }
+
         var updated = WebhookRegistration.Create(
             webhookId,
             req.WorkflowDefinitionId == Guid.Empty ? existing.WorkflowDefinitionId : req.WorkflowDefinitionId,
@@ -170,6 +211,12 @@ public static class WebhookEndpoints
         {
             Enabled = req.Enabled ?? existing.Enabled,
             CreatedAt = existing.CreatedAt,
+            SecretKey = req.SecretKey is { Length: > 0 } sk
+                ? Option<string>.Some(sk)
+                : existing.SecretKey,
+            SignatureScheme = req.SignatureScheme is { Length: > 0 } ss
+                ? Option<string>.Some(ss)
+                : existing.SignatureScheme,
         };
 
         var result = await repo.UpdateAsync(updated, ct).ConfigureAwait(false);
@@ -199,9 +246,18 @@ public static class WebhookEndpoints
 /// <param name="WorkflowDefinitionId">Workflow to run when the webhook fires.</param>
 /// <param name="AllowedMethods">Optional HTTP methods (default <c>["POST"]</c>).</param>
 /// <param name="Enabled">Whether the webhook is active (default <c>true</c>).</param>
+/// <param name="SecretKey">
+/// Optional HMAC secret — required when <paramref name="SignatureScheme"/> is set~ 🔒.
+/// </param>
+/// <param name="SignatureScheme">
+/// Optional signature scheme: <c>"hmac-sha256"</c>, <c>"github"</c>, or <c>"stripe"</c>~ 🔐.
+/// When set, trigger requests that fail signature validation are rejected with 401 Unauthorized.
+/// </param>
 public sealed record RegisterWebhookRequest(
     string WebhookId,
     Guid WorkflowDefinitionId,
     string[]? AllowedMethods = null,
-    bool? Enabled = null);
+    bool? Enabled = null,
+    string? SecretKey = null,
+    string? SignatureScheme = null);
 

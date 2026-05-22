@@ -91,6 +91,12 @@ public sealed record WebhookRegistration(
             errors.Add("AllowedMethods must contain at least one HTTP method.");
         }
 
+        // 🔒 Phase 2.3.7 — Scheme without a secret key is a misconfiguration~
+        if (SignatureScheme.IsSome && SecretKey.IsNone)
+        {
+            errors.Add("SignatureScheme requires a SecretKey — cannot validate signatures without a secret.");
+        }
+
         return errors;
     }
 }

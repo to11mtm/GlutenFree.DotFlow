@@ -394,7 +394,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.6 Webhook Trigger Module + API Surface 🪝
+## 2.3.6 Webhook Trigger Module + API Surface 🪝 ✅ **(May 21, 2026)**
 
 > **Purpose:** Inbound side — let workflows be **triggered** by external HTTP POSTs. New module + API endpoint + registration repository~ 💖
 
@@ -406,66 +406,72 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ### Tasks
 
-- [ ] **`WebhookRegistration` model** 📋
-  - [ ] New file: `Workflow.Core/Models/WebhookRegistration.cs`
-  - [ ] Fields: `WebhookId` (string), `WorkflowDefinitionId` (Guid), `AllowedMethods` (`Arr<string>`), `SecretKey` (Option<string>), `SignatureScheme` (`Option<string>`), `CreatedAt`, `Enabled`
+- [x] **`WebhookRegistration` model** 📋 ✅
+  - [x] New file: `Workflow.Core/Models/WebhookRegistration.cs`
+  - [x] Fields: `WebhookId` (string), `WorkflowDefinitionId` (Guid), `AllowedMethods` (`Arr<string>`), `SecretKey` (Option<string>), `SignatureScheme` (`Option<string>`), `CreatedAt`, `Enabled`
+  - [x] `static WebhookRegistration Create(webhookId, workflowDefinitionId, allowedMethods?)` — default POST, `AllowedMethods` normalised to UPPER-CASE via `ToUpperInvariant()`
+  - [x] `IReadOnlyList<string> Validate()` — non-empty ID, non-empty Guid, non-empty methods list
 
-- [ ] **`IWebhookRegistrationRepository`** 💾
-  - [ ] New file: `Workflow.Persistence/Abstractions/IWebhookRegistrationRepository.cs`
-  - [ ] CRUD: `RegisterAsync`, `UpdateAsync`, `DeleteAsync`, `GetAsync(webhookId)`, `ListAsync()`
-  - [ ] Default impl: `InMemoryWebhookRegistrationRepository`
-  - [ ] Add to `IPersistenceProvider` interface as optional `Webhooks` property *(or new provider slot)*
-  - [ ] SQLite impl: `Workflow.Persistence.Sqlite/SqliteWebhookRegistrationRepository.cs` + migration
+- [x] **`IWebhookRegistrationRepository`** 💾 ✅
+  - [x] New file: `Workflow.Persistence/Abstractions/IWebhookRegistrationRepository.cs`
+  - [x] CRUD: `RegisterAsync`, `UpdateAsync`, `DeleteAsync`, `GetAsync(webhookId)`, `ListAsync()`
+  - [x] `WebhookRegistrationResult` discriminated record: `Ok(reg)` / `Conflict(webhookId)` / `NotFound(webhookId)`
+  - [x] Default impl: `InMemoryWebhookRegistrationRepository` — `ConcurrentDictionary<string, WebhookRegistration>` with `StringComparer.OrdinalIgnoreCase`
+  - [ ] ~~Add to `IPersistenceProvider` interface as optional `Webhooks` property~~ — **deferred**: `IPersistenceProvider` is shared across ALL persistence backends; webhook registration is scoped to the API host for now. Wire up when a full persistence provider plugin story lands in Phase 4~
+  - [ ] ~~SQLite impl: `Workflow.Persistence.Sqlite/SqliteWebhookRegistrationRepository.cs` + migration~~ — **deferred to 2.3.8** when end-to-end persistence tests are written (in-memory impl is sufficient for 2.3.6 feature set)~
 
-- [ ] **Webhook API endpoints** 🌐
-  - [ ] New file: `Workflow.Api/Webhooks/WebhookDispatcher.cs` — encapsulates lookup + dispatch (forward-compat for 2.3.P1)
-  - [ ] New file: `Workflow.Api/Webhooks/IWebhookResponseStrategy.cs` + `Async202ResponseStrategy` (default impl, forward-compat for 2.3.P2)
-  - [ ] New file: `Workflow.Api/Controllers/WebhooksController.cs` *(or minimal-API mapping in `Program.cs`)*
-  - [ ] `POST /webhooks/{webhookId}` — trigger endpoint *(see 2.3.7 for signature validation)*
-    - [ ] Delegate to `WebhookDispatcher.DispatchAsync(webhookId, HttpRequest, responseStrategy)`
-    - [ ] Dispatcher: lookup registration → check method allowed → kick off execution via `WorkflowSupervisor.CreateWorkflowInstance` → hand off to response strategy
-    - [ ] Default strategy returns `202 Accepted` with `{ executionId }`
-  - [ ] `POST /api/webhooks` — register
-  - [ ] `GET /api/webhooks` — list
-  - [ ] `GET /api/webhooks/{webhookId}` — fetch one
-  - [ ] `PUT /api/webhooks/{webhookId}` — update
-  - [ ] `DELETE /api/webhooks/{webhookId}` — delete
+- [x] **Webhook API endpoints** 🌐 ✅
+  - [x] New file: `Workflow.Api/Webhooks/WebhookDispatcher.cs` — encapsulates lookup + dispatch (forward-compat for 2.3.P1)
+  - [x] New file: `Workflow.Api/Webhooks/IWebhookResponseStrategy.cs` + `Async202ResponseStrategy` (default impl, forward-compat for 2.3.P2)
+  - [x] New file: `Workflow.Api/Webhooks/IWorkflowLauncher.cs` + `NullWorkflowLauncher` *(stub returning `Guid.NewGuid()` — replaced by `ActorWorkflowLauncher` in 2.3.8)*
+  - [x] New file: `Workflow.Api/Webhooks/WebhookEndpoints.cs` — **minimal-API** extension method `MapWebhookEndpoints(this IEndpointRouteBuilder)` *(preferred over controller class for cleaner DI/testing)*
+  - [x] `ANY /webhooks/{webhookId}` — trigger endpoint *(methods: GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS; see 2.3.7 for signature validation)*
+    - [x] Delegate to `WebhookDispatcher.DispatchAsync(webhookId, HttpContext, responseStrategy)`
+    - [x] Dispatcher: lookup registration → check method allowed → parse body → populate `__webhook__` input bag → `IWorkflowLauncher.LaunchAsync` → respond via `IWebhookResponseStrategy`
+    - [x] Default strategy returns `202 Accepted` with `{ executionId }`
+  - [x] `POST /api/webhooks` — register
+  - [x] `GET /api/webhooks` — list
+  - [x] `GET /api/webhooks/{webhookId}` — fetch one
+  - [x] `PUT /api/webhooks/{webhookId}` — update
+  - [x] `DELETE /api/webhooks/{webhookId}` — delete
+  - [x] `Workflow.Api/Program.cs` — added 4 DI registrations + `app.MapWebhookEndpoints()` call
+  - [x] `Workflow.Api/ProgramPublic.cs` — added `public partial class Program {}` to expose `Program` type for `WebApplicationFactory<Program>` in tests
 
-- [ ] **`WebhookTriggerModule`** 🪝
-  - [ ] New file: `Workflow.Modules/Builtin/Http/WebhookTriggerModule.cs`
-  - [ ] `ModuleId: "builtin.http.webhook"`, `Category: "Triggers"`, `Icon: "🪝"`
-  - [ ] Schema:
-    - [ ] Properties: `webhookId` (string, required) — must match a registration
-    - [ ] Outputs: `body` (object), `headers` (`HashMap<string,string>`), `query` (`HashMap<string,string>`), `method` (string), `receivedAt` (`DateTimeOffset`)
-  - [ ] Execution: this module is a **trigger node** — when the workflow is started by the webhook controller, the inputs are pre-populated; the module just passes them through to outputs
+- [x] **`WebhookTriggerModule`** 🪝 ✅
+  - [x] New file: `Workflow.Modules/Builtin/Http/WebhookTriggerModule.cs`
+  - [x] `ModuleId: "builtin.http.webhook"`, `Category: "Triggers"`, `Icon: "🪝"`
+  - [x] Schema:
+    - [x] Properties: `webhookId` (string, required) — must match a registration
+    - [x] Outputs: `body` (object), `headers` (`HashMap<string,string>`), `query` (`HashMap<string,string>`), `method` (string), `receivedAt` (`DateTimeOffset`)
+  - [x] Execution: trigger node — inputs pre-populated by dispatcher via `__webhook__` key; module unpacks to named output ports. Returns empty outputs when key absent (unit tests pass without full DI stack)
 
-- [ ] **Triggered workflow inputs convention** 📨
-  - [ ] Webhook controller calls `CreateWorkflowInstance` with `inputs = { "__webhook__": { body, headers, query, method, receivedAt } }`
-  - [ ] `WebhookTriggerModule.ExecuteAsync` reads `ctx.Inputs["__webhook__"]` → unpacks to outputs
+- [x] **Triggered workflow inputs convention** 📨 ✅
+  - [x] Webhook dispatcher calls `IWorkflowLauncher.LaunchAsync` with `inputs = { "__webhook__": { body, headers, query, method, receivedAt } }`
+  - [x] `WebhookTriggerModule.ExecuteAsync` reads `ctx.Inputs["__webhook__"]` as `IDictionary<string,object?>` → unpacks to 5 output ports
 
-### Tests (target ~12): → `Workflow.Tests/Modules/Http/WebhookTriggerModuleTests.cs`, `Workflow.Tests/Api/WebhookApiTests.cs`
+### Tests (target ~12): → `Workflow.Tests/Modules/Http/WebhookTriggerModuleTests.cs`, `Workflow.Tests/Api/WebhookApiTests.cs` ✅ **12/12 passing (May 21, 2026)**
 
 **Unit (5):**
-- [ ] `WebhookTriggerModule_Metadata_IsCorrect`
-- [ ] `WebhookTriggerModule_Schema_HasCorrectPorts`
-- [ ] `WebhookTriggerModule_WithWebhookInputs_PopulatesOutputs`
-- [ ] `WebhookTriggerModule_WithoutWebhookInputs_OutputsAreEmpty`
-- [ ] `WebhookRegistration_ValidationRules`
+- [x] `WebhookTriggerModule_Metadata_IsCorrect` ✅
+- [x] `WebhookTriggerModule_Schema_HasCorrectPorts` ✅
+- [x] `WebhookTriggerModule_WithWebhookInputs_PopulatesOutputs` ✅
+- [x] `WebhookTriggerModule_WithoutWebhookInputs_OutputsAreEmpty` ✅
+- [x] `WebhookRegistration_ValidationRules` ✅
 
 **Registration repository (3):**
-- [ ] `InMemoryRepository_RegisterAndGet_RoundTrips`
-- [ ] `InMemoryRepository_DuplicateId_ReturnsConflictError`
-- [ ] `InMemoryRepository_Delete_RemovesEntry`
+- [x] `InMemoryRepository_RegisterAndGet_RoundTrips` ✅
+- [x] `InMemoryRepository_DuplicateId_ReturnsConflictError` ✅
+- [x] `InMemoryRepository_Delete_RemovesEntry` ✅
 
-**API integration (4 — via `WebAplicationFactory<Program>`):**
-- [ ] `RegisterWebhook_ReturnsCreated`
-- [ ] `PostToRegisteredWebhook_TriggersWorkflow_Returns202`
-- [ ] `PostToUnknownWebhook_Returns404`
-- [ ] `PostWithDisallowedMethod_Returns405`
+**API integration (4 — via `WebApplicationFactory<Program>`, `SpyWorkflowLauncher` DI override):**
+- [x] `RegisterWebhook_ReturnsCreated` ✅
+- [x] `PostToRegisteredWebhook_TriggersWorkflow_Returns202` ✅
+- [x] `PostToUnknownWebhook_Returns404` ✅
+- [x] `PostWithDisallowedMethod_Returns405` ✅
 
 ---
 
-## 2.3.7 Webhook Signature Validation 🔒
+## 2.3.7 Webhook Signature Validation 🔒 ✅ **(May 21, 2026)**
 
 > **Purpose:** Secure webhook endpoints against forged requests. Support generic HMAC + named provider shapes (GitHub, Stripe)~ 🛡️
 
@@ -473,31 +479,43 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ### Tasks
 
-- [ ] **Signature scheme registry** 🔧
-  - [ ] New file: `Workflow.Api/Webhooks/IWebhookSignatureValidator.cs`
-  - [ ] Built-in implementations:
-    - [ ] `HmacSha256SignatureValidator` — generic: header name + secret + hex/base64 encoding
-    - [ ] `GitHubSignatureValidator` — `X-Hub-Signature-256: sha256={hex}`
-    - [ ] `StripeSignatureValidator` — `Stripe-Signature: t={timestamp},v1={hex}` *(includes timestamp tolerance check)*
-  - [ ] Resolved by `signatureScheme` string on `WebhookRegistration` (`"hmac-sha256"`, `"github"`, `"stripe"`)
+- [x] **Signature scheme registry** 🔧 ✅
+  - [x] New file: `Workflow.Api/Webhooks/IWebhookSignatureValidator.cs`
+  - [x] `SignatureValidationResult` sealed record: `Valid()` / `Invalid(reason)` factory methods — uses `CryptographicOperations.FixedTimeEquals` internally, reason is logged but NOT sent to caller~ 🛡️
+  - [x] Built-in implementations:
+    - [x] `HmacSha256SignatureValidator` — `X-Signature: {lowercase-hex}` (default header for generic HMAC-SHA256)
+    - [x] `GitHubSignatureValidator` — `X-Hub-Signature-256: sha256={hex}`
+    - [x] `StripeSignatureValidator` — `Stripe-Signature: t={timestamp},v1={hex}` *(includes timestamp tolerance check, default 5 min)*
+  - [x] `WebhookSignatureValidatorRegistry` static registry — `Resolve(scheme)` + `IsKnownScheme(scheme)`
+  - [x] Resolved by `signatureScheme` string on `WebhookRegistration` (`"hmac-sha256"`, `"github"`, `"stripe"`)
 
-- [ ] **Validation in controller** 🛡️
-  - [ ] Before triggering workflow, validator runs against raw request body + headers
-  - [ ] Mismatch → `401 Unauthorized` + log + don't trigger
-  - [ ] Missing `SecretKey` on registration but `SignatureScheme` set → registration-time validation failure
+- [x] **Validation in dispatcher** 🛡️ ✅
+  - [x] `WebhookDispatcher.DispatchAsync` refactored: body read as **raw bytes** first (step 3), BEFORE JSON parsing — hash functions operate on wire bytes~ 🔒
+  - [x] Step 4 (NEW): if `registration.SignatureScheme.IsSome` → `WebhookSignatureValidatorRegistry.Resolve(scheme)` → `validator.Validate(headers, rawBytes, secret, registration)`
+  - [x] Mismatch / missing header → `401 Unauthorized` + internal log + don't trigger (failure reason logged but NOT echoed to caller to prevent oracle attacks)
+  - [x] Unknown scheme on a stored registration → fail-safe `401` + error log (guards against bad data escaping registration-time checks)
 
-- [ ] **Replay protection** ⏰
-  - [ ] Stripe-style timestamp tolerance (default 5 minutes — configurable per registration)
+- [x] **Registration-time validation** 📋 ✅
+  - [x] `RegisterWebhookRequest` DTO updated: `SecretKey` (string?, optional) + `SignatureScheme` (string?, optional)
+  - [x] `RegisterWebhookHandler` + `UpdateWebhookHandler` validate: unknown scheme → `400 Bad Request` *(uses `WebhookSignatureValidatorRegistry.IsKnownScheme`)*
+  - [x] `RegisterWebhookHandler` + `UpdateWebhookHandler` validate: scheme set but no secret → `400 Bad Request`
+  - [x] `WebhookRegistration.Validate()` updated: `SignatureScheme.IsSome && SecretKey.IsNone` → validation error
 
-### Tests (target ~7): → `Workflow.Tests/Api/WebhookSignatureTests.cs`
+- [x] **Replay protection** ⏰ ✅
+  - [x] `StripeSignatureValidator` checks `DateTimeOffset.UtcNow - eventTime > tolerance`
+  - [x] Default tolerance: `TimeSpan.FromMinutes(5)` (matches Stripe's recommended default)
+  - [x] Events outside tolerance → `401` + reason includes age + tolerance in seconds
+  - [ ] ~~Configurable per-registration tolerance~~ — **deferred**: `WebhookRegistration` doesn't yet have a `TimestampToleranceSeconds` field; the validator constructor accepts an override for testing; per-registration config is a 2.3.P2/future concern~
 
-- [ ] `HmacSha256_ValidSignature_Passes`
-- [ ] `HmacSha256_InvalidSignature_Rejected`
-- [ ] `HmacSha256_MissingHeader_Rejected`
-- [ ] `GitHub_ValidSignature_Passes`
-- [ ] `Stripe_ValidSignatureWithinTolerance_Passes`
-- [ ] `Stripe_ExpiredTimestamp_Rejected`
-- [ ] `UnknownScheme_RejectedAtRegistration`
+### Tests (target ~7): → `Workflow.Tests/Api/WebhookSignatureTests.cs` ✅ **7/7 passing (May 21, 2026)**
+
+- [x] `HmacSha256_ValidSignature_Passes` ✅
+- [x] `HmacSha256_InvalidSignature_Rejected` ✅
+- [x] `HmacSha256_MissingHeader_Rejected` ✅
+- [x] `GitHub_ValidSignature_Passes` ✅
+- [x] `Stripe_ValidSignatureWithinTolerance_Passes` ✅
+- [x] `Stripe_ExpiredTimestamp_Rejected` ✅
+- [x] `UnknownScheme_RejectedAtRegistration` ✅
 
 ---
 
@@ -748,17 +766,17 @@ and merges the results into a single object output~ 🌸
 ## Phase 2.3 Deliverables ✅
 
 **V1 (MVP) Completion Criteria:**
-- [ ] 2.3.0 shipped: `HttpRequestModule` core (GET/POST/JSON minimum) + DI infra + `AddWorkflowModules()` aggregate registration
+- [x] 2.3.0 shipped: `HttpRequestModule` core (GET/POST/JSON minimum) + DI infra + `AddWorkflowModules()` aggregate registration ✅ **(May 19, 2026)**
 - [x] 2.3.1 shipped: form/multipart-byte[]/XML/raw body + content-type-aware response decoding ✅ **(May 19, 2026)**
 - [x] 2.3.2 shipped: Basic, Bearer, API Key auth + header redaction ✅ **(May 19, 2026)**
 - [x] 2.3.3 shipped: OAuth2 client credentials + selectable `module`/`pipeline` token cache scope + refresh-on-401 ✅ **(May 19, 2026)**
-- [ ] 2.3.4 shipped: Polly retry + timeout + circuit breaker + Retry-After honouring (capped by `maxRetryBackoffSeconds`)
+- [x] 2.3.4 shipped: Polly retry + timeout + circuit breaker + Retry-After honouring (capped by `maxRetryBackoffSeconds`) ✅ **(May 19, 2026)**
 - [x] 2.3.5 shipped: URL templating + JSONPath/regex/header response extraction ✅ **(May 20, 2026)**
-- [ ] 2.3.6 shipped: `WebhookTriggerModule` + `IWebhookRegistrationRepository` + `WebhookDispatcher` + `IWebhookResponseStrategy` (default async-202) + API endpoints
-- [ ] 2.3.7 shipped: HMAC/GitHub/Stripe signature validation + replay protection
+- [x] 2.3.6 shipped: `WebhookTriggerModule` + `IWebhookRegistrationRepository` (`InMemory` default) + `WebhookDispatcher` + `IWebhookResponseStrategy` (async-202) + `IWorkflowLauncher` (stub) + minimal-API endpoints ✅ **(May 21, 2026)** *(SQLite repo + `IPersistenceProvider` slot deferred to 2.3.8)*
+- [x] 2.3.7 shipped: HMAC/GitHub/Stripe signature validation + replay protection + registration-time scheme check ✅ **(May 21, 2026)**
 - [ ] 2.3.8 shipped: end-to-end demo + persistence test + `docs/http-and-network.md`
-- [ ] Modules: `builtin.http.request`, `builtin.http.webhook`
-- [ ] ~82 unit + integration tests passing across 2.3.0–2.3.8 (2.3.0 ~10 + 2.3.1 ~8 + 2.3.2 ~9 + 2.3.3 ~10 + 2.3.4 ~11 + **2.3.5 ✅ 8/8** + 2.3.6 ~12 + 2.3.7 ~7 + 2.3.8 ~4) — **60 passing so far**
+- [x] Modules: `builtin.http.request` ✅, `builtin.http.webhook` ✅ — both registered in `BuiltinModuleRegistration.GetAll()` (18 total builtin modules)
+- [ ] ~82 unit + integration tests passing across 2.3.0–2.3.8 (2.3.0 ✅ 13/13 + 2.3.1 ✅ 9/9 + 2.3.2 ✅ 9/9 + 2.3.3 ✅ 10/10 + 2.3.4 ✅ 11/11 + 2.3.5 ✅ 8/8 + 2.3.6 ✅ 12/12 + **2.3.7 ✅ 7/7** + 2.3.8 ~4) — **79 passing so far** 🎉
 - [ ] XML docs + `docs/http-and-network.md`
 - [ ] Sample workflow runs end-to-end on persistence + API stack
 
@@ -774,64 +792,67 @@ and merges the results into a single object output~ 🌸
 **New / Modified Files (planned):**
 ```
 Workflow.Core/
-  Models/WebhookRegistration.cs                         ← new (2.3.6)
+  Models/WebhookRegistration.cs                         ← new (2.3.6) ✅
 
 Workflow.Modules/
-  WorkflowModulesServiceCollectionExtensions.cs         ← new (2.3.0) — aggregate AddWorkflowModules()
+  WorkflowModulesServiceCollectionExtensions.cs         ← new (2.3.0) ✅ — aggregate AddWorkflowModules()
 
 Workflow.Modules/Builtin/Http/
-  HttpRequestModule.cs                                  ← new (2.3.0, extended in 2.3.1–2.3.5)
-  WebhookTriggerModule.cs                               ← new (2.3.6)
-  HttpModuleServiceCollectionExtensions.cs              ← new (2.3.0)
-  Internal/RequestBodyEncoder.cs                        ← new (2.3.1)
-  Internal/ResponseBodyDecoder.cs                       ← new (2.3.1)
-  Internal/JsonPathExtractor.cs                         ← new (2.3.5)
-  Auth/IHttpAuthStrategy.cs (+ Basic/Bearer/ApiKey)     ← new (2.3.2)
-  Auth/OAuth2ClientCredentialsStrategy.cs               ← new (2.3.3)
-  Auth/IOAuth2TokenCache.cs                             ← new (2.3.3)
-  Auth/PerModuleOAuth2TokenCache.cs                     ← new (2.3.3)
-  Auth/PerPipelineOAuth2TokenCache.cs                   ← new (2.3.3)
-  Resilience/HttpResiliencePipelineFactory.cs           ← new (2.3.4)
+  HttpRequestModule.cs                                  ← new (2.3.0) ✅, extended in 2.3.1–2.3.5
+  WebhookTriggerModule.cs                               ← new (2.3.6) ✅
+  HttpModuleServiceCollectionExtensions.cs              ← new (2.3.0) ✅
+  Internal/RequestBodyEncoder.cs                        ← new (2.3.1) ✅
+  Internal/ResponseBodyDecoder.cs                       ← new (2.3.1) ✅
+  Internal/JsonPathExtractor.cs                         ← new (2.3.5) ✅
+  Auth/IHttpAuthStrategy.cs (+ Basic/Bearer/ApiKey)     ← new (2.3.2) ✅
+  Auth/OAuth2ClientCredentialsStrategy.cs               ← new (2.3.3) ✅
+  Auth/IOAuth2TokenCache.cs                             ← new (2.3.3) ✅
+  Auth/PerModuleOAuth2TokenCache.cs                     ← new (2.3.3) ✅
+  Auth/PerPipelineOAuth2TokenCache.cs                   ← new (2.3.3) ✅
+  Resilience/HttpResiliencePipelineFactory.cs           ← new (2.3.4) ✅
 
 Workflow.Persistence/
-  Abstractions/IWebhookRegistrationRepository.cs        ← new (2.3.6)
-  InMemoryWebhookRegistrationRepository.cs              ← new (2.3.6)
+  Abstractions/IWebhookRegistrationRepository.cs        ← new (2.3.6) ✅
+  Abstractions/InMemoryWebhookRegistrationRepository.cs ← new (2.3.6) ✅
+  [IPersistenceProvider webhook slot]                   ← deferred (see 2.3.6 notes)
 
 Workflow.Persistence.Sqlite/
-  SqliteWebhookRegistrationRepository.cs                ← new (2.3.6)
-  Migrations/Migration_005_Webhooks.cs                  ← new (2.3.6)
+  SqliteWebhookRegistrationRepository.cs                ← deferred to 2.3.8
+  Migrations/Migration_005_Webhooks.cs                  ← deferred to 2.3.8
 
 Workflow.Api/
-  Controllers/WebhooksController.cs                     ← new (2.3.6)
-  Webhooks/WebhookDispatcher.cs                         ← new (2.3.6) — forward-compat for 2.3.P1
-  Webhooks/IWebhookResponseStrategy.cs                  ← new (2.3.6) — forward-compat for 2.3.P2
-  Webhooks/Async202ResponseStrategy.cs                  ← new (2.3.6)
-  Webhooks/IWebhookSignatureValidator.cs (+ impls)      ← new (2.3.7)
-  Program.cs                                            ← + AddHttpModules (2.3.0)
+  ProgramPublic.cs                                      ← new (2.3.6) ✅ — exposes Program for WebApplicationFactory<Program>
+  Webhooks/WebhookDispatcher.cs                         ← new (2.3.6) ✅ — forward-compat for 2.3.P1
+  Webhooks/IWebhookResponseStrategy.cs (+ Async202)     ← new (2.3.6) ✅ — forward-compat for 2.3.P2
+  Webhooks/IWorkflowLauncher.cs (+ NullWorkflowLauncher)← new (2.3.6) ✅ — stub; replaced by ActorWorkflowLauncher in 2.3.8
+  Webhooks/WebhookEndpoints.cs                          ← new (2.3.6) ✅ — minimal-API MapWebhookEndpoints() (not controller); extended in 2.3.7 with SecretKey/SignatureScheme fields
+  Webhooks/IWebhookSignatureValidator.cs (+ impls)      ← new (2.3.7) ✅ — HmacSha256 + GitHub + Stripe + WebhookSignatureValidatorRegistry
+  Program.cs                                            ← + AddHttpModules (2.3.0) ✅, + webhook DI (2.3.6) ✅
 
 Workflow.Tests/Modules/Http/
-  HttpRequestModuleTests.cs                             ← new (2.3.0)
-  HttpBodyFormatTests.cs                                ← new (2.3.1)
-  HttpAuthTests.cs                                      ← new (2.3.2)
-  OAuth2Tests.cs                                        ← new (2.3.3)
-  HttpRetryTests.cs                                     ← new (2.3.4)
-  HttpTransformationTests.cs                            ← new (2.3.5)
-  WebhookTriggerModuleTests.cs                          ← new (2.3.6)
+  HttpRequestModuleTests.cs                             ← new (2.3.0) ✅
+  HttpBodyFormatTests.cs                                ← new (2.3.1) ✅
+  HttpAuthTests.cs                                      ← new (2.3.2) ✅
+  OAuth2Tests.cs                                        ← new (2.3.3) ✅
+  HttpRetryTests.cs                                     ← new (2.3.4) ✅
+  HttpTransformationTests.cs                            ← new (2.3.5) ✅
+  WebhookTriggerModuleTests.cs                          ← new (2.3.6) ✅
   HttpPersistenceTests.cs                               ← new (2.3.8)
   HttpE2ETests.cs                                       ← new (2.3.8)
 
 Workflow.Tests/Api/
-  WebhookApiTests.cs                                    ← new (2.3.6)
-  WebhookSignatureTests.cs                              ← new (2.3.7)
+  WebhookApiTests.cs                                    ← new (2.3.6) ✅
+  WebhookSignatureTests.cs                              ← new (2.3.7) ✅
 
 docs/http-and-network.md                                ← new (2.3.8)
 examples/definitions/http-integration-demo.json         ← new (2.3.8)
 
 Directory.Packages.props
-  + WireMock.Net                                        (test dependency)
-  + Microsoft.Extensions.Http                           (2.3.0)
-  + Polly.Core                                          (2.3.4)
-  + JsonPath.Net                                        (2.3.5)
+  + WireMock.Net                                        (test dependency) ✅
+  + Microsoft.Extensions.Http                           (2.3.0) ✅
+  + Polly.Core                                          (2.3.4) ✅
+  + JsonPath.Net                                        (2.3.5) ✅
+  + Microsoft.AspNetCore.Mvc.Testing                    (2.3.6) ✅
 
 Post-MVP additions (deferred):
   Workflow.Modules/Builtin/Http/GraphQLQueryModule.cs   ← new (2.3.P6)

@@ -17,8 +17,8 @@ using Microsoft.Extensions.Logging;
 using Workflow.Persistence.Abstractions;
 
 /// <summary>
-/// 🪝 Phase 2.3.6 — Encapsulates webhook lookup, method validation, payload assembly, workflow
-/// launch, and HTTP response via <see cref="IWebhookResponseStrategy"/>~ ✨💖.
+/// 🪝 Phase 2.3.6/2.3.7 — Encapsulates webhook lookup, method validation, signature validation,
+/// payload assembly, workflow launch, and HTTP response via <see cref="IWebhookResponseStrategy"/>~ ✨💖.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -30,6 +30,11 @@ using Workflow.Persistence.Abstractions;
 /// <para>
 /// CopilotNote: The <c>__webhook__</c> input convention must be kept stable — the
 /// <c>builtin.http.webhook</c> trigger module depends on it~ 🌸
+/// </para>
+/// <para>
+/// CopilotNote (2.3.7): Raw bytes are always buffered BEFORE signature validation — the
+/// HMAC is computed over the wire bytes, not the deserialised object. Never validate
+/// against the parsed body~ 🔒
 /// </para>
 /// </remarks>
 public sealed class WebhookDispatcher
@@ -92,35 +97,79 @@ public sealed class WebhookDispatcher
             return;
         }
 
-        // 3️⃣ Read + parse the request body~
-        object? body = null;
+        // 3️⃣ Buffer raw body bytes — must happen before signature validation AND before JSON parse~
+        // CopilotNote: EnableBuffering() switches to a FileBufferingReadStream if body > threshold;
+        // reset Position=0 after each read so downstream processing starts from the beginning~ 🧠
+        var rawBodyBytes = Array.Empty<byte>();
         try
         {
             context.Request.EnableBuffering();
-            using var reader = new StreamReader(context.Request.Body, Encoding.UTF8, leaveOpen: true);
-            var rawBody = await reader.ReadToEndAsync(ct).ConfigureAwait(false);
+            using var ms = new MemoryStream();
+            await context.Request.Body.CopyToAsync(ms, ct).ConfigureAwait(false);
+            rawBodyBytes = ms.ToArray();
             context.Request.Body.Position = 0;
-
-            if (!string.IsNullOrEmpty(rawBody))
-            {
-                try
-                {
-                    using var doc = JsonDocument.Parse(rawBody);
-                    body = JsonElementToObject(doc.RootElement);
-                }
-                catch (JsonException)
-                {
-                    // Non-JSON body — pass as raw string~
-                    body = rawBody;
-                }
-            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning("🪝 Could not read request body for webhook '{WebhookId}': {Error}~", webhookId, ex.Message);
+            _logger.LogWarning(
+                "🪝 Could not read request body for webhook '{WebhookId}': {Error}~",
+                webhookId, ex.Message);
         }
 
-        // 4️⃣ Build the __webhook__ input payload~
+        // 4️⃣ 🔒 Phase 2.3.7 — Signature validation (when scheme is configured)~
+        if (registration.SignatureScheme.IsSome)
+        {
+            var scheme = registration.SignatureScheme.IfNone(string.Empty);
+            var secret = registration.SecretKey.IfNone(string.Empty);
+
+            var validator = WebhookSignatureValidatorRegistry.Resolve(scheme);
+            if (validator is null)
+            {
+                // Misconfigured registration slipped through — fail safe, log, return 401~
+                _logger.LogError(
+                    "🔒 Unknown signature scheme '{Scheme}' on webhook '{WebhookId}' — failing safe~ 🛡️",
+                    scheme, webhookId);
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsJsonAsync(
+                    new { error = "Webhook signature validation failed." }, ct).ConfigureAwait(false);
+                return;
+            }
+
+            var result = validator.Validate(context.Request.Headers, rawBodyBytes, secret, registration);
+            if (!result.IsValid)
+            {
+                // Log the reason internally but DON'T surface it to the caller (timing oracle)~
+                _logger.LogWarning(
+                    "🔒 Signature validation failed for webhook '{WebhookId}' (scheme '{Scheme}'): {Reason}~",
+                    webhookId, scheme, result.FailureReason);
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                await context.Response.WriteAsJsonAsync(
+                    new { error = "Webhook signature validation failed." }, ct).ConfigureAwait(false);
+                return;
+            }
+
+            _logger.LogDebug(
+                "🔒 Signature validated for webhook '{WebhookId}' via scheme '{Scheme}'~ ✅",
+                webhookId, scheme);
+        }
+
+        // 5️⃣ Parse body from raw bytes (JSON or string fallback)~
+        object? body = null;
+        if (rawBodyBytes.Length > 0)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(rawBodyBytes);
+                body = JsonElementToObject(doc.RootElement);
+            }
+            catch (JsonException)
+            {
+                // Non-JSON body — pass as raw string~
+                body = Encoding.UTF8.GetString(rawBodyBytes);
+            }
+        }
+
+        // 6️⃣ Build the __webhook__ input payload~
         var flatHeaders = context.Request.Headers
             .ToDictionary(h => h.Key, h => h.Value.ToString(), StringComparer.OrdinalIgnoreCase);
         var flatQuery = context.Request.Query
@@ -137,14 +186,14 @@ public sealed class WebhookDispatcher
 
         var inputs = new Dictionary<string, object?> { ["__webhook__"] = webhookPayload };
 
-        // 5️⃣ Launch the workflow~
+        // 7️⃣ Launch the workflow~
         var executionId = await _launcher.LaunchAsync(registration, inputs, ct).ConfigureAwait(false);
 
         _logger.LogInformation(
             "🪝 Webhook '{WebhookId}' triggered → execution {ExecutionId} for workflow {WorkflowId}~",
             webhookId, executionId, registration.WorkflowDefinitionId);
 
-        // 6️⃣ Delegate to response strategy (V1 default = 202 Accepted)~
+        // 8️⃣ Delegate to response strategy (V1 default = 202 Accepted)~
         await responseStrategy.RespondAsync(context, executionId, ct).ConfigureAwait(false);
     }
 
