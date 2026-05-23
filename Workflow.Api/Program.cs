@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using Akka.Actor;
 using Workflow.Api.Webhooks;
 using Workflow.Core.Abstractions;
+using Workflow.Engine.Actors;
 using Workflow.Engine.Services;
 using Workflow.Modules;
 using Workflow.Modules.Builtin.Http;
@@ -17,20 +19,35 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddSingleton<IExecutionStateStore, InMemoryExecutionStateStore>();
 
-// 🧮 Expression Evaluators (Phase 2.2.5)~ — default: Jint (JS/ES2020); opt-in fallback: DynamicExpresso (C#)
+//  Expression Evaluators (Phase 2.2.5)~ — default: Jint (JS/ES2020); opt-in fallback: DynamicExpresso (C#)
 builder.Services.AddSingleton<IExpressionEvaluator, JintExpressionEvaluator>();
 builder.Services.AddKeyedSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>("csharp");
 builder.Services.AddSingleton<IExpressionEvaluatorFactory, KeyedExpressionEvaluatorFactory>();
 
-// 🌐 HTTP built-in modules (Phase 2.3.0)~ — IHttpClientFactory named client "dotflow.http"
+//  HTTP built-in modules (Phase 2.3.0)~ — IHttpClientFactory named client "dotflow.http"
 // (was: builder.Services.AddHttpModules(); — now aggregated under AddWorkflowModules)
 builder.Services.AddWorkflowModules();
 
-// 🪝 Webhook services (Phase 2.3.6)~ — registration repository + dispatcher + response strategy
+//  Webhook services (Phase 2.3.6/2.3.9)~ — registration repository + dispatcher + response strategy
+// CopilotNote (2.3.9): IWebhookRegistrationRepository is registered here as InMemory default.
+// If a persistence provider with Webhooks support (e.g. SQLite) is configured, it is swapped in
+// AFTER persistenceProvider is built (see after BuildPersistenceProvider call below)~
 builder.Services.AddSingleton<IWebhookRegistrationRepository, InMemoryWebhookRegistrationRepository>();
-builder.Services.AddSingleton<IWorkflowLauncher, NullWorkflowLauncher>();      // replaced in 2.3.8 with ActorWorkflowLauncher~
 builder.Services.AddSingleton<IWebhookResponseStrategy, Async202ResponseStrategy>();
 builder.Services.AddSingleton<WebhookDispatcher>();
+
+//  Akka actor system + WorkflowSupervisor (Phase 2.3.9)~
+// CopilotNote: The factory runs lazily on first IWorkflowLauncher resolution so the full DI
+// container (including IWorkflowRepository) is available at that point~
+builder.Services.AddSingleton(sp =>
+{
+    var system = ActorSystem.Create("dotflow");
+    // CopilotNote: WorkflowSupervisor.Props(sp) captures the root IServiceProvider — safe for
+    // singleton actors that live for the process lifetime~
+    var supervisorRef = system.ActorOf(WorkflowSupervisor.Props(sp), "workflow-supervisor");
+    return new WorkflowSupervisorActorRef(supervisorRef);
+});
+builder.Services.AddSingleton<IWorkflowLauncher, ActorWorkflowLauncher>();  // 2.3.9 — replaces NullWorkflowLauncher~
 
 var persistenceProvider = BuildPersistenceProvider(builder.Configuration);
 if (persistenceProvider is not null)
@@ -47,6 +64,14 @@ if (persistenceProvider is not null)
     {
         builder.Services.AddSingleton<IBlobStore>(sp => sp.GetRequiredService<IPersistenceProvider>().Blobs!);
     }
+
+    //  Phase 2.3.9 — If the persistence provider supports webhook persistence, use it~
+    // CopilotNote: Swap out the InMemory default registered above with the provider's repo.
+    // This keeps the DI registration order clean and avoids requiring providers to register themselves~
+    if (persistenceProvider.Webhooks is not null)
+    {
+        builder.Services.AddSingleton<IWebhookRegistrationRepository>(persistenceProvider.Webhooks);
+    }
 }
 
 var app = builder.Build();
@@ -59,7 +84,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// 🪝 Phase 2.3.6 — Webhook trigger + management endpoints~
+//  Phase 2.3.6 — Webhook trigger + management endpoints~
 app.MapWebhookEndpoints();
 
 if (persistenceProvider is not null)

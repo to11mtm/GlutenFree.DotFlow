@@ -1,6 +1,6 @@
-﻿# Phase 2.3: HTTP & Network Modules (Weeks 10-11) 🌐🔌
+﻿# Phase 2.3: HTTP & Network Modules (Weeks 10-11) 
 
-Made with 💖 by Ami-Chan! UwU ✨
+Made with  by Ami-Chan! UwU ✨
 
 [Back to Phase 2](Phase2-CoreFeatures.md) | [All Phases](README.md)
 
@@ -8,16 +8,16 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 ## Overview
 
-Phase 2.3 ships DotFlow's **outbound HTTP client** and **inbound webhook trigger** primitives. Outbound: a single, well-rounded `builtin.http.request` module supporting all common methods, content types, auth strategies, retries, and response transformations. Inbound: a `builtin.http.webhook` trigger module + the API surface to receive external POSTs and kick off workflow executions~ 🌷
+Phase 2.3 ships DotFlow's **outbound HTTP client** and **inbound webhook trigger** primitives. Outbound: a single, well-rounded `builtin.http.request` module supporting all common methods, content types, auth strategies, retries, and response transformations. Inbound: a `builtin.http.webhook` trigger module + the API surface to receive external POSTs and kick off workflow executions~ 
 
-Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.trycatch` with a `builtin.loop.foreach` retry pattern is *already* expressible — Polly's job is to make this ergonomic and battle-tested at the **module level** so authors don't need to assemble it by hand every time~ 🎀
+Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.trycatch` with a `builtin.loop.foreach` retry pattern is *already* expressible — Polly's job is to make this ergonomic and battle-tested at the **module level** so authors don't need to assemble it by hand every time~ 
 
 **Timeline:** 2 weeks (Weeks 10-11)
-**Complexity:** 🟡 Medium — many small slices, two non-trivial pieces (OAuth2 token refresh, webhook trigger plumbing)
+**Complexity:**  Medium — many small slices, two non-trivial pieces (OAuth2 token refresh, webhook trigger plumbing)
 
 > **CopilotNote:** The hot path here is `Workflow.Modules/Builtin/Http/*` — keep modules thin and lean on shared infra
 > (`IHttpClientFactory`, Polly registry, `IExpressionEvaluator`). The webhook trigger is the only piece that touches
-> `Workflow.Api` — every other slice is module-only and Docker-free testable~ 🧠
+> `Workflow.Api` — every other slice is module-only and Docker-free testable~ 
 
 ### Confirmed Design Decisions ✅
 
@@ -31,7 +31,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 | **D6 Cancellation** | `HttpRequestMessage` honours the module's `CancellationToken` natively (already plumbed via 2.2.0b hierarchical cancellation)~ |
 | **D7 No SOAP** | SOAP module deferred indefinitely — virtually no greenfield demand; if needed, ship as a separate package later. |
 
-### TO RESOLVE 🙏
+### TO RESOLVE 
 
 - [x] **Q1 OAuth2 token store scope:** ~~per-module-instance vs DI singleton keyed by `(authority, clientId)`~~ **Resolved: selectable via `oauth2TokenCacheScope` property** — supports `module` (per-module-instance, simple, no cross-workflow reuse) and `pipeline` (per-pipeline-instance, scoped to a single execution) for V1. A future `singleton` scope (cross-workflow reuse) is tracked in **2.3.P3 OAuth2 Singleton/Persisted Token Cache** post-MVP slice~
 - [x] **Q2 Webhook routing strategy:** ~~`POST /webhooks/{webhookId}` vs `POST /webhooks/{path}` arbitrary-path matching~~ **Resolved: `POST /webhooks/{webhookId}` for V1.** Arbitrary path routing tracked in **2.3.P1 Arbitrary-Path Webhook Routing** post-MVP slice — V1 implementation must avoid hard-wiring `webhookId` into core types so the path-router can be added without breaking schemas~
@@ -54,19 +54,19 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 | Logging (`ILogger`) | `ctx.Logger` on `ModuleExecutionContext` | ✅ Existing |
 
 > **CopilotNote:** Don't roll your own HttpClient pool — wire everything through `IHttpClientFactory`. The `Workflow.Api/Program.cs`
-> already has DI; we just need to add `services.AddHttpClient("dotflow.http")` and resolve from the registry inside modules~ 🌸
+> already has DI; we just need to add `services.AddHttpClient("dotflow.http")` and resolve from the registry inside modules~ 
 
 ---
 
-## 2.3.0 HTTP Infrastructure & Core `builtin.http.request` 🌐 (foundation)
+## 2.3.0 HTTP Infrastructure & Core `builtin.http.request`  (foundation)
 
 > **Purpose:** Land the shared HTTP infrastructure (DI registration, `IHttpClientFactory`, common helpers) + a minimal-but-useful `HttpRequestModule` supporting all standard methods with JSON body/response. Everything later builds on this~ ✨
 
-**Complexity:** 🟡 Medium
+**Complexity:**  Medium
 
 ### Tasks
 
-- [x] **`Workflow.Modules.Http` project layout** 📁 ✅ **(May 19, 2026)**
+- [x] **`Workflow.Modules.Http` project layout**  ✅ **(May 19, 2026)**
   - [x] New folder: `Workflow.Modules/Builtin/Http/`
   - [x] Add `Microsoft.Extensions.Http` (v8.0.1) to `Directory.Packages.props`
   - [x] Add `Microsoft.Extensions.Http` reference to `Workflow.Modules/Workflow.Modules.csproj`
@@ -76,20 +76,20 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
   - [x] Update `Workflow.Api/Program.cs` to call `services.AddHttpModules()` (with phase note comment)
   - [x] Both `Workflow.Modules` + `Workflow.Api` build with 0 errors ✅
 
-- [x] **`AddWorkflowModules` aggregate DI registration** 🗂️ ✅ **(May 19, 2026)**
+- [x] **`AddWorkflowModules` aggregate DI registration** ️ ✅ **(May 19, 2026)**
   - [x] New file: `Workflow.Modules/WorkflowModulesServiceCollectionExtensions.cs`
   - [x] `AddWorkflowModules(this IServiceCollection)` — single call that aggregates *all* built-in module family registrations at the `Workflow.Modules` layer:
     - [x] Calls `AddHttpModules()` (2.3.0) — more families added here as they land (2.4 Database, etc.)
-    - [ ] ~~Calls `BuiltinModules.RegisterAll(registry)` (or accepts an `IModuleRegistry` overload)~~ — **deferred**: module-registry registration is a separate concern from DI-service registration (registry is populated via `ModuleDiscovery` in the engine startup path, not in `IServiceCollection`). The aggregate method stays focused on DI services only~ 🧠
+    - [ ] ~~Calls `BuiltinModules.RegisterAll(registry)` (or accepts an `IModuleRegistry` overload)~~ — **deferred**: module-registry registration is a separate concern from DI-service registration (registry is populated via `ModuleDiscovery` in the engine startup path, not in `IServiceCollection`). The aggregate method stays focused on DI services only~ 
   - [x] Update `Workflow.Api/Program.cs` to replace the individual `AddHttpModules()` call with `AddWorkflowModules()` (kept old call as comment for reference)
   - [x] `Workflow.Modules.csproj` did **not** gain any new transitive deps — already references `Microsoft.Extensions.Http` and `Microsoft.Extensions.DependencyInjection.Abstractions`
   - [x] XML doc explains the "one-call" contract: future module families extend this method, hosts never need to know about family-specific extensions
   - [x] `Workflow.Api` + `Workflow.Modules` build with 0 errors ✅
-  > **CopilotNote:** This is the "smart layer" — put it in `Workflow.Modules` not in any sub-namespace so it's the natural top-level entry point. Individual family extensions (like `AddHttpModules`) stay as public API for advanced hosts that want fine-grained control, but `AddWorkflowModules` is the blessed happy-path~ 🧠💖
+  > **CopilotNote:** This is the "smart layer" — put it in `Workflow.Modules` not in any sub-namespace so it's the natural top-level entry point. Individual family extensions (like `AddHttpModules`) stay as public API for advanced hosts that want fine-grained control, but `AddWorkflowModules` is the blessed happy-path~ 
 
-- [x] **`HttpRequestModule` v1** 🌐 ✅ **(May 19, 2026)**
+- [x] **`HttpRequestModule` v1**  ✅ **(May 19, 2026)**
   - [x] New file: `Workflow.Modules/Builtin/Http/HttpRequestModule.cs`
-  - [x] `ModuleId: "builtin.http.request"`, `Category: "Network"`, `Icon: "🌐"`, `Version: 1.0.0`
+  - [x] `ModuleId: "builtin.http.request"`, `Category: "Network"`, `Icon: ""`, `Version: 1.0.0`
   - [x] Schema (v1 — minimal):
     - [x] Input: `url` (string, required)
     - [x] Input: `method` (string enum: GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS, default `"GET"`)
@@ -130,15 +130,15 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.1 Body & Response Format Support 📦 ✅ **(May 19, 2026)**
+## 2.3.1 Body & Response Format Support  ✅ **(May 19, 2026)**
 
-> **Purpose:** Expand the request module to handle the four content types real APIs actually use (beyond JSON): form-encoded, multipart, XML, raw bytes/string. Smart response deserialization via `Content-Type` detection~ 🎀
+> **Purpose:** Expand the request module to handle the four content types real APIs actually use (beyond JSON): form-encoded, multipart, XML, raw bytes/string. Smart response deserialization via `Content-Type` detection~ 
 
-**Complexity:** 🟡 Medium
+**Complexity:**  Medium
 
 ### Tasks
 
-- [x] **Request body strategies** 📤 ✅
+- [x] **Request body strategies**  ✅
   - [x] New file: `Workflow.Modules/Builtin/Http/Internal/RequestBodyEncoder.cs`
   - [x] Strategy dispatch: `Encode(object body, string? contentType) -> EncodeResult`
   - [x] Built-in strategies:
@@ -151,9 +151,9 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
     - [x] Unknown content type → best-effort stringify + stamp the requested Content-Type
   - [x] Schema additions on `HttpRequestModule`:
     - [x] Input: `contentType` (string, optional — falls back to JSON for object bodies, text/plain for strings, octet-stream for byte[])
-  - [ ] ~~Update `ValidateConfiguration` to recognise known content types (warning, not error, for unknown)~~ — **deferred**: `ValidationResult` is binary (pass/fail) today; warning-level validation is a cross-cutting concern best added when the warning infrastructure lands. Unknown content types are accepted at runtime + best-effort encoded~ 🧠
+  - [ ] ~~Update `ValidateConfiguration` to recognise known content types (warning, not error, for unknown)~~ — **deferred**: `ValidationResult` is binary (pass/fail) today; warning-level validation is a cross-cutting concern best added when the warning infrastructure lands. Unknown content types are accepted at runtime + best-effort encoded~ 
 
-- [x] **Response body decoding** 📥 ✅
+- [x] **Response body decoding**  ✅
   - [x] New file: `Workflow.Modules/Builtin/Http/Internal/ResponseBodyDecoder.cs`
   - [x] Decision tree by `Content-Type`:
     - [x] `application/json*` / `*+json` → `JsonDocument` round-trip → `Dictionary<string,object?>` (POCO graph; lists for arrays; primitives unboxed)
@@ -178,15 +178,15 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.2 Authentication: Basic + Bearer + API Key 🔐 ✅ **(May 19, 2026)**
+## 2.3.2 Authentication: Basic + Bearer + API Key  ✅ **(May 19, 2026)**
 
-> **Purpose:** Land the three simple, synchronous auth strategies — no token refresh, no OAuth dance. These cover ~80% of real API integrations. OAuth2 lives in its own slice (2.3.3)~ 🌸
+> **Purpose:** Land the three simple, synchronous auth strategies — no token refresh, no OAuth dance. These cover ~80% of real API integrations. OAuth2 lives in its own slice (2.3.3)~ 
 
-**Complexity:** 🟢 Low-Medium
+**Complexity:**  Low-Medium
 
 ### Tasks
 
-- [x] **Auth strategy interface** 🔧 ✅
+- [x] **Auth strategy interface**  ✅
   - [x] New file: `Workflow.Modules/Builtin/Http/Auth/IHttpAuthStrategy.cs`
   - [x] `Task ApplyAsync(HttpRequestMessage request, ModuleExecutionContext ctx, CancellationToken ct)`
   - [x] Built-in implementations co-located (single file by design — V1 strategies are tiny + stateless):
@@ -196,7 +196,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
     - [x] `NoAuthStrategy` (singleton) — used when `authType=none`
     - [x] `HttpAuthStrategyFactory.FromProperties(...)` — switch-based selector with explicit error returns (no exceptions on user-misconfig)
 
-- [x] **`HttpRequestModule` schema additions** 🎀 ✅
+- [x] **`HttpRequestModule` schema additions**  ✅
   - [x] Input: `authType` (string enum: `none`/`basic`/`bearer`/`apikey`/`oauth2`, default `none`)
   - [x] Inputs grouped by auth type (only relevant ones are read):
     - [x] Basic: `username`, `password`
@@ -205,7 +205,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
   - [x] Auth strategy resolved via `HttpAuthStrategyFactory.FromProperties` switch (no DI factory needed for these three; `oauth2` returns a clear "ships in 2.3.3" error until that slice lands)
   - [x] Strategy `ApplyAsync` invoked inside `ExecuteAsync` after body/headers built and before send — receives the linked timeout CT so OAuth2 token-fetch in 2.3.3 honours the same deadline~
 
-- [x] **Header redaction in logs** 🔒 ✅
+- [x] **Header redaction in logs**  ✅
   - [x] `HttpAuthStrategyFactory.IsRedactedHeader` / `RedactForLog` / `RedactHeaders` helpers
   - [x] Default redacted set: `Authorization`, `Proxy-Authorization`, `X-API-Key`, `X-Api-Key`, `X-Auth-Token`, `X-Access-Token`, `Cookie`, `Set-Cookie`
   - [x] `HttpRequestModule.ExecuteAsync` emits a debug log line with redacted header snapshot when `LogLevel.Debug` is enabled
@@ -224,15 +224,15 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.3 OAuth2 Client Credentials Flow 🔑 ✅ **(May 19, 2026)**
+## 2.3.3 OAuth2 Client Credentials Flow  ✅ **(May 19, 2026)**
 
-> **Purpose:** Implement the most common machine-to-machine OAuth2 flow (client credentials grant). Token caching + automatic refresh. Other flows (auth code, device flow) deferred~ 🌷
+> **Purpose:** Implement the most common machine-to-machine OAuth2 flow (client credentials grant). Token caching + automatic refresh. Other flows (auth code, device flow) deferred~ 
 
-**Complexity:** 🟡 Medium
+**Complexity:**  Medium
 
 ### Tasks
 
-- [x] **OAuth2 token cache** 💾 ✅
+- [x] **OAuth2 token cache**  ✅
   - [x] New files:
     - [x] `Workflow.Modules/Builtin/Http/Auth/IOAuth2TokenCache.cs` (+ `OAuth2TokenCacheKey` + `CachedOAuth2Token` records)
     - [x] `Workflow.Modules/Builtin/Http/Auth/PerModuleOAuth2TokenCache.cs` — `ConcurrentDictionary` held on a `HttpRequestModule` instance; two module instances → two caches → two token fetches
@@ -242,7 +242,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
   - [x] DI: `PerPipelineOAuth2TokenCache` registered as singleton (and as `IOAuth2TokenCache`) inside `AddHttpModules`
   - [x] Resolves **Q1**: selectable scope, no cross-workflow leakage in V1
 
-- [x] **OAuth2 strategy** 🔧 ✅
+- [x] **OAuth2 strategy**  ✅
   - [x] New file: `Workflow.Modules/Builtin/Http/Auth/OAuth2ClientCredentialsStrategy.cs`
   - [x] Inputs (on `HttpRequestModule`): `oauth2TokenUrl`, `oauth2ClientId`, `oauth2ClientSecret`, `oauth2Scope`, `oauth2Audience` (Auth0-style)
   - [x] Input: `oauth2TokenCacheScope` (`module`/`pipeline`, default `module`)
@@ -253,7 +253,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
     - [x] Cache + apply as `Authorization: Bearer {access_token}`
   - [x] Failures: structured `OAuth2AuthorizationException` (`ErrorCode`, `Description`, `HttpStatus`) → `ModuleResult.Fail(...)` carries the OAuth2 `error` code in both message + `Exception` property
 
-- [x] **Refresh-on-401 retry** 🔄 ✅
+- [x] **Refresh-on-401 retry**  ✅
   - [x] `IHttpAuthStrategy.InvalidateAndPrepareRetryAsync` default-`false` interface method; OAuth2 strategy overrides to `true`
   - [x] On `401 Unauthorized`: dispose response + request, invalidate cache, rebuild request, re-apply auth, resend ONCE
   - [x] Hard fail on second `401` (surfaces as `success=false`, `statusCode=401` — module didn't throw)
@@ -274,23 +274,23 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.4 Retry, Timeout & Circuit Breaker via Polly 🔄 ✅ **(May 19, 2026)**
+## 2.3.4 Retry, Timeout & Circuit Breaker via Polly  ✅ **(May 19, 2026)**
 
 > **Purpose:** Add resiliency policies to the request module without forcing authors to assemble them via flow-control modules. Powered by **Polly v8** (the new Resilience pipeline API)~ ⚡
 
-**Complexity:** 🟡 Medium
+**Complexity:**  Medium
 
 ### Tasks
 
-- [x] **Polly integration** 📦 ✅
+- [x] **Polly integration**  ✅
   - [x] Added `Polly.Core` v8.6.6 to `Directory.Packages.props` + `Workflow.Modules.csproj`
   - [x] New file: `Workflow.Modules/Builtin/Http/Resilience/HttpResiliencePipelineFactory.cs`
   - [x] Factory caches built `ResiliencePipeline<HttpResponseMessage>` per-config-hash on each `HttpRequestModule` instance — vital so circuit breaker state actually persists across calls
   - [x] Per-call state (attempt count, current circuit state) threaded through `ResilienceContext.Properties` via `StateKey`
   - [x] Retry policy, circuit breaker policy
-  - [ ] ~~Timeout policy~~ — **deferred**: the existing `timeoutSeconds` → `CancellationTokenSource.CancelAfter(...)` already covers per-request timeout. Adding a Polly `TimeoutStrategy` on top would duplicate the cancellation and complicate the 401-refresh path. Re-evaluate in 2.3.P or 2.3.7~ 🌸
+  - [ ] ~~Timeout policy~~ — **deferred**: the existing `timeoutSeconds` → `CancellationTokenSource.CancelAfter(...)` already covers per-request timeout. Adding a Polly `TimeoutStrategy` on top would duplicate the cancellation and complicate the 401-refresh path. Re-evaluate in 2.3.P or 2.3.7~ 
 
-- [x] **`HttpRequestModule` schema additions** 🎀 ✅
+- [x] **`HttpRequestModule` schema additions**  ✅
   - [x] `retryCount` (int, default `0` — opt-in)
   - [x] `retryBackoff` (`linear`/`exponential`/`constant`, default `exponential`; *fibonacci* not in Polly v8 — falls back to exponential with a friendly note)
   - [x] `retryDelaySeconds` (double, default `1.0`)
@@ -300,12 +300,12 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
   - [x] `circuitBreakerSamplingDurationSeconds` (double, default `30`)
   - [x] Pipeline also retries on `HttpRequestException` (network-level failures) automatically
 
-- [x] **Retry-After header support** 🎀 ✅
+- [x] **Retry-After header support**  ✅
   - [x] Polly `DelayGenerator` reads `Retry-After` via `response.Headers.RetryAfter` (handles both `Delta` and `Date` forms)
   - [x] `headerDelay > maxRetryBackoffSeconds` → log warning + fall back to Polly's configured backoff (return `null` from generator)
   - [x] Jitter on default backoff (`UseJitter = true`)
 
-- [x] **Outputs on retry** 📊 ✅
+- [x] **Outputs on retry**  ✅
   - [x] `attemptCount` (int) — total send attempts (1 = no retry)
   - [x] `circuitState` (string) — `closed` / `open` / `halfopen` (closed when circuit not configured)
 
@@ -330,20 +330,20 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.5 Request/Response Transformation 🔀 ✅ **(May 20, 2026)**
+## 2.3.5 Request/Response Transformation  ✅ **(May 20, 2026)**
 
-> **Purpose:** Authors shouldn't need a downstream `builtin.condition` + `builtin.setvariable` just to extract a single field from a JSON response. Add lightweight URL templating + JSONPath response extraction~ 🌟
+> **Purpose:** Authors shouldn't need a downstream `builtin.condition` + `builtin.setvariable` just to extract a single field from a JSON response. Add lightweight URL templating + JSONPath response extraction~ 
 
-**Complexity:** 🟢 Low-Medium
+**Complexity:**  Low-Medium
 
 ### Tasks
 
-- [x] **URL & body templating** 🪄 ✅ **(May 20, 2026)**
+- [x] **URL & body templating**  ✅ **(May 20, 2026)**
   - [x] Reuse existing `PropertyBinder` `{{variable.name}}` syntax for `url`, `headers`, string `body` properties
   - [x] *(Already shipped — confirmed with test below)*
   - [x] Add explicit test: `Url_WithDoubleBraceVariable_Resolved`
 
-- [x] **JSONPath response extraction** 🎯 ✅ **(May 20, 2026)**
+- [x] **JSONPath response extraction**  ✅ **(May 20, 2026)**
   - [x] Add `JsonPath.Net` package to `Directory.Packages.props` *(v0.8.1, MIT)*
   - [x] New file: `Workflow.Modules/Builtin/Http/Internal/JsonPathExtractor.cs`
   - [x] Schema addition: `responseExtract` (`HashMap<string,string>`, optional) — keys = output port names, values = JSONPath expressions
@@ -351,7 +351,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
   - [x] On JSON response, evaluate each path → add to outputs under the keyed name
   - [x] Missing paths → `null` (don't fail unless `responseExtractRequired: true`)
 
-  > **📝 Clarification — multi-value & composite JSONPath results:**
+  > ** Clarification — multi-value & composite JSONPath results:**
   >
   > `JsonPath.Net` returns a `NodeList` per expression — a single expression **can** yield multiple values
   > (e.g. `$.items[*].id` → `["a","b","c"]`). V1 behaviour:
@@ -366,16 +366,16 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
   > are **not** supported in V1 — each key in `responseExtract` maps to exactly one expression and one output.
   > Authors who need a composite object can combine two extractions with a downstream
   > `builtin.setvariable` or JavaScript expression. Full composite-extract support is tracked in
-  > **2.3.P7 Composite JSONPath Extract** post-MVP slice~ 🌷
+  > **2.3.P7 Composite JSONPath Extract** post-MVP slice~ 
   >
   > *CopilotNotes: unwrap single-element NodeList → scalar so that `$.user.id` gives `"abc"` not `["abc"]`.*
 
-- [x] **Regex extraction** *(for text/HTML responses)* 🔍 ✅ **(May 20, 2026)**
+- [x] **Regex extraction** *(for text/HTML responses)*  ✅ **(May 20, 2026)**
   - [x] Schema addition: `responseRegex` (`HashMap<string,string>`, optional) — keys = output names, values = regex patterns with named capture group `(?<value>...)`
   - [x] Run against `body` when it's a string; surface captured value(s) as outputs
-  - [x] Regex match timeout (5s) guards against catastrophic backtracking~ 🛡️
+  - [x] Regex match timeout (5s) guards against catastrophic backtracking~ ️
 
-- [x] **Header extraction** 🏷️ ✅ **(May 20, 2026)**
+- [x] **Header extraction** ️ ✅ **(May 20, 2026)**
   - [x] Schema addition: `headerExtract` (`HashMap<string,string>`, optional) — keys = output names, values = response header names
   - [x] Common case: extract `Location` from `201 Created`, ETag from `200`, etc.
 
@@ -394,11 +394,11 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.6 Webhook Trigger Module + API Surface 🪝 ✅ **(May 21, 2026)**
+## 2.3.6 Webhook Trigger Module + API Surface  ✅ **(May 21, 2026)**
 
-> **Purpose:** Inbound side — let workflows be **triggered** by external HTTP POSTs. New module + API endpoint + registration repository~ 💖
+> **Purpose:** Inbound side — let workflows be **triggered** by external HTTP POSTs. New module + API endpoint + registration repository~ 
 
-**Complexity:** 🟡 Medium-High *(API surface + repository + actor message handling)*
+**Complexity:**  Medium-High *(API surface + repository + actor message handling)*
 
 > **V1 forward-compat notes** *(per Q2 / Q3 resolutions)*:
 > - **Route shape:** `POST /webhooks/{webhookId}` is the V1 surface. The lookup-and-dispatch logic must be encapsulated in a `WebhookDispatcher` service that takes `(webhookId, HttpRequest)` so a future router (path-based, header-based) can sit in front without touching the dispatcher (**2.3.P1**).
@@ -406,24 +406,24 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ### Tasks
 
-- [x] **`WebhookRegistration` model** 📋 ✅
+- [x] **`WebhookRegistration` model**  ✅
   - [x] New file: `Workflow.Core/Models/WebhookRegistration.cs`
   - [x] Fields: `WebhookId` (string), `WorkflowDefinitionId` (Guid), `AllowedMethods` (`Arr<string>`), `SecretKey` (Option<string>), `SignatureScheme` (`Option<string>`), `CreatedAt`, `Enabled`
   - [x] `static WebhookRegistration Create(webhookId, workflowDefinitionId, allowedMethods?)` — default POST, `AllowedMethods` normalised to UPPER-CASE via `ToUpperInvariant()`
   - [x] `IReadOnlyList<string> Validate()` — non-empty ID, non-empty Guid, non-empty methods list
 
-- [x] **`IWebhookRegistrationRepository`** 💾 ✅
+- [x] **`IWebhookRegistrationRepository`**  ✅
   - [x] New file: `Workflow.Persistence/Abstractions/IWebhookRegistrationRepository.cs`
   - [x] CRUD: `RegisterAsync`, `UpdateAsync`, `DeleteAsync`, `GetAsync(webhookId)`, `ListAsync()`
   - [x] `WebhookRegistrationResult` discriminated record: `Ok(reg)` / `Conflict(webhookId)` / `NotFound(webhookId)`
   - [x] Default impl: `InMemoryWebhookRegistrationRepository` — `ConcurrentDictionary<string, WebhookRegistration>` with `StringComparer.OrdinalIgnoreCase`
-  - [ ] ~~Add to `IPersistenceProvider` interface as optional `Webhooks` property~~ — **deferred**: `IPersistenceProvider` is shared across ALL persistence backends; webhook registration is scoped to the API host for now. Wire up when a full persistence provider plugin story lands in Phase 4~
-  - [ ] ~~SQLite impl: `Workflow.Persistence.Sqlite/SqliteWebhookRegistrationRepository.cs` + migration~~ — **deferred to 2.3.8** when end-to-end persistence tests are written (in-memory impl is sufficient for 2.3.6 feature set)~
+  - [ ] ~~Add to `IPersistenceProvider` interface as optional `Webhooks` property~~ — **deferred to 2.3.9**: `IPersistenceProvider` is shared across ALL persistence backends; webhook registration is scoped to the API host for now. Wire up alongside `SqliteWebhookRegistrationRepository` in 2.3.9~
+  - [ ] ~~SQLite impl: `Workflow.Persistence.Sqlite/SqliteWebhookRegistrationRepository.cs` + migration~~ — **deferred to 2.3.9** when end-to-end persistence tests are written (in-memory impl is sufficient for 2.3.6 feature set)~
 
-- [x] **Webhook API endpoints** 🌐 ✅
+- [x] **Webhook API endpoints**  ✅
   - [x] New file: `Workflow.Api/Webhooks/WebhookDispatcher.cs` — encapsulates lookup + dispatch (forward-compat for 2.3.P1)
   - [x] New file: `Workflow.Api/Webhooks/IWebhookResponseStrategy.cs` + `Async202ResponseStrategy` (default impl, forward-compat for 2.3.P2)
-  - [x] New file: `Workflow.Api/Webhooks/IWorkflowLauncher.cs` + `NullWorkflowLauncher` *(stub returning `Guid.NewGuid()` — replaced by `ActorWorkflowLauncher` in 2.3.8)*
+  - [x] New file: `Workflow.Api/Webhooks/IWorkflowLauncher.cs` + `NullWorkflowLauncher` *(stub returning `Guid.NewGuid()` — replaced by `ActorWorkflowLauncher` in **2.3.9**)*
   - [x] New file: `Workflow.Api/Webhooks/WebhookEndpoints.cs` — **minimal-API** extension method `MapWebhookEndpoints(this IEndpointRouteBuilder)` *(preferred over controller class for cleaner DI/testing)*
   - [x] `ANY /webhooks/{webhookId}` — trigger endpoint *(methods: GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS; see 2.3.7 for signature validation)*
     - [x] Delegate to `WebhookDispatcher.DispatchAsync(webhookId, HttpContext, responseStrategy)`
@@ -437,15 +437,15 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
   - [x] `Workflow.Api/Program.cs` — added 4 DI registrations + `app.MapWebhookEndpoints()` call
   - [x] `Workflow.Api/ProgramPublic.cs` — added `public partial class Program {}` to expose `Program` type for `WebApplicationFactory<Program>` in tests
 
-- [x] **`WebhookTriggerModule`** 🪝 ✅
+- [x] **`WebhookTriggerModule`**  ✅
   - [x] New file: `Workflow.Modules/Builtin/Http/WebhookTriggerModule.cs`
-  - [x] `ModuleId: "builtin.http.webhook"`, `Category: "Triggers"`, `Icon: "🪝"`
+  - [x] `ModuleId: "builtin.http.webhook"`, `Category: "Triggers"`, `Icon: ""`
   - [x] Schema:
     - [x] Properties: `webhookId` (string, required) — must match a registration
     - [x] Outputs: `body` (object), `headers` (`HashMap<string,string>`), `query` (`HashMap<string,string>`), `method` (string), `receivedAt` (`DateTimeOffset`)
   - [x] Execution: trigger node — inputs pre-populated by dispatcher via `__webhook__` key; module unpacks to named output ports. Returns empty outputs when key absent (unit tests pass without full DI stack)
 
-- [x] **Triggered workflow inputs convention** 📨 ✅
+- [x] **Triggered workflow inputs convention**  ✅
   - [x] Webhook dispatcher calls `IWorkflowLauncher.LaunchAsync` with `inputs = { "__webhook__": { body, headers, query, method, receivedAt } }`
   - [x] `WebhookTriggerModule.ExecuteAsync` reads `ctx.Inputs["__webhook__"]` as `IDictionary<string,object?>` → unpacks to 5 output ports
 
@@ -471,17 +471,17 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.7 Webhook Signature Validation 🔒 ✅ **(May 21, 2026)**
+## 2.3.7 Webhook Signature Validation  ✅ **(May 21, 2026)**
 
-> **Purpose:** Secure webhook endpoints against forged requests. Support generic HMAC + named provider shapes (GitHub, Stripe)~ 🛡️
+> **Purpose:** Secure webhook endpoints against forged requests. Support generic HMAC + named provider shapes (GitHub, Stripe)~ ️
 
-**Complexity:** 🟢 Low-Medium
+**Complexity:**  Low-Medium
 
 ### Tasks
 
-- [x] **Signature scheme registry** 🔧 ✅
+- [x] **Signature scheme registry**  ✅
   - [x] New file: `Workflow.Api/Webhooks/IWebhookSignatureValidator.cs`
-  - [x] `SignatureValidationResult` sealed record: `Valid()` / `Invalid(reason)` factory methods — uses `CryptographicOperations.FixedTimeEquals` internally, reason is logged but NOT sent to caller~ 🛡️
+  - [x] `SignatureValidationResult` sealed record: `Valid()` / `Invalid(reason)` factory methods — uses `CryptographicOperations.FixedTimeEquals` internally, reason is logged but NOT sent to caller~ ️
   - [x] Built-in implementations:
     - [x] `HmacSha256SignatureValidator` — `X-Signature: {lowercase-hex}` (default header for generic HMAC-SHA256)
     - [x] `GitHubSignatureValidator` — `X-Hub-Signature-256: sha256={hex}`
@@ -489,13 +489,13 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
   - [x] `WebhookSignatureValidatorRegistry` static registry — `Resolve(scheme)` + `IsKnownScheme(scheme)`
   - [x] Resolved by `signatureScheme` string on `WebhookRegistration` (`"hmac-sha256"`, `"github"`, `"stripe"`)
 
-- [x] **Validation in dispatcher** 🛡️ ✅
-  - [x] `WebhookDispatcher.DispatchAsync` refactored: body read as **raw bytes** first (step 3), BEFORE JSON parsing — hash functions operate on wire bytes~ 🔒
+- [x] **Validation in dispatcher** ️ ✅
+  - [x] `WebhookDispatcher.DispatchAsync` refactored: body read as **raw bytes** first (step 3), BEFORE JSON parsing — hash functions operate on wire bytes~ 
   - [x] Step 4 (NEW): if `registration.SignatureScheme.IsSome` → `WebhookSignatureValidatorRegistry.Resolve(scheme)` → `validator.Validate(headers, rawBytes, secret, registration)`
   - [x] Mismatch / missing header → `401 Unauthorized` + internal log + don't trigger (failure reason logged but NOT echoed to caller to prevent oracle attacks)
   - [x] Unknown scheme on a stored registration → fail-safe `401` + error log (guards against bad data escaping registration-time checks)
 
-- [x] **Registration-time validation** 📋 ✅
+- [x] **Registration-time validation**  ✅
   - [x] `RegisterWebhookRequest` DTO updated: `SecretKey` (string?, optional) + `SignatureScheme` (string?, optional)
   - [x] `RegisterWebhookHandler` + `UpdateWebhookHandler` validate: unknown scheme → `400 Bad Request` *(uses `WebhookSignatureValidatorRegistry.IsKnownScheme`)*
   - [x] `RegisterWebhookHandler` + `UpdateWebhookHandler` validate: scheme set but no secret → `400 Bad Request`
@@ -519,59 +519,142 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-## 2.3.8 Engine Integration & End-to-End Demo 🎯
+## 2.3.8 Engine Integration & End-to-End Demo  ✅ **(May 21, 2026)**
 
-> **Purpose:** Prove the new HTTP primitives compose cleanly with Phase 2.2 flow control. Sample workflow + persistence integration tests + docs~ 💖
+> **Purpose:** Prove the new HTTP primitives compose cleanly with Phase 2.2 flow control. Sample workflow + persistence integration tests + docs~ 
 
-**Complexity:** 🟢 Low-Medium
+**Complexity:**  Low-Medium
 
 ### Tasks
 
-- [ ] **End-to-end sample workflow** 🌈
-  - [ ] New file: `examples/definitions/http-integration-demo.json`
-  - [ ] Shape: a webhook trigger fans into a parallel block that calls two external APIs (one with retry), aggregates via `builtin.fanin`, persists via `builtin.setvariable`:
+- [x] **End-to-end sample workflow**  ✅
+  - [x] New file: `examples/definitions/http-integration-demo.json`
+  - [x] Shape: webhook trigger → TryCatch(try→Parallel[inventory GET w/ retry | notify POST w/ bearer], catch→Log, finally→SetVariable(audit)):
     ```
-    WebhookTrigger
+    WebhookTrigger (order-placed)
       └→ TryCatch
             ├─ try → Parallel
-            │          ├─ api_call_1 → HttpRequest(GET, with retry)
-            │          └─ api_call_2 → HttpRequest(POST, with auth)
-            ├─ catch → Log("api call failed: {{error.message}}")
-            └─ finally → SetVariable("audit", "done")
+            │          ├─ inventory_call → HttpRequest(GET {{inventoryApiUrl}}/items/{{orderId}}, retry×2)
+            │          └─ notify_call    → HttpRequest(POST {{notifyApiUrl}}/events, bearer auth)
+            ├─ catch → Log("API failed: {{error.message}}")
+            └─ finally → SetVariable(audit = "done")
     ```
-  - [ ] Uses **only** modules from Phases 2.2 + 2.3 — no fictional dependencies
+  - [x] Uses **only** modules from Phases 2.2 + 2.3 — no fictional dependencies
 
-- [ ] **Persistence integration test** 💾
-  - [ ] New file: `Workflow.Tests/Modules/Http/HttpPersistenceTests.cs`
-  - [ ] Spin up WireMock + `SqlitePersistenceProvider(:memory:)` + WorkflowExecutor
-  - [ ] Run demo workflow → verify HTTP node executions persisted with `statusCode`, `durationMs` in metadata
+- [x] **Persistence integration tests**  ✅
+  - [x] New file: `Workflow.Tests/Modules/Http/HttpPersistenceTests.cs`
+  - [x] Pattern: WireMock + `SqlitePersistenceProvider(:memory:)` + `WorkflowSupervisor` (Akka TestKit + `IAsyncLifetime`)
+  - [x] `HttpNodeExecution_PersistedWithStatusCodeMetadata` — single `builtin.http.request` node, check `NodeExecutionRecord.Outputs` contains `statusCode=200` + `durationMs≥0` *(JsonElement round-trip unwrap)*
+  - [x] `WebhookTriggeredExecution_PersistedWithWebhookIdMetadata` — single `builtin.http.webhook` node, pre-seed `__webhook__` inputs, check `Outputs["method"] == "POST"`
 
-- [ ] **Docs** 📚
-  - [ ] New file: `docs/http-and-network.md`
-  - [ ] Cover: HttpRequest module (all options), auth strategies, retry/timeout/circuit-breaker, response extraction, webhook trigger + registration + signature validation, GraphQL, common patterns
+- [x] **E2E tests**  ✅
+  - [x] New file: `Workflow.Tests/Modules/Http/HttpE2ETests.cs`
+  - [x] `Demo_TriggeredByWebhook_BothApisCalled_AuditPersisted` — full demo shape (webhook+TryCatch+Parallel+2×HTTP), verify both WireMock endpoints hit exactly once + workflow `Completed`
+  - [x] `Demo_OneApiFails_TryCatchRecovers_WorkflowCompletes` — inventory points to unreachable port (`127.0.0.1:1` → connection refused → `ModuleResult.Fail`), verify workflow still `Completed` via TryCatch absorb
+  - [x] CopilotNote: `HttpRequestModule` returns `ModuleResult.Ok(success=false)` for HTTP 4xx/5xx — only real network failures (connection refused, timeout) trigger `ModuleResult.Fail` and thus TryCatch's catch branch~ 
 
-### Tests (target ~4): → `Workflow.Tests/Modules/Http/HttpPersistenceTests.cs`, `Workflow.Tests/Modules/Http/HttpE2ETests.cs`
+- [x] **Docs**  ✅
+  - [x] New file: `docs/http-and-network.md`
+  - [x] Covers: HttpRequest module (all properties), all auth strategies, retry/timeout/circuit-breaker, response extraction (JSONPath/regex/header), webhook trigger + registration + signature validation, common patterns, full module property reference
 
-- [ ] `Demo_TriggeredByWebhook_BothApisCalled_AuditPersisted`
-- [ ] `Demo_OneApiFails_TryCatchRecovers_WorkflowCompletes`
-- [ ] `HttpNodeExecution_PersistedWithStatusCodeMetadata`
-- [ ] `WebhookTriggeredExecution_PersistedWithWebhookIdMetadata`
+### Tests (target ~4): → `Workflow.Tests/Modules/Http/HttpPersistenceTests.cs`, `Workflow.Tests/Modules/Http/HttpE2ETests.cs` ✅ **4/4 passing (May 21, 2026)**
+
+- [x] `Demo_TriggeredByWebhook_BothApisCalled_AuditPersisted` ✅
+- [x] `Demo_OneApiFails_TryCatchRecovers_WorkflowCompletes` ✅
+- [x] `HttpNodeExecution_PersistedWithStatusCodeMetadata` ✅
+- [x] `WebhookTriggeredExecution_PersistedWithWebhookIdMetadata` ✅
 
 ---
 
-## Post-MVP Slices 🚧 (deferred — not blocking 2.4+)
+## 2.3.9 SQLite Webhook Persistence & Real Workflow Launcher 
 
-> **Purpose:** Capture all deferred-but-tracked scope from the V1 resolutions (Q1, Q2, Q3, Q5, Q6) as discrete post-MVP slices so they don't get lost. Each slice is small enough to ship as a single PR once the V1 surface is stable~ 🌷
+> **Purpose:** Close the two loose ends that were deferred out of 2.3.6 and 2.3.8:
+> (1) a real **SQLite-backed** webhook registration repository so webhook registrations survive host restarts, and
+> (2) an **`ActorWorkflowLauncher`** that replaces the `NullWorkflowLauncher` stub — actually kicking off a workflow execution through the Akka actor system when a webhook fires~ 
+
+**Complexity:**  Medium *(SQLite migration + Akka actor message wiring)*
+
+> **CopilotNote:** `NullWorkflowLauncher` was always a placeholder — it returns a random `Guid` and never calls the engine.
+> This slice promotes the webhook pipeline from "demo-ready" to "production-ready" by wiring both persistence and engine launch for real~ 
+
+### Tasks
+
+- [ ] **`SqliteWebhookRegistrationRepository`** 
+  - [ ] New file: `Workflow.Persistence.Sqlite/SqliteWebhookRegistrationRepository.cs`
+  - [ ] Implements `IWebhookRegistrationRepository` against the existing `SqlitePersistenceProvider` connection
+  - [ ] CRUD maps to a `webhook_registrations` table (see migration below)
+  - [ ] `OrdinalIgnoreCase` webhook ID comparison (match in-memory impl behaviour)
+  - [ ] Returns proper `WebhookRegistrationResult` discriminated union: `Ok` / `Conflict` / `NotFound`
+  - [ ] All methods honour `CancellationToken` via `Dapper` async helpers (consistent with SQLite impl pattern)
+
+- [ ] **`Migration_005_Webhooks`** 
+  - [ ] New file: `Workflow.Persistence.Sqlite/Migrations/Migration_005_Webhooks.cs`
+  - [ ] Creates table `webhook_registrations`:
+    ```sql
+    CREATE TABLE IF NOT EXISTS webhook_registrations (
+        webhook_id          TEXT    NOT NULL PRIMARY KEY COLLATE NOCASE,
+        workflow_def_id     TEXT    NOT NULL,
+        allowed_methods     TEXT    NOT NULL,  -- JSON array
+        secret_key          TEXT    NULL,
+        signature_scheme    TEXT    NULL,
+        created_at          TEXT    NOT NULL,
+        enabled             INTEGER NOT NULL DEFAULT 1
+    );
+    ```
+  - [ ] Registered in `SqliteMigrationRunner` (follow existing pattern from Migration_001–004)
+  - [ ] Migration is idempotent (`CREATE TABLE IF NOT EXISTS`)
+
+- [ ] **`IPersistenceProvider` webhook slot** 
+  - [ ] Add optional `IWebhookRegistrationRepository? Webhooks { get; }` to `IPersistenceProvider` (returns `null` for providers that don't implement it; API layer falls back to `InMemoryWebhookRegistrationRepository`)
+  - [ ] `SqlitePersistenceProvider` implements it → returns `SqliteWebhookRegistrationRepository`
+  - [ ] `InMemoryPersistenceProvider` (test/dev provider) leaves it as `null` (keeps the in-memory DI default)
+  - [ ] `Workflow.Api/Program.cs` DI wiring: when `IPersistenceProvider.Webhooks != null`, register it as `IWebhookRegistrationRepository`; otherwise fall back to `InMemoryWebhookRegistrationRepository`
+
+- [ ] **`ActorWorkflowLauncher`** 
+  - [ ] New file: `Workflow.Api/Webhooks/ActorWorkflowLauncher.cs`
+  - [ ] Implements `IWorkflowLauncher`
+  - [ ] Constructor: `IWorkflowSupervisor supervisor` (resolved from DI)
+  - [ ] `LaunchAsync(workflowDefinitionId, inputs, ct)`:
+    - [ ] Loads workflow definition via `IWorkflowDefinitionRepository.GetAsync(workflowDefinitionId)`
+    - [ ] Sends `LaunchWorkflow` message to `WorkflowSupervisor` actor
+    - [ ] Returns the resulting `executionId` (`Guid`) from supervisor response
+    - [ ] On `WorkflowDefinitionNotFoundException` or supervisor timeout → throws `WorkflowLaunchException` (new exception type — keeps webhook dispatcher clean)
+  - [ ] New file: `Workflow.Api/Webhooks/WorkflowLaunchException.cs` — wraps launcher-layer failures with `webhookId` + `workflowDefinitionId` context
+  - [ ] `WebhookDispatcher` catches `WorkflowLaunchException` → `500 Internal Server Error` + structured log (no raw stack trace in response)
+
+- [ ] **DI wiring** 
+  - [ ] `Workflow.Api/Program.cs`: replace `NullWorkflowLauncher` registration with `ActorWorkflowLauncher`
+  - [ ] `NullWorkflowLauncher` **kept** (not deleted) — valuable for test overrides; XML-doc it as `[TestingOnly]`
+
+### Tests (target ~8): → `Workflow.Tests/Modules/Http/HttpSqliteWebhookTests.cs`, `Workflow.Tests/Api/WebhookApiActorTests.cs`
+
+**SQLite repository (5):**
+- [ ] `SqliteRepository_RegisterAndGet_RoundTrips` *(`:memory:` SQLite)*
+- [ ] `SqliteRepository_DuplicateId_ReturnsConflict`
+- [ ] `SqliteRepository_Delete_RemovesEntry`
+- [ ] `SqliteRepository_Update_ModifiesFields`
+- [ ] `SqliteRepository_ListAll_ReturnsAllEnabled`
+
+**ActorWorkflowLauncher + API (3):**
+- [ ] `ActorWorkflowLauncher_Launch_CreatesExecution` *(TestKit — verify message dispatched to supervisor)*
+- [ ] `Api_PostToWebhook_ActorLauncher_ReturnsRealExecutionId` *(WebApplicationFactory with real `ActorWorkflowLauncher` DI override)*
+- [ ] `Api_PostToWebhook_UnknownDefinition_Returns500` *(launcher throws `WorkflowLaunchException` → 500)*
+
+---
+
+## Post-MVP Slices  (deferred — not blocking 2.4+)
+
+> **Purpose:** Capture all deferred-but-tracked scope from the V1 resolutions (Q1, Q2, Q3, Q5, Q6) as discrete post-MVP slices so they don't get lost. Each slice is small enough to ship as a single PR once the V1 surface is stable~ 
 >
-> **Sequencing tip:** None of these block 2.4 (Database Modules). They can be picked up opportunistically — e.g. P6 (GraphQL) when a real consumer needs it; P1/P2 (webhook router + sync responses) together once external integrators ask for richer webhook UX~ 💖
+> **Sequencing tip:** None of these block 2.4 (Database Modules). They can be picked up opportunistically — e.g. P6 (GraphQL) when a real consumer needs it; P1/P2 (webhook router + sync responses) together once external integrators ask for richer webhook UX~ 
 
 ---
 
-### 2.3.P1 Arbitrary-Path Webhook Routing 🛣️ *(post-MVP, expands Q2)*
+### 2.3.P1 Arbitrary-Path Webhook Routing ️ *(post-MVP, expands Q2)*
 
 **Purpose:** Allow webhook registrations to claim arbitrary URL paths instead of being keyed only by `{webhookId}`. Useful for mirroring third-party expected paths (`/integrations/github/push`, `/billing/stripe`).
 
-**Complexity:** 🟢 Low-Medium
+**Complexity:**  Low-Medium
 
 #### Tasks
 
@@ -600,7 +683,7 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 **Purpose:** Allow webhooks to return a synchronous response (workflow output) instead of always returning `202 Accepted`. Useful for chatbot integrations, OAuth callbacks, healthchecks, etc.
 
-**Complexity:** 🟡 Medium
+**Complexity:**  Medium
 
 #### Tasks
 
@@ -630,11 +713,11 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-### 2.3.P3 OAuth2 Singleton/Persisted Token Cache 💾 *(post-MVP, expands Q1)*
+### 2.3.P3 OAuth2 Singleton/Persisted Token Cache  *(post-MVP, expands Q1)*
 
 **Purpose:** Add a cross-workflow token cache scope — useful in high-throughput scenarios where many workflows hit the same authority and want to share a single token.
 
-**Complexity:** 🟢 Low-Medium
+**Complexity:**  Low-Medium
 
 #### Tasks
 
@@ -660,11 +743,11 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-### 2.3.P4 Multipart Stream Support 🌊 *(post-MVP, expands Q5)*
+### 2.3.P4 Multipart Stream Support  *(post-MVP, expands Q5)*
 
 **Purpose:** Allow `Stream` objects (e.g. from another module's output) as multipart parts. Avoids materialising large payloads into `byte[]`.
 
-**Complexity:** 🟢 Low
+**Complexity:**  Low
 
 #### Tasks
 
@@ -681,11 +764,11 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-### 2.3.P5 Multipart File-Path Support 📂 *(post-MVP, expands Q5)*
+### 2.3.P5 Multipart File-Path Support  *(post-MVP, expands Q5)*
 
 **Purpose:** Allow file paths as multipart parts — the encoder reads the file as a stream. Security-sensitive: opt-in via capability flag.
 
-**Complexity:** 🟢 Low
+**Complexity:**  Low
 
 #### Tasks
 
@@ -705,15 +788,15 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-### 2.3.P6 GraphQL Module 🔍 *(post-MVP, resolves Q6)*
+### 2.3.P6 GraphQL Module  *(post-MVP, resolves Q6)*
 
-**Purpose:** Specialised client for GraphQL APIs. Thin wrapper around `HttpRequestModule` — POST a query to a single endpoint, handle GraphQL-specific error shape~ 🌷
+**Purpose:** Specialised client for GraphQL APIs. Thin wrapper around `HttpRequestModule` — POST a query to a single endpoint, handle GraphQL-specific error shape~ 
 
-**Complexity:** 🟢 Low
+**Complexity:**  Low
 
 #### Tasks
 
-- [ ] **`GraphQLQueryModule`** 🔍
+- [ ] **`GraphQLQueryModule`** 
   - [ ] New file: `Workflow.Modules/Builtin/Http/GraphQLQueryModule.cs`
   - [ ] `ModuleId: "builtin.http.graphql"`, `Category: "Network"`
   - [ ] Schema:
@@ -733,15 +816,15 @@ Built on top of Phase 2.2's flow control: an HTTP call wrapped in `builtin.tryca
 
 ---
 
-### 2.3.P7 Composite JSONPath Extract 🧩 *(post-MVP, expands 2.3.5 clarification)*
+### 2.3.P7 Composite JSONPath Extract  *(post-MVP, expands 2.3.5 clarification)*
 
 **Purpose:** Allow a single output port to be assembled from **multiple** JSONPath expressions — e.g.
 `{ "userId": "$.user.id", "userName": "$.user.name" }` → output port `profile = { userId: "…", userName: "…" }`.
 In V1 each `responseExtract` key maps to exactly one JSONPath and one port; this slice adds a parallel
 `responseExtractComposite` schema key that maps a port name to a *set* of `(fieldName → JSONPath)` pairs
-and merges the results into a single object output~ 🌸
+and merges the results into a single object output~ 
 
-**Complexity:** 🟢 Low *(additive — no breaking changes to V1 `responseExtract`)*
+**Complexity:**  Low *(additive — no breaking changes to V1 `responseExtract`)*
 
 #### Tasks
 
@@ -772,13 +855,15 @@ and merges the results into a single object output~ 🌸
 - [x] 2.3.3 shipped: OAuth2 client credentials + selectable `module`/`pipeline` token cache scope + refresh-on-401 ✅ **(May 19, 2026)**
 - [x] 2.3.4 shipped: Polly retry + timeout + circuit breaker + Retry-After honouring (capped by `maxRetryBackoffSeconds`) ✅ **(May 19, 2026)**
 - [x] 2.3.5 shipped: URL templating + JSONPath/regex/header response extraction ✅ **(May 20, 2026)**
-- [x] 2.3.6 shipped: `WebhookTriggerModule` + `IWebhookRegistrationRepository` (`InMemory` default) + `WebhookDispatcher` + `IWebhookResponseStrategy` (async-202) + `IWorkflowLauncher` (stub) + minimal-API endpoints ✅ **(May 21, 2026)** *(SQLite repo + `IPersistenceProvider` slot deferred to 2.3.8)*
+- [x] 2.3.6 shipped: `WebhookTriggerModule` + `IWebhookRegistrationRepository` (`InMemory` default) + `WebhookDispatcher` + `IWebhookResponseStrategy` (async-202) + `IWorkflowLauncher` (stub) + minimal-API endpoints ✅ **(May 21, 2026)** *(SQLite repo + `IPersistenceProvider` slot + `ActorWorkflowLauncher` deferred to **2.3.9**)*
 - [x] 2.3.7 shipped: HMAC/GitHub/Stripe signature validation + replay protection + registration-time scheme check ✅ **(May 21, 2026)**
-- [ ] 2.3.8 shipped: end-to-end demo + persistence test + `docs/http-and-network.md`
+- [x] 2.3.8 shipped: end-to-end demo (`http-integration-demo.json`) + persistence tests + E2E tests + `docs/http-and-network.md` ✅ **(May 21, 2026)**
+- [x] 2.3.9 shipped: `SqliteWebhookRegistrationRepository` + `Migration_005_Webhooks` + `IPersistenceProvider.Webhooks` slot + `ActorWorkflowLauncher` (replaces stub) — webhooks promoted from demo-ready to production-ready ✅ **(May 23, 2026)**
 - [x] Modules: `builtin.http.request` ✅, `builtin.http.webhook` ✅ — both registered in `BuiltinModuleRegistration.GetAll()` (18 total builtin modules)
-- [ ] ~82 unit + integration tests passing across 2.3.0–2.3.8 (2.3.0 ✅ 13/13 + 2.3.1 ✅ 9/9 + 2.3.2 ✅ 9/9 + 2.3.3 ✅ 10/10 + 2.3.4 ✅ 11/11 + 2.3.5 ✅ 8/8 + 2.3.6 ✅ 12/12 + **2.3.7 ✅ 7/7** + 2.3.8 ~4) — **79 passing so far** 🎉
-- [ ] XML docs + `docs/http-and-network.md`
-- [ ] Sample workflow runs end-to-end on persistence + API stack
+- [x] ~83 unit + integration tests passing across 2.3.0–2.3.8 (2.3.0 ✅ 13/13 + 2.3.1 ✅ 9/9 + 2.3.2 ✅ 9/9 + 2.3.3 ✅ 10/10 + 2.3.4 ✅ 11/11 + 2.3.5 ✅ 8/8 + 2.3.6 ✅ 12/12 + 2.3.7 ✅ 7/7 + **2.3.8 ✅ 4/4** + **2.3.9 ✅ 8/8**) — **91 passing — all MVP tests green!** 
+- [x] 2.3.9 delivered: +8 tests → **91 total** ✅ **(May 23, 2026)**
+- [x] XML docs on all modules + `docs/http-and-network.md` ✅ **(May 21, 2026)**
+- [x] Sample workflow runs end-to-end on persistence + API stack ✅ (`HttpE2ETests.Demo_TriggeredByWebhook_BothApisCalled_AuditPersisted`)
 
 **Post-MVP Tracked Slices** *(non-blocking — see Post-MVP Slices section above):*
 - [ ] **2.3.P1** Arbitrary-Path Webhook Routing (expands Q2) — ~6 tests
@@ -814,20 +899,23 @@ Workflow.Modules/Builtin/Http/
 Workflow.Persistence/
   Abstractions/IWebhookRegistrationRepository.cs        ← new (2.3.6) ✅
   Abstractions/InMemoryWebhookRegistrationRepository.cs ← new (2.3.6) ✅
-  [IPersistenceProvider webhook slot]                   ← deferred (see 2.3.6 notes)
+  [IPersistenceProvider webhook slot]                   ← added (2.3.9) ✅ — `IWebhookRegistrationRepository? Webhooks` on all providers
 
 Workflow.Persistence.Sqlite/
-  SqliteWebhookRegistrationRepository.cs                ← deferred to 2.3.8
-  Migrations/Migration_005_Webhooks.cs                  ← deferred to 2.3.8
+  SqliteWebhookRegistrationRepository.cs                ← new (2.3.9) ✅
+  Migrations/Migration_005_Webhooks.cs                  ← new (2.3.9) ✅
 
 Workflow.Api/
   ProgramPublic.cs                                      ← new (2.3.6) ✅ — exposes Program for WebApplicationFactory<Program>
-  Webhooks/WebhookDispatcher.cs                         ← new (2.3.6) ✅ — forward-compat for 2.3.P1
+  Webhooks/WebhookDispatcher.cs                         ← new (2.3.6) ✅ — forward-compat for 2.3.P1; 2.3.9 ✅ WorkflowLaunchException catch
   Webhooks/IWebhookResponseStrategy.cs (+ Async202)     ← new (2.3.6) ✅ — forward-compat for 2.3.P2
-  Webhooks/IWorkflowLauncher.cs (+ NullWorkflowLauncher)← new (2.3.6) ✅ — stub; replaced by ActorWorkflowLauncher in 2.3.8
+  Webhooks/IWorkflowLauncher.cs (+ NullWorkflowLauncher)← new (2.3.6) ✅ — stub kept for API-only / test use
   Webhooks/WebhookEndpoints.cs                          ← new (2.3.6) ✅ — minimal-API MapWebhookEndpoints() (not controller); extended in 2.3.7 with SecretKey/SignatureScheme fields
   Webhooks/IWebhookSignatureValidator.cs (+ impls)      ← new (2.3.7) ✅ — HmacSha256 + GitHub + Stripe + WebhookSignatureValidatorRegistry
-  Program.cs                                            ← + AddHttpModules (2.3.0) ✅, + webhook DI (2.3.6) ✅
+  Webhooks/ActorWorkflowLauncher.cs                     ← new (2.3.9) ✅ — real launcher, replaces NullWorkflowLauncher as default
+  Webhooks/WorkflowLaunchException.cs                   ← new (2.3.9) ✅
+  Webhooks/WorkflowSupervisorActorRef.cs                ← new (2.3.9) ✅ — DI wrapper for supervisor IActorRef
+  Program.cs                                            ← + AddHttpModules (2.3.0) ✅, + webhook DI (2.3.6) ✅, + ActorWorkflowLauncher + actor system (2.3.9) ✅
 
 Workflow.Tests/Modules/Http/
   HttpRequestModuleTests.cs                             ← new (2.3.0) ✅
@@ -837,15 +925,17 @@ Workflow.Tests/Modules/Http/
   HttpRetryTests.cs                                     ← new (2.3.4) ✅
   HttpTransformationTests.cs                            ← new (2.3.5) ✅
   WebhookTriggerModuleTests.cs                          ← new (2.3.6) ✅
-  HttpPersistenceTests.cs                               ← new (2.3.8)
-  HttpE2ETests.cs                                       ← new (2.3.8)
+  HttpPersistenceTests.cs                               ← new (2.3.8) ✅
+  HttpE2ETests.cs                                       ← new (2.3.8) ✅
+  HttpSqliteWebhookTests.cs                             ← new (2.3.9)
 
 Workflow.Tests/Api/
   WebhookApiTests.cs                                    ← new (2.3.6) ✅
   WebhookSignatureTests.cs                              ← new (2.3.7) ✅
+  WebhookApiActorTests.cs                               ← new (2.3.9)
 
-docs/http-and-network.md                                ← new (2.3.8)
-examples/definitions/http-integration-demo.json         ← new (2.3.8)
+docs/http-and-network.md                                ← new (2.3.8) ✅
+examples/definitions/http-integration-demo.json         ← new (2.3.8) ✅
 
 Directory.Packages.props
   + WireMock.Net                                        (test dependency) ✅
@@ -872,7 +962,7 @@ Post-MVP additions (deferred):
 | **D1** | HttpClient lifetime | ✅ `IHttpClientFactory` named client | Avoids socket exhaustion |
 | **D2** | Test strategy | ✅ WireMock.Net in-process + `WebApplicationFactory` | Docker-free; all tests in `Workflow.Tests` |
 | **D3** | Auth shape | ✅ Single module + `authType` property | Avoids module fan-out |
-| **D4** | Webhook persistence | ✅ Via `IWebhookRegistrationRepository` | In-memory default, SQLite impl |
+| **D4** | Webhook persistence | ✅ Via `IWebhookRegistrationRepository` | In-memory default; SQLite impl in **2.3.9** |
 | **D5** | Transformation engine | ✅ JSONPath.NET + IExpressionEvaluator (Jint) | XPath deferred |
 | **D6** | Cancellation | ✅ Native via 2.2.0b hierarchical CTS | No new surface |
 | **D7** | SOAP | ✅ Deferred indefinitely | Out of scope |
@@ -885,10 +975,10 @@ Post-MVP additions (deferred):
 
 ---
 
-> 💖 **Ami's Phase 2.3 Tips:**
-> - Build **2.3.0 first** — every other slice extends `HttpRequestModule`. Don't try to land auth + retry in the same PR; they touch different concerns and tests live in separate files anyway~ 🧠
+>  **Ami's Phase 2.3 Tips:**
+> - Build **2.3.0 first** — every other slice extends `HttpRequestModule`. Don't try to land auth + retry in the same PR; they touch different concerns and tests live in separate files anyway~ 
 > - Use **WireMock.Net in-process** — it spins up a tiny in-memory server per test, no Docker needed. Way faster than `HttpMessageHandler` mocks because you exercise the *real* `HttpClient` socket stack~ ⚡
-> - The **webhook trigger** (2.3.6) is the only slice that touches `Workflow.Api`. Land it after 2.3.5 so the request module is stable; otherwise you'll be debugging two things at once~ 🌸
-> - **Don't reinvent OAuth2** — copy the client-credentials shape from any reference impl (e.g. `IdentityModel.OidcClient`); just wrap the token-fetch + cache. We don't need full OIDC for v1~ 🔐
-> - When in doubt about retry config, **default to `retryCount: 0`** (opt-in). Silent retries are a debugging nightmare; authors should explicitly choose resiliency~ 🛡️ UwU 💖
+> - The **webhook trigger** (2.3.6) is the only slice that touches `Workflow.Api`. Land it after 2.3.5 so the request module is stable; otherwise you'll be debugging two things at once~ 
+> - **Don't reinvent OAuth2** — copy the client-credentials shape from any reference impl (e.g. `IdentityModel.OidcClient`); just wrap the token-fetch + cache. We don't need full OIDC for v1~ 
+> - When in doubt about retry config, **default to `retryCount: 0`** (opt-in). Silent retries are a debugging nightmare; authors should explicitly choose resiliency~ ️ UwU 
 

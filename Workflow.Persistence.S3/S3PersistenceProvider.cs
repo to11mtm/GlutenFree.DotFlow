@@ -79,6 +79,10 @@ public sealed class S3PersistenceProvider : IPersistenceProvider
     public IBlobStore? Blobs => _blobs;
 
     /// <inheritdoc/>
+    /// <remarks>CopilotNote: S3 is blob-only — webhook repo is not implemented in V1~ </remarks>
+    public IWebhookRegistrationRepository? Webhooks => null;
+
+    /// <inheritdoc/>
     /// <remarks>Creates the configured bucket if it doesn't already exist~ .</remarks>
     public async Task InitializeAsync(CancellationToken ct = default)
     {

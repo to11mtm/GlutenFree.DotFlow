@@ -128,6 +128,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "more-features", "more-featu
 		new-feature-design\sqlModuleHandler.md = new-feature-design\sqlModuleHandler.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Persistence.Sql.Base", "Workflow.Persistence.Sql.Base\Workflow.Persistence.Sql.Base.csproj", "{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -306,6 +308,18 @@ Global
 		{F2700A5B-806C-415A-989B-2C2A6D9B9A04}.Release|x64.Build.0 = Release|Any CPU
 		{F2700A5B-806C-415A-989B-2C2A6D9B9A04}.Release|x86.ActiveCfg = Release|Any CPU
 		{F2700A5B-806C-415A-989B-2C2A6D9B9A04}.Release|x86.Build.0 = Release|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Debug|x64.Build.0 = Debug|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Debug|x86.Build.0 = Debug|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Release|x64.ActiveCfg = Release|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Release|x64.Build.0 = Release|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Release|x86.ActiveCfg = Release|Any CPU
+		{58B081E7-FD8D-47F9-8B8E-5BB55DDE7EFF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

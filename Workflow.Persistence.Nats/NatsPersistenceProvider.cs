@@ -11,12 +11,12 @@ using Workflow.Persistence.Models;
 using Workflow.Persistence.Nats.Repositories;
 
 /// <summary>
-/// 🚀 NATS JetStream KV-backed persistence provider~ ✨💖
+///  NATS JetStream KV-backed persistence provider~ ✨
 /// </summary>
 /// <remarks>
 /// CopilotNote: All repositories are backed by NATS KV buckets created during <see cref="InitializeAsync"/>.
 /// Blobs are not supported — returns <c>null</c> for <see cref="Blobs"/>; use S3 provider for blob storage.
-/// The provider manages one <see cref="NatsConnectionManager"/> for the lifetime of the application~ 🔗
+/// The provider manages one <see cref="NatsConnectionManager"/> for the lifetime of the application~
 /// </remarks>
 public sealed class NatsPersistenceProvider : IPersistenceProvider
 {
@@ -24,7 +24,7 @@ public sealed class NatsPersistenceProvider : IPersistenceProvider
     private bool _initialized;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="NatsPersistenceProvider"/> class~ 🔌.
+    /// Initializes a new instance of the <see cref="NatsPersistenceProvider"/> class~ .
     /// </summary>
     /// <param name="natsUrl">NATS server URL (e.g. <c>nats://localhost:4222</c>).</param>
     public NatsPersistenceProvider(string natsUrl)
@@ -34,7 +34,7 @@ public sealed class NatsPersistenceProvider : IPersistenceProvider
         _connectionManager = new NatsConnectionManager(natsUrl);
 
         // CopilotNote: Repositories are initialised with real stores in InitializeAsync.
-        // Setting to null! here because proper stores require async bucket creation~ 🧠
+        // Setting to null! here because proper stores require async bucket creation~
         Workflows = null!;
         ExecutionHistory = null!;
         Variables = null!;
@@ -59,7 +59,11 @@ public sealed class NatsPersistenceProvider : IPersistenceProvider
     /// <remarks>NATS KV is not suitable for large binary blobs — use S3 provider instead~ ☁️.</remarks>
     public IBlobStore? Blobs => null;
 
-    /// <summary>Gets the NATS server URL~ 🔗.</summary>
+    /// <inheritdoc />
+    /// <remarks>CopilotNote: NATS webhook repo is not implemented in V1 — deferred to Phase 4~ </remarks>
+    public IWebhookRegistrationRepository? Webhooks => null;
+
+    /// <summary>Gets the NATS server URL~ .</summary>
     public string NatsUrl { get; }
 
     /// <inheritdoc/>
@@ -93,7 +97,7 @@ public sealed class NatsPersistenceProvider : IPersistenceProvider
         var variableStore = await kv.CreateOrUpdateStoreAsync(
             new NatsKVConfig(NatsVariableStore.BucketName)
             {
-                // CopilotNote: NATS KV hard max is 64. Use 64 to retain as many versions as possible~ 💾
+                // CopilotNote: NATS KV hard max is 64. Use 64 to retain as many versions as possible~
                 History = 64,
             },
             ct).ConfigureAwait(false);

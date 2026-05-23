@@ -9,12 +9,12 @@ using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 
 /// <summary>
-/// 🔀 A persistence provider that routes each repository interface to a configured sub-provider.
-/// Enables mixing providers (e.g. Postgres for workflows + NATS for variables)~ ✨💖
+///  A persistence provider that routes each repository interface to a configured sub-provider.
+/// Enables mixing providers (e.g. Postgres for workflows + NATS for variables)~ ✨
 /// </summary>
 /// <remarks>
 /// CopilotNote: This provider delegates ALL operations to its sub-providers.
-/// It does NOT implement any storage logic itself — it's purely a router~ UwU 🔄
+/// It does NOT implement any storage logic itself — it's purely a router~ UwU
 /// </remarks>
 public sealed class CompositePersistenceProvider : IPersistenceProvider
 {
@@ -25,7 +25,7 @@ public sealed class CompositePersistenceProvider : IPersistenceProvider
     private readonly HashSet<IPersistenceProvider> _uniqueProviders;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="CompositePersistenceProvider"/> class~ 🔀.
+    /// Initializes a new instance of the <see cref="CompositePersistenceProvider"/> class~ .
     /// </summary>
     /// <param name="workflowsProvider">Provider for <see cref="IWorkflowRepository"/>.</param>
     /// <param name="executionHistoryProvider">Provider for <see cref="IExecutionHistoryRepository"/>.</param>
@@ -74,14 +74,23 @@ public sealed class CompositePersistenceProvider : IPersistenceProvider
     public IBlobStore? Blobs => _blobsProvider?.Blobs;
 
     /// <inheritdoc />
-    /// <remarks>Initialises all unique sub-providers in parallel~ 🚀.</remarks>
+    /// <remarks>
+    /// CopilotNote: Composite provider returns <c>null</c> for Webhooks — the webhook repo is
+    /// resolved from the first sub-provider that supports it (future enhancement).
+    /// For now, webhooks are registered via the API-layer DI fallback to InMemory~
+    /// </remarks>
+    public IWebhookRegistrationRepository? Webhooks =>
+        _uniqueProviders.Select(p => p.Webhooks).FirstOrDefault(w => w is not null);
+
+    /// <inheritdoc />
+    /// <remarks>Initialises all unique sub-providers in parallel~ .</remarks>
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         await Task.WhenAll(_uniqueProviders.Select(p => p.InitializeAsync(ct))).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    /// <remarks>Aggregates health from all unique sub-providers~ 🏥.</remarks>
+    /// <remarks>Aggregates health from all unique sub-providers~ .</remarks>
     public async Task<HealthCheckResult> HealthCheckAsync(CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
@@ -104,12 +113,12 @@ public sealed class CompositePersistenceProvider : IPersistenceProvider
             IsHealthy: allHealthy,
             ProviderName: "composite",
             Latency: sw.Elapsed,
-            ErrorMessage: allHealthy ? null : "One or more sub-providers are unhealthy~ 💔",
+            ErrorMessage: allHealthy ? null : "One or more sub-providers are unhealthy~ ",
             Details: details);
     }
 
     /// <inheritdoc />
-    /// <remarks>Disposes all unique sub-providers~ 👋.</remarks>
+    /// <remarks>Disposes all unique sub-providers~ .</remarks>
     public async ValueTask DisposeAsync()
     {
         foreach (var provider in _uniqueProviders)

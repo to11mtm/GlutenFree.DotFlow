@@ -12,12 +12,12 @@ using Workflow.Persistence.Postgres.Data;
 using Workflow.Persistence.Postgres.Repositories;
 
 /// <summary>
-/// 🐘 PostgreSQL-backed persistence provider for production use~ ✨💖
+///  PostgreSQL-backed persistence provider for production use~ ✨
 /// </summary>
 /// <remarks>
 /// CopilotNote: Requires PostgreSQL 15+. Uses Npgsql for connections and linq2db for queries.
 /// Run <see cref="InitializeAsync"/> once at startup — it applies FluentMigrator migrations.
-/// For tests use <c>Testcontainers.PostgreSql</c> to spin up a real Postgres instance~ 🐳
+/// For tests use <c>Testcontainers.PostgreSql</c> to spin up a real Postgres instance~
 /// </remarks>
 public sealed class PostgresPersistenceProvider : IPersistenceProvider
 {
@@ -25,7 +25,7 @@ public sealed class PostgresPersistenceProvider : IPersistenceProvider
     private bool _initialized;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="PostgresPersistenceProvider"/> class~ 🔌.
+    /// Initializes a new instance of the <see cref="PostgresPersistenceProvider"/> class~ .
     /// </summary>
     /// <param name="connectionString">The Npgsql connection string.</param>
     public PostgresPersistenceProvider(string connectionString)
@@ -57,7 +57,11 @@ public sealed class PostgresPersistenceProvider : IPersistenceProvider
     /// <inheritdoc/>
     public IBlobStore? Blobs => null;
 
-    /// <summary>Gets the connection string used by this provider~ 🔗.</summary>
+    /// <inheritdoc />
+    /// <remarks>CopilotNote: Postgres webhook repo is not implemented in V1 — deferred to Phase 4~ </remarks>
+    public IWebhookRegistrationRepository? Webhooks => null;
+
+    /// <summary>Gets the connection string used by this provider~ .</summary>
     public string ConnectionString { get; }
 
     /// <inheritdoc/>

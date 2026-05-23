@@ -12,12 +12,12 @@ using Workflow.Persistence.Sqlite.Data;
 using Workflow.Persistence.Sqlite.Repositories;
 
 /// <summary>
-/// 🪶 SQLite-backed persistence provider for local dev and testing~ ✨💖
+///  SQLite-backed persistence provider for local dev and testing~ ✨
 /// </summary>
 /// <remarks>
 /// CopilotNote: For in-memory test databases use the <c>AddSqlitePersistenceInMemory()</c> DI helper.
 /// For file-based dev use <c>AddSqlitePersistence(connectionString)</c>.
-/// Blobs are supported via <see cref="SqliteBlobStore"/> stored in the <c>blob_store</c> table~ 🗃️
+/// Blobs are supported via <see cref="SqliteBlobStore"/> stored in the <c>blob_store</c> table~ ️
 /// </remarks>
 public sealed class SqlitePersistenceProvider : IPersistenceProvider
 {
@@ -25,13 +25,13 @@ public sealed class SqlitePersistenceProvider : IPersistenceProvider
 
     // CopilotNote: For SQLite in-memory databases (Cache=Shared;Mode=Memory), the database
     // is tied to the lifetime of open connections sharing the same name. We keep one connection
-    // alive for the full provider lifetime so the database doesn't vanish between calls~ 🧠
+    // alive for the full provider lifetime so the database doesn't vanish between calls~
     private SqliteConnection? _keepAliveConnection;
 
     private bool _initialized;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SqlitePersistenceProvider"/> class~ 🔌.
+    /// Initializes a new instance of the <see cref="SqlitePersistenceProvider"/> class~ .
     /// </summary>
     /// <param name="connectionString">The SQLite connection string.</param>
     public SqlitePersistenceProvider(string connectionString)
@@ -45,6 +45,7 @@ public sealed class SqlitePersistenceProvider : IPersistenceProvider
         ExecutionHistory = new SqliteExecutionHistoryRepository(_factory);
         Variables = new SqliteVariableStore(_factory);
         Blobs = new SqliteBlobStore(_factory);
+        Webhooks = new SqliteWebhookRegistrationRepository(_factory);
     }
 
     /// <inheritdoc/>
@@ -65,13 +66,17 @@ public sealed class SqlitePersistenceProvider : IPersistenceProvider
     /// <inheritdoc/>
     public IBlobStore? Blobs { get; }
 
-    /// <summary>Gets the connection string used by this provider~ 🔗.</summary>
+    /// <inheritdoc/>
+    /// <remarks>Phase 2.3.9 — backed by <see cref="SqliteWebhookRegistrationRepository"/>~ ✨.</remarks>
+    public IWebhookRegistrationRepository? Webhooks { get; }
+
+    /// <summary>Gets the connection string used by this provider~ .</summary>
     public string ConnectionString { get; }
 
     /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken ct = default)
     {
-        // Open a keep-alive connection for in-memory DBs before running migrations~ 🧠
+        // Open a keep-alive connection for in-memory DBs before running migrations~
         if (ConnectionString.Contains(":memory:", StringComparison.OrdinalIgnoreCase)
             || ConnectionString.Contains("Mode=Memory", StringComparison.OrdinalIgnoreCase))
         {

@@ -17,24 +17,24 @@ using Microsoft.Extensions.Logging;
 using Workflow.Persistence.Abstractions;
 
 /// <summary>
-/// 🪝 Phase 2.3.6/2.3.7 — Encapsulates webhook lookup, method validation, signature validation,
-/// payload assembly, workflow launch, and HTTP response via <see cref="IWebhookResponseStrategy"/>~ ✨💖.
+///  Phase 2.3.6/2.3.7 — Encapsulates webhook lookup, method validation, signature validation,
+/// payload assembly, workflow launch, and HTTP response via <see cref="IWebhookResponseStrategy"/>~ ✨.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Intentionally isolated from routing so a future arbitrary-path router (2.3.P1) can sit
 /// in front without touching this class. The method signature is:
 /// <c>DispatchAsync(webhookId, context, responseStrategy, ct)</c>
-/// — callers supply the resolved strategy so advanced hosts can vary it per-request~ 🧠
+/// — callers supply the resolved strategy so advanced hosts can vary it per-request~
 /// </para>
 /// <para>
 /// CopilotNote: The <c>__webhook__</c> input convention must be kept stable — the
-/// <c>builtin.http.webhook</c> trigger module depends on it~ 🌸
+/// <c>builtin.http.webhook</c> trigger module depends on it~
 /// </para>
 /// <para>
 /// CopilotNote (2.3.7): Raw bytes are always buffered BEFORE signature validation — the
 /// HMAC is computed over the wire bytes, not the deserialised object. Never validate
-/// against the parsed body~ 🔒
+/// against the parsed body~
 /// </para>
 /// </remarks>
 public sealed class WebhookDispatcher
@@ -43,7 +43,7 @@ public sealed class WebhookDispatcher
     private readonly IWorkflowLauncher _launcher;
     private readonly ILogger<WebhookDispatcher> _logger;
 
-    /// <summary>Initialises the dispatcher with all injected dependencies~ 💉.</summary>
+    /// <summary>Initialises the dispatcher with all injected dependencies~ .</summary>
     public WebhookDispatcher(
         IWebhookRegistrationRepository repo,
         IWorkflowLauncher launcher,
@@ -56,7 +56,7 @@ public sealed class WebhookDispatcher
 
     /// <summary>
     /// Handle a webhook trigger request for <paramref name="webhookId"/>.
-    /// Writes the HTTP response before returning~ 🌐.
+    /// Writes the HTTP response before returning~ .
     /// </summary>
     /// <param name="webhookId">The webhook slug from the URL.</param>
     /// <param name="context">Current HTTP context.</param>
@@ -99,7 +99,7 @@ public sealed class WebhookDispatcher
 
         // 3️⃣ Buffer raw body bytes — must happen before signature validation AND before JSON parse~
         // CopilotNote: EnableBuffering() switches to a FileBufferingReadStream if body > threshold;
-        // reset Position=0 after each read so downstream processing starts from the beginning~ 🧠
+        // reset Position=0 after each read so downstream processing starts from the beginning~
         var rawBodyBytes = Array.Empty<byte>();
         try
         {
@@ -112,11 +112,11 @@ public sealed class WebhookDispatcher
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(
-                "🪝 Could not read request body for webhook '{WebhookId}': {Error}~",
+                " Could not read request body for webhook '{WebhookId}': {Error}~",
                 webhookId, ex.Message);
         }
 
-        // 4️⃣ 🔒 Phase 2.3.7 — Signature validation (when scheme is configured)~
+        // 4️⃣  Phase 2.3.7 — Signature validation (when scheme is configured)~
         if (registration.SignatureScheme.IsSome)
         {
             var scheme = registration.SignatureScheme.IfNone(string.Empty);
@@ -127,7 +127,7 @@ public sealed class WebhookDispatcher
             {
                 // Misconfigured registration slipped through — fail safe, log, return 401~
                 _logger.LogError(
-                    "🔒 Unknown signature scheme '{Scheme}' on webhook '{WebhookId}' — failing safe~ 🛡️",
+                    " Unknown signature scheme '{Scheme}' on webhook '{WebhookId}' — failing safe~ ️",
                     scheme, webhookId);
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(
@@ -140,7 +140,7 @@ public sealed class WebhookDispatcher
             {
                 // Log the reason internally but DON'T surface it to the caller (timing oracle)~
                 _logger.LogWarning(
-                    "🔒 Signature validation failed for webhook '{WebhookId}' (scheme '{Scheme}'): {Reason}~",
+                    " Signature validation failed for webhook '{WebhookId}' (scheme '{Scheme}'): {Reason}~",
                     webhookId, scheme, result.FailureReason);
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                 await context.Response.WriteAsJsonAsync(
@@ -149,7 +149,7 @@ public sealed class WebhookDispatcher
             }
 
             _logger.LogDebug(
-                "🔒 Signature validated for webhook '{WebhookId}' via scheme '{Scheme}'~ ✅",
+                " Signature validated for webhook '{WebhookId}' via scheme '{Scheme}'~ ✅",
                 webhookId, scheme);
         }
 
@@ -187,17 +187,33 @@ public sealed class WebhookDispatcher
         var inputs = new Dictionary<string, object?> { ["__webhook__"] = webhookPayload };
 
         // 7️⃣ Launch the workflow~
-        var executionId = await _launcher.LaunchAsync(registration, inputs, ct).ConfigureAwait(false);
+        Guid executionId;
+        try
+        {
+            executionId = await _launcher.LaunchAsync(registration, inputs, ct).ConfigureAwait(false);
+        }
+        catch (WorkflowLaunchException ex)
+        {
+            // CopilotNote: Log full context internally but DO NOT leak it to the caller~
+            _logger.LogError(
+                ex,
+                " Failed to launch workflow for webhook '{WebhookId}' (definition '{WorkflowId}'): {Message}~",
+                webhookId, registration.WorkflowDefinitionId, ex.Message);
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            await context.Response.WriteAsJsonAsync(
+                new { error = "Failed to launch workflow execution." }, ct).ConfigureAwait(false);
+            return;
+        }
 
         _logger.LogInformation(
-            "🪝 Webhook '{WebhookId}' triggered → execution {ExecutionId} for workflow {WorkflowId}~",
+            " Webhook '{WebhookId}' triggered → execution {ExecutionId} for workflow {WorkflowId}~",
             webhookId, executionId, registration.WorkflowDefinitionId);
 
         // 8️⃣ Delegate to response strategy (V1 default = 202 Accepted)~
         await responseStrategy.RespondAsync(context, executionId, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Recursively convert a <see cref="JsonElement"/> to POCO primitives/dicts/lists~ 🔧.</summary>
+    /// <summary>Recursively convert a <see cref="JsonElement"/> to POCO primitives/dicts/lists~ .</summary>
     private static object? JsonElementToObject(JsonElement el)
     {
         return el.ValueKind switch
