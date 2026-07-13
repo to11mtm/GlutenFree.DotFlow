@@ -40,6 +40,8 @@ This directory contains individual phase breakdown files to make it easier to na
 - [Phase2-1-PersistenceLayer.md](Phase2-1-PersistenceLayer.md) ⏳ — 6 sub-phases, detailed breakout ready!
 - [Phase2-2-AdvancedFlowControl.md](Phase2-2-AdvancedFlowControl.md) 🔄 — 10 sub-phases, mostly complete (2.3.6 API smoke tests pending)
 - [Phase2-3-HttpAndNetworkModules.md](Phase2-3-HttpAndNetworkModules.md) ⏳ — 10 sub-phases, detailed plan ready!
+- [Phase2-4-DatabaseModules.md](Phase2-4-DatabaseModules.md) ⏳ — 7 MVP sub-phases + 6 post-MVP slices (incl. 2.4.b Roslyn/linq family), detailed plan ready! 🌷
+  - Design exploration: [new-feature-design/Phase2-4-DatabaseModules-Design.md](../new-feature-design/Phase2-4-DatabaseModules-Design.md)
 
 ### [Phase3-AdvancedFeatures.md](Phase3-AdvancedFeatures.md) 🎨
 **Weeks 15-22** - Advanced Features and UI

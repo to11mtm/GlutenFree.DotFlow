@@ -611,189 +611,246 @@ Phase 2 builds upon the foundation with critical production features:
 
 ### 2.3 HTTP & Network Modules (Week 10-11)
 
-> 📖 **Detailed sub-phase breakdown:** See [Phase2-3-HttpAndNetworkModules.md](Phase2-3-HttpAndNetworkModules.md) for the full slice plan (2.3.0–2.3.9), design decisions, file lists, and per-slice test targets~ 🌷
+> 📖 **Detailed sub-phase breakdown:** See [Phase2-3-HttpAndNetworkModules.md](Phase2-3-HttpAndNetworkModules.md) for the full slice plan (2.3.0–2.3.8 + Post-MVP P1–P7), design decisions, file lists, and per-slice test targets~ 🌷
 >
-> **Sub-phases:** 2.3.0 Infra + core `HttpRequestModule` · 2.3.1 Body/Response formats · 2.3.2 Basic/Bearer/API Key auth · 2.3.3 OAuth2 client credentials · 2.3.4 Polly retry/timeout/circuit · 2.3.5 Request/response transformation · 2.3.6 Webhook trigger + API · 2.3.7 Webhook signature validation · 2.3.8 GraphQL *(optional)* · 2.3.9 E2E demo + docs
+> **Sub-phases:** 2.3.0 Infra + core `HttpRequestModule` · 2.3.1 Body/Response formats · 2.3.2 Basic/Bearer/API Key auth · 2.3.3 OAuth2 client credentials · 2.3.4 Polly retry/timeout/circuit · 2.3.5 Request/response transformation · 2.3.6 Webhook trigger + API · 2.3.7 Webhook signature validation · 2.3.8 E2E demo + docs · *(GraphQL deferred → 2.3.P6)*
 
 **Tasks:**
-- [ ] **Implement `HttpRequestModule` - Full HTTP client** 🌐
-    - [ ] Create `HttpRequestModule` class
-        - [ ] ModuleId: `builtin.http.request`
-        - [ ] DisplayName: `HTTP Request`
-        - [ ] Category: `Network`
-    - [ ] Define module schema
-        - [ ] Input: `url` (string, required) - Target URL
-        - [ ] Input: `method` (enum, required) - GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
-        - [ ] Input: `headers` (dictionary, optional) - Custom headers
-        - [ ] Input: `body` (object, optional) - Request body
-        - [ ] Input: `contentType` (string, optional) - Content-Type header
-        - [ ] Input: `timeout` (TimeSpan, optional, default=30s)
+- [x] **HTTP infrastructure & DI setup** 🏗️ ✅ **(May 19, 2026)**
+    - [x] New folder: `Workflow.Modules/Builtin/Http/`
+    - [x] Add `Microsoft.Extensions.Http` to `Directory.Packages.props`
+    - [x] `HttpModuleServiceCollectionExtensions` — registers `IHttpClientFactory` + named client `"dotflow.http"` (`SocketsHttpHandler`, `PooledConnectionLifetime=2min`, `MaxConnectionsPerServer=256`, `ConnectTimeout=30s`)
+    - [x] `AddWorkflowModules(this IServiceCollection)` aggregate DI registration — single call for all module families; `Workflow.Api/Program.cs` updated
+    - [x] `BuiltinModuleRegistration.GetAll()` updated (count 16 → 18: `HttpRequestModule` + `WebhookTriggerModule`)
+
+- [x] **Implement `HttpRequestModule` - Full HTTP client** 🌐 ✅ **(May 19–20, 2026)**
+    - [x] Create `HttpRequestModule` class
+        - [x] ModuleId: `builtin.http.request`
+        - [x] DisplayName: `HTTP Request`
+        - [x] Category: `Network`
+    - [x] Define module schema
+        - [x] Input: `url` (string, required) - Target URL
+        - [x] Input: `method` (enum, required) - GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+        - [x] Input: `headers` (dictionary, optional) - Custom headers
+        - [x] Input: `body` (object, optional) - Request body
+        - [x] Input: `contentType` (string, optional) - Content-Type header
+        - [x] Input: `timeout` (TimeSpan, optional, default=30s) — implemented as `timeoutSeconds` (int)
         - [ ] Input: `followRedirects` (bool, optional, default=true)
         - [ ] Input: `maxRedirects` (int, optional, default=10)
         - [ ] Input: `validateCertificate` (bool, optional, default=true)
-        - [ ] Output: `statusCode` (int) - HTTP status code
-        - [ ] Output: `headers` (dictionary) - Response headers
-        - [ ] Output: `body` (object) - Response body
-        - [ ] Output: `success` (bool) - Status code 200-299
-        - [ ] Output: `duration` (TimeSpan) - Request duration
-    - [ ] Implement ExecuteAsync method
-        - [ ] Create HttpClient instance (or use injected)
-        - [ ] Build HTTP request message
-        - [ ] Add all custom headers
-        - [ ] Serialize body based on content type
-        - [ ] Set timeout
-        - [ ] Send request
-        - [ ] Parse response
-        - [ ] Deserialize response body
-        - [ ] Return all outputs
-    - [ ] Add request body serialization
-        - [ ] JSON serialization
-        - [ ] XML serialization
-        - [ ] Form URL encoded
-        - [ ] Multipart form data
-        - [ ] Raw string/bytes
-    - [ ] Add response body deserialization
-        - [ ] Auto-detect content type
-        - [ ] JSON deserialization
-        - [ ] XML deserialization
-        - [ ] Text content
-        - [ ] Binary content
-    - [ ] Add comprehensive tests
-        - [ ] Test all HTTP methods
-        - [ ] Test custom headers
-        - [ ] Test request body serialization
-        - [ ] Test response parsing
-        - [ ] Test error handling (404, 500, etc.)
+        - [x] Input: `retryCount` (int, default=0 opt-in)
+        - [x] Input: `retryDelaySeconds` (double, default=1.0)
+        - [x] Input: `retryBackoff` (string: `linear`/`exponential`/`constant`, default=`exponential`)
+        - [x] Input: `maxRetryBackoffSeconds` (double, default=60.0) — Retry-After header cap
+        - [x] Input: `retryOnStatusCodes` (int[], default=[408,429,500,502,503,504])
+        - [x] Input: `circuitBreakerFailureThreshold` (int, default=0 disabled)
+        - [x] Input: `circuitBreakerSamplingDurationSeconds` (double, default=30)
+        - [x] Input: `authType` (string: none/basic/bearer/apikey/oauth2, default=none)
+        - [x] Input: `username`, `password` (Basic auth)
+        - [x] Input: `bearerToken` (Bearer auth)
+        - [x] Input: `apiKey`, `apiKeyHeader`, `apiKeyLocation` (API Key auth)
+        - [x] Input: `oauth2TokenUrl`, `oauth2ClientId`, `oauth2ClientSecret`, `oauth2Scope`, `oauth2Audience`, `oauth2TokenCacheScope` (OAuth2)
+        - [x] Input: `responseExtract` (HashMap<string,string>, optional) — JSONPath extraction map
+        - [x] Input: `responseExtractRequired` (bool, optional, default=false)
+        - [x] Input: `responseRegex` (HashMap<string,string>, optional) — regex named-capture extraction
+        - [x] Input: `headerExtract` (HashMap<string,string>, optional) — response header extraction
+        - [x] Output: `statusCode` (int) - HTTP status code
+        - [x] Output: `headers` (dictionary) - Response headers
+        - [x] Output: `body` (object) - Response body
+        - [x] Output: `success` (bool) - Status code 200-299
+        - [x] Output: `duration` (TimeSpan) - Request duration (as `durationMs` long)
+        - [x] Output: `contentType` (string) - Response Content-Type
+        - [x] Output: `attemptCount` (int) - Total send attempts (1 = no retry)
+        - [x] Output: `circuitState` (string) - `closed`/`open`/`halfopen`
+    - [x] Implement ExecuteAsync method
+        - [x] Create HttpClient instance (or use injected) — via `IHttpClientFactory` named client
+        - [x] Build HTTP request message
+        - [x] Add all custom headers
+        - [x] Serialize body based on content type
+        - [x] Set timeout
+        - [x] Send request
+        - [x] Parse response
+        - [x] Deserialize response body
+        - [x] Return all outputs
+    - [x] Add request body serialization (`RequestBodyEncoder`)
+        - [x] JSON serialization
+        - [x] XML serialization — string passthrough (well-formedness validated via XmlDocument.LoadXml)
+        - [x] Form URL encoded
+        - [x] Multipart form data — V1: `byte[]` + string parts only (Stream/file-path deferred → 2.3.P4/P5)
+        - [x] Raw string/bytes
+    - [x] Add response body deserialization (`ResponseBodyDecoder`)
+        - [x] Auto-detect content type
+        - [x] JSON deserialization → `Dictionary<string,object?>` POCO graph
+        - [x] XML deserialization — string passthrough (full XML→object map deferred)
+        - [x] Text content
+        - [x] Binary content
+    - [x] Add auth header redaction in logs 🔒
+        - [x] Redacts `Authorization`, `X-API-Key`, `X-Auth-Token`, `Cookie`, etc. in debug logs
+    - [x] Add comprehensive tests ✅ **13/13 + 9/9 HttpBodyFormat**
+        - [x] Test all HTTP methods
+        - [x] Test custom headers
+        - [x] Test request body serialization (JSON, form, multipart, XML, bytes)
+        - [x] Test response parsing (JSON dict, text, binary)
+        - [x] Test error handling (404, 500, etc.)
 
-- [ ] **Add authentication support** 🔐
-    - [ ] Implement Basic Authentication
-        - [ ] Add `authType` input (enum)
-        - [ ] Add `username` and `password` inputs
-        - [ ] Generate Authorization header
-    - [ ] Implement Bearer Token Authentication
-        - [ ] Add `bearerToken` input
-        - [ ] Add token to Authorization header
-    - [ ] Implement API Key Authentication
-        - [ ] Add `apiKey` and `apiKeyHeader` inputs
-        - [ ] Support query parameter API keys
-    - [ ] Implement OAuth2 Support
-        - [ ] Add OAuth2 client credentials flow
-        - [ ] Token caching
-        - [ ] Automatic token refresh
-    - [ ] Add comprehensive tests
-        - [ ] Test each auth type
-        - [ ] Test auth failures
-        - [ ] Test token refresh
+- [x] **Add authentication support** 🔐 ✅ **(May 19, 2026)**
+    - [x] Implement Basic Authentication
+        - [x] Add `authType` input (enum)
+        - [x] Add `username` and `password` inputs
+        - [x] Generate Authorization header
+    - [x] Implement Bearer Token Authentication
+        - [x] Add `bearerToken` input
+        - [x] Add token to Authorization header
+    - [x] Implement API Key Authentication
+        - [x] Add `apiKey` and `apiKeyHeader` inputs
+        - [x] Support query parameter API keys
+    - [x] Implement OAuth2 Support
+        - [x] Add OAuth2 client credentials flow
+        - [x] Token caching — `PerModuleOAuth2TokenCache` + `PerPipelineOAuth2TokenCache`
+        - [x] Automatic token refresh — refresh-on-401 retry (once)
+        - [x] Selectable `oauth2TokenCacheScope`: `module` (per-instance) or `pipeline` (per-execution)
+        - [ ] Singleton/persisted cross-workflow token cache — deferred → **2.3.P3**
+    - [x] Add comprehensive tests ✅ **9/9 HttpAuth + 10/10 OAuth2**
+        - [x] Test each auth type
+        - [x] Test auth failures
+        - [x] Test token refresh
 
-- [ ] **Implement retry logic and timeouts** 🔄
-    - [ ] Add retry configuration
-        - [ ] Input: `retryCount` (int, optional, default=3)
-        - [ ] Input: `retryDelay` (TimeSpan, optional, default=1s)
-        - [ ] Input: `retryBackoff` (enum: Linear, Exponential, Fibonacci)
-        - [ ] Input: `retryOnStatusCodes` (array, optional) - Which codes to retry
-    - [ ] Implement retry logic with Polly
-        - [ ] Install Polly NuGet package
-        - [ ] Create retry policy
-        - [ ] Handle transient failures (408, 429, 500-599)
-        - [ ] Exponential backoff implementation
-        - [ ] Jitter for retry delays
-    - [ ] Implement circuit breaker pattern
-        - [ ] Open circuit after N failures
-        - [ ] Half-open state for testing recovery
-        - [ ] Close circuit when stable
-    - [ ] Add timeout handling
-        - [ ] Request-level timeout
-        - [ ] Operation-level timeout
-        - [ ] Cancellation token support
-    - [ ] Add comprehensive tests
-        - [ ] Test retry on 500 error
-        - [ ] Test exponential backoff timing
-        - [ ] Test max retry limit
-        - [ ] Test circuit breaker opening
-        - [ ] Test timeout cancellation
+- [x] **Implement retry logic and timeouts** 🔄 ✅ **(May 19, 2026)**
+    - [x] Add retry configuration
+        - [x] Input: `retryCount` (int, optional, default=0 — opt-in)
+        - [x] Input: `retryDelaySeconds` (double, optional, default=1.0)
+        - [x] Input: `retryBackoff` (string: linear/exponential/constant — Fibonacci not in Polly v8, falls back to exponential)
+        - [x] Input: `retryOnStatusCodes` (array, optional, default=[408,429,500,502,503,504])
+    - [x] Implement retry logic with Polly
+        - [x] Install Polly.Core v8 NuGet package
+        - [x] Create retry policy (`HttpResiliencePipelineFactory` — cached per-config-hash per module instance)
+        - [x] Handle transient failures (408, 429, 500-599) + `HttpRequestException`
+        - [x] Exponential backoff implementation
+        - [x] Jitter for retry delays (`UseJitter = true`)
+        - [x] Retry-After header honouring for 429/503 (capped by `maxRetryBackoffSeconds`)
+        - [x] Requests rebuilt per attempt (HTTP messages aren't resendable)
+    - [x] Implement circuit breaker pattern
+        - [x] Open circuit after N failures (`circuitBreakerFailureThreshold`)
+        - [x] Half-open state for testing recovery
+        - [x] Close circuit when stable
+    - [x] Add timeout handling
+        - [x] Request-level timeout — `CancellationTokenSource.CancelAfter(timeoutSeconds)`
+        - [x] Operation-level timeout
+        - [x] Cancellation token support (hierarchical CT from 2.2.0b)
+    - [x] Add comprehensive tests ✅ **11/11 HttpRetry**
+        - [x] Test retry on 500 error
+        - [x] Test exponential backoff timing
+        - [x] Test max retry limit
+        - [x] Test circuit breaker opening
+        - [x] Test timeout cancellation
 
-- [ ] **Add request/response transformation** 🔄
-    - [ ] Implement request transformation
-        - [ ] Template strings in URL
-        - [ ] Variable interpolation in body
-        - [ ] Dynamic header generation
+- [x] **Add request/response transformation** 🔄 ✅ **(May 20, 2026)**
+    - [x] Implement request transformation
+        - [x] Template strings in URL — `{{variable.name}}` double-brace syntax via `PropertyBinder`
+        - [x] Variable interpolation in body
+        - [x] Dynamic header generation
         - [ ] Request middleware pipeline
-    - [ ] Implement response transformation
-        - [ ] JSONPath queries on response
-        - [ ] XPath queries on XML response
-        - [ ] Regex extraction from text
-        - [ ] Response mapping to outputs
-    - [ ] Add data extraction helpers
-        - [ ] Extract specific fields
+    - [x] Implement response transformation
+        - [x] JSONPath queries on response — `JsonPathExtractor` using `JsonPath.Net` (v0.8.1, MIT)
+        - [ ] XPath queries on XML response — deferred (low demand)
+        - [x] Regex extraction from text — named-capture `(?<value>...)` with 5s match timeout
+        - [x] Response mapping to outputs
+    - [x] Add data extraction helpers
+        - [x] Extract specific fields (JSONPath single, multi-value → array)
         - [ ] Flatten nested objects
         - [ ] Array manipulation
-    - [ ] Add comprehensive tests
-        - [ ] Test URL templating
-        - [ ] Test JSONPath extraction
-        - [ ] Test response mapping
+        - [ ] Composite JSONPath extract (multiple paths → single object port) — deferred → **2.3.P7**
+    - [x] Add comprehensive tests ✅ **8/8 HttpTransformation**
+        - [x] Test URL templating
+        - [x] Test JSONPath extraction (single, nested, array, missing)
+        - [x] Test regex named-capture extraction
+        - [x] Test response header extraction
+        - [x] Test response mapping
 
-- [ ] **Implement webhook trigger module** 🪝
-    - [ ] Create `WebhookTriggerModule` class
-        - [ ] ModuleId: `builtin.http.webhook`
-        - [ ] DisplayName: `Webhook Trigger`
-        - [ ] Category: `Triggers`
-    - [ ] Define module schema
-        - [ ] Configuration: `webhookId` (string, unique)
-        - [ ] Configuration: `path` (string) - URL path
-        - [ ] Configuration: `method` (enum) - Allowed HTTP methods
-        - [ ] Configuration: `secretKey` (string, optional) - For signature validation
-        - [ ] Output: `headers` (dictionary)
-        - [ ] Output: `body` (object)
-        - [ ] Output: `query` (dictionary)
-    - [ ] Implement webhook endpoint in API
-        - [ ] POST /api/webhooks/{webhookId}
-        - [ ] Parse incoming request
-        - [ ] Validate signature (if configured)
-        - [ ] Trigger workflow execution
-        - [ ] Return response to caller
-    - [ ] Add signature validation
-        - [ ] HMAC-SHA256 validation
-        - [ ] Support for common webhook signatures (GitHub, Stripe, etc.)
-    - [ ] Add webhook management endpoints
-        - [ ] Register webhook
-        - [ ] Update webhook
-        - [ ] Delete webhook
-        - [ ] List webhooks
-    - [ ] Add comprehensive tests
-        - [ ] Test webhook trigger
-        - [ ] Test signature validation
-        - [ ] Test invalid signatures
-        - [ ] Test different HTTP methods
+- [x] **Implement webhook trigger module** 🪝 ✅ **(May 21, 2026)**
+    - [x] Create `WebhookTriggerModule` class
+        - [x] ModuleId: `builtin.http.webhook`
+        - [x] DisplayName: `Webhook Trigger`
+        - [x] Category: `Triggers`
+    - [x] Create `WebhookRegistration` model (`Workflow.Core/Models/WebhookRegistration.cs`)
+        - [x] Fields: `WebhookId`, `WorkflowDefinitionId`, `AllowedMethods`, `SecretKey`, `SignatureScheme`, `CreatedAt`, `Enabled`
+        - [x] `WebhookRegistration.Validate()` — non-empty ID, Guid, methods; scheme+secret consistency
+    - [x] Create `IWebhookRegistrationRepository` (`Workflow.Persistence/Abstractions/`)
+        - [x] CRUD: `RegisterAsync`, `UpdateAsync`, `DeleteAsync`, `GetAsync`, `ListAsync`
+        - [x] `InMemoryWebhookRegistrationRepository` — default impl (ConcurrentDictionary, OrdinalIgnoreCase)
+        - [ ] SQLite impl / IPersistenceProvider slot — deferred
+    - [x] Define module schema
+        - [x] Configuration: `webhookId` (string, required — must match a registration)
+        - [ ] Configuration: `path` (string) - Arbitrary URL path routing — deferred → **2.3.P1**
+        - [x] Configuration: `method` (`AllowedMethods`, normalised to UPPER-CASE)
+        - [x] Configuration: `secretKey` (string, optional) - For signature validation
+        - [x] Output: `headers` (dictionary)
+        - [x] Output: `body` (object)
+        - [x] Output: `query` (dictionary)
+        - [x] Output: `method` (string) — HTTP method of triggering request
+        - [x] Output: `receivedAt` (DateTimeOffset) — timestamp of trigger
+    - [x] Implement webhook endpoint in API (`WebhookEndpoints.cs` — minimal-API)
+        - [x] `ANY /webhooks/{webhookId}` — trigger endpoint (all HTTP methods; method check in dispatcher)
+        - [x] Parse incoming request body as raw bytes (before JSON — required for HMAC hashing)
+        - [x] Validate signature (if configured) via `WebhookDispatcher`
+        - [x] Trigger workflow execution via `IWorkflowLauncher` (stub → `NullWorkflowLauncher`; `ActorWorkflowLauncher` wired in 2.3.8)
+        - [x] Return `202 Accepted + { executionId }` via `IWebhookResponseStrategy` (Async202, forward-compat for sync → **2.3.P2**)
+        - [x] `WebhookDispatcher` service — encapsulates lookup+dispatch (forward-compat for path router → **2.3.P1**)
+    - [x] Add signature validation (`Workflow.Api/Webhooks/IWebhookSignatureValidator.cs`) 🔒
+        - [x] HMAC-SHA256 validation (`HmacSha256SignatureValidator` — `X-Signature: {hex}`)
+        - [x] GitHub support (`GitHubSignatureValidator` — `X-Hub-Signature-256: sha256={hex}`)
+        - [x] Stripe support (`StripeSignatureValidator` — `Stripe-Signature: t={ts},v1={hex}` with 5-min tolerance)
+        - [x] Replay protection — Stripe validator rejects events outside timestamp tolerance
+        - [x] `WebhookSignatureValidatorRegistry` — `Resolve(scheme)` + `IsKnownScheme(scheme)`
+        - [x] Fail-safe `401` + internal-only error log (no oracle exposure)
+    - [x] Add webhook management endpoints (`POST/GET/PUT/DELETE /api/webhooks`)
+        - [x] Register webhook
+        - [x] Update webhook
+        - [x] Delete webhook
+        - [x] List webhooks
+        - [x] `ProgramPublic.cs` — exposes `Program` type for `WebApplicationFactory<Program>`
+    - [x] Add comprehensive tests ✅ **12/12 WebhookTrigger + 7/7 WebhookSignature**
+        - [x] Test webhook trigger (unit + API integration via WebApplicationFactory)
+        - [x] Test signature validation (HMAC, GitHub, Stripe)
+        - [x] Test invalid signatures (wrong hash, missing header, unknown scheme)
+        - [x] Test different HTTP methods (allowed vs. disallowed → 405)
+        - [x] Test invalid webhook ID (→ 404)
+
+- [x] **End-to-end demo & persistence integration** 🎯 ✅ **(May 21, 2026)**
+    - [x] `examples/definitions/http-integration-demo.json` — WebhookTrigger → TryCatch → Parallel[GET w/ retry | POST w/ bearer] → catch→Log → finally→SetVariable
+    - [x] Persistence tests — WireMock + `SqlitePersistenceProvider(:memory:)` + `WorkflowSupervisor` (Akka TestKit)
+    - [x] E2E tests — full demo shape validates both APIs called + TryCatch recovery path ✅ **4/4**
+    - [x] `docs/http-and-network.md` — full module reference docs
 
 **Modules:**
 ```
 ✅ builtin.http.request - All HTTP methods
 ✅ builtin.http.webhook - Webhook triggers
-✅ builtin.http.graphql - GraphQL queries
-✅ builtin.http.soap - SOAP client (optional)
+[ ] builtin.http.graphql - GraphQL queries (deferred → 2.3.P6)
+✅ builtin.http.soap - SOAP client — deferred indefinitely (D7)
 ```
 
 **Features:**
-- [ ] **All HTTP methods** (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
-    - [ ] Implement each method
-    - [ ] Test each method
+- [x] **All HTTP methods** (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS) ✅
+    - [x] Implement each method
+    - [x] Test each method
 
-- [ ] **Custom headers**
-    - [ ] Accept any header key-value pair
-    - [ ] Validate header names
+- [x] **Custom headers** ✅
+    - [x] Accept any header key-value pair
+    - [x] Validate header names (redact sensitive headers in logs)
     - [ ] Support multiple values for same header
 
-- [ ] **Multiple auth types**
-    - [ ] Basic, Bearer, API Key, OAuth2
-    - [ ] Test all combinations
+- [x] **Multiple auth types** ✅
+    - [x] Basic, Bearer, API Key, OAuth2
+    - [x] Test all combinations
 
-- [ ] **Retry with exponential backoff**
-    - [ ] Implement using Polly
-    - [ ] Test backoff timing
+- [x] **Retry with exponential backoff** ✅
+    - [x] Implement using Polly v8 (ResiliencePipeline API)
+    - [x] Test backoff timing
 
-- [ ] **Request/response body transformation**
-    - [ ] JSONPath, XPath, Regex
-    - [ ] Test transformations
+- [x] **Request/response body transformation** ✅
+    - [x] JSONPath, Regex (XPath deferred)
+    - [x] Test transformations
 
 - [ ] **SSL/TLS configuration**
     - [ ] Certificate validation toggle
@@ -805,53 +862,82 @@ Phase 2 builds upon the foundation with critical production features:
     - [ ] SOCKS proxy support
     - [ ] Proxy authentication
 
+**Post-MVP Slices** *(tracked, non-blocking 2.4+)* 🚧
+- [ ] **2.3.P1** Arbitrary-Path Webhook Routing — `Path`/`PathPattern` fields + `WebhookPathRouter` + new catch-all endpoint (~6 tests)
+- [ ] **2.3.P2** Sync Webhook Responses — `WaitForFirstOutputStrategy`, `WaitForCompletionStrategy`, `IWebhookResponseStrategy` impls + `VariableUpdated` engine event (~8 tests)
+- [ ] **2.3.P3** OAuth2 Singleton/Persisted Token Cache — `SingletonOAuth2TokenCache` DI singleton + optional `IOAuth2TokenStore` over `IPersistenceProvider` (~5 tests)
+- [ ] **2.3.P4** Multipart Stream Support — `RequestBodyEncoder` recognises `Stream` parts (~4 tests)
+- [ ] **2.3.P5** Multipart File-Path Support — `allowFileUpload` capability flag + path allowlist (~6 tests)
+- [ ] **2.3.P6** GraphQL Module — `builtin.http.graphql`, partial-success detection, auth reuse (~6 tests)
+- [ ] **2.3.P7** Composite JSONPath Extract — `responseExtractComposite` schema key, multi-path → single object port (~5 tests)
+
 **Tests:**
-- [ ] **HTTP request tests (with WireMock/MockServer)** 🧪
-    - [ ] Setup WireMock container
-    - [ ] Test GET request
-    - [ ] Test POST with JSON body
-    - [ ] Test PUT with XML body
-    - [ ] Test DELETE request
-    - [ ] Test response parsing
-    - [ ] Test error responses (404, 500)
+- [x] **HTTP request tests (with WireMock.Net in-process)** 🧪 ✅ **13/13**
+    - [x] Setup WireMock container (in-process, Docker-free)
+    - [x] Test GET request
+    - [x] Test POST with JSON body
+    - [x] Test PUT with XML body
+    - [x] Test DELETE request
+    - [x] Test response parsing
+    - [x] Test error responses (404, 500)
 
-- [ ] **Authentication flow tests** 🔐
-    - [ ] Test Basic auth success
-    - [ ] Test Basic auth failure
-    - [ ] Test Bearer token
-    - [ ] Test API key in header
-    - [ ] Test API key in query
-    - [ ] Test OAuth2 token flow
+- [x] **Authentication flow tests** 🔐 ✅ **9/9 + 10/10 OAuth2**
+    - [x] Test Basic auth success
+    - [x] Test Basic auth failure
+    - [x] Test Bearer token
+    - [x] Test API key in header
+    - [x] Test API key in query
+    - [x] Test OAuth2 token flow (fetch, cache, expire, 401-retry)
 
-- [ ] **Retry logic tests** 🔄
-    - [ ] Test retry on 500 error
-    - [ ] Test retry on 429 (rate limit)
-    - [ ] Test exponential backoff
-    - [ ] Test max retries exceeded
-    - [ ] Test retry gives up on 404
+- [x] **Retry logic tests** 🔄 ✅ **11/11**
+    - [x] Test retry on 500 error
+    - [x] Test retry on 429 (rate limit) — Retry-After header honoured up to cap
+    - [x] Test exponential backoff
+    - [x] Test max retries exceeded
+    - [x] Test retry gives up on 404
 
-- [ ] **Timeout tests** ⏱️
-    - [ ] Test request timeout
-    - [ ] Test connection timeout
-    - [ ] Test cancellation
+- [x] **Timeout tests** ⏱️ ✅
+    - [x] Test request timeout
+    - [x] Test connection timeout
+    - [x] Test cancellation token honoured mid-flight
 
-- [ ] **Webhook trigger tests** 🪝
-    - [ ] Test webhook receives request
-    - [ ] Test workflow triggered
-    - [ ] Test signature validation
-    - [ ] Test invalid webhook ID
+- [x] **Webhook trigger tests** 🪝 ✅ **12/12 + 7/7 signature**
+    - [x] Test webhook receives request
+    - [x] Test workflow triggered (SpyWorkflowLauncher DI override)
+    - [x] Test signature validation (HMAC, GitHub, Stripe)
+    - [x] Test invalid webhook ID (→ 404)
+
+- [x] **Persistence & E2E tests** 💾 ✅ **4/4**
+    - [x] `HttpNodeExecution_PersistedWithStatusCodeMetadata`
+    - [x] `WebhookTriggeredExecution_PersistedWithWebhookIdMetadata`
+    - [x] `Demo_TriggeredByWebhook_BothApisCalled_AuditPersisted`
+    - [x] `Demo_OneApiFails_TryCatchRecovers_WorkflowCompletes`
 
 **Deliverables:**
 - ✅ Can make authenticated HTTP requests to any API
 - ✅ Workflows triggered via webhooks reliably
 - ✅ Retry logic works correctly with backoff
 - ✅ All HTTP methods supported
-- ✅ Response transformation working
+- ✅ Response transformation working (JSONPath, regex, header extraction)
+- ✅ Webhook signature validation (HMAC, GitHub, Stripe) with replay protection
+- ✅ E2E demo workflow runs on persistence + API stack
+- ✅ `docs/http-and-network.md` documentation complete
+- ✅ 83 unit + integration tests passing across 2.3.0–2.3.8
 - ✅ 90%+ test coverage on HTTP modules
 
 ---
 
 ### 2.4 Database Modules (Week 11-12)
+
+> 📋 **See detailed sub-phases:** [Phase2-4-DatabaseModules.md](./Phase2-4-DatabaseModules.md)
+> 🧭 **Design exploration:** [new-feature-design/Phase2-4-DatabaseModules-Design.md](../new-feature-design/Phase2-4-DatabaseModules-Design.md)
+
+> **Sub-phases:** 2.4.a.0 Shared Infra · 2.4.a.1 Query · 2.4.a.2 Execute · 2.4.a.3 Transaction · 2.4.a.4 BulkInsert · 2.4.a.5 Named Connections + API · 2.4.a.6 E2E + Docs
+> **Estimated tests:** ~70 (MVP) + ~41 (post-MVP slices) | **New project:** Workflow.Modules.Database
+
+> **Note:** This section preserves the *original* Phase 2.4 task list below as a reference. The **authoritative, sliced plan lives in [`Phase2-4-DatabaseModules.md`](./Phase2-4-DatabaseModules.md)** — it incorporates the design-doc resolutions (named connections, deferred MySQL/SQL Server, shared infra extraction, post-MVP linq/Roslyn family) that are not yet reflected in the legacy list~ 🌸
+
+---
 
 **Tasks:**
 - [ ] **Implement generic SQL query module** 🗄️
@@ -1930,241 +2016,4 @@ Phase 2 builds upon the foundation with critical production features:
             - [ ] Accept refresh token
             - [ ] Validate refresh token
             - [ ] Generate new access token
-        - [ ] POST /api/v1/auth/logout
-            - [ ] Invalidate tokens
-    - [ ] Implement authorization policies
-        - [ ] Create `[Authorize]` attribute usage
-        - [ ] Define roles (Admin, Developer, Viewer)
-        - [ ] Define permissions (WorkflowCreate, WorkflowExecute, etc.)
-    - [ ] Add comprehensive tests
-        - [ ] Test API key authentication
-        - [ ] Test JWT authentication
-        - [ ] Test login endpoint
-        - [ ] Test token refresh
-        - [ ] Test authorization policies
-
-- [ ] **Implement API versioning** 🔢
-    - [ ] Install `Microsoft.AspNetCore.Mvc.Versioning`
-    - [ ] Configure API versioning
-        - [ ] URL-based versioning (/api/v1/, /api/v2/)
-        - [ ] Header-based versioning (api-version header)
-        - [ ] Query string versioning (?api-version=1.0)
-    - [ ] Mark controllers with version
-        - [ ] [ApiVersion("1.0")]
-    - [ ] Implement version deprecation
-        - [ ] Mark deprecated versions
-        - [ ] Return deprecation warning in response header
-    - [ ] Add comprehensive tests
-        - [ ] Test v1 endpoints
-        - [ ] Test version negotiation
-        - [ ] Test deprecated version warnings
-
-- [ ] **Add Swagger/OpenAPI documentation** 📚
-    - [ ] Install `Swashbuckle.AspNetCore`
-    - [ ] Configure Swagger generation
-        - [ ] Add XML documentation
-        - [ ] Configure schema generation
-        - [ ] Add authentication schemes
-    - [ ] Configure Swagger UI
-        - [ ] Enable at /swagger
-        - [ ] Add API key input
-        - [ ] Add JWT bearer token input
-        - [ ] Customize branding
-    - [ ] Generate OpenAPI spec
-        - [ ] Export as swagger.json
-        - [ ] Version the API specification
-    - [ ] Add API examples
-        - [ ] Request examples
-        - [ ] Response examples
-        - [ ] Error examples
-    - [ ] Add comprehensive tests
-        - [ ] Test Swagger generation
-        - [ ] Test UI accessibility
-        - [ ] Validate OpenAPI spec
-
-**Controllers:**
-```csharp
-✅ WorkflowsController - CRUD + Execute
-✅ ModulesController - Module management
-✅ VariablesController - Variable management
-✅ MonitoringController - Health + Metrics
-✅ WebhooksController - Webhook handling
-✅ ExecutionsController - Execution management
-✅ AuthController - Authentication
-```
-
-**Authentication:**
-```csharp
-✅ API Key authentication
-✅ JWT token authentication
-✅ Role-based authorization
-✅ Rate limiting (per user/key)
-```
-
-**Tests:**
-- [ ] **API endpoint tests** 🧪
-    - [ ] Test all CRUD operations
-    - [ ] Test execution endpoints
-    - [ ] Test module endpoints
-    - [ ] Test variable endpoints
-    - [ ] Test monitoring endpoints
-    - [ ] Test webhook endpoints
-    - [ ] Test request/response formats
-
-- [ ] **Authentication tests** 🔐
-    - [ ] Test API key auth success
-    - [ ] Test API key auth failure
-    - [ ] Test JWT auth success
-    - [ ] Test JWT auth failure
-    - [ ] Test login with valid credentials
-    - [ ] Test login with invalid credentials
-    - [ ] Test token refresh
-    - [ ] Test expired token
-
-- [ ] **Authorization tests** 🛡️
-    - [ ] Test role-based access
-    - [ ] Test permission-based access
-    - [ ] Test unauthorized access (403)
-    - [ ] Test unauthenticated access (401)
-
-- [ ] **Rate limiting tests** 🚦
-    - [ ] Test rate limit enforcement
-    - [ ] Test rate limit per user
-    - [ ] Test rate limit per API key
-    - [ ] Test rate limit headers
-    - [ ] Test rate limit exceeded (429)
-
-- [ ] **API versioning tests** 🔢
-    - [ ] Test v1 endpoints
-    - [ ] Test version routing
-    - [ ] Test deprecated version warnings
-    - [ ] Test unsupported version (404)
-
-**Deliverables:**
-- ✅ Full REST API operational with all endpoints
-- ✅ Swagger documentation available at /swagger
-- ✅ Authentication working (API Key + JWT)
-- ✅ Authorization with roles and permissions
-- ✅ Rate limiting in place per user/key
-- ✅ API versioning implemented
-- ✅ 90%+ test coverage on API controllers
-- ✅ OpenAPI specification exported
-
----
-
-### 2.8 Module System Enhancements (Deferred from Phase 1.4) 📦
-
-> **CopilotNote:** These items were deferred from Phase 1.4 (Module System Foundation) because they go beyond foundational work. Phase 1.4 establishes the core module contracts, registry, validation, property binding, discovery, and basic dynamic loading. These items build on top of that foundation~ 💖
-
-**Tasks:**
-- [ ] **Define `.wfmod` package format** 📦
-  - [ ] Define package structure (ZIP archive):
-    - [ ] `module.json` — manifest with metadata, version, dependencies
-    - [ ] `lib/` — module DLL(s) and dependency assemblies
-    - [ ] `docs/` — README, changelog, examples
-    - [ ] `assets/` — icons, screenshots
-  - [ ] Create `ModuleManifest` class (deserialized from `module.json`)
-    - [ ] `Id`, `Version`, `DisplayName`, `Description`, `Author`
-    - [ ] `MinEngineVersion` — minimum DotFlow engine version required
-    - [ ] `Dependencies` — list of other module IDs + version ranges
-    - [ ] `EntryAssembly` — path to main DLL within package
-  - [ ] Create `ModulePackageReader` class
-    - [ ] Read and validate `.wfmod` ZIP structure
-    - [ ] Deserialize manifest
-    - [ ] Extract DLLs to isolated directory
-    - [ ] Validate dependencies are available
-  - [ ] Integrate with `AssemblyModuleLoader` (from Phase 1.4.6) for loading extracted DLLs
-  - [ ] Add comprehensive tests
-    - [ ] Test valid package loads correctly
-    - [ ] Test invalid ZIP fails gracefully
-    - [ ] Test missing manifest fails
-    - [ ] Test missing DLL fails
-    - [ ] Test dependency validation
-
-- [ ] **Implement module hot-reload** 🔄
-  - [ ] Create `IModuleWatcher` interface
-    - [ ] `Watch(string directory)` — start watching for changes
-    - [ ] `Stop()` — stop watching
-    - [ ] `event Action<string> ModuleChanged` — fires on DLL/package changes
-  - [ ] Implement `FileSystemModuleWatcher` using `FileSystemWatcher`
-    - [ ] Monitor configured module directories
-    - [ ] Debounce rapid changes (e.g., 500ms delay)
-    - [ ] On change: unload old → load new via `AssemblyModuleLoader`
-  - [ ] Handle running workflows gracefully
-    - [ ] Don't unload modules with active executions
-    - [ ] Queue reload until current executions complete
-    - [ ] Publish `ModuleReloaded` event to Akka EventStream
-  - [ ] Add comprehensive tests
-
-- [ ] **Implement module versioning (side-by-side)** 🔢
-  - [ ] Extend `IModuleRegistry` to support versioned lookups
-    - [ ] `GetModule(string moduleId, Version? version = null)` — null = latest
-    - [ ] `GetModuleVersions(string moduleId) → IReadOnlyList<Version>`
-  - [ ] Store multiple versions per module ID in registry
-  - [ ] Allow workflows to pin to specific module versions
-    - [ ] Add `ModuleVersion` to `NodeDefinition` (optional)
-    - [ ] Resolve at execution time: pinned version > latest
-  - [ ] Handle breaking changes:
-    - [ ] Validate schema compatibility between versions
-    - [ ] Warn on incompatible upgrades
-  - [ ] Add comprehensive tests
-
-- [ ] **Implement full module dependency resolution** 🔗
-  - [ ] Build on `IWorkflowModule.Dependencies` stub (from Phase 1.4.1)
-  - [ ] Create `ModuleDependencyResolver` class
-    - [ ] Topological sort of modules by dependency order
-    - [ ] Detect circular dependencies
-    - [ ] Validate all declared dependencies are registered
-    - [ ] Report missing dependencies with clear messages
-  - [ ] Wire into module loading: load/register in dependency order
-  - [ ] Add comprehensive tests
-
-- [ ] **Assembly signature verification** 🔏
-  - [ ] Optionally verify assembly strong-name signatures on load
-  - [ ] Create `IAssemblyVerifier` interface
-    - [ ] `Verify(string assemblyPath) → bool`
-  - [ ] Implement `StrongNameVerifier`
-  - [ ] Allow trusted publisher list in configuration
-  - [ ] Log warnings for unsigned assemblies (don't block by default)
-  - [ ] Add comprehensive tests
-
-**Tests:**
-- [ ] Package format tests (valid/invalid packages)
-- [ ] Hot-reload tests (watch, reload, running-workflow safety)
-- [ ] Version management tests (side-by-side, pin, resolve)
-- [ ] Dependency resolution tests (sort, circular detection)
-- [ ] Assembly verification tests (signed, unsigned, trusted)
-
-**Deliverables:**
-- ✅ `.wfmod` packages can be loaded and validated
-- ✅ Module hot-reload works with file watching
-- ✅ Multiple module versions can coexist
-- ✅ Module dependencies resolved automatically
-- ✅ Assembly signatures optionally verified
-
----
-
-### Phase 2 Success Criteria ✨
-
-**Must Have:**
-- [ ] All 3 persistence providers working (PostgreSQL, NATS KV, S3)
-- [ ] Conditionals, loops, and parallel execution working
-- [ ] 20+ built-in modules operational
-- [ ] Complete REST API with auth
-- [ ] `.wfmod` package format defined and loadable
-- [ ] Module versioning (side-by-side) operational
-- [ ] 80%+ code coverage maintained
-
-**Demo Workflow:**
-```
-Webhook Trigger → HTTP GET API → Transform JSON → 
-Condition (if valid) → True: Database INSERT → Log Success
-                    → False: Log Error
-```
-
----
-
-*Made with 💖 by Ami-Chan! UwU* ✨
-
-**This is a COMPLETE self-contained Phase 2 roadmap!** Everything you need to implement Phase 2 is right here! 🎀
-
+        - [ ] POST /api/v1/auth

@@ -39,6 +39,8 @@
         <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
         <ProjectReference Include="..\Workflow.Engine\Workflow.Engine.csproj" />
         <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <!-- 🗄️ Phase 2.4 — database module family (shared infra + built-in modules)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
         <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj" />
         <ProjectReference Include="..\Workflow.Api\Workflow.Api.csproj" />
