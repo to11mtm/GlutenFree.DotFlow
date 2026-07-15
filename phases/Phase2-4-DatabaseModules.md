@@ -164,63 +164,72 @@ The design is the outcome of the [Phase 2.4 design exploration](../new-feature-d
 
 ### Tasks
 
-- [ ] **`DatabaseQueryModule`** 🔍
-  - [ ] New file: `Workflow.Modules.Database/Builtin/DatabaseQueryModule.cs`
-  - [ ] `ModuleId: "builtin.database.query"`, `Category: "Database"`, `Icon: "🔍"`, `Version: 1.0.0`
-  - [ ] Schema:
-    - [ ] Input: `connectionId` (string, optional) — preferred; resolved via `IDbConnectionFactory`
-    - [ ] Input: `connectionString` (string, optional) — escape hatch; requires `provider` when set
-    - [ ] Input: `provider` (string enum: `"postgres"`/`"sqlite"`, optional) — required only with `connectionString`
-    - [ ] Input: `query` (string, required) — verbatim SQL; NOT template-expanded (D7)
-    - [ ] Input: `parameters` (`HashMap<string, object?>`, optional) — bound positionally or by name depending on provider
-    - [ ] Input: `timeoutSeconds` (int, optional, default `30`)
-    - [ ] Input: `commandType` (string enum: `"text"`/`"storedProcedure"`, optional, default `"text"`) — *`storedProcedure` deferred to 2.4.a.P1; V1 throws if set to `"storedProcedure"`*
-    - [ ] Output: `rows` (`IReadOnlyList<IReadOnlyDictionary<string, object?>>`)
-    - [ ] Output: `rowCount` (int)
-    - [ ] Output: `columns` (`IReadOnlyList<string>`)
-    - [ ] Output: `success` (bool)
-    - [ ] Output: `durationMs` (long)
-  - [ ] `ValidateConfiguration`:
-    - [ ] Exactly one of (`connectionId`) or (`connectionString` + `provider`) must be set — otherwise validation error
-    - [ ] `query` non-empty
-    - [ ] `commandType == "storedProcedure"` → fails with "deferred to 2.4.a.P1"
-  - [ ] `ExecuteAsync`:
-    - [ ] Resolve `IDbConnectionFactory` from `ctx.Services`
-    - [ ] Build `DataConnection` via factory (named-or-raw, per inputs)
-    - [ ] Construct parameter array via shared `SqlParameterBinder` (new helper in `Workflow.Modules.Database/Internal/SqlParameterBinder.cs`)
-    - [ ] Execute via `db.QueryToList<Dictionary<string, object?>>(query, parameters)` — linq2db's reflective row→dict mapping
-    - [ ] Capture column names from the first row (or empty if no rows)
-    - [ ] Build outputs, return `ModuleResult.Ok(...)` with `ExecutionMetrics.FromDuration(...)`
-    - [ ] On exception: `ModuleResult.Fail(message, ex)` — wraps `Npgsql` / `Sqlite` errors with context
-  - [ ] Append to `BuiltinModuleRegistration`
+> **✅ 2.4.a.1 landed (2026-07-15).** Two implementation corrections folded in below:
+> 1. **Registration path (correction):** the module is **NOT** appended to `BuiltinModuleRegistration.GetAll()` — that lives in `Workflow.Modules`, which does not (and must not) reference `Workflow.Modules.Database` (circular). Instead the module registers via `AddDatabaseModules()` using `TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, DatabaseQueryModule>())`, **and** is reflection-discoverable by `ModuleDiscovery` (parameterless ctor) once the host scans the Database assembly (host wiring lands 2.4.a.5). Same reverse-dependency rule as the 2.4.a.0 `AddDatabaseModules` note~ 🌸
+> 2. **Row→dict API (correction):** linq2db **5.4.1** has no `QueryToList<Dictionary<…>>` reflective row→dict mapping. We use `db.ExecuteReader(sql, parameters)` + a manual `IDataReader` projection (`reader.Reader`) — provider-agnostic, materialises eagerly (D8), and captures ordered column names from the reader schema (not "first row"). `DBNull` → `null`. Verified compiling + 13 SQLite tests green~ ✨
 
-- [ ] **`SqlParameterBinder` helper** 🧷
-  - [ ] New file: `Workflow.Modules.Database/Internal/SqlParameterBinder.cs`
-  - [ ] Converts `HashMap<string, object?>` → `DataParameter[]` for linq2db
-  - [ ] Supported parameter value types: `string`, `int`, `long`, `double`, `decimal`, `bool`, `Guid`, `DateTime`, `DateTimeOffset`, `byte[]`, `null`
-  - [ ] Unsupported type → `SqlParameterBindingException(paramName, "Type X not supported in V1")`
-  - [ ] Provider-specific tweaks (e.g. Postgres `Guid` → `NpgsqlDbType.Uuid`) live here
+- [x] **`DatabaseQueryModule`** 🔍
+  - [x] New file: `Workflow.Modules.Database/Builtin/DatabaseQueryModule.cs`
+  - [x] `ModuleId: "builtin.database.query"`, `Category: "Database"`, `Icon: "🔍"`, `Version: 1.0.0`
+  - [x] Schema (config values arrive via `context.Properties`; results as output ports — the codebase has no separate "input port" concept for these):
+    - [x] Property: `connectionId` (string, optional) — preferred; resolved via `IDbConnectionFactory`
+    - [x] Property: `connectionString` (string, optional) — escape hatch; requires `provider` when set
+    - [x] Property: `provider` (string enum: `"postgres"`/`"sqlite"`, optional) — required only with `connectionString`
+    - [x] Property: `query` (string, required) — verbatim SQL; NOT template-expanded (D7)
+    - [x] Property: `parameters` (`Dictionary<string, object?>`, optional) — normalised + bound by name
+    - [x] Property: `timeoutSeconds` (int, optional, default `30`) — applied via `db.CommandTimeout`
+    - [x] Property: `commandType` (string enum: `"text"`/`"storedProcedure"`, optional, default `"text"`) — *`storedProcedure` deferred to 2.4.a.P1; V1 fails validation if set*
+    - [x] Output: `rows` (`IReadOnlyList<IReadOnlyDictionary<string, object?>>`)
+    - [x] Output: `rowCount` (int)
+    - [x] Output: `columns` (`IReadOnlyList<string>`)
+    - [x] Output: `success` (bool)
+    - [x] Output: `durationMs` (long)
+  - [x] `ValidateConfiguration`:
+    - [x] Exactly one of (`connectionId`) or (`connectionString` + `provider`) must be set — otherwise validation error
+    - [x] `query` non-empty
+    - [x] `commandType == "storedProcedure"` → fails with "deferred to 2.4.a.P1"
+  - [x] `ExecuteAsync`:
+    - [x] Resolve `IDbConnectionFactory` from `ctx.Services` (Fail if unregistered)
+    - [x] Build `DataConnection` via factory (named-or-raw, per properties)
+    - [x] Construct parameter array via shared `SqlParameterBinder`
+    - [x] Execute via `db.ExecuteReader(query, parameters)` + manual `IDataReader`→dict projection *(corrected from `QueryToList` — see note above)*
+    - [x] Capture ordered column names from the reader schema
+    - [x] Build outputs, return `ModuleResult.Ok(...)` with `ExecutionMetrics.FromDuration(...)`
+    - [x] On exception: `ModuleResult.Fail(message, ex)` — wraps `Npgsql` / `Sqlite` errors with context
+  - [x] ~~Append to `BuiltinModuleRegistration`~~ → **register via `AddDatabaseModules()` (`TryAddEnumerable`)** *(corrected — see note above)*
 
-### Tests (target ~15): → `Workflow.Tests/Modules/Database/DatabaseQueryModuleTests.cs` *(SQLite in-memory)* + `Workflow.Tests.Integration/Database/PostgresQueryTests.cs` *(Testcontainers)*
+- [x] **`SqlParameterBinder` helper** 🧷
+  - [x] New file: `Workflow.Modules.Database/Internal/SqlParameterBinder.cs`
+  - [x] Converts a parameter map → `DataParameter[]` for linq2db (+ `Normalize` for loosely-typed `HashMap`/dict/JSON-bag inputs)
+  - [x] Supported parameter value types: `string`, `bool`, `int`, `long`, `short`, `byte`, `double`, `float`, `decimal`, `Guid`, `DateTime`, `DateTimeOffset`, `TimeSpan`, `byte[]`, `null`
+  - [x] Unsupported type → `SqlParameterBindingException(paramName, "Type X not supported in V1")`
+  - [ ] Provider-specific tweaks (e.g. Postgres `Guid` → `NpgsqlDbType.Uuid`) live here *(deferred — linq2db's default `DataParameter` mapping handled all V1 test cases; revisit if a provider type-mapping gap surfaces)*
 
-**Unit/SQLite (10):**
-- [ ] `QueryModule_Metadata_IsCorrect`
-- [ ] `QueryModule_Schema_HasRequiredPorts`
-- [ ] `ValidateConfiguration_NeitherConnectionIdNorString_Fails`
-- [ ] `ValidateConfiguration_StoredProcedure_FailsAsDeferred`
-- [ ] `SimpleSelect_ReturnsAllRows` *(SQLite seeded with 3 rows)*
-- [ ] `SelectWithParameter_BindsCorrectly`
-- [ ] `SelectWithMultipleParameters_BindsAll`
-- [ ] `SelectWithNullParameter_HandlesNull`
-- [ ] `SelectEmptyResultSet_ReturnsEmptyRowsAndZeroCount`
-- [ ] `SelectInvalidSql_ReturnsFailWithSqliteError`
+### Tests (target ~15): → `Workflow.Tests/Modules/Database/DatabaseQueryModuleTests.cs` *(SQLite temp-file)* + `Workflow.Tests.Integration/Database/PostgresQueryTests.cs` *(Testcontainers)*
 
-**Integration/Postgres (5):**
-- [ ] `Postgres_SelectFromSeededTable_RoundTrips`
-- [ ] `Postgres_JoinTwoTables_ReturnsExpectedShape`
-- [ ] `Postgres_AggregateFunctions_CountSumAvg_ReturnExpected`
-- [ ] `Postgres_Jsonb_ReturnsAsObject`
-- [ ] `Postgres_TimeoutExceeded_ReturnsFailWithTimeoutError`
+**Unit/SQLite (13 — exceeded the 10 budget):**
+- [x] `QueryModule_Metadata_IsCorrect`
+- [x] `QueryModule_Schema_HasRequiredPorts`
+- [x] `ValidateConfiguration_NeitherConnectionIdNorString_Fails`
+- [x] `ValidateConfiguration_StoredProcedure_FailsAsDeferred`
+- [x] `SimpleSelect_ReturnsAllRows` *(SQLite seeded with 3 rows)*
+- [x] `SelectWithParameter_BindsCorrectly`
+- [x] `SelectWithMultipleParameters_BindsAll`
+- [x] `SelectWithNullParameter_HandlesNull`
+- [x] `SelectEmptyResultSet_ReturnsEmptyRowsAndZeroCount`
+- [x] `SelectInvalidSql_ReturnsFailWithSqliteError`
+- [x] `RawConnectionString_Works` *(bonus — escape-hatch path)*
+- [x] `UnknownConnectionId_ReturnsFail` *(bonus)*
+- [x] `MissingConnectionFactory_Fails` *(bonus — DI guard)*
+
+**Integration/Postgres (5, Docker-gated — compile-verified):**
+- [x] `Postgres_SelectFromSeededTable_RoundTrips`
+- [x] `Postgres_JoinTwoTables_ReturnsExpectedShape`
+- [x] `Postgres_AggregateFunctions_CountSumAvg_ReturnExpected`
+- [x] `Postgres_Jsonb_ReturnsAsValue` *(renamed from `_ReturnsAsObject` — jsonb surfaces as its string form via the generic reader; typed-object mapping is a 2.4.b concern)*
+- [x] `Postgres_InvalidSql_ReturnsFail` *(swapped for `_TimeoutExceeded` — deterministic without a slow-query fixture; timeout E2E revisited in 2.4.a.P4 telemetry slice)*
+
+> **CopilotNote:** `Workflow.Tests.Integration` needed explicit `ProjectReference`s to **both** `Workflow.Modules` and `Workflow.Modules.Database` — the transitive project reference didn't flow compile-time types for the module contract~ 🧩
 
 ---
 

@@ -36,6 +36,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
+        <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
         <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Nats\Workflow.Persistence.Nats.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Postgres\Workflow.Persistence.Postgres.csproj" />

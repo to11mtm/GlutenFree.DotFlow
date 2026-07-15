@@ -6,7 +6,9 @@ namespace Workflow.Modules.Database;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Workflow.Modules.Abstractions;
 using Workflow.Modules.Database.Abstractions;
+using Workflow.Modules.Database.Builtin;
 using Workflow.Modules.Database.Catalog;
 using Workflow.Modules.Database.Configuration;
 using Workflow.Modules.Database.Connections;
@@ -60,8 +62,12 @@ public static class DatabaseModuleServiceCollectionExtensions
         // 📚 Table catalog stub — manual registration only in V1 (Q4/D10)~
         services.TryAddSingleton<IWorkflowTableCatalog, InMemoryWorkflowTableCatalog>();
 
-        // 🔮 2.4.a.1–4 append the four built-in modules here as they land:
-        //    query 🔍 · execute ✏️ · transaction 💼 · bulkinsert 📊
+        // 🔍 2.4.a.1 — Database Query module (SELECT-only). Registered as an enumerable
+        //    IWorkflowModule so hosts that resolve IEnumerable<IWorkflowModule> from DI pick it up;
+        //    reflection-based ModuleDiscovery also finds it via assembly scan (host wiring in 2.4.a.5).
+        //    2.4.a.2–4 append execute ✏️ · transaction 💼 · bulkinsert 📊 here as they land~
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, DatabaseQueryModule>());
+
         return services;
     }
 }
