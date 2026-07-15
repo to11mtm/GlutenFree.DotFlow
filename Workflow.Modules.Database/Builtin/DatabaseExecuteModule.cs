@@ -209,7 +209,8 @@ public sealed class DatabaseExecuteModule : IWorkflowModule
 
             db.CommandTimeout = timeoutSeconds;
 
-            var (affectedRows, lastInsertId) = Execute(db, command, parameters, expectsLastInsertId, context.Logger);
+            var (affectedRows, lastInsertId) = DbSingleOpExecutor.Execute(
+                db, command, parameters, expectsLastInsertId, context.Logger);
             sw.Stop();
 
             var outputs = new Dictionary<string, object?>
@@ -239,61 +240,5 @@ public sealed class DatabaseExecuteModule : IWorkflowModule
             return ModuleResult.Fail($"Database execute failed: {DbErrorContext.Describe(ex)}~ 💔", ex);
         }
 #pragma warning restore CA1031
-    }
-
-    /// <summary>
-    /// Runs the command and, when requested, resolves the last-insert id in a provider-aware way~ 🆔.
-    /// </summary>
-    private static (int AffectedRows, long? LastInsertId) Execute(
-        DataConnection db,
-        string command,
-        DataParameter[] parameters,
-        bool expectsLastInsertId,
-        ILogger logger)
-    {
-        var providerName = db.DataProvider.Name;
-        var isPostgres = providerName.Contains("PostgreSQL", StringComparison.OrdinalIgnoreCase);
-
-        // 🐘 Postgres: the id (if any) rides on a user-supplied RETURNING clause (Q12 — no auto-rewrite).
-        // We read it via a reader so both the returned value AND the row count are captured.
-        if (expectsLastInsertId && isPostgres)
-        {
-            long? returningId = null;
-            var rowCount = 0;
-            using var reader = db.ExecuteReader(command, parameters);
-            var r = reader.Reader!;
-            while (r.Read())
-            {
-                rowCount++;
-                if (returningId is null && r.FieldCount > 0)
-                {
-                    var value = r.GetValue(0);
-                    if (value is not DBNull)
-                    {
-                        returningId = Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
-                    }
-                }
-            }
-
-            if (returningId is null)
-            {
-                logger.LogWarning(
-                    "⚠️ expectsLastInsertId was set but the Postgres command returned no RETURNING value — lastInsertId is null. Add 'RETURNING id' to your INSERT~ 🌸");
-            }
-
-            return (rowCount, returningId);
-        }
-
-        // Everything else: affected-row count from a plain Execute~
-        var affected = db.Execute(command, parameters);
-
-        if (!expectsLastInsertId)
-        {
-            return (affected, null);
-        }
-
-        // 🪶 SQLite: last_insert_rowid() on the SAME open connection~
-        long? lastId = db.Execute<long?>("SELECT last_insert_rowid()");
-        return (affected, lastId);
     }
 }

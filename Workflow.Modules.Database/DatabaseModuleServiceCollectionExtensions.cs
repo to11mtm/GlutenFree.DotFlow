@@ -71,6 +71,9 @@ public static class DatabaseModuleServiceCollectionExtensions
         // ✏️ 2.4.a.2 — Database Execute module (INSERT/UPDATE/DELETE + optional lastInsertId)~
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, DatabaseExecuteModule>());
 
+        // 💼 2.4.a.3 — Database Transaction module (atomic ordered ops; single + batch mode)~
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, DatabaseTransactionModule>());
+
         return services;
     }
 }
