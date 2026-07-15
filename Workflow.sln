@@ -24,6 +24,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "phases", "phases", "{AA4347
 		phases\Phase2-2-AdvancedFlowControl.md = phases\Phase2-2-AdvancedFlowControl.md
 		phases\Phase2-2-Akka-Streams-Analysis.md = phases\Phase2-2-Akka-Streams-Analysis.md
 		phases\Phase2-3-HttpAndNetworkModules.md = phases\Phase2-3-HttpAndNetworkModules.md
+		phases\Phase2-4-DatabaseModules.md = phases\Phase2-4-DatabaseModules.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ignore", "ignore", "{B9EB3407-915D-422B-8BD3-CE0DA7923FF3}"

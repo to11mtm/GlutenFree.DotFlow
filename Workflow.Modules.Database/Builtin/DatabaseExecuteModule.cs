@@ -1,4 +1,4 @@
-// <copyright file="DatabaseQueryModule.cs" company="GlutenFree">
+// <copyright file="DatabaseExecuteModule.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -6,47 +6,43 @@ namespace Workflow.Modules.Database.Builtin;
 
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using LanguageExt;
 using LinqToDB.Data;
+using Microsoft.Extensions.Logging;
 using Workflow.Core.Models;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Database.Abstractions;
 using Workflow.Modules.Database.Internal;
 
 /// <summary>
-/// 🔍 Built-in database query module (<c>builtin.database.query</c>) — Phase 2.4.a.1~ ✨💖.
-/// SELECT-only: returns materialised rows, column names, and a row count. Never string-concatenates
-/// SQL (D7) — parameters bind through <see cref="SqlParameterBinder"/>. Outputs are always fully
-/// materialised (D8) — no open readers or <c>IQueryable</c> escape the module~ 🌸.
+/// ✏️ Built-in database execute module (<c>builtin.database.execute</c>) — Phase 2.4.a.2~ ✨💖.
+/// INSERT/UPDATE/DELETE: returns the affected-row count plus an optional <c>lastInsertId</c>.
+/// Parameterised only (D7); provider-aware last-insert-id resolution (SQLite vs Postgres)~ 🌸.
 /// </summary>
 /// <remarks>
-/// <para>
-/// CopilotNote: The module is parameterless-constructable so <c>ModuleDiscovery</c> can reflectively
-/// instantiate it. It resolves <see cref="IDbConnectionFactory"/> lazily from
-/// <see cref="ModuleExecutionContext.Services"/> — the host wires the family via
-/// <c>services.AddDatabaseModules()</c> (D2/D14; host-side assembly scan lands in 2.4.a.5)~ 🧠.
-/// </para>
+/// CopilotNote: Parameterless-constructable (reflection discovery). Resolves
+/// <see cref="IDbConnectionFactory"/> from <see cref="ModuleExecutionContext.Services"/> and
+/// shares config/connection plumbing with the query module via <see cref="DbModuleSupport"/>~ 🧰.
 /// </remarks>
-public sealed class DatabaseQueryModule : IWorkflowModule
+public sealed class DatabaseExecuteModule : IWorkflowModule
 {
     /// <inheritdoc/>
-    public string ModuleId => "builtin.database.query";
+    public string ModuleId => "builtin.database.execute";
 
     /// <inheritdoc/>
-    public string DisplayName => "Database Query";
+    public string DisplayName => "Database Execute";
 
     /// <inheritdoc/>
     public string Category => "Database";
 
     /// <inheritdoc/>
-    public string Description => "Runs a parameterised SELECT and returns the rows, columns, and row count~ 🔍✨";
+    public string Description => "Runs a parameterised INSERT/UPDATE/DELETE and returns the affected row count~ ✏️✨";
 
     /// <inheritdoc/>
-    public string Icon => "🔍";
+    public string Icon => "✏️";
 
     /// <inheritdoc/>
     public Version Version => new(1, 0, 0);
@@ -56,34 +52,28 @@ public sealed class DatabaseQueryModule : IWorkflowModule
         Inputs: Arr<PortDefinition>.Empty,
         Outputs: Arr.create(
             new PortDefinition(
-                Name: "rows",
-                DisplayName: "Rows",
-                DataType: typeof(IReadOnlyList<IReadOnlyDictionary<string, object?>>),
-                Description: "Materialised result rows (each a column→value dictionary)~ 📊",
-                IsRequired: false),
-            new PortDefinition(
-                Name: "rowCount",
-                DisplayName: "Row Count",
+                Name: "affectedRows",
+                DisplayName: "Affected Rows",
                 DataType: typeof(int),
-                Description: "Number of rows returned~ 🔢",
+                Description: "Number of rows inserted/updated/deleted~ 🔢",
                 IsRequired: false),
             new PortDefinition(
-                Name: "columns",
-                DisplayName: "Columns",
-                DataType: typeof(IReadOnlyList<string>),
-                Description: "Ordered column names from the result set~ 🏷️",
+                Name: "lastInsertId",
+                DisplayName: "Last Insert Id",
+                DataType: typeof(long?),
+                Description: "Auto-generated id when expectsLastInsertId is set (SQLite rowid / Postgres RETURNING)~ 🆔",
                 IsRequired: false),
             new PortDefinition(
                 Name: "success",
                 DisplayName: "Success",
                 DataType: typeof(bool),
-                Description: "True when the query executed without error~ ✅",
+                Description: "True when the command executed without error~ ✅",
                 IsRequired: false),
             new PortDefinition(
                 Name: "durationMs",
                 DisplayName: "Duration (ms)",
                 DataType: typeof(long),
-                Description: "Query round-trip elapsed time in milliseconds~ ⏱️",
+                Description: "Command round-trip elapsed time in milliseconds~ ⏱️",
                 IsRequired: false)),
         Properties: Arr.create(
             new ModulePropertyDefinition(
@@ -111,10 +101,10 @@ public sealed class DatabaseQueryModule : IWorkflowModule
                 DefaultValue: null,
                 EditorType: PropertyEditorType.Dropdown),
             new ModulePropertyDefinition(
-                Name: "query",
-                DisplayName: "Query (SQL)",
+                Name: "command",
+                DisplayName: "Command (SQL)",
                 DataType: typeof(string),
-                Description: "Verbatim SELECT SQL. NOT template-expanded (D7) — use parameters for values~ 🔍",
+                Description: "Verbatim INSERT/UPDATE/DELETE SQL. NOT template-expanded (D7)~ ✏️",
                 IsRequired: true,
                 DefaultValue: null,
                 EditorType: PropertyEditorType.Code),
@@ -135,13 +125,13 @@ public sealed class DatabaseQueryModule : IWorkflowModule
                 DefaultValue: 30,
                 EditorType: PropertyEditorType.Number),
             new ModulePropertyDefinition(
-                Name: "commandType",
-                DisplayName: "Command Type",
-                DataType: typeof(string),
-                Description: "'text' (default). 'storedProcedure' is deferred to 2.4.a.P1~ 🎛️",
+                Name: "expectsLastInsertId",
+                DisplayName: "Expects Last Insert Id",
+                DataType: typeof(bool),
+                Description: "When true, resolves lastInsertId — SQLite via last_insert_rowid(); Postgres via a user-supplied RETURNING clause~ 🆔",
                 IsRequired: false,
-                DefaultValue: "text",
-                EditorType: PropertyEditorType.Dropdown)));
+                DefaultValue: false,
+                EditorType: PropertyEditorType.Boolean)));
 
     /// <inheritdoc/>
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -151,24 +141,13 @@ public sealed class DatabaseQueryModule : IWorkflowModule
         // Connection-source rule (connectionId XOR connectionString+provider) — shared (D3)~ 🔀
         DbModuleSupport.ValidateConnectionSource(configuration, errors);
 
-        // Query non-empty~ 🔍
-        if (string.IsNullOrWhiteSpace(DbModuleSupport.GetString(configuration, "query")))
+        // Command non-empty~ ✏️
+        if (string.IsNullOrWhiteSpace(DbModuleSupport.GetString(configuration, "command")))
         {
             errors.Add(new ValidationError(
-                "DB_QUERY_REQUIRED",
-                "'query' is required and must be non-empty~ 💔",
-                PropertyName: "query"));
-        }
-
-        // storedProcedure deferred to 2.4.a.P1~ 🎛️
-        var commandType = DbModuleSupport.GetString(configuration, "commandType");
-        if (!string.IsNullOrWhiteSpace(commandType)
-            && string.Equals(commandType, "storedProcedure", StringComparison.OrdinalIgnoreCase))
-        {
-            errors.Add(new ValidationError(
-                "DB_COMMANDTYPE_DEFERRED",
-                "commandType 'storedProcedure' is deferred to 2.4.a.P1 — use 'text' for now~ 💔",
-                PropertyName: "commandType"));
+                "DB_COMMAND_REQUIRED",
+                "'command' is required and must be non-empty~ 💔",
+                PropertyName: "command"));
         }
 
         // Timeout must be positive when supplied~ ⏱️
@@ -198,7 +177,7 @@ public sealed class DatabaseQueryModule : IWorkflowModule
                 "IDbConnectionFactory not registered in DI. Call services.AddDatabaseModules() at host startup~ 💔");
         }
 
-        // 2️⃣ Read + validate config~ 📋
+        // 2️⃣ Validate config~ 📋
         var validation = this.ValidateConfiguration(context.Properties);
         if (!validation.IsValid)
         {
@@ -206,8 +185,9 @@ public sealed class DatabaseQueryModule : IWorkflowModule
                 $"Invalid configuration: {string.Join("; ", validation.Errors)}~ 💔");
         }
 
-        var query = DbModuleSupport.GetString(context.Properties, "query")!;
+        var command = DbModuleSupport.GetString(context.Properties, "command")!;
         var timeoutSeconds = DbModuleSupport.TryParseInt(context.Properties, "timeoutSeconds") ?? 30;
+        var expectsLastInsertId = DbModuleSupport.TryParseBool(context.Properties, "expectsLastInsertId") ?? false;
 
         DataParameter[] parameters;
         try
@@ -223,22 +203,19 @@ public sealed class DatabaseQueryModule : IWorkflowModule
         var sw = Stopwatch.StartNew();
         try
         {
-            // 3️⃣ Build connection via the factory (named XOR raw)~ 🔌
             using var db = await DbModuleSupport
                 .CreateConnectionAsync(factory, context.Properties, cancellationToken)
                 .ConfigureAwait(false);
 
             db.CommandTimeout = timeoutSeconds;
 
-            // 4️⃣ Execute + materialise rows (D8)~ 📊
-            var (rows, columns) = ReadAll(db, query, parameters);
+            var (affectedRows, lastInsertId) = Execute(db, command, parameters, expectsLastInsertId, context.Logger);
             sw.Stop();
 
             var outputs = new Dictionary<string, object?>
             {
-                ["rows"] = rows,
-                ["rowCount"] = rows.Count,
-                ["columns"] = columns,
+                ["affectedRows"] = affectedRows,
+                ["lastInsertId"] = lastInsertId,
                 ["success"] = true,
                 ["durationMs"] = sw.ElapsedMilliseconds,
             };
@@ -256,49 +233,67 @@ public sealed class DatabaseQueryModule : IWorkflowModule
             return ModuleResult.Fail($"Unknown provider '{ex.ProviderKey}'~ 💔", ex);
         }
         catch (Exception ex)
-#pragma warning disable CA1031 // Provider-level SQL errors (Npgsql/Sqlite) are intentionally caught wide and surfaced as a clean Fail~ 🌸
+#pragma warning disable CA1031 // Provider-level SQL errors (Npgsql/Sqlite) are intentionally caught wide and surfaced as a clean Fail with constraint context~ 🌸
         {
-            // Provider-level SQL errors (Npgsql/Sqlite) surface as a clean Fail with context~ 🌸
             sw.Stop();
-            return ModuleResult.Fail($"Database query failed: {DbErrorContext.Describe(ex)}~ 💔", ex);
+            return ModuleResult.Fail($"Database execute failed: {DbErrorContext.Describe(ex)}~ 💔", ex);
         }
 #pragma warning restore CA1031
     }
 
     /// <summary>
-    /// Executes the query and projects every row into a column→value dictionary,
-    /// capturing the ordered column names once from the reader schema~ 📊.
+    /// Runs the command and, when requested, resolves the last-insert id in a provider-aware way~ 🆔.
     /// </summary>
-    private static (IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows, IReadOnlyList<string> Columns) ReadAll(
+    private static (int AffectedRows, long? LastInsertId) Execute(
         DataConnection db,
-        string query,
-        DataParameter[] parameters)
+        string command,
+        DataParameter[] parameters,
+        bool expectsLastInsertId,
+        ILogger logger)
     {
-        var rows = new List<IReadOnlyDictionary<string, object?>>();
-        var columns = new List<string>();
+        var providerName = db.DataProvider.Name;
+        var isPostgres = providerName.Contains("PostgreSQL", StringComparison.OrdinalIgnoreCase);
 
-        using var reader = db.ExecuteReader(query, parameters);
-        IDataReader r = reader.Reader!;
-
-        var fieldCount = r.FieldCount;
-        for (var i = 0; i < fieldCount; i++)
+        // 🐘 Postgres: the id (if any) rides on a user-supplied RETURNING clause (Q12 — no auto-rewrite).
+        // We read it via a reader so both the returned value AND the row count are captured.
+        if (expectsLastInsertId && isPostgres)
         {
-            columns.Add(r.GetName(i));
-        }
-
-        while (r.Read())
-        {
-            var row = new Dictionary<string, object?>(fieldCount, StringComparer.Ordinal);
-            for (var i = 0; i < fieldCount; i++)
+            long? returningId = null;
+            var rowCount = 0;
+            using var reader = db.ExecuteReader(command, parameters);
+            var r = reader.Reader!;
+            while (r.Read())
             {
-                var value = r.GetValue(i);
-                row[columns[i]] = value is DBNull ? null : value;
+                rowCount++;
+                if (returningId is null && r.FieldCount > 0)
+                {
+                    var value = r.GetValue(0);
+                    if (value is not DBNull)
+                    {
+                        returningId = Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                }
             }
 
-            rows.Add(row);
+            if (returningId is null)
+            {
+                logger.LogWarning(
+                    "⚠️ expectsLastInsertId was set but the Postgres command returned no RETURNING value — lastInsertId is null. Add 'RETURNING id' to your INSERT~ 🌸");
+            }
+
+            return (rowCount, returningId);
         }
 
-        return (rows, columns);
+        // Everything else: affected-row count from a plain Execute~
+        var affected = db.Execute(command, parameters);
+
+        if (!expectsLastInsertId)
+        {
+            return (affected, null);
+        }
+
+        // 🪶 SQLite: last_insert_rowid() on the SAME open connection~
+        long? lastId = db.Execute<long?>("SELECT last_insert_rowid()");
+        return (affected, lastId);
     }
 }
-

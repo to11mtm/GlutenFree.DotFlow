@@ -65,8 +65,11 @@ public static class DatabaseModuleServiceCollectionExtensions
         // 🔍 2.4.a.1 — Database Query module (SELECT-only). Registered as an enumerable
         //    IWorkflowModule so hosts that resolve IEnumerable<IWorkflowModule> from DI pick it up;
         //    reflection-based ModuleDiscovery also finds it via assembly scan (host wiring in 2.4.a.5).
-        //    2.4.a.2–4 append execute ✏️ · transaction 💼 · bulkinsert 📊 here as they land~
+        //    2.4.a.3–4 append transaction 💼 · bulkinsert 📊 here as they land~
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, DatabaseQueryModule>());
+
+        // ✏️ 2.4.a.2 — Database Execute module (INSERT/UPDATE/DELETE + optional lastInsertId)~
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, DatabaseExecuteModule>());
 
         return services;
     }

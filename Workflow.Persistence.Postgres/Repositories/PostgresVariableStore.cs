@@ -2,6 +2,8 @@
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
+using LinqToDB.Async;
+
 namespace Workflow.Persistence.Postgres.Repositories;
 
 using System.Text.Json;

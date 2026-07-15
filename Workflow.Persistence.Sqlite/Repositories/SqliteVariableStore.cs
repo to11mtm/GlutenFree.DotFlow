@@ -2,6 +2,8 @@
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
+using LinqToDB.Async;
+
 namespace Workflow.Persistence.Sqlite.Repositories;
 
 using System.Text.Json;

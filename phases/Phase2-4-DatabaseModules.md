@@ -241,44 +241,57 @@ The design is the outcome of the [Phase 2.4 design exploration](../new-feature-d
 
 ### Tasks
 
-- [ ] **`DatabaseExecuteModule`** ✏️
-  - [ ] New file: `Workflow.Modules.Database/Builtin/DatabaseExecuteModule.cs`
-  - [ ] `ModuleId: "builtin.database.execute"`, `Category: "Database"`, `Icon: "✏️"`, `Version: 1.0.0`
-  - [ ] Schema:
-    - [ ] Input: `connectionId` / `connectionString` / `provider` (same as query module)
-    - [ ] Input: `command` (string, required) — verbatim SQL
-    - [ ] Input: `parameters` (`HashMap<string, object?>`, optional)
-    - [ ] Input: `timeoutSeconds` (int, optional, default `30`)
-    - [ ] Input: `expectsLastInsertId` (bool, optional, default `false`) — when `true`, runs `SELECT last_insert_rowid()` (SQLite) or assumes the user used `RETURNING id` (Postgres — see Q12)
-    - [ ] Output: `affectedRows` (int)
-    - [ ] Output: `lastInsertId` (long, nullable)
-    - [ ] Output: `success` (bool)
-    - [ ] Output: `durationMs` (long)
-  - [ ] `ExecuteAsync`:
-    - [ ] Resolve factory, build connection
-    - [ ] Execute via `db.Execute(command, parameters)` → `affectedRows`
-    - [ ] If `expectsLastInsertId == true`:
-      - [ ] SQLite: follow-up `SELECT last_insert_rowid()` on same connection
-      - [ ] Postgres: try to extract from `RETURNING` clause result if present; otherwise leave `lastInsertId` null with a logged warning
-    - [ ] On `Npgsql` / `Sqlite` errors: `ModuleResult.Fail(...)` with parsed error context (constraint name, column name where available)
+> **✅ 2.4.a.2 landed (2026-07-15).** Notes:
+> 1. **DRY refactor folded in:** extracted `Workflow.Modules.Database/Internal/DbModuleSupport.cs` (property readers `GetString`/`TryParseInt`/`TryParseBool` + `ValidateConnectionSource` + `CreateConnectionAsync`) and retrofitted `DatabaseQueryModule` onto it (13 query tests re-run green — no regression). Query & execute now share one copy of the boring config/connection bits; transaction + bulkinsert will too~ 🧰
+> 2. **Provider-aware `lastInsertId`:** the module inspects `db.DataProvider.Name` at runtime (no need to thread the provider key through the factory). SQLite → follow-up `db.Execute<long?>("SELECT last_insert_rowid()")` on the same open connection; Postgres → reads the user-supplied `RETURNING` scalar via `ExecuteReader` (Q12 — document-only, no auto-rewrite), logging a warning + returning `null` when absent~ 🆔
+> 3. **Error context:** new `Internal/DbErrorContext.cs` enriches failures with `sqlState`/`constraint`/`column`/`table` — reads Npgsql `PostgresException` reflectively (no compile-time Npgsql-type coupling) and falls back to `DbException.SqlState` / `ex.Message`. `DatabaseQueryModule` adopted it too~ 🚨
+> 4. **linq2db 6.3.0 verified:** `db.Execute`, `db.Execute<T>`, `db.DataProvider.Name`, and the query module's `ExecuteReader`/`.Reader` all compile + pass under the 6.3.0 bump~ ✨
+
+- [x] **`DatabaseExecuteModule`** ✏️
+  - [x] New file: `Workflow.Modules.Database/Builtin/DatabaseExecuteModule.cs`
+  - [x] `ModuleId: "builtin.database.execute"`, `Category: "Database"`, `Icon: "✏️"`, `Version: 1.0.0`
+  - [x] Schema (config via `context.Properties`; results as output ports):
+    - [x] Property: `connectionId` / `connectionString` / `provider` (same as query module — shared validation)
+    - [x] Property: `command` (string, required) — verbatim SQL
+    - [x] Property: `parameters` (`Dictionary<string, object?>`, optional)
+    - [x] Property: `timeoutSeconds` (int, optional, default `30`)
+    - [x] Property: `expectsLastInsertId` (bool, optional, default `false`)
+    - [x] Output: `affectedRows` (int)
+    - [x] Output: `lastInsertId` (long?, nullable)
+    - [x] Output: `success` (bool)
+    - [x] Output: `durationMs` (long)
+  - [x] `ExecuteAsync`:
+    - [x] Resolve factory (Fail if unregistered), build connection via `DbModuleSupport.CreateConnectionAsync`
+    - [x] Execute via `db.Execute(command, parameters)` → `affectedRows`
+    - [x] If `expectsLastInsertId == true` (branch on `db.DataProvider.Name`):
+      - [x] SQLite: follow-up `SELECT last_insert_rowid()` on same connection
+      - [x] Postgres: read `RETURNING` scalar via reader; else `null` + logged warning
+    - [x] On `Npgsql` / `Sqlite` errors: `ModuleResult.Fail(...)` with `DbErrorContext` (constraint/column/sqlState where available)
+  - [x] Register via `AddDatabaseModules()` (`TryAddEnumerable`) *(not `BuiltinModuleRegistration` — same reverse-dep rule as 2.4.a.1)*
+
+- [x] **`DbModuleSupport` + `DbErrorContext` helpers** 🧰 *(folded-in DRY extraction)*
+  - [x] `Workflow.Modules.Database/Internal/DbModuleSupport.cs` — shared property readers, connection-source validation, named-or-raw connection resolution
+  - [x] `Workflow.Modules.Database/Internal/DbErrorContext.cs` — provider-specific error enrichment
+  - [x] `DatabaseQueryModule` retrofitted onto both
 
 ### Tests (target ~12): → `Workflow.Tests/Modules/Database/DatabaseExecuteModuleTests.cs` + `Workflow.Tests.Integration/Database/PostgresExecuteTests.cs`
 
-**Unit/SQLite (8):**
-- [ ] `ExecuteModule_Metadata_IsCorrect`
-- [ ] `Insert_ReturnsAffectedRowsOne`
-- [ ] `Update_MatchingRows_ReturnsAffectedRowsCount`
-- [ ] `Update_NoMatch_ReturnsZeroAffected`
-- [ ] `Delete_RemovesRow`
-- [ ] `Insert_WithExpectsLastInsertId_ReturnsAutoIncrementId`
-- [ ] `Insert_UniqueConstraintViolation_ReturnsFailWithConstraintName`
-- [ ] `Execute_InvalidSql_ReturnsFail`
+**Unit/SQLite (9 — 8 planned + 1 bonus):**
+- [x] `ExecuteModule_Metadata_IsCorrect`
+- [x] `Insert_ReturnsAffectedRowsOne`
+- [x] `Update_MatchingRows_ReturnsAffectedRowsCount`
+- [x] `Update_NoMatch_ReturnsZeroAffected`
+- [x] `Delete_RemovesRow`
+- [x] `Insert_WithExpectsLastInsertId_ReturnsAutoIncrementId`
+- [x] `Insert_UniqueConstraintViolation_ReturnsFailWithConstraintContext` *(renamed from `_WithConstraintName` — SQLite exposes the constraint target in the message, not a discrete field)*
+- [x] `Execute_InvalidSql_ReturnsFail`
+- [x] `ValidateConfiguration_MissingCommand_Fails` *(bonus)*
 
-**Integration/Postgres (4):**
-- [ ] `Postgres_InsertReturningId_PopulatesLastInsertId`
-- [ ] `Postgres_UpdateWithCte_AffectsCorrectRows`
-- [ ] `Postgres_DeleteCascade_AffectsExpectedCount`
-- [ ] `Postgres_ForeignKeyViolation_ReturnsFailWithConstraintName`
+**Integration/Postgres (4, Docker-gated — compile-verified):**
+- [x] `Postgres_InsertReturningId_PopulatesLastInsertId`
+- [x] `Postgres_UpdateWithCte_AffectsCorrectRows`
+- [x] `Postgres_DeleteCascade_AffectsExpectedCount`
+- [x] `Postgres_ForeignKeyViolation_ReturnsFailWithConstraintName` *(asserts `constraint=` context from `DbErrorContext`)*
 
 ---
 
