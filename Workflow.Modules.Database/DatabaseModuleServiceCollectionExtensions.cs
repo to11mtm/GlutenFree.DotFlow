@@ -74,6 +74,9 @@ public static class DatabaseModuleServiceCollectionExtensions
         // 💼 2.4.a.3 — Database Transaction module (atomic ordered ops; single + batch mode)~
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, DatabaseTransactionModule>());
 
+        // 📊 2.4.a.4 — Database BulkInsert module (batched multi-row INSERT + optional RETURNING)~
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, DatabaseBulkInsertModule>());
+
         return services;
     }
 }

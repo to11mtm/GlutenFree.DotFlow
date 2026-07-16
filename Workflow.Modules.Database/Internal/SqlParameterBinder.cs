@@ -48,11 +48,22 @@ public static class SqlParameterBinder
         var i = 0;
         foreach (var kv in parameters)
         {
-            result[i++] = new DataParameter(NormalizeName(kv.Key), CoerceValue(kv.Key, kv.Value));
+            result[i++] = BindOne(kv.Key, kv.Value);
         }
 
         return result;
     }
+
+    /// <summary>
+    /// Binds a single name/value pair to a linq2db <see cref="DataParameter"/>, validating the
+    /// value type against the supported allowlist~ 🧷.
+    /// </summary>
+    /// <param name="name">The parameter name (a leading <c>@</c>/<c>:</c>/<c>?</c> is trimmed).</param>
+    /// <param name="value">The parameter value.</param>
+    /// <returns>The bound parameter.</returns>
+    /// <exception cref="SqlParameterBindingException">Thrown when the value type is unsupported.</exception>
+    public static DataParameter BindOne(string name, object? value)
+        => new DataParameter(NormalizeName(name), CoerceValue(name, value));
 
     /// <summary>
     /// Coerces a loosely-typed properties entry (which may arrive as a <see cref="HashMap{K,V}"/>,
