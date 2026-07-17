@@ -17,6 +17,8 @@
              AddWorkflowModules() / raw-SQL-only hosts never transitively load Microsoft.CodeAnalysis~ -->
         <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
         <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <!-- 📦 2.4.b.2 — IBlobStore for the compiled-assembly cache~ -->
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
     </ItemGroup>
 
     <ItemGroup>

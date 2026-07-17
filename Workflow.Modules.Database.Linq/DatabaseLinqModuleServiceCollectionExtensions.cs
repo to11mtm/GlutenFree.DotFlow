@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Workflow.Modules.Database.Linq.Abstractions;
 using Workflow.Modules.Database.Linq.Compilation;
+using Workflow.Modules.Database.Linq.Execution;
 
 /// <summary>
 /// 🧬✨ Opt-in DI registration entry point for the typed linq family (<c>builtin.database.linq</c>)~ 💖.
@@ -48,8 +49,15 @@ public static class DatabaseLinqModuleServiceCollectionExtensions
         services.TryAddSingleton<TableTypeResolver>();
         services.TryAddSingleton<IWorkflowLinqCompiler, WorkflowLinqCompiler>();
 
-        // 🧩 2.4.b.2–4 registrations slot in here (TryAdd so hosts can override)~
-        // Cache, module, and previewer land in their slices — see the <remarks> above~ 🌸
+        // 📦 2.4.b.2 — compiled-assembly cache (IBlobStore + HMAC + LRU). The host may replace the
+        //    ephemeral HMAC key with a Data-Protection-backed stable key for cross-restart cache reuse~
+        services.AddOptions<LinqCompileCacheOptions>();
+        services.TryAddSingleton<ILinqHmacKeyProvider, EphemeralLinqHmacKeyProvider>();
+        services.TryAddSingleton<ILinqAssemblySigner, HmacLinqAssemblySigner>();
+        services.TryAddSingleton<ICompiledAssemblyCache, CompiledAssemblyCache>();
+
+        // 🧩 2.4.b.3–4 registrations slot in here (TryAdd so hosts can override)~
+        // Module and previewer land in their slices — see the <remarks> above~ 🌸
         return services;
     }
 }

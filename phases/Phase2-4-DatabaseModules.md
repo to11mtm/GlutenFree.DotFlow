@@ -819,25 +819,34 @@ public sealed record DbOperationSpec
 
 ---
 
-### 2.4.b.2 Compiled-Assembly Caching in `IBlobStore` 📦
+### 2.4.b.2 Compiled-Assembly Caching in `IBlobStore` 📦 ✅ COMPLETE
 
 **Complexity:** 🟡 Low-Medium
 
+> **✅ Implemented & verified (July 2026):** full solution build green (**0 errors**); **9/9** cache tests passing (target ~6), 27 DatabaseLinq total. Scoped to the cache/HMAC/LRU unit; the publish-graph-walk orchestration moved to 2.4.b.5 (no publish hook exists yet). Deviations recorded 💡 below.
+
 #### Tasks
 
-- [ ] Blob key: `compiled-modules/{definitionId}/{nodeId}/{SHA256(userCode + schemaVersion + selectedTables.OrderedHash())}.dll` (design doc §8.3) — cache-invalidation is automatic via the hash (D15)
-- [ ] Compile hook at **workflow publish time**: publishing a definition containing linq nodes triggers `CompileAsync` for each; publish fails with diagnostics if any node fails to compile
-- [ ] In-memory LRU (by hash) of loaded assembly bytes in front of `IBlobStore` — configurable capacity, default 64
-- [ ] Orphan cleanup: deleting a definition version deletes its `compiled-modules/{definitionId}/*` blobs
-- [ ] Local-filesystem fallback if `IBlobStore` unavailable (Q5 contingency)
+- [x] Blob key: `compiled-modules/{definitionId}/{nodeId}/{SHA256(userCode + schemaVersion + selectedTables.OrderedHash())}.dll` (design doc §8.3) — cache-invalidation is automatic via the hash (D15) *(`Execution/CompiledAssemblyKey.cs`; ordered, order-independent table fingerprint incl. columns)*
+- [x] **HMAC signing (moved here from 2.4.b.1 per plan):** `ILinqAssemblySigner` + `HmacLinqAssemblySigner` prepend an HMAC-SHA256 tag on write, verify + strip on read (tamper → cache miss, never handed to the loader). Key via `ILinqHmacKeyProvider`
+    > 💡 **HMAC key (Consideration 3 resolved):** the Linq project ships an **ephemeral per-process** `EphemeralLinqHmacKeyProvider` default (safe; on-disk cache recomputed once after a restart). The host may register a **Data-Protection-backed stable key** (mirrors the 2.4.a.5 protector) for cross-restart cache reuse — the seam is `ILinqHmacKeyProvider`.
+- [x] In-memory LRU (by key) of verified assembly bytes in front of `IBlobStore` — `LinqCompileCacheOptions.LruCapacity` (default 64) *(`Execution/CompiledAssemblyCache.cs`)*
+- [x] Orphan cleanup: `EvictDefinitionAsync(definitionId)` deletes `compiled-modules/{definitionId}/*` + drops LRU entries
+    > 💡 **Limitation:** `IBlobStore` has **no list-by-prefix API**, so eviction deletes the keys this process has stored (tracked in-memory). Cross-restart orphan GC needs a blob-store list API — tracked as a follow-up.
+- [ ] ~~Compile hook at workflow publish time~~ → **moved to 2.4.b.5** (Consideration 1): `IWorkflowRepository` has no publish/validate step, so the "compile every linq node on save" graph-walk belongs with the API `compile` endpoint where compiler + module + API converge~ 🌸
+- [ ] ~~Local-filesystem fallback if `IBlobStore` unavailable (Q5)~~ → deferred: the cache takes an injected `IBlobStore` (host wires the real one; tests use an in-memory double). A local-FS `IBlobStore` fallback is a host-wiring concern, tracked for 2.4.b.5/host config.
+- [x] Registered `ICompiledAssemblyCache` + `ILinqAssemblySigner` + `ILinqHmacKeyProvider` + options via `TryAddSingleton` in `AddDatabaseLinqModules()`
 
-#### Tests (target ~6): → `Workflow.Tests/Modules/DatabaseLinq/CompiledAssemblyCacheTests.cs`
-- [ ] `Compile_WritesBlobUnderCompiledModulesNamespace`
-- [ ] `SameCodeAndSchema_ProducesSameHash_NoRecompile`
-- [ ] `ChangedCode_ProducesNewHash_NewBlob`
-- [ ] `ChangedSchemaVersion_InvalidatesHash`
-- [ ] `Lru_EvictsLeastRecentlyUsed_ReloadsFromBlobStore`
-- [ ] `PublishWithFailingLinqNode_FailsPublishWithDiagnostics`
+#### Tests (target ~6): ✅ **9 delivered** → `Workflow.Tests/Modules/DatabaseLinq/CompiledAssemblyCacheTests.cs` *(in-memory `IBlobStore` double)*
+- [x] `Store_WritesBlobUnderCompiledModulesNamespace`
+- [x] `SameCodeAndSchema_ProducesSameKey`
+- [x] `ChangedCode_ProducesNewKey`
+- [x] `ChangedSchemaVersion_ProducesNewKey`
+- [x] `ChangedSelectedTables_ProducesNewKey` *(bonus — table-fingerprint invalidation)*
+- [x] `Hmac_RoundTrips` + `Hmac_TamperedBlob_RejectedOnRead` *(the signing half of the 2.4.b.3 tamper test)*
+- [x] `Lru_EvictsLeastRecentlyUsed_ReloadsFromBlobStore`
+- [x] `EvictDefinition_RemovesAllNodeBlobs`
+- [ ] ~~`PublishWithFailingLinqNode_FailsPublishWithDiagnostics`~~ → moved to 2.4.b.5 (no publish hook exists)
 
 ---
 
@@ -1153,7 +1162,7 @@ When 2.4 ships (Week 14), all of the following must be true:
 
 - [ ] **`builtin.database.linq`** discoverable, publish-time-compiled, ALC-executed on Postgres + SQLite
 - [x] **`IWorkflowLinqCompiler`** with reference/usings/syntax whitelists + `LinqInputs` accessor-struct codegen (design doc §8.6 Phase 1) *(2.4.b.1 ✅ — plus dual-POCO table resolution; HMAC signing deferred to 2.4.b.2)*
-- [ ] **Compiled-assembly cache** in `IBlobStore` under `compiled-modules/` with hash-keyed invalidation + HMAC verification (D15)
+- [x] **Compiled-assembly cache** in `IBlobStore` under `compiled-modules/` with hash-keyed invalidation + HMAC verification (D15) *(2.4.b.2 ✅ — LRU + ephemeral/Data-Protection HMAC seam; publish-hook + local-FS fallback → 2.4.b.5)*
 - [ ] **Sandbox preview** (`IWorkflowLinqPreviewer`, always-rollback `:memory:` SQLite) + one-shot catalog import (Q17/D19 ✅)
 - [ ] **API endpoints:** `POST /api/database/linq/{validate,preview,compile}` — compile gated by trusted-author policy (Q2/Q15)
 - [ ] **Security review checklist passed** (whitelist bypass, HMAC tamper, ALC leak under load, no conn-string leakage in diagnostics)
@@ -1234,8 +1243,13 @@ Workflow.Modules.Database.Linq/                         ← NEW PROJECT (2.4.b.0
     ForbiddenSyntaxWalker.cs                             ← new (2.4.b.1) ✅ — syntax blocklist
     ReferenceWhitelist.cs                                ← new (2.4.b.1) ✅ — reference set + usings allowlist
   Execution/
-    CompiledAssemblyCache.cs                             ← new (2.4.b.2) — IBlobStore + LRU + HMAC
+    CompiledAssemblyCache.cs                             ← new (2.4.b.2) ✅ — IBlobStore + LRU + options
+    CompiledAssemblyKey.cs                               ← new (2.4.b.2) ✅ — §8.3 hash key + LinqCodegen.SchemaVersion
+    HmacLinqAssemblySigner.cs                            ← new (2.4.b.2) ✅ — HMAC sign/verify + ephemeral key provider
     CollectibleScriptRunner.cs                           ← new (2.4.b.3) — ALC lifecycle
+  Abstractions/
+    ICompiledAssemblyCache.cs                            ← new (2.4.b.2) ✅
+    ILinqAssemblySigner.cs                               ← new (2.4.b.2) ✅ — signer + ILinqHmacKeyProvider seam
   Preview/
     WorkflowLinqPreviewer.cs                             ← new (2.4.b.4) — rollback-only SQLite sandbox
     CatalogSchemaImporter.cs                             ← new (2.4.b.4) — one-shot import (Q17)
