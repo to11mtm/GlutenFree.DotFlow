@@ -1,11 +1,16 @@
 using System.Security.Claims;
 using Akka.Actor;
+using Microsoft.Extensions.Options;
+using Workflow.Api.Database;
 using Workflow.Api.Webhooks;
 using Workflow.Core.Abstractions;
 using Workflow.Engine.Actors;
 using Workflow.Engine.Services;
 using Workflow.Modules;
 using Workflow.Modules.Builtin.Http;
+using Workflow.Modules.Database;
+using Workflow.Modules.Database.Abstractions;
+using Workflow.Modules.Database.Configuration;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Composite;
 using Workflow.Persistence.Nats;
@@ -35,6 +40,18 @@ builder.Services.AddWorkflowModules();
 builder.Services.AddSingleton<IWebhookRegistrationRepository, InMemoryWebhookRegistrationRepository>();
 builder.Services.AddSingleton<IWebhookResponseStrategy, Async202ResponseStrategy>();
 builder.Services.AddSingleton<WebhookDispatcher>();
+
+// 🗄️ Database module family (Phase 2.4.a.5)~ — shared infra + 4 built-in modules.
+// CopilotNote: AddDatabaseModules() can't be called from AddWorkflowModules() (circular ref —
+// Workflow.Modules.Database references Workflow.Modules), so the host wires it here (D14)~
+builder.Services.AddDatabaseModules();
+builder.Services.Configure<DatabaseConnectionsOptions>(
+    builder.Configuration.GetSection(DatabaseConnectionsOptions.SectionName));
+
+// 🔒 Data-Protection-backed connection-string encryption (replaces the no-op default from
+// AddDatabaseModules) so persisted connection strings are encrypted at rest~
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton<IConnectionStringProtector, DataProtectionConnectionStringProtector>();
 
 //  Akka actor system + WorkflowSupervisor (Phase 2.3.9)~
 // CopilotNote: The factory runs lazily on first IWorkflowLauncher resolution so the full DI
@@ -72,6 +89,16 @@ if (persistenceProvider is not null)
     {
         builder.Services.AddSingleton<IWebhookRegistrationRepository>(persistenceProvider.Webhooks);
     }
+
+    // 📇 Phase 2.4.a.5 — When SQLite persistence is configured, override the in-memory
+    // connection registry with the SQLite-persisted one (encrypted at rest). The registry is
+    // resolved lazily so the DataProtection-backed protector is available; the db_connections
+    // table is created by Migration_006 during InitializeAsync~
+    if (persistenceProvider is SqlitePersistenceProvider sqliteProvider)
+    {
+        builder.Services.AddSingleton<IDbConnectionRegistry>(sp =>
+            sqliteProvider.CreateDbConnectionRegistry(sp.GetRequiredService<IConnectionStringProtector>()));
+    }
 }
 
 var app = builder.Build();
@@ -87,10 +114,18 @@ app.UseHttpsRedirection();
 //  Phase 2.3.6 — Webhook trigger + management endpoints~
 app.MapWebhookEndpoints();
 
+// 📇 Phase 2.4.a.5 — Named database-connection CRUD endpoints~
+app.MapDatabaseConnectionEndpoints();
+
 if (persistenceProvider is not null)
 {
     await persistenceProvider.InitializeAsync().ConfigureAwait(false);
 }
+
+// 📇 Phase 2.4.a.5 — Seed config-declared connections into the active registry (so the
+// SQLite-persisted registry still honours appsettings Workflow:Database:Connections). Idempotent:
+// only inserts ids that aren't already present~
+await SeedConfiguredConnectionsAsync(app.Services).ConfigureAwait(false);
 
 var summaries = new[]
 {
@@ -137,6 +172,28 @@ static IPersistenceProvider? BuildPersistenceProvider(IConfiguration configurati
         "composite" => BuildCompositeProvider(configuration),
         _ => throw new InvalidOperationException($"Unsupported persistence provider '{providerName}'."),
     };
+}
+
+// 📇 Phase 2.4.a.5 — Seeds appsettings-declared connections into the active IDbConnectionRegistry.
+// No-op for the in-memory registry (it hydrates from config at construction); meaningful for the
+// SQLite-persisted registry which starts empty. Idempotent — only inserts absent ids~
+static async Task SeedConfiguredConnectionsAsync(IServiceProvider services)
+{
+    var options = services.GetRequiredService<IOptions<DatabaseConnectionsOptions>>().Value;
+    if (options.Connections.Count == 0)
+    {
+        return;
+    }
+
+    var registry = services.GetRequiredService<IDbConnectionRegistry>();
+    foreach (var (key, descriptor) in options.Connections)
+    {
+        var existing = await registry.GetAsync(key).ConfigureAwait(false);
+        if (existing.IsNone)
+        {
+            await registry.UpsertAsync(descriptor with { Id = key }).ConfigureAwait(false);
+        }
+    }
 }
 
 static IPersistenceProvider BuildCompositeProvider(IConfiguration configuration)

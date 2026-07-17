@@ -30,7 +30,7 @@ This directory contains individual phase breakdown files to make it easier to na
 - ⏳ Persistence layer (PostgreSQL, NATS KV, S3) (2.1)
 - ⏳ Advanced flow control (conditionals, loops, parallel) (2.2)
 - ⏳ HTTP & Network modules (2.3)
-- ⏳ Database modules (2.4)
+- 🔄 Database modules (2.4) — **2.4.a (raw-SQL escape-hatch family) COMPLETE ✅**; 2.4.b (typed linq/Roslyn) pending
 - ⏳ File system & cloud storage modules (2.5)
 - ⏳ Data transformation modules (2.6)
 - ⏳ REST API with authentication (2.7)
@@ -40,8 +40,9 @@ This directory contains individual phase breakdown files to make it easier to na
 - [Phase2-1-PersistenceLayer.md](Phase2-1-PersistenceLayer.md) ⏳ — 6 sub-phases, detailed breakout ready!
 - [Phase2-2-AdvancedFlowControl.md](Phase2-2-AdvancedFlowControl.md) 🔄 — 10 sub-phases, mostly complete (2.3.6 API smoke tests pending)
 - [Phase2-3-HttpAndNetworkModules.md](Phase2-3-HttpAndNetworkModules.md) ⏳ — 10 sub-phases, detailed plan ready!
-- [Phase2-4-DatabaseModules.md](Phase2-4-DatabaseModules.md) ⏳ — 7 MVP sub-phases + 6 post-MVP slices (incl. 2.4.b Roslyn/linq family), detailed plan ready! 🌷
+- [Phase2-4-DatabaseModules.md](Phase2-4-DatabaseModules.md) 🔄 — 7 MVP sub-phases + 6 post-MVP slices (incl. 2.4.b Roslyn/linq family). **2.4.a.0–2.4.a.6 COMPLETE ✅** (66 unit + Docker-gated Postgres/E2E + named-connection API); 2.4.b (typed linq) next~ 🌷
   - Design exploration: [new-feature-design/Phase2-4-DatabaseModules-Design.md](../new-feature-design/Phase2-4-DatabaseModules-Design.md)
+  - Module guide: [docs/database-modules.md](../docs/database-modules.md)
 
 ### [Phase3-AdvancedFeatures.md](Phase3-AdvancedFeatures.md) 🎨
 **Weeks 15-22** - Advanced Features and UI

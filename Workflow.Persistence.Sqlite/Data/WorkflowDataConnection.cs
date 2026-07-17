@@ -39,5 +39,8 @@ public class WorkflowDataConnection : DataConnection
 
     /// <summary>Gets the <c>webhook_registrations</c> table~ .</summary>
     public ITable<WebhookRegistrationEntity> WebhookRegistrations => this.GetTable<WebhookRegistrationEntity>();
+
+    /// <summary>Gets the <c>db_connections</c> table (Phase 2.4.a.5)~ 📇.</summary>
+    public ITable<DbConnectionEntity> DbConnections => this.GetTable<DbConnectionEntity>();
 }
 

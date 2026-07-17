@@ -62,6 +62,11 @@ public static class DatabaseModuleServiceCollectionExtensions
         // 📚 Table catalog stub — manual registration only in V1 (Q4/D10)~
         services.TryAddSingleton<IWorkflowTableCatalog, InMemoryWorkflowTableCatalog>();
 
+        // 🔒 Connection-string protector — no-op by default (config values are plain, D3).
+        //    The host (Workflow.Api) replaces this with a Data-Protection-backed impl for the
+        //    persisted registry's at-rest encryption (2.4.a.5)~
+        services.TryAddSingleton<IConnectionStringProtector, NoOpConnectionStringProtector>();
+
         // 🔍 2.4.a.1 — Database Query module (SELECT-only). Registered as an enumerable
         //    IWorkflowModule so hosts that resolve IEnumerable<IWorkflowModule> from DI pick it up;
         //    reflection-based ModuleDiscovery also finds it via assembly scan (host wiring in 2.4.a.5).

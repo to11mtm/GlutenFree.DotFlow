@@ -6,6 +6,7 @@ namespace Workflow.Persistence.Sqlite;
 
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;
+using Workflow.Modules.Database.Abstractions;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 using Workflow.Persistence.Sqlite.Data;
@@ -72,6 +73,20 @@ public sealed class SqlitePersistenceProvider : IPersistenceProvider
 
     /// <summary>Gets the connection string used by this provider~ .</summary>
     public string ConnectionString { get; }
+
+    /// <summary>
+    /// Creates a SQLite-backed <see cref="IDbConnectionRegistry"/> sharing this provider's
+    /// database (Phase 2.4.a.5)~ 📇.
+    /// </summary>
+    /// <param name="protector">Connection-string protector for at-rest encryption.</param>
+    /// <returns>A persisted connection registry over the same SQLite database.</returns>
+    /// <remarks>
+    /// CopilotNote: Exposed as a factory method (rather than an <see cref="IPersistenceProvider"/>
+    /// member) to keep the persistence abstraction free of a Workflow.Modules.Database dependency.
+    /// The <c>db_connections</c> table is created by Migration_006 during <see cref="InitializeAsync"/>~ 🌸.
+    /// </remarks>
+    public IDbConnectionRegistry CreateDbConnectionRegistry(IConnectionStringProtector protector)
+        => new SqliteDbConnectionRegistry(_factory, protector);
 
     /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken ct = default)
