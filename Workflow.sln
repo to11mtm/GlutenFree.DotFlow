@@ -133,6 +133,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Persistence.Sql.Ba
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Modules.Database", "Workflow.Modules.Database\Workflow.Modules.Database.csproj", "{9E0053B8-49A1-458A-BADA-D071D1BA3B14}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Modules.Database.Linq", "Workflow.Modules.Database.Linq\Workflow.Modules.Database.Linq.csproj", "{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -335,6 +337,18 @@ Global
 		{9E0053B8-49A1-458A-BADA-D071D1BA3B14}.Release|x64.Build.0 = Release|Any CPU
 		{9E0053B8-49A1-458A-BADA-D071D1BA3B14}.Release|x86.ActiveCfg = Release|Any CPU
 		{9E0053B8-49A1-458A-BADA-D071D1BA3B14}.Release|x86.Build.0 = Release|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Debug|x64.Build.0 = Debug|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Debug|x86.Build.0 = Debug|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Release|x64.ActiveCfg = Release|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Release|x64.Build.0 = Release|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Release|x86.ActiveCfg = Release|Any CPU
+		{D8A2564C-BF98-4BEF-82F3-18EA6F6F7C80}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -748,23 +748,31 @@ public sealed record DbOperationSpec
 
 ---
 
-### 2.4.b.0 Project Scaffolding 🏗️
+### 2.4.b.0 Project Scaffolding 🏗️ ✅ COMPLETE
 
 **Complexity:** 🟢 Low
 
+> **✅ Implemented & verified (July 2026):** full solution build green (**0 errors**); **4/4** scaffolding tests passing (target was ~2). Roslyn (4.11.0) + Basic.Reference.Assemblies (1.7.8) restore + run; the D14 quarantine is proven by test. Deviations recorded 💡 below.
+
 #### Tasks
 
-- [ ] **`Workflow.Modules.Database.Linq` project layout**
-  - [ ] New project: `Workflow.Modules.Database.Linq/Workflow.Modules.Database.Linq.csproj`
-  - [ ] References: `Workflow.Modules.Database` (shared infra), `Workflow.Modules`, `Microsoft.CodeAnalysis.CSharp` (Roslyn), `Basic.Reference.Assemblies` (portable refs — mitigates C8), `LinqToDB`
-  - [ ] Add `Microsoft.CodeAnalysis.CSharp` + `Basic.Reference.Assemblies` to `Directory.Packages.props` (both MIT — Q10 ✅)
-  - [ ] Add to `Workflow.sln`
-  - [ ] Folder layout: `Abstractions/` · `Compilation/` · `Execution/` · `Preview/` · `Builtin/`
-  - [ ] `DatabaseLinqModuleServiceCollectionExtensions.AddDatabaseLinqModules(this IServiceCollection)` — separate opt-in entry point (D14); called by default from `Workflow.Api`, NOT from `AddWorkflowModules()` (keeps Roslyn out of minimal hosts)
+- [x] **`Workflow.Modules.Database.Linq` project layout**
+  - [x] New project: `Workflow.Modules.Database.Linq/Workflow.Modules.Database.Linq.csproj`
+  - [x] References: `Workflow.Modules.Database` (shared infra), `Workflow.Modules`, `Microsoft.CodeAnalysis.CSharp` (Roslyn), `Basic.Reference.Assemblies` (portable refs — mitigates C8), `LinqToDB`
+  - [x] Add `Microsoft.CodeAnalysis.CSharp` (4.11.0) + `Basic.Reference.Assemblies` (1.7.8) to `Directory.Packages.props` (both MIT — Q10 ✅)
+  - [x] Add to `Workflow.sln`
+  - [x] Folder layout: `Abstractions/` · `Compilation/` · `Execution/` · `Preview/` · `Builtin/`
+    > 💡 **Note:** each folder currently holds a one-line `README.md` marker describing what lands there + in which sub-slice (empty folders aren't trackable). These are deleted as real files replace them~
+  - [x] `DatabaseLinqModuleServiceCollectionExtensions.AddDatabaseLinqModules(this IServiceCollection)` — separate opt-in entry point (D14); wired by the host, **NOT** by `AddWorkflowModules()`
+    > 💡 **Scaffold state:** the extension is a documented **no-op** today (chainable/idempotent); real registrations (compiler/cache/module/previewer) slot in across 2.4.b.1–4. Added `AssemblyMarker` (a Roslyn-toolchain smoke) so the slice has verifiable substance + so the compiler emits the Roslyn/BasicRefs assembly references the quarantine test asserts on.
+  - [x] 💡 **`NoWarn SA0002`** on the Linq project only — StyleCop.Analyzers (pinned to older Roslyn) can't load `stylecop.json` when a project references a newer `Microsoft.CodeAnalysis` as a runtime library. Known cosmetic conflict (also pre-exists on `Workflow.Api`); suppressed with a comment.
 
-#### Tests (target ~2): → `Workflow.Tests/Modules/DatabaseLinq/ScaffoldingTests.cs`
-- [ ] `AddDatabaseLinqModules_RegistersCompilerPreviewerAndModule`
-- [ ] `AddWorkflowModules_DoesNotPullRoslyn` *(assert `Microsoft.CodeAnalysis` not loaded without opt-in)*
+#### Tests (target ~2): ✅ **4 delivered** → `Workflow.Tests/Modules/DatabaseLinq/ScaffoldingTests.cs`
+  > 💡 **Deviation:** the plan's `AddDatabaseLinqModules_RegistersCompilerPreviewerAndModule` can't be honest at scaffold time (those types land in 2.4.b.1/3/4). Replaced with tests that are true *now* + keep the D14 guarantee:
+- [x] `AddDatabaseLinqModules_IsChainableAndIdempotent` *(no `IWorkflowModule` registered yet — module lands 2.4.b.3)*
+- [x] `RoslynToolchain_ResolvesInsideLinqAssembly` *(Roslyn parse smoke + Basic.Reference.Assemblies referenced)*
+- [x] `LinqAssembly_ReferencesRoslynAndBasicRefs` *(reference-set assertion)*
+- [x] `WorkflowModules_DoesNotReferenceRoslyn_QuarantineHolds` *(the D14 quarantine — deterministic `GetReferencedAssemblies` check)* — replaces the plan's `AddWorkflowModules_DoesNotPullRoslyn`
 
 ---
 
@@ -1168,7 +1176,7 @@ When 2.4 ships (Week 14), all of the following must be true:
 - [ ] **~134 tests passing** total across both families
 - [ ] **90%+ test coverage** on `Workflow.Modules.Database` + `Workflow.Modules.Database.Linq`
 - [ ] **0 errors, 0 new warnings** in `dotnet build`
-- [ ] **Roslyn dep quarantined** — `AddWorkflowModules()` alone must not load `Microsoft.CodeAnalysis` (D14)
+- [x] **Roslyn dep quarantined** — `AddWorkflowModules()` alone must not load `Microsoft.CodeAnalysis` (D14) *(established + test-locked in 2.4.b.0 via `WorkflowModules_DoesNotReferenceRoslyn_QuarantineHolds`)*
 - [x] **README + phases/README.md** updated — Database modules (2.4) marked **2.4.a complete ✅** / 2.4.b pending (not blanket-✅: D12 promoted 2.4.b into the MVP); `docs/database-modules.md` added to `DOCUMENTATION_INDEX.md`
 
 **Post-MVP slices (tracked, non-blocking 2.5+):**
@@ -1218,9 +1226,10 @@ Workflow.Modules.Database/                              ← NEW PROJECT (2.4.a.0
     DatabaseTransactionModule.cs                         ← new (2.4.a.3)
     DatabaseBulkInsertModule.cs                          ← new (2.4.a.4)
 
-Workflow.Modules.Database.Linq/                         ← NEW PROJECT (2.4.b.0)
-  Workflow.Modules.Database.Linq.csproj
-  DatabaseLinqModuleServiceCollectionExtensions.cs       ← new (2.4.b.0) — opt-in AddDatabaseLinqModules()
+Workflow.Modules.Database.Linq/                         ← NEW PROJECT (2.4.b.0) ✅
+  Workflow.Modules.Database.Linq.csproj                  ← new (2.4.b.0) ✅ (NoWarn SA0002)
+  AssemblyMarker.cs                                      ← new (2.4.b.0) ✅ — Roslyn-toolchain smoke + ref-emit
+  DatabaseLinqModuleServiceCollectionExtensions.cs       ← new (2.4.b.0) ✅ — opt-in AddDatabaseLinqModules() (no-op scaffold)
   Abstractions/
     IWorkflowLinqCompiler.cs                             ← new (2.4.b.1)
     IWorkflowLinqPreviewer.cs                            ← new (2.4.b.4)

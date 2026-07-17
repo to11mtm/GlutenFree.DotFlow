@@ -77,6 +77,10 @@
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.22" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="8.0.22" />
+    <!-- 🧬 Phase 2.4.b — Typed linq family (Roslyn compile pipeline). Both MIT (Q10). Quarantined in
+         Workflow.Modules.Database.Linq so raw-SQL-only hosts never pay for Roslyn (~30MB, D14)~ -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
+    <PackageVersion Include="Basic.Reference.Assemblies" Version="1.7.8" />
   </ItemGroup>
   <!--  CopilotNote: With Central Package Management, project files only need <PackageReference Include="Name" /> -->
   <!-- ✨ No Version attribute needed in individual projects - it's all managed here! Super clean, nya~! -->

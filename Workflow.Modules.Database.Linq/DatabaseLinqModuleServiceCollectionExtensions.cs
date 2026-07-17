@@ -1,0 +1,49 @@
+// <copyright file="DatabaseLinqModuleServiceCollectionExtensions.cs" company="GlutenFree">
+// Copyright (c) GlutenFree. All rights reserved.
+// </copyright>
+
+namespace Workflow.Modules.Database.Linq;
+
+using Microsoft.Extensions.DependencyInjection;
+
+/// <summary>
+/// 🧬✨ Opt-in DI registration entry point for the typed linq family (<c>builtin.database.linq</c>)~ 💖.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Call <see cref="AddDatabaseLinqModules"/> explicitly in your host startup — it is deliberately
+/// <b>separate</b> from <c>AddWorkflowModules()</c> and <c>AddDatabaseModules()</c> so that hosts which
+/// only want the raw-SQL escape-hatch family (or no DB at all) never load Roslyn
+/// (<c>Microsoft.CodeAnalysis.*</c>, ~30MB transitive). This is the D14 quarantine — the whole reason
+/// the linq family lives in its own assembly~ 🌸.
+/// </para>
+/// <para>
+/// CopilotNote: Phase 2.4.b.0 is scaffolding only — this method currently wires nothing beyond being
+/// chainable/idempotent. The real registrations land as their slices ship:
+/// <list type="bullet">
+///   <item><description>2.4.b.1 — <c>IWorkflowLinqCompiler</c> (Roslyn compile pipeline + whitelists)</description></item>
+///   <item><description>2.4.b.2 — compiled-assembly cache over <c>IBlobStore</c></description></item>
+///   <item><description>2.4.b.3 — <c>LinqQueryModule</c> (<c>builtin.database.linq</c>) + collectible ALC executor</description></item>
+///   <item><description>2.4.b.4 — <c>IWorkflowLinqPreviewer</c> (rollback-only SQLite sandbox)</description></item>
+/// </list>
+/// All registrations will use <c>TryAdd*</c> so hosts/plugins can override~ 💡.
+/// </para>
+/// </remarks>
+public static class DatabaseLinqModuleServiceCollectionExtensions
+{
+    /// <summary>
+    /// Registers the typed linq family (compiler, previewer, and the <c>builtin.database.linq</c>
+    /// module) as they land in 2.4.b.1–4. Scaffolding no-op today; safe to call now~ 🧬.
+    /// </summary>
+    /// <param name="services">The DI service collection.</param>
+    /// <returns>The same <paramref name="services"/> for chaining~ 💖.</returns>
+    public static IServiceCollection AddDatabaseLinqModules(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        // 🧩 2.4.b.1–4 registrations slot in here (TryAdd so hosts can override)~
+        // Intentionally empty during scaffolding (2.4.b.0) — see the <remarks> above~ 🌸
+        return services;
+    }
+}
+
