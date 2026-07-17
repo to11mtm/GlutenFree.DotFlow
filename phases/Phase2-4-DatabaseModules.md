@@ -893,30 +893,37 @@ public sealed record DbOperationSpec
 
 ---
 
-### 2.4.b.4 `IWorkflowLinqPreviewer` + Catalog Import 🔎
+### 2.4.b.4 `IWorkflowLinqPreviewer` + Catalog Import 🔎 ✅ COMPLETE
 
 **Complexity:** 🟠 Medium
 
+> **✅ Implemented & verified (July 2026):** full solution build green (**0 errors**); **5 previewer + 2 catalog** tests passing (target ~8) + 1 Docker-gated Postgres catalog test (compile-verified); 43 DatabaseLinq/Database total. Deviations recorded 💡 below.
+
 #### Tasks
 
-- [ ] **`IWorkflowLinqPreviewer`**
-  - [ ] Spins up `:memory:` SQLite, `CreateTable<T>` per selected table, seeds sample rows
-  - [ ] **Always-rollback transaction wrapper** (design doc §8.5 — mitigates C6)
-  - [ ] Returns sample rows + execution time + diagnostics
-  - [ ] Docs must state loudly: SQLite preview ≠ target-provider semantics (C10); Testcontainers-backed preview → 2.4.b.P2
-- [ ] **One-shot catalog import (confirmed in-scope per Q17/D19)**
-  - [ ] `POST /api/database/catalog/{connectionId}/import` — introspects the live connection's schema (`information_schema` / `pragma table_info`) and upserts `WorkflowTableMetadata` rows into `IWorkflowTableCatalog`
-  - [ ] Manual, on-demand, no versioning — full versioned auto-discovery stays in 2.4.b.P3 (D10 unchanged)
+- [x] **`IWorkflowLinqPreviewer`**
+  - [x] Spins up `:memory:` SQLite, `CreateTable<T>` per selected table (reflectively, from the context's `ITable<T>` props), seeds sample rows (`SampleDataGenerator`)
+    > 💡 **Reflection (Consideration 4 resolved):** `DataExtensions.CreateTable<T>`/`Insert<T>`/`GetTable<T>` are invoked via reflection with `Type.Missing` for optional params — linq2db creates + queries with consistent naming, dodging the schema-qualified-name rendering question. Verified on linq2db 6.3.0.
+  - [x] **Always-rollback transaction wrapper** (design doc §8.5 — mitigates C6) — seeds committed *before* the txn; the user body runs inside `BeginTransaction`→`RollbackTransaction`
+    > 💡 **Rollback observability (Consideration 1 resolved):** an ephemeral `:memory:` DB can't be re-queried post-close, so `LinqPreviewResult.PostRollbackRowCount` re-counts the first seeded table after rollback — a deleting body asserts `PostRollbackRowCount == SampleRowsSeeded` (deterministic, single connection).
+  - [x] Returns sample rows + execution time + diagnostics (`LinqPreviewResult`)
+    > 💡 **Preview is compile-inclusive (Consideration 5):** the previewer takes a `LinqCompileRequest` (+ sample `Inputs`) and compiles internally, so `/preview` = validate + run in one call and compile errors return diagnostics without throwing.
+  - [x] Docs must state loudly: SQLite preview ≠ target-provider semantics (C10); Testcontainers-backed preview → 2.4.b.P2 *(docs land in 2.4.b.6)*
+- [x] **One-shot catalog import (confirmed in-scope per Q17/D19)**
+  - [x] `ICatalogSchemaImporter` / `CatalogSchemaImporter` — introspects the live connection's schema (Postgres `information_schema.{tables,columns}` / SQLite `sqlite_master` + `PRAGMA table_info`) and upserts `WorkflowTableMetadata` rows into `IWorkflowTableCatalog`
+    > 💡 **Home (Consideration 2):** lives in **`Workflow.Modules.Database/Catalog/`** (no Roslyn dep — reusable, keeps the quarantine clean), NOT the Linq project. Registered in `AddDatabaseModules()`.
+  - [ ] ~~`POST /api/database/catalog/{connectionId}/import` endpoint~~ → **moved to 2.4.b.5** (Consideration 3): it's an API concern alongside validate/preview/compile; 2.4.b.4 ships the importer *service* so it stays WebApplicationFactory-free. The `connectionId`→404 mapping is asserted in 2.4.b.5.
+  - [x] Manual, on-demand, no versioning — full versioned auto-discovery stays in 2.4.b.P3 (D10 unchanged)
 
-#### Tests (target ~8): → `Workflow.Tests/Modules/DatabaseLinq/LinqPreviewerTests.cs`
-- [ ] `Preview_ReturnsSampleRowsAndDuration`
-- [ ] `Preview_MutationAttempt_AlwaysRolledBack`
-- [ ] `Preview_DropTableAttempt_DoesNotPersist`
-- [ ] `Preview_CompileError_ReturnsDiagnosticsNotException`
-- [ ] `Preview_SeedsSampleRowsPerSelectedTable`
-- [ ] `CatalogImport_Sqlite_PragmaTableInfo_PopulatesCatalog`
-- [ ] `CatalogImport_Postgres_InformationSchema_PopulatesCatalog` *(integration)*
-- [ ] `CatalogImport_UnknownConnection_ReturnsNotFound`
+#### Tests (target ~8): ✅ **5 previewer + 2 catalog + 1 Postgres** → `Workflow.Tests/Modules/DatabaseLinq/LinqPreviewerTests.cs` + `Workflow.Tests/Modules/Database/CatalogImportTests.cs` + `Workflow.Tests.Integration/Database/PostgresCatalogImportTests.cs`
+- [x] `Preview_ReturnsSampleRowsAndDuration`
+- [x] `Preview_MutationAttempt_AlwaysRolledBack` *(delete body → `PostRollbackRowCount == SampleRowsSeeded`)*
+- [x] `Preview_MutationsIsolatedAcrossRuns` *(reframed from `_DropTableAttempt_DoesNotPersist` — typed linq can't `DROP TABLE`; instead proves each preview reseeds a fresh isolated `:memory:` DB)*
+- [x] `Preview_CompileError_ReturnsDiagnosticsNotException`
+- [x] `Preview_SeedsSampleRowsPerSelectedTable`
+- [x] `CatalogImport_Sqlite_PragmaTableInfo_PopulatesCatalog` *(asserts columns + nullability)*
+- [x] `CatalogImport_UnknownConnection_ThrowsConnectionNotFound` *(reframed from `_ReturnsNotFound` — service throws `ConnectionNotFoundException`; the 404 mapping is a 2.4.b.5 API test)*
+- [x] `CatalogImport_Postgres_InformationSchema_PopulatesCatalog` *(integration)*
 
 ---
 
@@ -1169,7 +1176,7 @@ When 2.4 ships (Week 14), all of the following must be true:
 - [x] **`builtin.database.linq`** discoverable, publish-time-compiled, ALC-executed on Postgres + SQLite *(2.4.b.3 ✅ — collectible ALC + forced materialisation; concurrent-isolated-ALC Postgres test)*
 - [x] **`IWorkflowLinqCompiler`** with reference/usings/syntax whitelists + `LinqInputs` accessor-struct codegen (design doc §8.6 Phase 1) *(2.4.b.1 ✅ — plus dual-POCO table resolution; HMAC signing deferred to 2.4.b.2)*
 - [x] **Compiled-assembly cache** in `IBlobStore` under `compiled-modules/` with hash-keyed invalidation + HMAC verification (D15) *(2.4.b.2 ✅ — LRU + ephemeral/Data-Protection HMAC seam; publish-hook + local-FS fallback → 2.4.b.5)*
-- [ ] **Sandbox preview** (`IWorkflowLinqPreviewer`, always-rollback `:memory:` SQLite) + one-shot catalog import (Q17/D19 ✅)
+- [x] **Sandbox preview** (`IWorkflowLinqPreviewer`, always-rollback `:memory:` SQLite) + one-shot catalog import (Q17/D19 ✅) *(2.4.b.4 ✅ — importer in the Database project; import API endpoint → 2.4.b.5)*
 - [ ] **API endpoints:** `POST /api/database/linq/{validate,preview,compile}` — compile gated by trusted-author policy (Q2/Q15)
 - [ ] **Security review checklist passed** (whitelist bypass, HMAC tamper, ALC leak under load, no conn-string leakage in diagnostics)
 - [ ] **~48 tests passing** across 2.4.b.0–2.4.b.6 (2 scaffold + 12 compiler + 6 cache + 10 module + 8 preview + 6 API + 4 E2E/security)
@@ -1217,6 +1224,7 @@ Workflow.Modules.Database/                              ← NEW PROJECT (2.4.a.0
     DefaultDbTransactionScope.cs                         ← new (2.4.a.0)
   Catalog/
     InMemoryWorkflowTableCatalog.cs                      ← new (2.4.a.0)
+    CatalogSchemaImporter.cs                             ← new (2.4.b.4) ✅ — one-shot import (Q17; no Roslyn dep)
   Configuration/
     DatabaseConnectionsOptions.cs                        ← new (2.4.a.5)
   Internal/
@@ -1257,9 +1265,10 @@ Workflow.Modules.Database.Linq/                         ← NEW PROJECT (2.4.b.0
   Abstractions/
     ICompiledAssemblyCache.cs                            ← new (2.4.b.2) ✅
     ILinqAssemblySigner.cs                               ← new (2.4.b.2) ✅ — signer + ILinqHmacKeyProvider seam
+    IWorkflowLinqPreviewer.cs                            ← new (2.4.b.4) ✅ — preview request/result contract
   Preview/
-    WorkflowLinqPreviewer.cs                             ← new (2.4.b.4) — rollback-only SQLite sandbox
-    CatalogSchemaImporter.cs                             ← new (2.4.b.4) — one-shot import (Q17)
+    WorkflowLinqPreviewer.cs                             ← new (2.4.b.4) ✅ — rollback-only SQLite sandbox
+    SampleDataGenerator.cs                               ← new (2.4.b.4) ✅ — deterministic sample seeding
   Builtin/
     LinqQueryModule.cs                                   ← new (2.4.b.3) ✅ — builtin.database.linq
 

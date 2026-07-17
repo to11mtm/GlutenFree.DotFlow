@@ -13,7 +13,6 @@ using Workflow.Modules.Database.Catalog;
 using Workflow.Modules.Database.Configuration;
 using Workflow.Modules.Database.Connections;
 using Workflow.Modules.Database.Providers;
-
 /// <summary>
 /// 🗄️✨ DI registration entry point for the database built-in module family~ 💖.
 /// </summary>
@@ -61,6 +60,9 @@ public static class DatabaseModuleServiceCollectionExtensions
 
         // 📚 Table catalog stub — manual registration only in V1 (Q4/D10)~
         services.TryAddSingleton<IWorkflowTableCatalog, InMemoryWorkflowTableCatalog>();
+
+        // 📥 2.4.b.4 — one-shot catalog schema importer (no Roslyn dep; usable without the linq family)~
+        services.TryAddSingleton<ICatalogSchemaImporter, CatalogSchemaImporter>();
 
         // 🔒 Connection-string protector — no-op by default (config values are plain, D3).
         //    The host (Workflow.Api) replaces this with a Data-Protection-backed impl for the

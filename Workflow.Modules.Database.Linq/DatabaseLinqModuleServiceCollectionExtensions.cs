@@ -11,6 +11,7 @@ using Workflow.Modules.Database.Linq.Abstractions;
 using Workflow.Modules.Database.Linq.Builtin;
 using Workflow.Modules.Database.Linq.Compilation;
 using Workflow.Modules.Database.Linq.Execution;
+using Workflow.Modules.Database.Linq.Preview;
 
 /// <summary>
 /// 🧬✨ Opt-in DI registration entry point for the typed linq family (<c>builtin.database.linq</c>)~ 💖.
@@ -62,7 +63,9 @@ public static class DatabaseLinqModuleServiceCollectionExtensions
         services.TryAddSingleton<ILinqScriptRunner, CollectibleScriptRunner>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, LinqQueryModule>());
 
-        // 🧩 2.4.b.4 registration (previewer) slots in here (TryAdd so hosts can override)~
+        // 🔎 2.4.b.4 — sandbox previewer (compile → seeded :memory: SQLite → always-rollback)~
+        services.TryAddSingleton<IWorkflowLinqPreviewer, WorkflowLinqPreviewer>();
+
         return services;
     }
 }
