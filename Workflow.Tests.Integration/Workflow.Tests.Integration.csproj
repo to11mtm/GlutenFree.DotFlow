@@ -37,6 +37,8 @@
     <ItemGroup>
         <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
         <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
+        <!-- 🧬 Phase 2.4.b — typed linq family (compiler + cache + ALC runner + module)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database.Linq\Workflow.Modules.Database.Linq.csproj" />
         <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Nats\Workflow.Persistence.Nats.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Postgres\Workflow.Persistence.Postgres.csproj" />

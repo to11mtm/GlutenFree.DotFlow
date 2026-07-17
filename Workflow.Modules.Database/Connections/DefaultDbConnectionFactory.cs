@@ -72,16 +72,39 @@ public sealed class DefaultDbConnectionFactory : IDbConnectionFactory
 #pragma warning restore CA2000
     }
 
+    /// <inheritdoc/>
+    public async ValueTask<DataOptions> CreateOptionsAsync(string connectionId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
+
+        var maybeDescriptor = await this.connectionRegistry.GetAsync(connectionId, ct).ConfigureAwait(false);
+
+        var descriptor = maybeDescriptor.MatchUnsafe<DbConnectionDescriptor?>(
+            Some: d => d,
+            None: () => null);
+
+        if (descriptor is null || !descriptor.Enabled)
+        {
+            throw new ConnectionNotFoundException(connectionId);
+        }
+
+        return this.BuildOptions(descriptor.ProviderKey, descriptor.ConnectionString);
+    }
+
     /// <summary>
     /// Builds the <see cref="DataConnection"/> after resolving the linq2db provider name. 🏗️.
     /// </summary>
     private DataConnection Build(string providerKey, string connectionString)
+        => new(this.BuildOptions(providerKey, connectionString));
+
+    /// <summary>
+    /// Resolves the linq2db provider name and builds <see cref="DataOptions"/>. 🧩.
+    /// </summary>
+    private DataOptions BuildOptions(string providerKey, string connectionString)
     {
         // Throws UnknownProviderException on unregistered keys~ 🗂️
         var linq2DbProvider = this.providerRegistry.ResolveLinq2DbProvider(providerKey);
-
-        var options = new DataOptions().UseConnectionString(linq2DbProvider, connectionString);
-        return new DataConnection(options);
+        return new DataOptions().UseConnectionString(linq2DbProvider, connectionString);
     }
 }
 

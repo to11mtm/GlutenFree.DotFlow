@@ -6,6 +6,7 @@ namespace Workflow.Modules.Database.Abstractions;
 
 using System.Threading;
 using System.Threading.Tasks;
+using LinqToDB;
 using LinqToDB.Data;
 
 /// <summary>
@@ -47,5 +48,20 @@ public interface IDbConnectionFactory
     /// <returns>A ready-to-use <see cref="DataConnection"/> — caller must dispose.</returns>
     /// <exception cref="UnknownProviderException">Thrown when the provider key is not registered.</exception>
     public ValueTask<DataConnection> CreateAsync(string providerKey, string connectionString, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resolves a named connection into linq2db <see cref="DataOptions"/> (provider + connection string)~ 🧩.
+    /// </summary>
+    /// <param name="connectionId">The registered connection id (case-insensitive).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The <see cref="DataOptions"/> for the connection.</returns>
+    /// <remarks>
+    /// CopilotNote: Phase 2.4.b.3 — the Roslyn-compiled <c>DynamicWorkflowContext(DataOptions)</c> ctor
+    /// needs <see cref="DataOptions"/> (not a built <see cref="DataConnection"/>). This keeps
+    /// connection-string resolution in the one factory instead of duplicating it in the linq family~ 💖.
+    /// </remarks>
+    /// <exception cref="ConnectionNotFoundException">Thrown when the id is unknown or disabled.</exception>
+    /// <exception cref="UnknownProviderException">Thrown when the provider key is not registered.</exception>
+    public ValueTask<DataOptions> CreateOptionsAsync(string connectionId, CancellationToken ct = default);
 }
 

@@ -6,7 +6,9 @@ namespace Workflow.Modules.Database.Linq;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Workflow.Modules.Abstractions;
 using Workflow.Modules.Database.Linq.Abstractions;
+using Workflow.Modules.Database.Linq.Builtin;
 using Workflow.Modules.Database.Linq.Compilation;
 using Workflow.Modules.Database.Linq.Execution;
 
@@ -56,8 +58,11 @@ public static class DatabaseLinqModuleServiceCollectionExtensions
         services.TryAddSingleton<ILinqAssemblySigner, HmacLinqAssemblySigner>();
         services.TryAddSingleton<ICompiledAssemblyCache, CompiledAssemblyCache>();
 
-        // 🧩 2.4.b.3–4 registrations slot in here (TryAdd so hosts can override)~
-        // Module and previewer land in their slices — see the <remarks> above~ 🌸
+        // 🚀 2.4.b.3 — collectible-ALC runner + the builtin.database.linq module (opt-in, D14)~
+        services.TryAddSingleton<ILinqScriptRunner, CollectibleScriptRunner>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IWorkflowModule, LinqQueryModule>());
+
+        // 🧩 2.4.b.4 registration (previewer) slots in here (TryAdd so hosts can override)~
         return services;
     }
 }

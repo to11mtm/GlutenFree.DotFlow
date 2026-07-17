@@ -37,10 +37,9 @@ public sealed class ScaffoldingTests
         var act = () => services.AddDatabaseLinqModules().AddDatabaseLinqModules();
         act.Should().NotThrow();
 
-        // No IWorkflowModule is registered yet (the module lands in 2.4.b.3)~
+        // Exactly one IWorkflowModule (builtin.database.linq) is registered (2.4.b.3)~ 🌟
         using var provider = services.BuildServiceProvider();
-        provider.GetServices<IWorkflowModule>().Should().BeEmpty(
-            "the linq module is scaffolding-only until 2.4.b.3~ 🌱");
+        provider.GetServices<IWorkflowModule>().Should().ContainSingle(m => m.ModuleId == "builtin.database.linq");
     }
 
     [Fact]
