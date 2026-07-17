@@ -776,57 +776,46 @@ public sealed record DbOperationSpec
 
 ---
 
-### 2.4.b.1 `IWorkflowLinqCompiler` + Whitelists + `LinqInputs` Codegen 🧬
+### 2.4.b.1 `IWorkflowLinqCompiler` + Whitelists + `LinqInputs` Codegen 🧬 ✅ COMPLETE
 
 **Complexity:** 🔴 High *(Roslyn pipeline + security surface)*
 
+> **✅ Implemented & verified (July 2026):** full solution build green (**0 errors**); **14/14** compiler tests passing (target ~12) + the 4 scaffolding tests still green (18 DatabaseLinq total). Dual-POCO sourcing landed per user direction; deviations recorded 💡 below.
+
 #### Tasks
 
-- [ ] **`IWorkflowLinqCompiler`**
-  - [ ] New: `Workflow.Modules.Database.Linq/Abstractions/IWorkflowLinqCompiler.cs`
-    ```csharp
-    public sealed record LinqCompileRequest(
-        string DefinitionId,
-        string NodeId,
-        string UserCodeBody,                              // method body only — wrapped by codegen
-        IReadOnlyList<WorkflowTableMetadata> SelectedTables,
-        ModuleSchema InputSchema,                          // drives LinqInputs codegen
-        bool StrictTypeMode = false);                      // reject non-allowlisted property types vs warn
+- [x] **`IWorkflowLinqCompiler`**
+  - [x] New: `Workflow.Modules.Database.Linq/Abstractions/IWorkflowLinqCompiler.cs` (+ `Abstractions/LinqDiagnostic.cs`)
+    > 💡 **Deviation (result shape):** `LinqCompileResult` carries **`byte[]? AssemblyBytes`**, NOT `string? BlobKey`. 2.4.b.1 is a pure compiler — blob key/write **and HMAC signing** move to 2.4.b.2 (co-located with `IBlobStore` + the 2.4.b.3 load-time verify). Keeps the compiler pure/testable. `LinqDiagnostic` carries `Id`/`Severity`/`Message`/`Line`/`Column` (line/col point into the wrapped unit; user-relative mapping is a 2.4.b.5 refinement).
+  - [x] Codegen: `DynamicWorkflowContext : DataConnection` with `ITable<T>` per table (`DynamicContextCodeGenerator`)
+    > 💡 **Deviation (ctor):** uses `DynamicWorkflowContext(LinqToDB.DataOptions options) : base(options)` — the two-string `DataConnection(provider, connStr)` ctor from the design snippet isn't in linq2db 6.3.0. Execution (2.4.b.3) constructs via `DataOptions`.
+  - [x] Codegen: `readonly struct LinqInputs` from `ModuleSchema.Properties` via `RestrictedTypeMapper` (§8.6 scalar allowlist); non-allowlisted → `object?` + warning (`WFLINQ004`), or error in strict mode (`LinqInputsCodeGenerator`)
+  - [x] Codegen: `WorkflowScript.ExecuteAsync(DynamicWorkflowContext db, LinqInputs inputs, CancellationToken ct)` async wrapper (mitigates C2)
+  - [x] **🌟 Dual-POCO table resolution (`TableTypeResolver` — per user direction):** each selected table resolves its entity type via **(a) a plugin POCO** (`ClrTypeName` + `AssemblyName`, preferred + authoritative when present/loadable) **or (b) a column-generated POCO** emitted from `WorkflowColumnMetadata` via `SqlTypeMapper` (provider SQL-type → C# type). A table with neither → error `WFLINQ001`; an unloadable plugin type → `WFLINQ002`; an unmapped column type → `WFLINQ003` (warn, or error in strict). **Precedence: plugin POCO wins** when both are present.
+- [x] **Security whitelists (mitigates C1)**
+  - [x] Reference set (`ReferenceWhitelist`): `Basic.Reference.Assemblies.Net80.References.All` + `LinqToDB` + resolved plugin assemblies
+    > 💡 **Note (enforcement model):** `Net80` refs = the whole BCL, so the *real* gate is the **usings allowlist** (codegen prepends ONLY `System`/`System.Linq`/`System.Collections.Generic`/`System.Threading`/`System.Threading.Tasks`/`LinqToDB`) **+ `ForbiddenSyntaxWalker`**, which catches fully-qualified reaches like `System.IO.File.Delete`. Trimming references isn't the mechanism (documented in `ReferenceWhitelist`).
+  - [x] `ForbiddenSyntaxWalker` (`CSharpSyntaxWalker`) rejects `Process`/`File`/`Directory`/`Socket`/`HttpClient`/`Activator`/`Marshal`/`Assembly`/… identifiers (`WFLINQ100`), `[DllImport]` (`WFLINQ101`), `unsafe` (`WFLINQ102`), pointers (`WFLINQ103`), `stackalloc` (`WFLINQ104`). Scans the user body **standalone** so codegen/column identifiers can't false-positive.
+  - [x] Usings allowlist (codegen-controlled — user bodies can't declare usings)
+  - [ ] ~~Emitted assembly HMACed with per-instance key~~ → **moved to 2.4.b.2** (signing belongs with the blob write + the 2.4.b.3 load-time verify)
+- [ ] **Trusted-author gate (Q2/Q15):** enforced at the API layer in **2.4.b.5**, not in the compiler — note only
+- [x] Registered `IWorkflowLinqCompiler` + `TableTypeResolver` via `TryAddSingleton` in `AddDatabaseLinqModules()`
 
-    public sealed record LinqCompileResult(
-        bool Success,
-        string? BlobKey,                                   // compiled-modules/{def}/{node}/{hash}.dll
-        IReadOnlyList<LinqDiagnostic> Errors,
-        IReadOnlyList<LinqDiagnostic> Warnings);           // warnings surfaced too (mitigates C9)
-
-    public interface IWorkflowLinqCompiler
-    {
-        Task<LinqCompileResult> CompileAsync(LinqCompileRequest request, CancellationToken ct = default);
-    }
-    ```
-  - [ ] Codegen: `DynamicWorkflowContext : DataConnection` with `ITable<T>` property per selected table (per `sqlModuleHandler.md` snippet)
-  - [ ] Codegen: `readonly struct LinqInputs` accessor from `ModuleSchema.Properties` using the restricted Type→CSharpName mapping (design doc §8.6 Phase 1); non-allowlisted types → `object?` + warning (or error in strict mode)
-  - [ ] Codegen: wrapper `WorkflowScript.ExecuteAsync(DynamicWorkflowContext db, LinqInputs inputs, CancellationToken ct)` — async + ct in signature (mitigates C2)
-- [ ] **Security whitelists (mitigates C1)**
-  - [ ] Reference whitelist: `Basic.Reference.Assemblies` core set + `LinqToDB` + registered plugin POCO assemblies only
-  - [ ] Syntax-tree walker rejects: `unsafe`, P/Invoke attrs, `AppDomain`, `Process`, `File`/`Directory`, `Socket`/`HttpClient`, `Reflection.Emit`, `Activator.CreateInstance` on non-DTO types, `#r`/`extern alias`
-  - [ ] Usings whitelist: `System`, `System.Linq`, `System.Collections.Generic`, `System.Threading.Tasks`, `LinqToDB` (block everything else)
-  - [ ] Emitted assembly HMACed with per-instance key — swapped blobs rejected at load
-- [ ] **Trusted-author gate (Q2/Q15):** compile/save endpoints require the trusted-author policy in V1
-
-#### Tests (target ~12): → `Workflow.Tests/Modules/DatabaseLinq/LinqCompilerTests.cs`
-- [ ] `Compile_ValidQuery_Succeeds`
-- [ ] `Compile_TypoInTableName_ReturnsCS0103Diagnostic`
-- [ ] `Compile_TypoInInputProperty_ReturnsCS1061Diagnostic`
-- [ ] `Compile_WrongTypeComparison_ReturnsCS0019Diagnostic`
-- [ ] `Compile_WarningsSurfacedAlongsideSuccess`
-- [ ] `Compile_ForbiddenApi_ProcessStart_Rejected`
-- [ ] `Compile_ForbiddenApi_FileIo_Rejected`
-- [ ] `Compile_ForbiddenUsing_SystemNet_Rejected`
-- [ ] `Compile_UnsafeBlock_Rejected`
-- [ ] `LinqInputs_Codegen_AllowlistedScalarTypes_EmitTypedProperties`
-- [ ] `LinqInputs_Codegen_NonAllowlistedType_FallsBackToObjectWithWarning`
-- [ ] `LinqInputs_Codegen_StrictMode_NonAllowlistedType_Rejected`
+#### Tests (target ~12): ✅ **14 delivered** → `Workflow.Tests/Modules/DatabaseLinq/LinqCompilerTests.cs`
+- [x] `Compile_ValidQuery_Succeeds`
+- [x] `Compile_ColumnGeneratedPocoTable_Succeeds` *(new — generated-POCO path)*
+- [x] `Compile_TypoInTableName_ReturnsMemberDiagnostic` *(asserts **CS1061** — `db.Ordrs` is a member typo, not the plan's CS0103)*
+- [x] `Compile_TypoInInputProperty_ReturnsCS1061Diagnostic`
+- [x] `Compile_WrongTypeComparison_ReturnsCS0019Diagnostic`
+- [x] `LinqInputs_Codegen_AllowlistedScalarTypes_EmitTypedProperties`
+- [x] `LinqInputs_Codegen_NonAllowlistedType_FallsBackToObjectWithWarning` *(covers `Compile_WarningsSurfacedAlongsideSuccess`)*
+- [x] `LinqInputs_Codegen_StrictMode_NonAllowlistedType_Rejected`
+- [x] `Compile_ForbiddenApi_ProcessStart_Rejected`
+- [x] `Compile_ForbiddenApi_FileIo_Rejected`
+- [x] `Compile_ForbiddenApi_HttpClient_Rejected` *(renamed from `_ForbiddenUsing_SystemNet` — user bodies can't declare usings; the reach is a fully-qualified `System.Net.Http.HttpClient`)*
+- [x] `Compile_UnsafeBlock_Rejected`
+- [x] `Compile_PluginPocoTable_Succeeds` *(new — plugin-POCO path)*
+- [x] `Compile_TableWithNoTypeOrColumns_ReturnsDiagnostic` *(new — `WFLINQ001`)*
 
 ---
 
@@ -1163,7 +1152,7 @@ When 2.4 ships (Week 14), all of the following must be true:
 **2.4.b — Typed linq family, the primary surface (Week 14 gate, per D12):**
 
 - [ ] **`builtin.database.linq`** discoverable, publish-time-compiled, ALC-executed on Postgres + SQLite
-- [ ] **`IWorkflowLinqCompiler`** with reference/usings/syntax whitelists + `LinqInputs` accessor-struct codegen (design doc §8.6 Phase 1)
+- [x] **`IWorkflowLinqCompiler`** with reference/usings/syntax whitelists + `LinqInputs` accessor-struct codegen (design doc §8.6 Phase 1) *(2.4.b.1 ✅ — plus dual-POCO table resolution; HMAC signing deferred to 2.4.b.2)*
 - [ ] **Compiled-assembly cache** in `IBlobStore` under `compiled-modules/` with hash-keyed invalidation + HMAC verification (D15)
 - [ ] **Sandbox preview** (`IWorkflowLinqPreviewer`, always-rollback `:memory:` SQLite) + one-shot catalog import (Q17/D19 ✅)
 - [ ] **API endpoints:** `POST /api/database/linq/{validate,preview,compile}` — compile gated by trusted-author policy (Q2/Q15)
@@ -1231,15 +1220,19 @@ Workflow.Modules.Database.Linq/                         ← NEW PROJECT (2.4.b.0
   AssemblyMarker.cs                                      ← new (2.4.b.0) ✅ — Roslyn-toolchain smoke + ref-emit
   DatabaseLinqModuleServiceCollectionExtensions.cs       ← new (2.4.b.0) ✅ — opt-in AddDatabaseLinqModules() (no-op scaffold)
   Abstractions/
-    IWorkflowLinqCompiler.cs                             ← new (2.4.b.1)
+    IWorkflowLinqCompiler.cs                             ← new (2.4.b.1) ✅ — LinqCompileRequest/Result (bytes, not blob key)
+    LinqDiagnostic.cs                                    ← new (2.4.b.1) ✅
     IWorkflowLinqPreviewer.cs                            ← new (2.4.b.4)
-    LinqDiagnostic.cs                                    ← new (2.4.b.1)
   Compilation/
-    WorkflowLinqCompiler.cs                              ← new (2.4.b.1) — Roslyn pipeline
-    LinqInputsCodeGenerator.cs                           ← new (2.4.b.1) — accessor-struct codegen (§8.6 Phase 1)
-    DynamicContextCodeGenerator.cs                       ← new (2.4.b.1) — ITable<T> context codegen
-    ForbiddenSyntaxWalker.cs                             ← new (2.4.b.1) — syntax blocklist
-    ReferenceWhitelist.cs                                ← new (2.4.b.1)
+    WorkflowLinqCompiler.cs                              ← new (2.4.b.1) ✅ — Roslyn pipeline orchestrator
+    TableTypeResolver.cs                                 ← new (2.4.b.1) ✅ — dual-POCO (plugin OR column-generated)
+    RestrictedTypeMapper.cs                              ← new (2.4.b.1) ✅ — Type→C# name (§8.6 LinqInputs)
+    SqlTypeMapper.cs                                     ← new (2.4.b.1) ✅ — SQL type→C# name (generated POCOs)
+    LinqInputsCodeGenerator.cs                           ← new (2.4.b.1) ✅ — accessor-struct codegen (§8.6 Phase 1)
+    DynamicContextCodeGenerator.cs                       ← new (2.4.b.1) ✅ — POCO + ITable<T> context + wrapper
+    CodeIdentifiers.cs                                   ← new (2.4.b.1) ✅ — identifier/literal sanitising
+    ForbiddenSyntaxWalker.cs                             ← new (2.4.b.1) ✅ — syntax blocklist
+    ReferenceWhitelist.cs                                ← new (2.4.b.1) ✅ — reference set + usings allowlist
   Execution/
     CompiledAssemblyCache.cs                             ← new (2.4.b.2) — IBlobStore + LRU + HMAC
     CollectibleScriptRunner.cs                           ← new (2.4.b.3) — ALC lifecycle

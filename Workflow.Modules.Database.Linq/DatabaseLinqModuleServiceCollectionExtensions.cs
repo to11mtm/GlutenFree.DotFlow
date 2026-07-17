@@ -5,6 +5,9 @@
 namespace Workflow.Modules.Database.Linq;
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Workflow.Modules.Database.Linq.Abstractions;
+using Workflow.Modules.Database.Linq.Compilation;
 
 /// <summary>
 /// 🧬✨ Opt-in DI registration entry point for the typed linq family (<c>builtin.database.linq</c>)~ 💖.
@@ -41,8 +44,12 @@ public static class DatabaseLinqModuleServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // 🧩 2.4.b.1–4 registrations slot in here (TryAdd so hosts can override)~
-        // Intentionally empty during scaffolding (2.4.b.0) — see the <remarks> above~ 🌸
+        // 🧬 2.4.b.1 — the Roslyn compile pipeline (dual-POCO: plugin OR column-generated)~
+        services.TryAddSingleton<TableTypeResolver>();
+        services.TryAddSingleton<IWorkflowLinqCompiler, WorkflowLinqCompiler>();
+
+        // 🧩 2.4.b.2–4 registrations slot in here (TryAdd so hosts can override)~
+        // Cache, module, and previewer land in their slices — see the <remarks> above~ 🌸
         return services;
     }
 }
