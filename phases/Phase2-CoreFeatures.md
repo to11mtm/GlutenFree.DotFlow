@@ -1283,7 +1283,9 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 
 ### 2.7 REST API Implementation (Week 13-14)
 
-**Tasks:**
+> **📋 Detailed sliced plan available:** [Phase2-7-RestApi.md](Phase2-7-RestApi.md) — versioned `/api/v1` surface (workflow CRUD, execution start/status/cancel, modules, variables, monitoring) over the **existing** repositories + Akka execution messages, plus the two genuinely-new concerns (API-key/JWT auth, API versioning). **Timeline shifted to Weeks 19-20.** The checklist below is the legacy reference list — the sliced doc supersedes it (notably: **Minimal-API endpoint groups, not MVC controllers**; webhook endpoints already shipped in 2.3.6/2.3.9; the repos/execution messages/health checks already exist so most endpoints are thin adapters; auth MVP = API-key + JWT bearer validation with first-party login deferred).
+
+**Tasks:** *(legacy reference list — superseded by the sliced plan above)*
 - [ ] **Implement workflow CRUD endpoints** 📋
   - [ ] Create `WorkflowsController` class
   - [ ] Implement GET /api/v1/workflows

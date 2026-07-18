@@ -44,6 +44,7 @@ This directory contains individual phase breakdown files to make it easier to na
   - Design exploration: [new-feature-design/Phase2-4-DatabaseModules-Design.md](../new-feature-design/Phase2-4-DatabaseModules-Design.md)
 - [Phase2-5-FileSystemModules.md](Phase2-5-FileSystemModules.md) ✅ — 2.5.a local file family (path-security sandbox + 10 modules) **COMPLETE** (58 unit tests) + 2.5.b cloud storage (S3/Azure Blob, quarantined project) **COMPLETE** (22 unit + Docker-gated MinIO/Azurite/E2E). Q1–Q10 resolved~ 🌷
 - [Phase2-6-DataTransformationModules.md](Phase2-6-DataTransformationModules.md) ✅ — 2.6.a expression family (9 transform modules incl. join, on the 2.2.5 evaluator seam) **COMPLETE** + 2.6.b typed C# script (`builtin.transform.script`) on a new shared `Workflow.Scripting.Roslyn` core **COMPLETE** (~120 unit tests; 2.4.b's 53 linq tests untouched). Q1–Q8 resolved ✅~ 🌷
+- [Phase2-7-RestApi.md](Phase2-7-RestApi.md) ⏳ — versioned `/api/v1` surface (workflow CRUD, execution, modules, variables, monitoring) over existing repos + Akka execution messages, plus API-key/JWT auth + API versioning. Minimal-API endpoint groups (not MVC); most endpoints are thin adapters since the engine/persistence layers already exist. Weeks 19-20; Q1–Q7 clarifications pending~ 🌷
   - Module guide: [docs/database-modules.md](../docs/database-modules.md)
 
 ### [Phase3-AdvancedFeatures.md](Phase3-AdvancedFeatures.md) 🎨
