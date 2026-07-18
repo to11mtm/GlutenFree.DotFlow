@@ -16,7 +16,7 @@ Phase 2.6 ships DotFlow's **transformation family** — mapping, querying, aggre
 This slice also **absorbs the query modules deferred from 2.5** (D9/Q2 there): `builtin.transform.jsonquery` (JSONPath, building on 2.3.5's `JsonPathExtractor`) and `builtin.transform.xmlquery` (XPath).
 
 **Timeline:** 2 weeks (Weeks 17-18 — following 2.5's Weeks 15-16) — 2.6.a Week 17 · 2.6.b Week 18
-**Complexity:** 🟠 Medium-High — 2.6.a is volume (7 modules) on well-trodden infrastructure; 2.6.b is a **refactor-then-reuse** of the hardest code in the repo (Roslyn pipeline + ALC lifecycle), where the risk is regression in 2.4.b, mitigated by its 53-test suite staying green
+**Complexity:** 🟠 Medium-High — 2.6.a is volume (9 modules) on well-trodden infrastructure; 2.6.b is a **refactor-then-reuse** of the hardest code in the repo (Roslyn pipeline + ALC lifecycle), where the risk is regression in 2.4.b, mitigated by its 53-test suite staying green
 
 > **CopilotNote:** Hot paths: `Workflow.Modules/Builtin/Transform/*` (expression family — same placement rules as the HTTP/File families), **new `Workflow.Scripting.Roslyn`** (extraction target for `ForbiddenSyntaxWalker`, `ReferenceWhitelist`, `CompiledAssemblyCache`, `HmacLinqAssemblySigner`, `CollectibleScriptRunner`), `Workflow.Modules.Transform.Script` (quarantined script module — Roslyn stays out of `Workflow.Modules` per the D14 precedent), and `Workflow.Modules.Database.Linq` (retrofitted onto the shared core — **its 53 tests must stay green unchanged**). Tests stay Docker-free throughout — transforms are pure in-memory~ 🌸
 
@@ -32,33 +32,35 @@ This slice also **absorbs the query modules deferred from 2.5** (D9/Q2 there): `
 | **D6 One uniform data shape: CLR dict/list/scalar** | Transforms operate on `IReadOnlyDictionary<string, object?>` / `IReadOnlyList<object?>` / scalars — exactly what 2.5's `JsonValueConverter` and the database modules' `rows` already emit. `TransformDataNormalizer` (2.6.a.0) coerces incoming values (incl. `JsonNode`/`JsonElement` stragglers) into this shape once, at module entry. `JsonValueConverter` + `XmlDictionaryConverter` are **promoted from `Builtin/File/Internal` to a shared `Workflow.Modules/Internal/`** namespace (2.5 modules retarget the using — no behaviour change). |
 | **D7 Expression item-context convention** | Per-item expressions see `item` (current element), `index` (int), plus workflow `Variables` — flattened into the evaluator's variable map. Aggregate/group expressions additionally see `group` (key) and `items`. Documented once in 2.6.a.0 and shared by map/query/aggregate/validate. |
 | **D8 Outputs always materialised** | Same as 2.4-D8/2.5-D8: modules return fully materialised lists/dicts — never lazy enumerables. The script runner reuses the 2.4.b materialisation guard (`ScriptResultMaterializer`): an `IQueryable`/lazy return from user code → failure diagnostic. |
-| **D9 Validation is declarative rules, not FluentValidation** | The legacy checklist said "Install FluentValidation" — superseded. FluentValidation is *code-first* (rules authored in C# classes), which can't be driven from a workflow-definition JSON property. `builtin.transform.validate` ships a declarative rule set (required/type/length/range/regex/email/url/enum/nested/array) + a `custom` rule kind that evaluates an `IExpressionEvaluator` expression. Full JSON-Schema support via `JsonSchema.Net` (json-everything, MIT — same family as our `JsonPath.Net`) is **pending Q3**. |
+| **D9 Validation is declarative rules, not FluentValidation** | The legacy checklist said "Install FluentValidation" — superseded. FluentValidation is *code-first* (rules authored in C# classes), which can't be driven from a workflow-definition JSON property. `builtin.transform.validate` ships a declarative rule set (required/type/length/range/regex/email/url/enum/nested/array) + a `custom` rule kind that evaluates an `IExpressionEvaluator` expression. **Plus a JSON Schema mode via `JsonSchema.Net`** (json-everything, MIT — same family as our `JsonPath.Net`) — confirmed per Q3. |
 | **D10 `jsonquery`/`xmlquery` land here (from 2.5-D9)** | `builtin.transform.jsonquery` wraps JSONPath (extending 2.3.5's `JsonPathExtractor`; `JsonPath.Net` already pinned). `builtin.transform.xmlquery` wraps `XPathSelectElements` over the D6 dict shape (via `XmlDictionaryConverter` round-trip) — XXE-safe settings identical to 2.5's `XmlReadModule`. |
 | **D11 String ops as one operation-style module** | `builtin.transform.string` with `operation` string key (case/trim/substring/replace/split/join/pad/truncate/format/regex/base64/url/html/hash/guid) — same operation-property pattern as `builtin.cloud.s3`. MD5 ships but is documented **non-cryptographic (legacy interop only)**; SHA256/SHA512 are the recommended hashes. |
 | **D12 Script inputs reuse the `LinqInputs` accessor-struct codegen** | 2.4.b.1's `RestrictedTypeMapper` + `LinqInputsCodeGenerator` (§8.6 scalar allowlist, `object?` fallback with warning) generalise as-is — the script's `inputs` map binds identically. The script body signature is `Task<object?> ExecuteAsync(ScriptRows rows, ScriptInputs inputs, CancellationToken ct)` where `ScriptRows` wraps the normalised D6 data. |
 | **D13 Script cache namespace `compiled-modules/transform/`** | Same `IBlobStore` cache as 2.4.b.2 (shared `CompiledAssemblyCache` post-extraction), keyed `compiled-modules/transform/{definitionId}/{nodeId}/{SHA256(code+schemaVersion+inputsFingerprint)}.dll` — no table fingerprint (no DB), inputs-shape fingerprint instead. |
 | **D14 Trusted-author gate + whitelists carry over (2.4-D17)** | Script compile/save gated to trusted authors at the API layer; same `ForbiddenSyntaxWalker` blocklist + usings allowlist (minus `LinqToDB` — transform scripts get `System`/`System.Linq`/`System.Collections.Generic`/`System.Text`/`System.Text.RegularExpressions`/`System.Threading`/`System.Threading.Tasks`). No I/O, no network, no reflection — transforms are pure functions. |
+| **D15 Joins are MVP, as a dedicated `builtin.transform.join` module** | Per Q5 resolution — joins ship in 2.6.a.2, but NOT bolted onto the query module: a dedicated module with a second input port (`right`), `leftKey`/`rightKey` expressions, and `joinType` (`inner`/`left`/`full`). Keeps the query module's fixed pipeline clean (Q4/D-no-DSL) while covering the legacy checklist's "Join operations". Hash-join implementation (build right-side lookup, probe left) — O(n+m). |
+| **D16 2.6.b typed script is MVP (Week 18)** | Per Q1 resolution — the full 2.6.b track (extraction + module + API/preview) ships in the MVP, mirroring 2.4's typed-first precedent (D12 there). The 2.6.b.0 extraction is also deliberate tech-debt paydown on `Workflow.Modules.Database.Linq` before 2.7+ builds on it. |
 
 ### TO RESOLVE 🤔
 
-> Raised during this task breakdown — each carries a V1 recommendation so 2.6.a.0 can start immediately~ ✨
+> All Q1–Q8 resolved (July 2026) — answers recorded below, folded into D9/D15/D16 and the slice plans~ ✅
 
-- [ ] **Q1 Is 2.6.b (typed script) MVP or post-MVP?** The expression family covers the legacy checklist fully; the script family is the power surface. Per the 2.4 typed-first precedent (D12 there) **V1 recommendation: MVP, Week 18** — the extraction (2.6.b.0) also pays down tech debt in `Workflow.Modules.Database.Linq` that 2.7+ would otherwise inherit. Fallback if Week 18 is squeezed: ship 2.6.b.0 (extraction only, regression-tested) and defer 2.6.b.1–2 to a P-slice.
-  - A1: Is MVP 
-- [ ] **Q2 Default expression language:** Jint/JS (`item.price > 10 && item.name.startsWith("A")`) or DynamicExpresso/C# (`item.price > 10`)? Jint is the 2.2.5 default and handles untyped dict access more gracefully; C# feels closer to 2.6.b. **V1 recommendation: JS default, `"csharp"` opt-in per module via a `language` property** — exactly the `IExpressionEvaluatorFactory` keyed pattern that already exists.
-  - A2: JS and lets leverage what we did in 2.4 to support C# as an opt-in language.
-- [ ] **Q3 JSON Schema validation:** add `JsonSchema.Net` so `builtin.transform.validate` accepts a standard JSON Schema alongside the declarative rule set? **V1 recommendation: yes, as a `schemaFormat: "jsonSchema"` mode** — it's MIT, ~200KB, same maintainer as JsonPath.Net, and "validate against a real JSON Schema" is table stakes for ETL. If cut, tracked as 2.6.a.P2.
-  - A3: Okay 
-- [ ] **Q4 `builtin.transform.query` shape:** one module with `where`/`select`/`orderBy`/`skip`/`take` properties applied as a fixed pipeline, or a list-of-operations DSL (`operations: [{op: "where", …}]`)? **V1 recommendation: fixed-pipeline properties** — covers 95% of uses, zero DSL invention (matches 2.4-D11's "no DSL" spirit); chains of query nodes compose the rest. Multi-stage single-node pipelines → 2.6.b script.
-  - A4: Okay
-- [ ] **Q5 Join support in the query module:** the legacy checklist lists "Join operations". Joining two upstream collections needs a second input port + key expressions — real complexity. **V1 recommendation: defer joins to 2.6.b script (trivial in LINQ) + track a dedicated `builtin.transform.join` as 2.6.a.P1** — don't bloat the query module's V1.
-  - A5: I think we need joins for MVP.
-- [ ] **Q6 Scripting-core project name/home:** `Workflow.Scripting.Roslyn` as proposed (new top-level project), or fold into `Workflow.Modules.Database.Linq` with the Transform script referencing *it*? **V1 recommendation: new `Workflow.Scripting.Roslyn` project** — a transform module referencing a *database* assembly (dragging linq2db along) is exactly the coupling D14-style quarantines exist to prevent.
-  - A6: Okay 
-- [ ] **Q7 Script preview:** 2.4.b.4's previewer is SQLite-specific (seeds tables). Transform preview is simpler — run the compiled script against caller-supplied sample rows with a timeout. **V1 recommendation: ship `ITransformScriptPreviewer` in 2.6.b.2** (compile-inclusive, like 2.4.b.4's Consideration 5) — no sandbox DB needed, pure in-memory.
-  - A7: Okay 
-- [ ] **Q8 Regex safety:** `builtin.transform.string` regex ops + validate's `pattern` rule take user-supplied patterns — ReDoS risk. **V1 recommendation: `RegexOptions.NonBacktracking` where the pattern allows it, else mandatory `Regex` match timeout (1s default, configurable)** — test-locked with a catastrophic-backtracking pattern.
-  - A8: Okay  
+- [x] **Q1 Is 2.6.b (typed script) MVP or post-MVP?** The expression family covers the legacy checklist fully; the script family is the power surface. Per the 2.4 typed-first precedent (D12 there) V1 recommendation: MVP, Week 18.
+  - **RESOLVED: MVP** (D16) — 2.6.b.0–2.6.b.2 all ship in Week 18; the extraction also pays down the `Workflow.Modules.Database.Linq` tech debt before 2.7+ inherits it.
+- [x] **Q2 Default expression language:** Jint/JS or DynamicExpresso/C#?
+  - **RESOLVED: JS (Jint) default, C# opt-in** via a per-module `language: "csharp"` property — leveraging the 2.4-era keyed-evaluator work (`IExpressionEvaluatorFactory`), exactly the existing 2.2.5 pattern.
+- [x] **Q3 JSON Schema validation via `JsonSchema.Net`?**
+  - **RESOLVED: yes** — `builtin.transform.validate` ships a `schema` (JSON Schema) mode alongside the declarative rules (D9). `JsonSchema.Net` pin confirmed.
+- [x] **Q4 `builtin.transform.query` shape:** fixed pipeline vs operations DSL?
+  - **RESOLVED: fixed-pipeline properties** (`where` → `select` → `orderBy` → `skip`/`take`), no DSL — matches 2.4-D11's spirit; multi-stage single-node pipelines → 2.6.b script.
+- [x] **Q5 Join support:** defer or MVP?
+  - **RESOLVED: joins are MVP** — but as a dedicated **`builtin.transform.join` module** (second input port + key expressions + join types), NOT bolted onto the query module. Ships in 2.6.a.2 (D15); the former 2.6.a.P1 slice is promoted and removed from post-MVP.
+- [x] **Q6 Scripting-core project name/home:**
+  - **RESOLVED: new `Workflow.Scripting.Roslyn` project** — a transform module referencing a database assembly (dragging linq2db) is exactly the coupling the D14-style quarantines exist to prevent.
+- [x] **Q7 Script preview:**
+  - **RESOLVED: `ITransformScriptPreviewer` in 2.6.b.2** — compile-inclusive, pure in-memory against caller-supplied sample rows, short timeout. No sandbox DB.
+- [x] **Q8 Regex safety (ReDoS):**
+  - **RESOLVED: `RegexOptions.NonBacktracking` where the pattern allows it, else mandatory match timeout (1s default, configurable)** — test-locked with a catastrophic-backtracking pattern in both `string` and `validate`.
 
 ---
 
@@ -168,11 +170,11 @@ This slice also **absorbs the query modules deferred from 2.5** (D9/Q2 there): `
 
 ---
 
-## 2.6.a.2 Query + Aggregate Modules 🔍📊 (`builtin.transform.query` / `builtin.transform.aggregate`)
+## 2.6.a.2 Query + Aggregate + Join Modules 🔍📊🔗 (`builtin.transform.{query,aggregate,join}`)
 
-> **Purpose:** Filter/project/sort/paginate collections, and compute aggregates with optional grouping — all expression-driven (D1, Q4)~ ✨
+> **Purpose:** Filter/project/sort/paginate collections, compute aggregates with optional grouping, and join two collections — all expression-driven (D1, Q4, D15)~ ✨
 
-**Complexity:** 🟠 Medium
+**Complexity:** 🟠 Medium-High *(join added per Q5)*
 
 ### Tasks
 
@@ -181,18 +183,28 @@ This slice also **absorbs the query modules deferred from 2.5** (D9/Q2 there): `
   - [ ] Input port: `data` (array); Properties: `where` (expression, optional) · `select` (expression **or** mapping-style map, optional) · `orderBy` (expression or dot-path, optional) · `descending` (bool) · `skip`/`take` (int, optional) · `language` (Q2)
   - [ ] Outputs: `result` (array) · `count` (int) · `totalCount` (int — pre-skip/take) · `success`
   - [ ] `orderBy` comparison: numeric when both comparands are numeric, ordinal-string otherwise; `null` sorts first (documented)
-  - [ ] Joins **not** in V1 (Q5) — module description points at `builtin.transform.script` + 2.6.a.P1
+  - [ ] Joins live in `builtin.transform.join` (D15) — module description cross-references it
 - [ ] **`AggregateModule`** 📊 (`builtin.transform.aggregate`)
   - [ ] Input port: `data` (array); Properties: `operation` (string key: `sum`/`count`/`avg`/`min`/`max`/`first`/`last`/`distinct`/`median`/`mode`, required) · `property` (dot-path, optional — required for numeric ops on record arrays) · `groupBy` (dot-path or expression, optional) · `language`
   - [ ] Outputs: `result` (scalar, or array for `distinct`) · `groups` (array of `{ key, result, count }`, when `groupBy`) · `success`
   - [ ] Numeric coercion via invariant culture; nulls skipped (documented); empty collection → `count: 0`, `sum: 0`, others `null` (no throw)
   - [ ] Grouped mode: group → aggregate within each group → `groups` output
+- [ ] **`DataJoinModule`** 🔗 (`builtin.transform.join` — MVP per Q5/D15)
+  - [ ] New: `Workflow.Modules/Builtin/Transform/DataJoinModule.cs` — `DisplayName: "Join Data"`, `Category: "Transformation"`, `Icon: "🔗"`
+  - [ ] Input ports: `left` (array, required) · `right` (array, required) — **the family's first two-port module**; property fallbacks for both (port wins, D5)
+  - [ ] Properties: `leftKey` / `rightKey` (dot-path **or** expression, required) · `joinType` (string key: `"inner"` (default) / `"left"` / `"full"`) · `select` (optional mapping-style map or expression seeing `left`/`right` — defaults to `{ …left, right: {…right} }` merge shape, documented) · `language`
+  - [ ] Implementation: **hash join** — build a multi-map over `right` keyed by `rightKey`, probe with `left` (O(n+m)); key equality: invariant string comparison after scalar normalisation (numbers compare numerically — documented)
+  - [ ] `left`/`full` joins emit unmatched rows with `right: null` (and `full` additionally emits unmatched right rows with `left: null`); duplicate right keys → one output row per match pair (documented)
+  - [ ] Outputs: `result` (array) · `count` (int) · `unmatchedLeft` / `unmatchedRight` (int counts) · `success`
+  - [ ] `ValidateConfiguration`: keys present; `joinType` known
 
-### Tests (target ~18): → `Workflow.Tests/Modules/Transform/DataQueryModuleTests.cs` + `AggregateModuleTests.cs`
+### Tests (target ~27): → `Workflow.Tests/Modules/Transform/DataQueryModuleTests.cs` + `AggregateModuleTests.cs` + `DataJoinModuleTests.cs`
 
 **Query (~9):** metadata · `Where_FiltersRows` · `Select_ProjectsShape` *(expression + map forms)* · `OrderBy_NumericAndString` · `OrderByDescending_Works` · `SkipTake_Paginates_TotalCountPreSlice` · `CombinedPipeline_AllStages` · `EmptyData_ReturnsEmptyNotError` · `WhereExpressionError_CarriesItemIndex`
 
 **Aggregate (~9):** metadata · `Sum_Avg_OnNumericProperty` · `MinMax_Works` · `Count_NoPropertyNeeded` · `FirstLast_Work` · `Distinct_ReturnsUniques` · `Median_Mode_Custom` · `GroupBy_AggregatesPerGroup` · `EmptyCollection_NullNotThrow` · `NullValues_Skipped`
+
+**Join (~9):** metadata · `InnerJoin_MatchesOnKey` · `InnerJoin_ExpressionKeys_Work` · `LeftJoin_UnmatchedLeft_RightNull` · `FullJoin_EmitsBothUnmatchedSides` · `DuplicateRightKeys_OneRowPerPair` · `NumericKeys_CompareNumerically` · `CustomSelect_ShapesOutput` · `EmptyRightSide_LeftJoinPassesThrough`
 
 ---
 
@@ -243,11 +255,11 @@ This slice also **absorbs the query modules deferred from 2.5** (D9/Q2 there): `
   - [ ] Nested validation via dot-paths into sub-objects; array-of-records input validates each item
   - [ ] Outputs: `isValid` (bool) · `errors` (array of `{ index?, field, rule, message }`) · `validItems` / `invalidItems` (arrays, when input is an array) · `success`
   - [ ] `failOnInvalid: true` → `ModuleResult.Fail` with the error list in the message (composes with `builtin.trycatch`)
-  - [ ] Q3 (if confirmed): `schema` property validates via `JsonSchema.Net`; `rules` and `schema` are mutually exclusive (validation error otherwise)
+  - [ ] **JSON Schema mode (Q3 ✅):** `schema` property validates via `JsonSchema.Net` (new pin); `rules` and `schema` are mutually exclusive (validation error otherwise); schema violations map into the same `errors` output shape
 
 ### Tests (target ~14): → `Workflow.Tests/Modules/Transform/ValidateDataModuleTests.cs`
 
-- [ ] metadata · `Required_MissingField_Invalid` · `Type_Mismatch_Invalid` · `MinMaxLength_Enforced` · `NumericRange_Enforced` · `Pattern_Regex_Works` · `Pattern_CatastrophicBacktracking_TimesOutSafely` *(Q8 lock)* · `Email_Url_Formats` · `Enum_Membership` · `NestedField_DotPath_Validated` · `ArrayInput_SplitsValidAndInvalid` · `CustomExpressionRule_Works` · `FailOnInvalid_ReturnsModuleFail` · `JsonSchemaMode_Validates` *(Q3-gated)*
+- [ ] metadata · `Required_MissingField_Invalid` · `Type_Mismatch_Invalid` · `MinMaxLength_Enforced` · `NumericRange_Enforced` · `Pattern_Regex_Works` · `Pattern_CatastrophicBacktracking_TimesOutSafely` *(Q8 lock)* · `Email_Url_Formats` · `Enum_Membership` · `NestedField_DotPath_Validated` · `ArrayInput_SplitsValidAndInvalid` · `CustomExpressionRule_Works` · `FailOnInvalid_ReturnsModuleFail` · `JsonSchemaMode_Validates` · `RulesAndSchema_MutuallyExclusive_FailsValidation`
 
 ---
 
@@ -282,9 +294,9 @@ This slice also **absorbs the query modules deferred from 2.5** (D9/Q2 there): `
 
 ### Tasks
 
-- [ ] **E2E pipeline test** (Docker-free, `Workflow.Tests/Modules/Transform/TransformE2ETests.cs`): csv.read (2.5) → `validate` (split invalid) → `map` (reshape+convert) → `query` (filter+sort) → `aggregate` (groupBy sum) → `json.write` (2.5) — asserts end shape + invalid-item routing
-- [ ] **`docs/transform-modules.md`** — module reference (7 + script pointer), expression-context guide (D7, `item`/`index`/Variables, JS vs csharp), mapping-spec reference, validation-rule reference, "expressions vs typed script" guidance (mirrors the typed-first framing of `docs/database-modules.md`)
-- [ ] **Registration housekeeping** — all 7 modules in `BuiltinModuleRegistration.GetAll()` (module-count tests updated); `DOCUMENTATION_INDEX.md` + `phases/README.md` + `Phase2-CoreFeatures.md` §2.6 updated
+- [ ] **E2E pipeline test** (Docker-free, `Workflow.Tests/Modules/Transform/TransformE2ETests.cs`): csv.read (2.5) → `validate` (split invalid) → `map` (reshape+convert) → `join` (enrich from a reference collection) → `query` (filter+sort) → `aggregate` (groupBy sum) → `json.write` (2.5) — asserts end shape + invalid-item routing
+- [ ] **`docs/transform-modules.md`** — module reference (9 + script pointer), expression-context guide (D7, `item`/`index`/Variables, JS vs csharp), mapping-spec reference, join semantics, validation-rule + JSON-Schema reference, "expressions vs typed script" guidance (mirrors the typed-first framing of `docs/database-modules.md`)
+- [ ] **Registration housekeeping** — all 9 modules in `BuiltinModuleRegistration.GetAll()` (module-count tests updated); `DOCUMENTATION_INDEX.md` + `phases/README.md` + `Phase2-CoreFeatures.md` §2.6 updated
 
 ### Tests (target ~2): the E2E above + `BuiltinModules_CountAndIds_IncludeTransformFamily`
 
@@ -371,14 +383,10 @@ This slice also **absorbs the query modules deferred from 2.5** (D9/Q2 there): `
 
 ## Post-MVP Slices 🚧 *(deferred — not blocking 2.7+)*
 
-### 2.6.a.P1 Join Module 🔗 *(post-MVP — Q5)*
-`builtin.transform.join` — second input port, key expressions, inner/left/full modes. ~8 tests.
+### 2.6.a.P1 Lookup-Table Enrichment Module 🗂️ *(post-MVP)*
+`builtin.transform.lookup` — enrich rows from a keyed reference collection with a simpler single-value-merge surface than the full join module (D15) — convenience sugar for the common case. ~6 tests.
 
-### 2.6.a.P2 JSON Schema Validation 📐 *(only if Q3 resolves "cut from MVP")*
-`JsonSchema.Net` mode on `builtin.transform.validate`. ~5 tests.
-
-### 2.6.a.P3 Lookup-Table Enrichment Module 🗂️ *(post-MVP)*
-`builtin.transform.lookup` — enrich rows from a keyed reference collection (the poor man's join for the common case). ~6 tests.
+*(Former P1 "Join Module" promoted to MVP per Q5/D15 — ships in 2.6.a.2. Former P2 "JSON Schema Validation" confirmed in-scope per Q3 — ships in 2.6.a.4.)*
 
 ### 2.6.b.P1 Script Snippet Library 📚 *(post-MVP)*
 Named, versioned, reusable script snippets referenced by id across workflows (shared cache entries). ~6 tests.
@@ -394,12 +402,12 @@ When 2.6 ships (Week 18), all of the following must be true:
 
 **2.6.a — Expression family (Week 17 gate):**
 
-- [ ] **Modules (7):** `builtin.transform.{map,query,aggregate,jsonquery,xmlquery,json,validate,string}` — *(8 ids, 7 slices)* — all discoverable, validated, executable; registered in `BuiltinModuleRegistration`
+- [ ] **Modules (9):** `builtin.transform.{map,query,aggregate,join,jsonquery,xmlquery,json,validate,string}` — all discoverable, validated, executable; registered in `BuiltinModuleRegistration`
 - [ ] **Shared infra:** `TransformDataNormalizer` + `ItemExpressionEvaluator` (D6/D7); converters promoted to `Workflow.Modules/Internal/` with the 2.5 suite green
 - [ ] **Security proven:** XXE lock on xmlquery, regex-timeout locks (Q8), expression sandbox unchanged (no new evaluator surface)
-- [ ] **~83 unit tests passing** (10 infra + 11 map + 18 query/aggregate + 14 json/xml + 14 validate + 14 string + 2 E2E) — all Docker-free
+- [ ] **~93 unit tests passing** (10 infra + 11 map + 27 query/aggregate/join + 14 json/xml + 15 validate + 14 string + 2 E2E) — all Docker-free
 
-**2.6.b — Typed script family (Week 18 gate, pending Q1):**
+**2.6.b — Typed script family (Week 18 gate — MVP per Q1/D16):**
 
 - [ ] **`Workflow.Scripting.Roslyn` extracted** — 2.4.b's 53 tests green **unchanged**; walker/HMAC/ALC behaviour identical; quarantine tests hold (`Workflow.Modules` references neither Roslyn nor the scripting core)
 - [ ] **`builtin.transform.script`** discoverable, publish-time-compiled, HMAC-cached under `compiled-modules/transform/`, ALC-executed with forced materialisation
@@ -410,7 +418,7 @@ When 2.6 ships (Week 18), all of the following must be true:
 
 - [ ] **docs/transform-modules.md** published + indexed (expressions-first framing, script security model)
 - [ ] **0 errors, 0 new warnings** in `dotnet build`; full unit suite green
-- [ ] **Q1–Q8 resolved** and recorded in the Resolved Questions Reference
+- [ ] **Q1–Q8 resolved** ✅ *(all resolved July 2026 — see Resolved Questions Reference)*
 - [ ] **README + phases/README.md + Phase2-CoreFeatures.md §2.6** updated
 
 **New / Modified Files (planned):**
@@ -422,7 +430,7 @@ Workflow.Modules/
   Builtin/Transform/
     TransformModuleServiceCollectionExtensions.cs  ← new (2.6.a.0)
     DataMapModule.cs                               ← new (2.6.a.1)
-    DataQueryModule.cs / AggregateModule.cs        ← new (2.6.a.2)
+    DataQueryModule.cs / AggregateModule.cs / DataJoinModule.cs ← new (2.6.a.2)
     JsonQueryModule.cs / XmlQueryModule.cs / JsonTransformModule.cs ← new (2.6.a.3)
     ValidateDataModule.cs                          ← new (2.6.a.4)
     StringTransformModule.cs                       ← new (2.6.a.5)
@@ -430,7 +438,7 @@ Workflow.Modules/
       TransformDataNormalizer.cs                   ← new (2.6.a.0)
       ItemExpressionEvaluator.cs                   ← new (2.6.a.0)
       TransformModuleException.cs                  ← new (2.6.a.0)
-  Builtin/BuiltinModuleRegistration.cs             ← modified — +8 transform ids
+  Builtin/BuiltinModuleRegistration.cs             ← modified — +9 transform ids
   WorkflowModulesServiceCollectionExtensions.cs    ← modified — AddTransformModules()
 
 Workflow.Scripting.Roslyn/                         ← NEW PROJECT (2.6.b.0 — extraction target)
@@ -458,7 +466,7 @@ Workflow.Tests/
   Api/TransformScriptApiTests.cs
 
 docs/transform-modules.md                          ← new (2.6.a.6 + 2.6.b.2)
-Directory.Packages.props                           ← + JsonSchema.Net (Q3-gated); no other new pins
+Directory.Packages.props                           ← + JsonSchema.Net (Q3 ✅); no other new pins
 ```
 
 ---
@@ -467,15 +475,15 @@ Directory.Packages.props                           ← + JsonSchema.Net (Q3-gate
 
 | # | Question | Resolution | Tracked in |
 |---|----------|------------|------------|
-| **Q1** | 2.6.b typed script MVP or post-MVP? | ⏳ pending — V1 rec: MVP Week 18; fallback ships 2.6.b.0 only | TO RESOLVE + 2.6.b |
-| **Q2** | Default expression language? | ⏳ pending — V1 rec: JS (Jint) default, `language: "csharp"` opt-in | TO RESOLVE + 2.6.a.0 |
-| **Q3** | JSON Schema validation via JsonSchema.Net? | ⏳ pending — V1 rec: yes, `schema` mode on validate | TO RESOLVE + 2.6.a.4 |
-| **Q4** | Query module: fixed pipeline vs operations DSL? | ⏳ pending — V1 rec: fixed pipeline, no DSL | TO RESOLVE + 2.6.a.2 |
-| **Q5** | Joins in the query module? | ⏳ pending — V1 rec: no — script (2.6.b) + 2.6.a.P1 | TO RESOLVE + 2.6.a.2 |
-| **Q6** | Scripting-core home? | ⏳ pending — V1 rec: new `Workflow.Scripting.Roslyn` project | TO RESOLVE + 2.6.b.0 |
-| **Q7** | Script preview shape? | ⏳ pending — V1 rec: in-memory compile-inclusive previewer | TO RESOLVE + 2.6.b.2 |
-| **Q8** | Regex/ReDoS safety? | ⏳ pending — V1 rec: NonBacktracking or mandatory match timeout, test-locked | TO RESOLVE + 2.6.a.4/2.6.a.5 |
+| **Q1** | 2.6.b typed script MVP or post-MVP? | **MVP, Week 18** (D16) | 2.6.b.0–2 |
+| **Q2** | Default expression language? | **JS (Jint) default, `language: "csharp"` opt-in** via the keyed-evaluator pattern | 2.6.a.0 |
+| **Q3** | JSON Schema validation via JsonSchema.Net? | **Yes** — `schema` mode on validate (D9); new pin | 2.6.a.4 |
+| **Q4** | Query module: fixed pipeline vs operations DSL? | **Fixed pipeline, no DSL** | 2.6.a.2 |
+| **Q5** | Joins in MVP? | **Yes — dedicated `builtin.transform.join` module** (D15), not bolted onto query | 2.6.a.2 |
+| **Q6** | Scripting-core home? | **New `Workflow.Scripting.Roslyn` project** | 2.6.b.0 |
+| **Q7** | Script preview shape? | **In-memory compile-inclusive `ITransformScriptPreviewer`** | 2.6.b.2 |
+| **Q8** | Regex/ReDoS safety? | **NonBacktracking or mandatory match timeout (1s default), test-locked** | 2.6.a.4/2.6.a.5 |
 
 ---
 
-> 🌸 *uwu — the transform family is plan-ready, senpai~! 2.6.a rides entirely on seams that already exist (the 2.2.5 evaluator, JsonPath.Net, the 2.5 converters), and 2.6.b turns 2.4.b's hardest-won machinery into a reusable scripting core — move first, rename second, and let those 53 linq tests stand guard. Nod at Q1–Q8 and we'll start slicing~!* 💖
+> 🌸 *uwu — Q1–Q8 all resolved, senpai~! The plan is fully unblocked: 2.6.a rides entirely on seams that already exist (the 2.2.5 evaluator, JsonPath.Net, the 2.5 converters) with joins promoted to a proper first-class module, and 2.6.b turns 2.4.b's hardest-won machinery into a reusable scripting core — move first, rename second, and let those 53 linq tests stand guard. Ready to start slicing at 2.6.a.0~!* 💖
