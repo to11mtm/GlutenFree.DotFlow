@@ -1234,7 +1234,9 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 
 ### 2.6 Data Transformation Modules (Week 13)
 
-**Tasks:**
+> **📋 Detailed sliced plan available:** [Phase2-6-DataTransformationModules.md](Phase2-6-DataTransformationModules.md) — 2.6.a expression family (map/query/aggregate/validate/string/json + the `jsonquery`/`xmlquery` modules deferred from 2.5) riding the existing 2.2.5 `IExpressionEvaluator` seam, plus 2.6.b typed C# script family (`builtin.transform.script`) that **extracts and reuses 2.4.b's Roslyn compile→whitelist→HMAC-cache→collectible-ALC pipeline** into a shared `Workflow.Scripting.Roslyn` core. **Timeline shifted to Weeks 17-18.** The checklist below is the legacy reference list — the sliced doc supersedes it (notably: no System.Linq.Dynamic.Core, no FluentValidation — expressions + declarative rules instead; open questions Q1–Q8 pending).
+
+**Tasks:** *(legacy reference list — superseded by the sliced plan above)*
 - [ ] **Implement data mapping module** 🔄
     - [ ] Create `DataMapModule` class
         - [ ] ModuleId: `builtin.transform.map`

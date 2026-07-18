@@ -43,6 +43,7 @@ This directory contains individual phase breakdown files to make it easier to na
 - [Phase2-4-DatabaseModules.md](Phase2-4-DatabaseModules.md) 🔄 — 7 MVP sub-phases + 6 post-MVP slices (incl. 2.4.b Roslyn/linq family). **2.4.a.0–2.4.a.6 COMPLETE ✅** (66 unit + Docker-gated Postgres/E2E + named-connection API); 2.4.b (typed linq) next~ 🌷
   - Design exploration: [new-feature-design/Phase2-4-DatabaseModules-Design.md](../new-feature-design/Phase2-4-DatabaseModules-Design.md)
 - [Phase2-5-FileSystemModules.md](Phase2-5-FileSystemModules.md) ✅ — 2.5.a local file family (path-security sandbox + 10 modules) **COMPLETE** (58 unit tests) + 2.5.b cloud storage (S3/Azure Blob, quarantined project) **COMPLETE** (22 unit + Docker-gated MinIO/Azurite/E2E). Q1–Q10 resolved~ 🌷
+- [Phase2-6-DataTransformationModules.md](Phase2-6-DataTransformationModules.md) ⏳ — 2.6.a expression family (8 transform modules on the 2.2.5 evaluator seam) + 2.6.b typed C# script (`builtin.transform.script`, reusing 2.4.b's Roslyn pipeline via a new shared `Workflow.Scripting.Roslyn` core), detailed plan ready! Weeks 17-18; Q1–Q8 clarifications pending~ 🌷
   - Module guide: [docs/database-modules.md](../docs/database-modules.md)
 
 ### [Phase3-AdvancedFeatures.md](Phase3-AdvancedFeatures.md) 🎨
