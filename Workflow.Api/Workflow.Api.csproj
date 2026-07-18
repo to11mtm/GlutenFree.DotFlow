@@ -24,6 +24,8 @@
         <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
         <!-- 🗄️ Phase 2.4 — database module family (AddDatabaseModules + IConnectionStringProtector)~ -->
         <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
+        <!-- 🧬 Phase 2.4.b.5 — typed linq family (validate/preview/compile endpoints; opt-in Roslyn, D14)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database.Linq\Workflow.Modules.Database.Linq.csproj" />
         <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Postgres\Workflow.Persistence.Postgres.csproj" />

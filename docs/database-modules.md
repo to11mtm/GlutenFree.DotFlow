@@ -15,9 +15,75 @@ DotFlow's database family lets workflows talk to relational databases (Postgres 
 | 🌟 **Typed linq** *(recommended default)* | `builtin.database.linq` *(Phase 2.4.b)* | The everyday path — write typed C# linq2db against a selected table catalog, Roslyn-validated, sandbox-previewable. **Reach for this first.** |
 | 🧰 **Raw SQL** *(escape hatch)* | `builtin.database.{query,execute,transaction,bulkinsert}` | When typed linq can't express it: vendor-specific DDL, hand-tuned bulk paths, ad-hoc SQL against unregistered catalogs. |
 
-> **Typed-first (D12/D13):** you should **not** have to hand-write SQL for routine work. The raw-SQL modules documented here are the deliberate escape hatch — powerful, parameterised, and always available, but not the first tool you reach for~ 🌸
+> **Typed-first (D12/D13):** you should **not** have to hand-write SQL for routine work. The raw-SQL modules are the deliberate escape hatch — powerful, parameterised, and always available, but not the first tool you reach for~ 🌸
 
-This document covers the **raw-SQL escape-hatch family** (2.4.a). For the typed linq surface, see the 2.4.b sections of the plan doc.
+This document leads with the **typed linq surface** (2.4.b), then documents the **raw-SQL escape-hatch family** (2.4.a) as its own chapter.
+
+---
+
+## 🌟 Typed linq (`builtin.database.linq`) — the default surface
+
+Write ordinary, strongly-typed C# linq2db against your tables. Roslyn validates it, an in-memory SQLite sandbox previews it, and it's compiled once at publish time and executed in a collectible `AssemblyLoadContext`. No SQL strings, real compile errors, IDE-grade feedback~ ✨
+
+### Authoring flow: import → author → validate → preview → publish
+
+1. **Import the table catalog** — one-shot introspection so you can author against real tables:
+   ```http
+   POST /api/database/catalog/{connectionId}/import
+   ```
+   This reads the live schema (`information_schema` on Postgres, `PRAGMA table_info` on SQLite) and upserts `WorkflowTableMetadata` (table + column names/types/nullability) into the catalog. Manual + on-demand in V1 (versioned auto-discovery is 2.4.b.P3).
+
+2. **Author** the query body — plain C# returning a **materialised** result (a `List<T>`, not an open `IQueryable`). `db` exposes an `ITable<T>` per selected table; `inputs` exposes your typed node inputs:
+   ```csharp
+   return db.orders
+       .Where(o => o.total >= inputs.MinTotal)
+       .OrderBy(o => o.id)
+       .ToList();
+   ```
+
+3. **Validate** — compile without persisting; diagnostics carry line/column for editor squigglies:
+   ```http
+   POST /api/database/linq/validate   → { success, errors[], warnings[] }
+   ```
+
+4. **Preview** — run against a throwaway `:memory:` SQLite sandbox seeded with sample rows, inside an **always-rollback** transaction (nothing you write can persist):
+   ```http
+   POST /api/database/linq/preview    → { rows, rowCount, durationMs, diagnostics[] }
+   ```
+   > ⚠️ **Preview ≠ target semantics (C10):** preview runs on SQLite, so provider-specific behaviour (Postgres types, collations, functions) is *not* reproduced. Testcontainers-backed preview against the real provider is tracked as 2.4.b.P2.
+
+5. **Publish / compile** — compile + cache the assembly, returning the `compiledAssemblyKey` the node stores:
+   ```http
+   POST /api/database/linq/compile    → { compiledAssemblyKey }
+   ```
+   Gated to trusted authors (see security model below).
+
+### Table typing: generated **or** plugin POCOs
+
+Each selected table resolves an entity type via one of two paths:
+
+- **Column-generated POCO** *(default)* — emitted from the imported `WorkflowColumnMetadata` (provider SQL type → C# type). Zero setup beyond catalog import.
+- **Plugin POCO** *(preferred when present)* — a pre-registered CLR type (`ClrTypeName` + `AssemblyName`), authoritative for attributes/relations. Wins over the generated POCO when both exist.
+
+### Typed inputs (`LinqInputs`)
+
+Node input properties become a typed `readonly struct LinqInputs` (§8.6 Phase 1). Allow-listed scalar types (`string`/`int`/`long`/`decimal`/`double`/`bool`/`Guid`/`DateTime`/…) become strongly-typed properties; non-allow-listed types fall back to `object?` with a warning (or a hard error in strict mode).
+
+---
+
+## 🔒 Typed linq — security model
+
+The typed surface runs author-supplied C#, so it ships a defence-in-depth sandbox (V1, D17). **Trusted-author gate + whitelists**; fuller isolation (process/WASM) is revisited in Phase 3.
+
+| Control | What it does |
+|---------|--------------|
+| **Trusted-author gate** | `POST /compile` (and publish of linq nodes) requires the trusted-author policy. `validate`/`preview` use the standard authenticated policy. |
+| **Usings allowlist** | Codegen prepends **only** `System`, `System.Linq`, `System.Collections.Generic`, `System.Threading`, `System.Threading.Tasks`, `LinqToDB`. User bodies can't declare their own usings. |
+| **Forbidden-syntax walker** | Rejects `Process`/`File`/`Directory`/`Socket`/`HttpClient`/`Activator`/`Marshal`/`Assembly`, `[DllImport]`, `unsafe`, pointers, `stackalloc` — including fully-qualified reaches like `System.IO.File.Delete` (`WFLINQ1xx` diagnostics). |
+| **HMAC-signed blobs** | Compiled assemblies are HMAC-SHA256 signed on write and verified on read; a tampered/swapped blob is treated as absent and never loaded. |
+| **No connection strings in code** | The typed path takes only a `connectionId` — user code never sees a raw connection string, and failure surfaces never echo one. |
+| **Collectible ALC, bounded** | Each distinct compiled assembly loads into **one** reused collectible `AssemblyLoadContext`; ALC count is bounded by the LRU capacity, **not** by execution count (no leak under sustained load — design §8.4.4). |
+| **Forced materialisation** | Results are copied out to BCL types before the context is disposed; returning an open `IQueryable`/lazy sequence fails with a clear diagnostic (D8). |
 
 ---
 
@@ -66,6 +132,12 @@ Named connections come from two places:
 When a persistence provider (SQLite) is configured, connection strings are **encrypted at rest** via ASP.NET Data Protection (`IConnectionStringProtector`, purpose `Workflow.Modules.Database.ConnectionString`). The registry never persists plaintext. Without a persistence provider the in-memory registry is used (config values are plain by design).
 
 ---
+
+---
+
+## 🧰 Raw SQL — the escape-hatch family
+
+The four raw-SQL modules below (2.4.a) are the deliberate escape hatch (D13): vendor-specific DDL, hand-tuned queries, perf-critical bulk paths, and connections whose table catalog isn't registered yet. They're always parameterised — the binder never concatenates SQL (D7).
 
 ## Per-module reference
 
@@ -201,9 +273,13 @@ No core enums to touch — provider keys are strings by design.
 | **2.4.a.P4** | Connection-pool metrics + OpenTelemetry |
 | **2.4.a.P5** | Streaming query results + concurrent bulk-insert pipeline |
 | **2.4.a.P6** | Typed bulk insert via `AsQueryable`/`InsertWithOutput` (depends on 2.4.b) |
-| **2.4.b** | 🌟 Typed linq family (Roslyn) — the recommended default surface |
+| **2.4.b** | ✅ **Shipped** — 🌟 Typed linq family (Roslyn) — the recommended default surface |
+| **2.4.b.P1** | Typed `record LinqInputs` codegen upgrade |
+| **2.4.b.P2** | Testcontainers-backed preview (real target provider) |
+| **2.4.b.P3** | Catalog versioned auto-discovery |
+| **2.4.b.P4** | `Workflow.UI` Monaco editor panel |
 
 ---
 
-> 🌸 *uwu — reach for typed linq first; keep this raw-SQL family in your back pocket for the gnarly vendor-specific bits~* 💖
+> 🌸 *uwu — reach for typed linq first; keep the raw-SQL family in your back pocket for the gnarly vendor-specific bits~* 💖
 

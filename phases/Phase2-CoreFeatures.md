@@ -33,7 +33,7 @@ Phase 2 builds upon the foundation with critical production features:
 - [2.1 Persistence Layer (Week 7-9)](#21-persistence-layer-week-7-9)
 - [2.2 Advanced Flow Control (Week 9-10)](#22-advanced-flow-control-week-9-10)
 - [2.3 HTTP & Network Modules (Week 10-11)](#23-http--network-modules-week-10-11)
-- [2.4 Database Modules (Week 11-12)](#24-database-modules-week-11-12)
+- [2.4 Database Modules (Week 11-14) ✅](#24-database-modules-week-11-12)
 - [2.5 File System Modules (Week 12-13)](#25-file-system-modules-week-12-13)
 - [2.6 Data Transformation Modules (Week 13)](#26-data-transformation-modules-week-13)
 - [2.7 REST API Implementation (Week 13-14)](#27-rest-api-implementation-week-13-14)
@@ -927,19 +927,35 @@ Phase 2 builds upon the foundation with critical production features:
 
 ---
 
-### 2.4 Database Modules (Week 11-12)
+### 2.4 Database Modules (Week 11-14) ✅ COMPLETE
 
 > 📋 **See detailed sub-phases:** [Phase2-4-DatabaseModules.md](./Phase2-4-DatabaseModules.md)
 > 🧭 **Design exploration:** [new-feature-design/Phase2-4-DatabaseModules-Design.md](../new-feature-design/Phase2-4-DatabaseModules-Design.md)
+> 📖 **Feature guide:** [docs/database-modules.md](../docs/database-modules.md)
 
-> **Sub-phases:** 2.4.a.0 Shared Infra · 2.4.a.1 Query · 2.4.a.2 Execute · 2.4.a.3 Transaction · 2.4.a.4 BulkInsert · 2.4.a.5 Named Connections + API · 2.4.a.6 E2E + Docs
-> **Estimated tests:** ~70 (MVP) + ~41 (post-MVP slices) | **New project:** Workflow.Modules.Database
+> **Sub-phases:** 2.4.a.0 Shared Infra · 2.4.a.1 Query · 2.4.a.2 Execute · 2.4.a.3 Transaction · 2.4.a.4 BulkInsert · 2.4.a.5 Named Connections + API · 2.4.a.6 E2E + Docs · **2.4.b.0–6 Typed Linq/Roslyn family**
+> **Estimated tests:** ~70 (MVP) + ~41 (post-MVP slices) | **New projects:** Workflow.Modules.Database + Workflow.Modules.Database.Linq
 
-> **Note:** This section preserves the *original* Phase 2.4 task list below as a reference. The **authoritative, sliced plan lives in [`Phase2-4-DatabaseModules.md`](./Phase2-4-DatabaseModules.md)** — it incorporates the design-doc resolutions (named connections, deferred MySQL/SQL Server, shared infra extraction, post-MVP linq/Roslyn family) that are not yet reflected in the legacy list~ 🌸
+> **Note:** This section preserves the *original* Phase 2.4 task list below as a reference. The **authoritative, sliced plan lives in [`Phase2-4-DatabaseModules.md`](./Phase2-4-DatabaseModules.md)** — it incorporates the design-doc resolutions (named connections, deferred MySQL/SQL Server, shared infra extraction, and the typed linq/Roslyn family) that are not reflected in the legacy list below~ 🌸
 
 ---
 
-**Tasks:**
+#### ✅ Completion summary (July 2026 — typed-first re-plan, Option D)
+
+Per product direction ("users should not have to hand-write raw SQL unless absolutely necessary"), Phase 2.4 shipped **both** families across Weeks 11-14:
+
+- [x] **🌟 Typed linq — `builtin.database.linq` (the recommended default surface, 2.4.b):** author strongly-typed C# linq2db against an imported table catalog; Roslyn-validated with a security allowlist (usings + forbidden-syntax walker); compiled at publish time; HMAC-signed assemblies cached in `IBlobStore`; executed in a **reused collectible ALC** (bounded, no leak under load); in-memory SQLite **always-rollback** sandbox preview; one-shot catalog import; `POST /api/database/linq/{validate,preview,compile}` + `POST /api/database/catalog/{id}/import` (trusted-author gate). Dual-POCO table typing (column-generated **or** plugin POCOs).
+- [x] **🧰 Raw SQL escape-hatch family (2.4.a):** `builtin.database.{query,execute,transaction,bulkinsert}` — parameterised (never string-concatenated), Postgres + SQLite, single + batch (`parameterSets`) transactions, hand-built multi-row bulk insert with optional `RETURNING`.
+- [x] **Shared infra:** `IDbConnectionFactory` · `IDbProviderRegistry` · `IDbConnectionRegistry` · `IDbTransactionScope` · `IWorkflowTableCatalog`, plus named connections (config + runtime CRUD API + encrypted-at-rest credentials).
+- [x] **Roslyn quarantined** in `Workflow.Modules.Database.Linq` (opt-in `AddDatabaseLinqModules()`, D14) — raw-SQL-only deployments don't pay the ~30MB.
+- [x] **Tests:** ~132 passing (2.4.a: 66 unit + 13 registry/API; 2.4.b: 53 unit + 3 security) + Docker-gated Postgres & E2E suites (compile-verified); **0 build errors**.
+- [x] **Docs:** [`docs/database-modules.md`](../docs/database-modules.md) restructured typed-first (authoring guide + security model), added to `DOCUMENTATION_INDEX.md`.
+
+> Post-MVP slices (2.4.a.P1–P6, 2.4.b.P1–P4) remain tracked in the sliced doc — non-blocking for Phase 2.5+.
+
+---
+
+**Tasks:** *(legacy reference list — superseded by the sliced plan above)*
 - [ ] **Implement generic SQL query module** 🗄️
     - [ ] Create `DatabaseQueryModule` class
         - [ ] ModuleId: `builtin.database.query`

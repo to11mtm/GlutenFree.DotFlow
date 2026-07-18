@@ -194,16 +194,15 @@ public sealed class LinqQueryModuleTests : IAsyncLifetime, IDisposable
             "return db.Orders.ToList();",
             new[] { OrdersTable() },
             Schema());
-        _ = key;
 
         var options = await this.Factory().CreateOptionsAsync(ConnId);
 
-        // The runner LoadFromStream → runs → materialises → disposes the context → Unload(), all
-        // without throwing, and hands back a WeakReference to the (now-unloaded) collectible ALC~ 🧹
-        var run = await new CollectibleScriptRunner().RunAsync(
-            bytes, options, new Dictionary<string, object?>(), 30, CancellationToken.None);
+        // The runner loads the compiled assembly into a (reused) collectible ALC, runs, materialises,
+        // and disposes the context — handing back BCL-only rows (no ALC-rooted reference escapes)~ 🧹
+        using var runner = new CollectibleScriptRunner();
+        var run = await runner.RunAsync(key, bytes, options, new Dictionary<string, object?>(), 30, CancellationToken.None);
 
-        run.AlcWeakRef.Should().NotBeNull("the runner created + unloaded a collectible ALC~");
+        run.AlcWeakRef.Should().NotBeNull("the runner created a collectible ALC~");
 
         // The materialised rows must be pure BCL types — NO ALC-rooted reference escapes (D8 / §8.4).
         run.Rows.Should().NotBeNull();

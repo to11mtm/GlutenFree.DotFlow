@@ -151,7 +151,7 @@ public sealed class LinqQueryModule : IWorkflowModule
             }
 
             var options = await factory.CreateOptionsAsync(connectionId, cancellationToken).ConfigureAwait(false);
-            var run = await runner.RunAsync(bytes, options, inputs, timeoutSeconds, cancellationToken).ConfigureAwait(false);
+            var run = await runner.RunAsync(key, bytes, options, inputs, timeoutSeconds, cancellationToken).ConfigureAwait(false);
             sw.Stop();
 
             var outputs = new Dictionary<string, object?>

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Akka.Actor;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Workflow.Api.Database;
 using Workflow.Api.Webhooks;
@@ -11,6 +12,7 @@ using Workflow.Modules.Builtin.Http;
 using Workflow.Modules.Database;
 using Workflow.Modules.Database.Abstractions;
 using Workflow.Modules.Database.Configuration;
+using Workflow.Modules.Database.Linq;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Composite;
 using Workflow.Persistence.Nats;
@@ -52,6 +54,12 @@ builder.Services.Configure<DatabaseConnectionsOptions>(
 // AddDatabaseModules) so persisted connection strings are encrypted at rest~
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<IConnectionStringProtector, DataProtectionConnectionStringProtector>();
+
+// 🧬 Typed linq family (Phase 2.4.b)~ — opt-in Roslyn compile/preview/cache pipeline (D14).
+// Quarantined in Workflow.Modules.Database.Linq; the host opts in here so raw-SQL-only hosts don't pay for it~
+builder.Services.AddDatabaseLinqModules();
+builder.Services.Configure<LinqEndpointsOptions>(
+    builder.Configuration.GetSection(LinqEndpointsOptions.SectionName));
 
 //  Akka actor system + WorkflowSupervisor (Phase 2.3.9)~
 // CopilotNote: The factory runs lazily on first IWorkflowLauncher resolution so the full DI
@@ -101,6 +109,10 @@ if (persistenceProvider is not null)
     }
 }
 
+// 🗃️ Phase 2.4.b.5 — Fallback blob store for the compiled-assembly cache when no persistence
+// provider supplies one (dev/tests). A persistence-backed IBlobStore (registered above) wins via TryAdd~
+builder.Services.TryAddSingleton<IBlobStore, InMemoryBlobStore>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -116,6 +128,9 @@ app.MapWebhookEndpoints();
 
 // 📇 Phase 2.4.a.5 — Named database-connection CRUD endpoints~
 app.MapDatabaseConnectionEndpoints();
+
+// 🧬 Phase 2.4.b.5 — Typed linq validate/preview/compile + catalog import endpoints~
+app.MapDatabaseLinqEndpoints();
 
 if (persistenceProvider is not null)
 {

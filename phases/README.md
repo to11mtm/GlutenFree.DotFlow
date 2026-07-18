@@ -30,7 +30,7 @@ This directory contains individual phase breakdown files to make it easier to na
 - ⏳ Persistence layer (PostgreSQL, NATS KV, S3) (2.1)
 - ⏳ Advanced flow control (conditionals, loops, parallel) (2.2)
 - ⏳ HTTP & Network modules (2.3)
-- 🔄 Database modules (2.4) — **2.4.a (raw-SQL escape-hatch family) COMPLETE ✅**; 2.4.b (typed linq/Roslyn) pending
+- ✅ Database modules (2.4) — **COMPLETE**: 2.4.a (raw-SQL escape-hatch family) + 2.4.b (typed linq/Roslyn — the recommended default surface)
 - ⏳ File system & cloud storage modules (2.5)
 - ⏳ Data transformation modules (2.6)
 - ⏳ REST API with authentication (2.7)
