@@ -18,6 +18,8 @@
         <PackageReference Include="Polly.Core" />
         <!-- 🎯 Phase 2.3.5 — JSONPath extraction via JsonPath.Net (json-everything, MIT)~ -->
         <PackageReference Include="JsonPath.Net" />
+        <!-- ✅ Phase 2.6.a.4 — JSON Schema validation via JsonSchema.Net (json-everything, MIT)~ -->
+        <PackageReference Include="JsonSchema.Net" />
         <!-- 📊 Phase 2.5.a.2 — CSV parsing/generation via CsvHelper~ -->
         <PackageReference Include="CsvHelper" />
         <PackageReference Include="StyleCop.Analyzers">

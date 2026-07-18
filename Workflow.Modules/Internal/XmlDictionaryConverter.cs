@@ -2,7 +2,7 @@
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.Modules.Builtin.File.Internal;
+namespace Workflow.Modules.Internal;
 
 using System.Collections.Generic;
 using System.Linq;

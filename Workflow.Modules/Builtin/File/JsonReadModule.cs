@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Workflow.Core.Models;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.File.Internal;
+using Workflow.Modules.Internal;
 
 /// <summary>
 /// 📄 Built-in JSON Read module (<c>builtin.file.json.read</c>) — parses a JSON file into a

@@ -45,6 +45,9 @@
         <ProjectReference Include="..\Workflow.Modules.Database.Linq\Workflow.Modules.Database.Linq.csproj" />
         <!-- ☁️ Phase 2.5.b — cloud storage module family~ -->
         <ProjectReference Include="..\Workflow.Modules.Cloud\Workflow.Modules.Cloud.csproj" />
+        <!-- 🌟 Phase 2.6.b — typed transform script family + shared scripting core~ -->
+        <ProjectReference Include="..\Workflow.Scripting.Roslyn\Workflow.Scripting.Roslyn.csproj" />
+        <ProjectReference Include="..\Workflow.Modules.Transform.Script\Workflow.Modules.Transform.Script.csproj" />
         <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj" />
         <ProjectReference Include="..\Workflow.Api\Workflow.Api.csproj" />

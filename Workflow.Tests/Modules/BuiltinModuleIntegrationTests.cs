@@ -94,7 +94,16 @@ public sealed class BuiltinModuleIntegrationTests
         registry.HasModule("builtin.file.xml.read").Should().BeTrue("Phase 2.5.a.2 xml.read must register~ 🏷️");
         registry.HasModule("builtin.file.compress").Should().BeTrue("Phase 2.5.a.4 compress must register~ 🗜️");
         registry.HasModule("builtin.file.decompress").Should().BeTrue("Phase 2.5.a.4 decompress must register~ 📦");
-        registry.GetAllModules().Should().HaveCount(28, because: "28 builtin modules after Phase 2.5.a~ 💖");
+        registry.HasModule("builtin.transform.map").Should().BeTrue("Phase 2.6.a.1 transform.map must register~ 🔄");
+        registry.HasModule("builtin.transform.query").Should().BeTrue("Phase 2.6.a.2 transform.query must register~ 🔍");
+        registry.HasModule("builtin.transform.aggregate").Should().BeTrue("Phase 2.6.a.2 transform.aggregate must register~ 📊");
+        registry.HasModule("builtin.transform.join").Should().BeTrue("Phase 2.6.a.2 transform.join must register~ 🔗");
+        registry.HasModule("builtin.transform.jsonquery").Should().BeTrue("Phase 2.6.a.3 transform.jsonquery must register~ 🎯");
+        registry.HasModule("builtin.transform.xmlquery").Should().BeTrue("Phase 2.6.a.3 transform.xmlquery must register~ 🏷️");
+        registry.HasModule("builtin.transform.json").Should().BeTrue("Phase 2.6.a.3 transform.json must register~ 📝");
+        registry.HasModule("builtin.transform.validate").Should().BeTrue("Phase 2.6.a.4 transform.validate must register~ ✅");
+        registry.HasModule("builtin.transform.string").Should().BeTrue("Phase 2.6.a.5 transform.string must register~ 📝");
+        registry.GetAllModules().Should().HaveCount(37, because: "37 builtin modules after Phase 2.6.a~ 💖");
     }
 
     /// <summary>
@@ -111,7 +120,7 @@ public sealed class BuiltinModuleIntegrationTests
     public void GetAll_ShouldReturnFiveModules()
     {
         var modules = BuiltinModules.GetAll();
-        modules.Should().HaveCount(28, because: "28 builtin modules after Phase 2.5.a~ 💖");
+        modules.Should().HaveCount(37, because: "37 builtin modules after Phase 2.6.a~ 💖");
         modules.Select(m => m.ModuleId).Should().BeEquivalentTo(
             "builtin.passthrough", "builtin.log", "builtin.delay",
             "builtin.setvariable", "builtin.getvariable",
@@ -126,7 +135,12 @@ public sealed class BuiltinModuleIntegrationTests
             "builtin.file.csv.read", "builtin.file.csv.write",
             "builtin.file.json.read", "builtin.file.json.write",
             "builtin.file.xml.read", "builtin.file.xml.write",
-            "builtin.file.compress", "builtin.file.decompress");
+            "builtin.file.compress", "builtin.file.decompress",
+            "builtin.transform.map", "builtin.transform.query",
+            "builtin.transform.aggregate", "builtin.transform.join",
+            "builtin.transform.jsonquery", "builtin.transform.xmlquery",
+            "builtin.transform.json", "builtin.transform.validate",
+            "builtin.transform.string");
     }
 
     /// <summary>

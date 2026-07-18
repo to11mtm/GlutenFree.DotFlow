@@ -2,7 +2,7 @@
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.Modules.Builtin.File.Internal;
+namespace Workflow.Modules.Internal;
 
 using System.Collections.Generic;
 using System.Text.Json;
@@ -52,6 +52,46 @@ public static class JsonValueConverter
         }
     }
 
+    /// <summary>
+    /// Converts a <see cref="JsonElement"/> directly to a plain CLR object graph~ 📄.
+    /// </summary>
+    /// <param name="element">The element to convert.</param>
+    /// <returns>A dictionary, list, scalar, or <c>null</c>.</returns>
+    public static object? FromElement(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var dict = new Dictionary<string, object?>();
+                foreach (var prop in element.EnumerateObject())
+                {
+                    dict[prop.Name] = FromElement(prop.Value);
+                }
+
+                return dict;
+            case JsonValueKind.Array:
+                var list = new List<object?>();
+                foreach (var item in element.EnumerateArray())
+                {
+                    list.Add(FromElement(item));
+                }
+
+                return list;
+            case JsonValueKind.String:
+                return element.GetString();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            case JsonValueKind.Null or JsonValueKind.Undefined:
+                return null;
+            case JsonValueKind.Number:
+                return element.TryGetInt64(out var l) ? (object)l : element.GetDouble();
+            default:
+                return element.GetRawText();
+        }
+    }
+
     private static object? ScalarToClr(JsonValue value)
     {
         var element = value.GetValue<JsonElement>();
@@ -61,7 +101,7 @@ public static class JsonValueConverter
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Null => null,
-            JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDouble(),
+            JsonValueKind.Number => element.TryGetInt64(out var l) ? (object)l : element.GetDouble(),
             _ => element.GetRawText(),
         };
     }

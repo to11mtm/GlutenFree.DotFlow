@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging;
 using Workflow.Core.Models;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.File.Internal;
+using Workflow.Modules.Internal;
 
 /// <summary>
 /// 🏷️ Built-in XML Write module (<c>builtin.file.xml.write</c>) — writes a dictionary graph to

@@ -20,6 +20,7 @@ using Microsoft.Extensions.Logging;
 using Workflow.Core.Models;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.File.Internal;
+using Workflow.Modules.Internal;
 
 /// <summary>
 /// 🏷️ Built-in XML Read module (<c>builtin.file.xml.read</c>) — parses an XML file into a

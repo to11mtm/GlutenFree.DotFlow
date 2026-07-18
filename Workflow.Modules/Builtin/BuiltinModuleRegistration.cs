@@ -9,6 +9,7 @@ using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.File;
 using Workflow.Modules.Builtin.Flow;
 using Workflow.Modules.Builtin.Http;
+using Workflow.Modules.Builtin.Transform;
 
 /// <summary>
 /// 📦 Convenience class for registering all built-in modules at once~ ✨💖.
@@ -99,6 +100,17 @@ public static class BuiltinModules
         // Phase 2.5.a.4 — Compression modules~ 🗜️📦
         new CompressModule(),
         new DecompressModule(),
+
+        // Phase 2.6.a — Data transformation modules~ 🔄
+        new DataMapModule(),
+        new DataQueryModule(),
+        new AggregateModule(),
+        new DataJoinModule(),
+        new JsonQueryModule(),
+        new XmlQueryModule(),
+        new JsonTransformModule(),
+        new ValidateDataModule(),
+        new StringTransformModule(),
     };
 
     /// <summary>

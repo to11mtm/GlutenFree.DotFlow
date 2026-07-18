@@ -15,6 +15,8 @@ using Workflow.Modules.Database.Configuration;
 using Workflow.Modules.Database.Linq;
 using Workflow.Modules.Cloud;
 using Workflow.Modules.Cloud.Configuration;
+using Workflow.Modules.Transform.Script;
+using Workflow.Api.Transform;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Composite;
 using Workflow.Persistence.Nats;
@@ -122,6 +124,10 @@ if (persistenceProvider is not null)
 // provider supplies one (dev/tests). A persistence-backed IBlobStore (registered above) wins via TryAdd~
 builder.Services.TryAddSingleton<IBlobStore, InMemoryBlobStore>();
 
+// 🌟 Phase 2.6.b — Typed transform-script family (opt-in Roslyn; uses the IBlobStore above for the
+// compiled-assembly cache). Host-wired, NOT in AddWorkflowModules() (Roslyn quarantine, D4)~
+builder.Services.AddTransformScriptModules();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -140,6 +146,9 @@ app.MapDatabaseConnectionEndpoints();
 
 // 🧬 Phase 2.4.b.5 — Typed linq validate/preview/compile + catalog import endpoints~
 app.MapDatabaseLinqEndpoints();
+
+// 🌟 Phase 2.6.b.2 — Typed transform-script validate/preview/compile endpoints~
+app.MapTransformScriptEndpoints();
 
 if (persistenceProvider is not null)
 {

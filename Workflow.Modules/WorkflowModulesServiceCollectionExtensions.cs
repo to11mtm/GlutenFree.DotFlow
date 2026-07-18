@@ -7,6 +7,7 @@ namespace Workflow.Modules;
 using Microsoft.Extensions.DependencyInjection;
 using Workflow.Modules.Builtin.File;
 using Workflow.Modules.Builtin.Http;
+using Workflow.Modules.Builtin.Transform;
 
 /// <summary>
 /// 🗂️✨ Top-level DI registration entry point for the entire <c>Workflow.Modules</c> layer~ 💖.
@@ -50,6 +51,9 @@ public static class WorkflowModulesServiceCollectionExtensions
 
         // 📁 Phase 2.5 — file-system family (path-security sandbox + IWorkflowPathValidator)~
         services.AddFileSystemModules();
+
+        // 🔄 Phase 2.6 — data-transformation family (expression seam; no family singletons yet)~
+        services.AddTransformModules();
 
         // 🔮 Future families plug in here (e.g. services.AddDatabaseModules(), services.AddMessagingModules())~
 

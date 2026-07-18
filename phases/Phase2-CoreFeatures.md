@@ -1232,280 +1232,52 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 
 ---
 
-### 2.6 Data Transformation Modules (Week 13)
+### 2.6 Data Transformation Modules (Week 13) ✅ COMPLETE
 
-> **📋 Detailed sliced plan available:** [Phase2-6-DataTransformationModules.md](Phase2-6-DataTransformationModules.md) — 2.6.a expression family (map/query/aggregate/**join**/validate/string/json + the `jsonquery`/`xmlquery` modules deferred from 2.5) riding the existing 2.2.5 `IExpressionEvaluator` seam, plus 2.6.b typed C# script family (`builtin.transform.script`) that **extracts and reuses 2.4.b's Roslyn compile→whitelist→HMAC-cache→collectible-ALC pipeline** into a shared `Workflow.Scripting.Roslyn` core. **Timeline shifted to Weeks 17-18.** The checklist below is the legacy reference list — the sliced doc supersedes it (notably: no System.Linq.Dynamic.Core, no FluentValidation — expressions + declarative rules + JSON Schema instead; Q1–Q8 all resolved — 2.6.b is MVP, joins ship as `builtin.transform.join`).
+> **✅ COMPLETE — full detail in the sliced plan:** [Phase2-6-DataTransformationModules.md](Phase2-6-DataTransformationModules.md) · module reference: [`docs/transform-modules.md`](../docs/transform-modules.md)
+>
+> Shipped as two families: **2.6.a** expression family (9 modules in `Workflow.Modules/Builtin/Transform/`, riding the existing 2.2.5 `IExpressionEvaluator` seam — JS default, C# opt-in) and **2.6.b** typed C# script (`builtin.transform.script`) whose compile→whitelist→HMAC-cache→collectible-ALC pipeline is a domain-agnostic generalisation of 2.4.b's typed-linq machinery, extracted into a shared **`Workflow.Scripting.Roslyn`** core (Roslyn quarantined out of `Workflow.Modules`, D4). **~120 unit tests green; 2.4.b's 53 linq tests untouched (zero regression).**
 
-**Tasks:** *(legacy reference list — superseded by the sliced plan above)*
-- [ ] **Implement data mapping module** 🔄
-    - [ ] Create `DataMapModule` class
-        - [ ] ModuleId: `builtin.transform.map`
-        - [ ] DisplayName: `Map Data`
-        - [ ] Category: `Transformation`
-    - [ ] Define DataMapModule schema
-        - [ ] Input: `source` (object or array, required) - Source data
-        - [ ] Input: `mapping` (object, required) - Mapping configuration
-        - [ ] Input: `flatten` (bool, optional, default=false) - Flatten nested objects
-        - [ ] Input: `ignoreNulls` (bool, optional, default=false)
-        - [ ] Output: `result` (object or array) - Transformed data
-    - [ ] Implement mapping engine
-        - [ ] Support property renaming (source.oldName → target.newName)
-        - [ ] Support nested property access (user.address.city)
-        - [ ] Support array mapping
-        - [ ] Support conditional mapping
-        - [ ] Support default values
-        - [ ] Support type conversion
-        - [ ] Support computed properties (expressions)
-    - [ ] Create mapping configuration DSL
-        - [ ] JSON-based mapping definitions
-        - [ ] Template expressions
-        - [ ] Function calls
-    - [ ] Add comprehensive tests
-        - [ ] Test simple property mapping
-        - [ ] Test nested object mapping
-        - [ ] Test array mapping
-        - [ ] Test conditional mapping
-        - [ ] Test type conversion
-        - [ ] Test null handling
-
-- [ ] **Add LINQ-style query support** 🔍
-    - [ ] Install `System.Linq.Dynamic.Core` NuGet package
-    - [ ] Create `DataQueryModule` class
-        - [ ] ModuleId: `builtin.transform.query`
-        - [ ] DisplayName: `Query Data`
-        - [ ] Category: `Transformation`
-    - [ ] Define DataQueryModule schema
-        - [ ] Input: `data` (array, required) - Source data collection
-        - [ ] Input: `query` (string, required) - LINQ query expression
-        - [ ] Input: `parameters` (dictionary, optional) - Query parameters
-        - [ ] Output: `result` (array) - Query results
-        - [ ] Output: `count` (int) - Result count
-    - [ ] Implement query execution
-        - [ ] Parse dynamic LINQ expressions
-        - [ ] Support Where filtering
-        - [ ] Support Select projection
-        - [ ] Support OrderBy/OrderByDescending
-        - [ ] Support GroupBy aggregation
-        - [ ] Support Skip/Take pagination
-        - [ ] Support Join operations
-    - [ ] Add query helpers
-        - [ ] Query builder API
-        - [ ] Common query templates
-        - [ ] Query validation
-    - [ ] Add comprehensive tests
-        - [ ] Test Where filtering
-        - [ ] Test Select projection
-        - [ ] Test OrderBy sorting
-        - [ ] Test GroupBy aggregation
-        - [ ] Test Skip/Take pagination
-        - [ ] Test complex queries
-        - [ ] Test query parameter binding
-
-- [ ] **Implement aggregation operations** 📊
-    - [ ] Create `AggregateModule` class
-        - [ ] ModuleId: `builtin.transform.aggregate`
-        - [ ] DisplayName: `Aggregate Data`
-        - [ ] Category: `Transformation`
-    - [ ] Define AggregateModule schema
-        - [ ] Input: `data` (array, required) - Source data
-        - [ ] Input: `operation` (enum, required) - Sum, Count, Average, Min, Max, First, Last
-        - [ ] Input: `property` (string, optional) - Property to aggregate
-        - [ ] Input: `groupBy` (string, optional) - Group by property
-        - [ ] Output: `result` (varies) - Aggregation result
-        - [ ] Output: `groups` (array, optional) - Grouped results
-    - [ ] Implement aggregation operations
-        - [ ] Sum - Calculate total
-        - [ ] Count - Count items
-        - [ ] Average - Calculate mean
-        - [ ] Min - Find minimum
-        - [ ] Max - Find maximum
-        - [ ] First - Get first item
-        - [ ] Last - Get last item
-        - [ ] Distinct - Get unique values
-        - [ ] Median - Calculate median (custom)
-        - [ ] Mode - Find most common value (custom)
-    - [ ] Support grouped aggregation
-        - [ ] Group by property
-        - [ ] Aggregate within groups
-        - [ ] Return grouped results
-    - [ ] Add comprehensive tests
-        - [ ] Test Sum aggregation
-        - [ ] Test Count aggregation
-        - [ ] Test Average aggregation
-        - [ ] Test Min/Max aggregation
-        - [ ] Test grouped aggregation
-        - [ ] Test empty collection
-        - [ ] Test null value handling
-
-- [ ] **Add data validation module** ✅
-    - [ ] Install `FluentValidation` NuGet package
-    - [ ] Create `ValidateDataModule` class
-        - [ ] ModuleId: `builtin.transform.validate`
-        - [ ] DisplayName: `Validate Data`
-        - [ ] Category: `Transformation`
-    - [ ] Define ValidateDataModule schema
-        - [ ] Input: `data` (object or array, required) - Data to validate
-        - [ ] Input: `schema` (object, required) - Validation schema
-        - [ ] Input: `throwOnError` (bool, optional, default=false)
-        - [ ] Output: `isValid` (bool) - Validation result
-        - [ ] Output: `errors` (array) - Validation errors
-        - [ ] Output: `validItems` (array, optional) - Valid items
-        - [ ] Output: `invalidItems` (array, optional) - Invalid items
-    - [ ] Implement validation rules
-        - [ ] Required field validation
-        - [ ] Type validation (string, number, boolean, date)
-        - [ ] String length validation (min, max)
-        - [ ] Number range validation (min, max)
-        - [ ] Regex pattern validation
-        - [ ] Email validation
-        - [ ] URL validation
-        - [ ] Date range validation
-        - [ ] Custom validation (expressions)
-        - [ ] Nested object validation
-        - [ ] Array validation (min/max items)
-    - [ ] Create validation schema format
-        - [ ] JSON Schema support
-        - [ ] Custom validation DSL
-        - [ ] Reusable validation rules
-    - [ ] Add comprehensive tests
-        - [ ] Test required field validation
-        - [ ] Test type validation
-        - [ ] Test length/range validation
-        - [ ] Test pattern validation
-        - [ ] Test email/URL validation
-        - [ ] Test nested validation
-        - [ ] Test array validation
-        - [ ] Test custom rules
-
-- [ ] **Implement string manipulation** 📝
-    - [ ] Create `StringTransformModule` class
-        - [ ] ModuleId: `builtin.transform.string`
-        - [ ] DisplayName: `String Operations`
-        - [ ] Category: `Transformation`
-    - [ ] Define StringTransformModule schema
-        - [ ] Input: `input` (string or array, required) - String(s) to transform
-        - [ ] Input: `operation` (enum, required) - Transformation operation
-        - [ ] Input: `parameters` (dictionary, optional) - Operation parameters
-        - [ ] Output: `result` (string or array) - Transformed string(s)
-    - [ ] Implement string operations
-        - [ ] ToUpper - Convert to uppercase
-        - [ ] ToLower - Convert to lowercase
-        - [ ] Trim - Remove whitespace
-        - [ ] TrimStart/TrimEnd - Remove from start/end
-        - [ ] Substring - Extract substring
-        - [ ] Replace - Replace text
-        - [ ] Split - Split into array
-        - [ ] Join - Join array into string
-        - [ ] PadLeft/PadRight - Add padding
-        - [ ] Truncate - Limit length
-        - [ ] Format - String formatting
-        - [ ] Regex operations (Match, Replace, Extract)
-        - [ ] Base64 encode/decode
-        - [ ] URL encode/decode
-        - [ ] HTML encode/decode
-        - [ ] Hash (MD5, SHA256, SHA512)
-        - [ ] GUID generation
-    - [ ] Add comprehensive tests
-        - [ ] Test all string operations
-        - [ ] Test with null/empty strings
-        - [ ] Test with arrays of strings
-        - [ ] Test regex operations
-        - [ ] Test encoding operations
-        - [ ] Test hash generation
-
-- [ ] **Implement JSON transformation** 📝
-    - [ ] Create `JsonTransformModule` class
-        - [ ] ModuleId: `builtin.transform.json`
-        - [ ] DisplayName: `JSON Transform`
-        - [ ] Category: `Transformation`
-    - [ ] Define JsonTransformModule schema
-        - [ ] Input: `data` (object, required)
-        - [ ] Input: `operation` (enum, required) - Select, Filter, Transform, Merge
-        - [ ] Input: `path` (string, optional) - JSONPath expression
-        - [ ] Input: `template` (object, optional) - Transformation template
-        - [ ] Output: `result` (object)
-    - [ ] Implement JSON operations
-        - [ ] JSONPath queries ($.items[?(@.price > 10)])
-        - [ ] JSON merge/patch
-        - [ ] JSON diff
-        - [ ] JSON schema validation
-        - [ ] Flatten nested JSON
-        - [ ] Unflatten flat JSON
-    - [ ] Add comprehensive tests
-        - [ ] Test JSONPath queries
-        - [ ] Test merge operations
-        - [ ] Test diff operations
-        - [ ] Test flatten/unflatten
+**Key corrections vs. the original checklist** *(the plan below was written pre-implementation)*:
+- **No `System.Linq.Dynamic.Core`** — per-item predicates/projections evaluate through the existing 2.2.5 `IExpressionEvaluator` seam (Jint/JS default; DynamicExpresso/C# via `language: "csharp"`).
+- **No `FluentValidation`** (code-first, can't be driven from workflow JSON) — `builtin.transform.validate` ships declarative rules + a `custom` expression rule **and** a JSON Schema mode via `JsonSchema.Net`.
+- Config values are **module Properties** with `data`/`source` on **input ports** (port wins), not a separate input-port concept.
+- **Joins are a first-class `builtin.transform.join` module** (hash-join, inner/left/full), not bolted onto the query module.
+- `jsonquery`/`xmlquery` (deferred from 2.5) **land here**; regex ops are ReDoS-safe (NonBacktracking + timeout); `xmlquery` is XXE-safe.
 
 **Modules:**
 ```
-✅ builtin.transform.map - Object mapping
-✅ builtin.transform.query - LINQ queries
-✅ builtin.transform.aggregate - Sum, count, avg, etc.
-✅ builtin.transform.validate - Data validation
-✅ builtin.transform.string - String operations
-✅ builtin.transform.json - JSON transformations
+✅ builtin.transform.map        - Reshape records (rename/nested/default/convert/compute)
+✅ builtin.transform.query      - Filter → project → sort → paginate
+✅ builtin.transform.aggregate  - Sum/count/avg/min/max/first/last/distinct/median/mode + groupBy
+✅ builtin.transform.join       - Hash-join two collections (inner/left/full)
+✅ builtin.transform.jsonquery  - JSONPath query
+✅ builtin.transform.xmlquery   - XPath query (XXE-safe)
+✅ builtin.transform.json       - Merge/patch/diff/flatten/unflatten
+✅ builtin.transform.validate   - Declarative rules or JSON Schema
+✅ builtin.transform.string     - Case/trim/substring/replace/split/join/regex/encode/hash/guid
+✅ builtin.transform.script     - Typed C# transform (Roslyn-compiled, HMAC-cached, ALC-executed)
 ```
 
 **Tests:**
-- [ ] **Data mapping tests** 🔄
-    - [ ] Test simple property mapping
-    - [ ] Test nested object mapping
-    - [ ] Test array mapping
-    - [ ] Test conditional mapping
-    - [ ] Test type conversion in mapping
-    - [ ] Test default values
-
-- [ ] **Query execution tests** 🔍
-    - [ ] Test Where clause filtering
-    - [ ] Test Select projection
-    - [ ] Test OrderBy sorting (ascending/descending)
-    - [ ] Test GroupBy aggregation
-    - [ ] Test Skip/Take pagination
-    - [ ] Test combined operations
-
-- [ ] **Aggregation tests** 📊
-    - [ ] Test Sum on numeric array
-    - [ ] Test Count on collection
-    - [ ] Test Average calculation
-    - [ ] Test Min/Max on collection
-    - [ ] Test grouped aggregation
-    - [ ] Test empty collection handling
-
-- [ ] **Validation tests** ✅
-    - [ ] Test required field validation
-    - [ ] Test type validation errors
-    - [ ] Test string length validation
-    - [ ] Test number range validation
-    - [ ] Test regex pattern matching
-    - [ ] Test email format validation
-    - [ ] Test nested object validation
-    - [ ] Test array validation rules
-
----
+- [x] Infra tests (normalizer, dot-path, expression bridge JS+C#) — `TransformInfrastructureTests`
+- [x] Map / Query / Aggregate / Join tests — `DataMapModuleTests`, `DataQueryAggregateJoinTests`
+- [x] JSON/XML query + transform tests (incl. XXE lock) — `JsonXmlQueryTransformTests`
+- [x] Validation tests (rules + JSON Schema + ReDoS lock) — `ValidateDataModuleTests`
+- [x] String tests (all ops + regex timeout + hash vectors) — `StringTransformModuleTests`
+- [x] E2E pipeline (csv→validate→map→join→query→aggregate→json.write) — `TransformE2ETests`
+- [x] Scripting core (walker/HMAC/cache/collectible-ALC) + quarantine — `ScriptingCoreTests`, `ScriptingQuarantineTests`
+- [x] Script module (compile→cache→execute, tamper, timeout) — `TransformScriptModuleTests`
+- [x] Script API (validate/preview/compile, trusted-author gate) — `TransformScriptApiTests`
 
 **Deliverables:**
-- ✅ Can transform data between formats reliably
-- ✅ Can validate data schemas with detailed errors
-- ✅ Can perform aggregations (sum, avg, count, etc.)
-- ✅ Can query collections with LINQ expressions
-- ✅ Can manipulate strings with various operations
-- ✅ JSON transformations working (JSONPath, merge, diff)
-- ✅ 90%+ test coverage on transformation modules
-  ✅ builtin.transform.validate - Data validation
-  ✅ builtin.transform.string - String operations
-  ✅ builtin.transform.json - JSON transformations
-
-**Tests:**
-- [ ] Data mapping tests
-- [ ] Query execution tests
-- [ ] Aggregation tests
-- [ ] Validation tests
-
-**Deliverables:**
-- ✅ Can transform data between formats
-- ✅ Can validate data schemas
-- ✅ Can perform aggregations
+- ✅ Transform data reliably (map/query/aggregate/join)
+- ✅ Validate with declarative rules **and** JSON Schema (detailed errors)
+- ✅ Aggregations (sum/avg/count/min/max/median/mode) with grouping
+- ✅ Query collections (filter/project/sort/paginate) via sandboxed expressions
+- ✅ String manipulation (incl. ReDoS-safe regex, hashing, encodings)
+- ✅ JSON transformations (JSONPath, merge, diff, flatten) + XPath (XXE-safe)
+- ✅ Typed C# power surface via the shared `Workflow.Scripting.Roslyn` core (2.4.b reuse)
 
 ---
 

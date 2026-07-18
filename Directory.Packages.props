@@ -70,6 +70,8 @@
     <PackageVersion Include="Polly.Core" Version="8.6.6" />
     <!-- 🎯 JSONPath extraction (Phase 2.3.5) — JsonPath.Net by json-everything, MIT licensed~ -->
     <PackageVersion Include="JsonPath.Net" Version="3.0.2" />
+    <!-- ✅ JSON Schema validation (Phase 2.6.a.4) — JsonSchema.Net by json-everything, MIT~ -->
+    <PackageVersion Include="JsonSchema.Net" Version="7.3.4" />
     <!-- 📊 CSV parsing/generation (Phase 2.5.a.2) — CsvHelper, MS-PL/Apache-2.0~ -->
     <PackageVersion Include="CsvHelper" Version="33.0.1" />
     <PackageVersion Include="Testcontainers.Minio" Version="4.11.0" />
