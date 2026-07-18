@@ -59,6 +59,7 @@ Located in **[phases/](phases/)** directory:
 ### Feature & Module Guides
 Located in **[docs/](docs/)** directory:
 - **[docs/database-modules.md](docs/database-modules.md)** 🗄️ — Database module family (2.4): typed-linq vs raw-SQL surfaces, connection management, per-module reference, transactions & isolation, provider notes, security
+- **[docs/file-modules.md](docs/file-modules.md)** 📁☁️ — File system & cloud storage modules (2.5): path-security sandbox, read/write, CSV/JSON/XML, compression, S3 & Azure Blob, named storage connections
 - **[docs/http-and-network.md](docs/http-and-network.md)** 🌐 — HTTP & network modules (2.3)
 - **[docs/advanced-flow-control.md](docs/advanced-flow-control.md)** 🔀 — Conditionals, loops, parallel, try/catch (2.2)
 - **[docs/module-author-guide.md](docs/module-author-guide.md)** 📦 — Authoring & shipping custom modules

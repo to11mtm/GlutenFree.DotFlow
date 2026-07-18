@@ -87,7 +87,14 @@ public sealed class BuiltinModuleIntegrationTests
         registry.HasModule("builtin.throw").Should().BeTrue("Phase 2.2.4 throw module must register~ 💥");
         registry.HasModule("builtin.http.request").Should().BeTrue("Phase 2.3.0 http.request must register~ 🌐");
         registry.HasModule("builtin.http.webhook").Should().BeTrue("Phase 2.3.6 http.webhook must register~ 🪝");
-        registry.GetAllModules().Should().HaveCount(18, because: "18 builtin modules after Phase 2.3.6~ 💖");
+        registry.HasModule("builtin.file.read").Should().BeTrue("Phase 2.5.a.1 file.read must register~ 📖");
+        registry.HasModule("builtin.file.write").Should().BeTrue("Phase 2.5.a.1 file.write must register~ ✍️");
+        registry.HasModule("builtin.file.csv.read").Should().BeTrue("Phase 2.5.a.2 csv.read must register~ 📊");
+        registry.HasModule("builtin.file.json.read").Should().BeTrue("Phase 2.5.a.2 json.read must register~ 📄");
+        registry.HasModule("builtin.file.xml.read").Should().BeTrue("Phase 2.5.a.2 xml.read must register~ 🏷️");
+        registry.HasModule("builtin.file.compress").Should().BeTrue("Phase 2.5.a.4 compress must register~ 🗜️");
+        registry.HasModule("builtin.file.decompress").Should().BeTrue("Phase 2.5.a.4 decompress must register~ 📦");
+        registry.GetAllModules().Should().HaveCount(28, because: "28 builtin modules after Phase 2.5.a~ 💖");
     }
 
     /// <summary>
@@ -104,7 +111,7 @@ public sealed class BuiltinModuleIntegrationTests
     public void GetAll_ShouldReturnFiveModules()
     {
         var modules = BuiltinModules.GetAll();
-        modules.Should().HaveCount(18, because: "18 builtin modules after Phase 2.3.6~ 💖");
+        modules.Should().HaveCount(28, because: "28 builtin modules after Phase 2.5.a~ 💖");
         modules.Select(m => m.ModuleId).Should().BeEquivalentTo(
             "builtin.passthrough", "builtin.log", "builtin.delay",
             "builtin.setvariable", "builtin.getvariable",
@@ -114,7 +121,12 @@ public sealed class BuiltinModuleIntegrationTests
             "builtin.parallel",
             "builtin.fanout", "builtin.fanin",
             "builtin.trycatch", "builtin.throw",
-            "builtin.http.request", "builtin.http.webhook");
+            "builtin.http.request", "builtin.http.webhook",
+            "builtin.file.read", "builtin.file.write",
+            "builtin.file.csv.read", "builtin.file.csv.write",
+            "builtin.file.json.read", "builtin.file.json.write",
+            "builtin.file.xml.read", "builtin.file.xml.write",
+            "builtin.file.compress", "builtin.file.decompress");
     }
 
     /// <summary>

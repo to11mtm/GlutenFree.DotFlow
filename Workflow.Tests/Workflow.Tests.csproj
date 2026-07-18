@@ -43,6 +43,8 @@
         <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
         <!-- 🧬 Phase 2.4.b — typed linq family (Roslyn quarantined here; referenced for scaffolding tests)~ -->
         <ProjectReference Include="..\Workflow.Modules.Database.Linq\Workflow.Modules.Database.Linq.csproj" />
+        <!-- ☁️ Phase 2.5.b — cloud storage module family~ -->
+        <ProjectReference Include="..\Workflow.Modules.Cloud\Workflow.Modules.Cloud.csproj" />
         <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj" />
         <ProjectReference Include="..\Workflow.Api\Workflow.Api.csproj" />

@@ -5,6 +5,7 @@
 namespace Workflow.Modules;
 
 using Microsoft.Extensions.DependencyInjection;
+using Workflow.Modules.Builtin.File;
 using Workflow.Modules.Builtin.Http;
 
 /// <summary>
@@ -46,6 +47,9 @@ public static class WorkflowModulesServiceCollectionExtensions
     {
         // 🌐 Phase 2.3 — HTTP request/webhook family (IHttpClientFactory named "dotflow.http")~
         services.AddHttpModules();
+
+        // 📁 Phase 2.5 — file-system family (path-security sandbox + IWorkflowPathValidator)~
+        services.AddFileSystemModules();
 
         // 🔮 Future families plug in here (e.g. services.AddDatabaseModules(), services.AddMessagingModules())~
 

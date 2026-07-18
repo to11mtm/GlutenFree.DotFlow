@@ -1167,7 +1167,9 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 
 ### 2.5 File System Modules (Week 12-13)
 
-**Tasks:**
+> **✅ COMPLETE — detailed sliced plan:** [Phase2-5-FileSystemModules.md](Phase2-5-FileSystemModules.md). Shipped 2.5.a (local file family: `builtin.file.{read,write,csv.read,csv.write,json.read,json.write,xml.read,xml.write,compress,decompress}` + `IWorkflowPathValidator` sandbox) and 2.5.b (cloud storage: `builtin.cloud.s3` + `builtin.cloud.azureblob` in the quarantined `Workflow.Modules.Cloud` project). 80 Docker-free unit tests green + Docker-gated MinIO/Azurite/E2E suites. Docs at [`docs/file-modules.md`](../docs/file-modules.md). The checklist below is the legacy reference list — the sliced doc supersedes it (config values are Properties not input ports; `jsonquery`/`xmlquery` moved to 2.6; cloud credentials via named storage connections).
+
+**Tasks:** *(legacy reference list — superseded by the sliced plan above)*
 - [ ] **Implement file read/write modules** 📁
     - [ ] Create `FileReadModule` class
         - [ ] ModuleId: `builtin.file.read`

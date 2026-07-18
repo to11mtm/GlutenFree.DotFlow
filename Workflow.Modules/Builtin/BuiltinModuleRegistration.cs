@@ -6,6 +6,7 @@ namespace Workflow.Modules.Builtin;
 
 using System.Collections.Generic;
 using Workflow.Modules.Abstractions;
+using Workflow.Modules.Builtin.File;
 using Workflow.Modules.Builtin.Flow;
 using Workflow.Modules.Builtin.Http;
 
@@ -82,6 +83,22 @@ public static class BuiltinModules
 
         // Phase 2.3.6 — Webhook trigger module~ 🪝
         new WebhookTriggerModule(),
+
+        // Phase 2.5.a.1 — File read/write modules~ 📖✍️
+        new FileReadModule(),
+        new FileWriteModule(),
+
+        // Phase 2.5.a.2 — Structured format modules (CSV/JSON/XML)~ 📊📄🏷️
+        new CsvReadModule(),
+        new CsvWriteModule(),
+        new JsonReadModule(),
+        new JsonWriteModule(),
+        new XmlReadModule(),
+        new XmlWriteModule(),
+
+        // Phase 2.5.a.4 — Compression modules~ 🗜️📦
+        new CompressModule(),
+        new DecompressModule(),
     };
 
     /// <summary>

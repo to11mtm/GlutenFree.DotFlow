@@ -28,6 +28,8 @@
         <PackageReference Include="Testcontainers.Nats" />
         <PackageReference Include="Testcontainers.PostgreSql" />
         <PackageReference Include="Testcontainers.Minio" />
+        <!-- ☁️ Phase 2.5.b — Azurite (Azure Storage emulator) for blob module E2E~ -->
+        <PackageReference Include="Testcontainers.Azurite" />
     </ItemGroup>
 
     <ItemGroup>
@@ -43,6 +45,9 @@
         <ProjectReference Include="..\Workflow.Persistence.Nats\Workflow.Persistence.Nats.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Postgres\Workflow.Persistence.Postgres.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.S3\Workflow.Persistence.S3.csproj" />
+        <!-- ☁️ Phase 2.5.b — cloud storage module family (S3 + Azure Blob modules)~ -->
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <ProjectReference Include="..\Workflow.Modules.Cloud\Workflow.Modules.Cloud.csproj" />
     </ItemGroup>
 
 </Project>

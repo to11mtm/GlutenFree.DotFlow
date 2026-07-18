@@ -31,7 +31,7 @@ This directory contains individual phase breakdown files to make it easier to na
 - ⏳ Advanced flow control (conditionals, loops, parallel) (2.2)
 - ⏳ HTTP & Network modules (2.3)
 - ✅ Database modules (2.4) — **COMPLETE**: 2.4.a (raw-SQL escape-hatch family) + 2.4.b (typed linq/Roslyn — the recommended default surface)
-- ⏳ File system & cloud storage modules (2.5)
+- ✅ File system & cloud storage modules (2.5) — **COMPLETE**: 2.5.a (local file/CSV/JSON/XML/compression + path-security sandbox) + 2.5.b (S3 + Azure Blob, quarantined `Workflow.Modules.Cloud`)
 - ⏳ Data transformation modules (2.6)
 - ⏳ REST API with authentication (2.7)
 - ⏳ Module system enhancements (2.8)
@@ -42,6 +42,7 @@ This directory contains individual phase breakdown files to make it easier to na
 - [Phase2-3-HttpAndNetworkModules.md](Phase2-3-HttpAndNetworkModules.md) ⏳ — 10 sub-phases, detailed plan ready!
 - [Phase2-4-DatabaseModules.md](Phase2-4-DatabaseModules.md) 🔄 — 7 MVP sub-phases + 6 post-MVP slices (incl. 2.4.b Roslyn/linq family). **2.4.a.0–2.4.a.6 COMPLETE ✅** (66 unit + Docker-gated Postgres/E2E + named-connection API); 2.4.b (typed linq) next~ 🌷
   - Design exploration: [new-feature-design/Phase2-4-DatabaseModules-Design.md](../new-feature-design/Phase2-4-DatabaseModules-Design.md)
+- [Phase2-5-FileSystemModules.md](Phase2-5-FileSystemModules.md) ✅ — 2.5.a local file family (path-security sandbox + 10 modules) **COMPLETE** (58 unit tests) + 2.5.b cloud storage (S3/Azure Blob, quarantined project) **COMPLETE** (22 unit + Docker-gated MinIO/Azurite/E2E). Q1–Q10 resolved~ 🌷
   - Module guide: [docs/database-modules.md](../docs/database-modules.md)
 
 ### [Phase3-AdvancedFeatures.md](Phase3-AdvancedFeatures.md) 🎨

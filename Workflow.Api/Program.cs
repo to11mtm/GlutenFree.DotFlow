@@ -13,6 +13,8 @@ using Workflow.Modules.Database;
 using Workflow.Modules.Database.Abstractions;
 using Workflow.Modules.Database.Configuration;
 using Workflow.Modules.Database.Linq;
+using Workflow.Modules.Cloud;
+using Workflow.Modules.Cloud.Configuration;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Composite;
 using Workflow.Persistence.Nats;
@@ -54,6 +56,13 @@ builder.Services.Configure<DatabaseConnectionsOptions>(
 // AddDatabaseModules) so persisted connection strings are encrypted at rest~
 builder.Services.AddDataProtection();
 builder.Services.AddSingleton<IConnectionStringProtector, DataProtectionConnectionStringProtector>();
+
+// ☁️ Cloud storage module family (Phase 2.5.b)~ — S3 + Azure Blob modules.
+// CopilotNote: host-wired (not in AddWorkflowModules) — Workflow.Modules.Cloud references
+// Workflow.Modules, so the reverse call would be circular; same rule as AddDatabaseModules (D4)~
+builder.Services.AddCloudStorageModules();
+builder.Services.Configure<CloudStorageOptions>(
+    builder.Configuration.GetSection(CloudStorageOptions.SectionName));
 
 // 🧬 Typed linq family (Phase 2.4.b)~ — opt-in Roslyn compile/preview/cache pipeline (D14).
 // Quarantined in Workflow.Modules.Database.Linq; the host opts in here so raw-SQL-only hosts don't pay for it~
