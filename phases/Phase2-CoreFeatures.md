@@ -1693,12 +1693,21 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
   - [ ] Log warnings for unsigned assemblies (don't block by default)
   - [ ] Add comprehensive tests
 
+- [ ] **Module management HTTP endpoints** 📦 *(the write-side of the Phase 2.7 module API, per Phase 2.7 Q4)*
+  - [ ] Build on the `.wfmod` package format + `ModulePackageReader` above (Phase 2.7 ships read-only `GET /api/v1/modules[/{id}]`; the management verbs land here once packages exist)
+  - [ ] `POST /api/v1/modules/upload` — accept a `.wfmod` upload, validate via `ModulePackageReader`, install into a plugin ALC (`AssemblyModuleLoader`/`PluginAssemblyLoadContext`), register into `IModuleRegistry`, return the installed module info
+  - [ ] `POST /api/v1/modules/{moduleId}/enable` / `POST /api/v1/modules/{moduleId}/disable` — toggle a module's availability (enabled state tracked in the registry)
+  - [ ] `DELETE /api/v1/modules/{moduleId}` — uninstall (check dependents via `ModuleDependencyResolver`; refuse if in use)
+  - [ ] Reuse the Phase 2.7 Minimal-API endpoint-group convention (`ModuleEndpoints.cs`) + DTO layer + auth policies
+  - [ ] Add comprehensive tests (upload valid/invalid package, enable/disable, uninstall-with-dependents refused)
+
 **Tests:**
 - [ ] Package format tests (valid/invalid packages)
 - [ ] Hot-reload tests (watch, reload, running-workflow safety)
 - [ ] Version management tests (side-by-side, pin, resolve)
 - [ ] Dependency resolution tests (sort, circular detection)
 - [ ] Assembly verification tests (signed, unsigned, trusted)
+- [ ] Module management endpoint tests (upload, enable/disable, uninstall)
 
 **Deliverables:**
 - ✅ `.wfmod` packages can be loaded and validated
@@ -1706,4 +1715,5 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 - ✅ Multiple module versions can coexist
 - ✅ Module dependencies resolved automatically
 - ✅ Assembly signatures optionally verified
+- ✅ Module upload/enable/disable/uninstall HTTP endpoints (completes the Phase 2.7 module API)
 

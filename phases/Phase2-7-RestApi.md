@@ -29,23 +29,30 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 | **D6 Serializable DTO layer — never serialize domain records directly** | Domain models use LanguageExt (`Arr`/`HashMap`/`Option`) + `System.Type` (in `ModuleSchema`) + `System.Version`, which don't round-trip cleanly through `System.Text.Json`. Phase 2.7 adds a `Workflow.Api/Contracts/*` DTO layer (`WorkflowSummaryDto`/`WorkflowDetailsDto`/`ExecutionDto`/`ExecutionStatusDto`/`ModuleSummaryDto`/`ModuleDetailsDto`/`ModuleSchemaDto`/`VariableDto`/…) with explicit projections. `Type` → assembly-qualified string; `Version` → string; `Option<T>` → nullable. |
 | **D7 Caller identity resolution extracted + reused (audit fields)** | `Program.cs` already has a `ResolveCallerId(HttpContext)` static (X-Caller-Id → `NameIdentifier`/`sub` claim → `"system"`). This is extracted to `Workflow.Api/Auth/CallerIdentity.cs` (an extension method) and reused by the execute endpoints to populate `ExecutionStartOptions.CallerId` (which the engine persists as the execution's `TriggeredBy`). Once auth (2.7.7) lands, the claim path becomes real. |
 | **D8 RFC 7807 ProblemDetails for all error responses** | `AddProblemDetails()` + a consistent `{ type, title, status, detail, errors? }` shape for 400/401/403/404/409/422/500. Validation failures (from `ModuleAwareWorkflowValidator`) map to 422 with a per-field `errors` map. Not-found → 404, version/state conflicts → 409. |
-| **D9 Auth MVP = API Key + JWT *bearer validation*; full login/refresh/user-store is post-MVP** | Phase 2.7 ships (a) an **API-key scheme** (`X-API-Key` validated against config-declared keys, each carrying a caller id + roles; keys hashed at rest via the existing Data-Protection seam) and (b) a **JWT bearer scheme** that *validates externally-issued tokens* (`AddJwtBearer`, configurable authority/audience/signing key). The checklist's `/auth/login` + `/auth/refresh` + username/password store + full RBAC model is a **real identity system** — deferred to **2.7.P1** (see Q1). Endpoints are `[Authorize]`-able but default to anonymous in dev unless `Api:Auth:Require` is set. |
+| **D9 Auth MVP = API Key + JWT *bearer validation*; full login/refresh/user-store is post-MVP** | Phase 2.7 ships (a) an **API-key scheme** (`X-API-Key` validated against config-declared keys, each carrying a caller id + roles; keys hashed at rest via the existing Data-Protection seam) and (b) a **JWT bearer scheme** that *validates externally-issued tokens* (`AddJwtBearer`, configurable authority/audience/signing key). A **local dev/test mode requires no auth** (`Api:Auth:Require=false` by default) so `WebApplicationFactory` tests and local runs work anonymously; setting `Api:Auth:Require=true` enforces auth globally. The checklist's `/auth/login` + `/auth/refresh` + username/password store + full RBAC model is a **real identity system** — deferred to **2.7.P1** (Q1). Endpoints are `[Authorize]`-able but no-op when auth is disabled. |
 | **D10 Health via the existing `IPersistenceProvider.HealthCheckAsync` + `AddHealthChecks`** | `IPersistenceProvider` already exposes `HealthCheckAsync(ct) → HealthCheckResult`. 2.7.5 wires ASP.NET `AddHealthChecks()` with a persistence check + an actor-system check (supervisor `Ask<…>` liveness), exposed at `/api/v1/health` (detailed), `/api/v1/health/ready` (readiness), `/api/v1/health/live` (liveness). |
-| **D11 Metrics MVP = a JSON `/status` + `/metrics` counters seam; Prometheus exporter is opt-in** | A lightweight `IWorkflowMetrics` counter service (executions started/completed/failed, active count) backs `/api/v1/status` (JSON overview) and `/api/v1/metrics`. A Prometheus text-format exporter (`prometheus-net`) is **opt-in / post-MVP** (Q2) — the counter seam is exporter-agnostic so wiring Prometheus later is additive. |
+| **D11 Metrics MVP = a JSON `/status` + `/metrics` seam behind a generic exporter interface** | A lightweight, **exporter-agnostic** `IWorkflowMetrics` counter service (executions started/completed/failed, active count) backs `/api/v1/status` (JSON overview) and `/api/v1/metrics` (JSON dump). The seam is deliberately generic so **any exporter can plug in** — a Prometheus text-format exporter (`prometheus-net`) is **opt-in / post-MVP** (Q2) and additive. |
 | **D12 Swagger enrichment builds on the existing bootstrap** | `AddSwaggerGen()` + `UseSwagger/UseSwaggerUI` already run. 2.7.8 enriches: XML doc comments (`<GenerateDocumentationFile>`), the two auth security schemes (ApiKey + Bearer) so "Authorize" works in the UI, request/response examples, and grouped tags per resource. |
 | **D13 Rate limiting via the in-box .NET 8 middleware, opt-in** | .NET 8's `Microsoft.AspNetCore.RateLimiting` (no new package) provides a fixed-window limiter keyed by API key / caller id, returning `429` + `Retry-After`. Wired but **disabled by default** (enabled via `Api:RateLimit:Enabled`); full per-key quota tiers are post-MVP (Q3). |
 
 ### TO RESOLVE 🤔
 
-> Each carries a V1 recommendation so 2.7.0 can start immediately~ ✨
+> All Q1–Q7 resolved (July 2026) — answers folded into the design decisions + slices below~ ✅
 
-- [ ] **Q1 Auth scope for MVP — bearer-validation only, or a full identity system?** The checklist wants `/auth/login` + `/auth/refresh` + username/password + roles/permissions. That's a real IdP (user store, password hashing, refresh-token rotation, RBAC policy model). **V1 recommendation: MVP ships API-key auth + JWT *bearer validation* of externally-issued tokens (D9); defer the first-party login/refresh/user-store + full RBAC to 2.7.P1.** Rationale: most deployments front DotFlow with an existing IdP (Entra/Auth0/Keycloak); a bespoke user store is scope creep. If product needs first-party login now, budget +1 week.
-- [ ] **Q2 Prometheus metrics in MVP?** `/api/v1/metrics` — JSON counters (in-box, D11) or Prometheus text format (needs `prometheus-net`, ~small MIT dep)? **V1 recommendation: JSON `/status` + a counter seam in MVP; add the Prometheus exporter as 2.7.P2** (the seam is exporter-agnostic so it's purely additive). If ops requires Prometheus scraping day-one, pull P2 forward (~1 day).
-- [ ] **Q3 Rate limiting in MVP?** Deliverables mention "rate limiting per user/key". **V1 recommendation: wire the in-box .NET 8 fixed-window limiter (D13) but ship it *disabled by default*; per-key quota tiers + sliding window → 2.7.P3.** Rationale: rate-limit policy is deployment-specific; the middleware seam is what matters for MVP.
-- [ ] **Q4 Module upload / enable / disable endpoints?** The checklist has `POST /modules/upload` (`.wfmod` package), `enable`/`disable`. There's dynamic-loading infra (`AssemblyModuleLoader`, `PluginAssemblyLoadContext`) but **no `.wfmod` package format** — that's Phase 2.8 (Module System Enhancements) territory. **V1 recommendation: MVP ships read-only module endpoints (`GET /modules`, `GET /modules/{id}`); upload/install/enable/disable → 2.7.P4, gated on the Phase 2.8 package format.** |
-- [ ] **Q5 Sync execution (`/execute/sync`) in MVP?** The checklist has a "execute and wait for completion with timeout" endpoint. It needs the execution service to poll/await terminal state. **V1 recommendation: yes, MVP** — implement as "start, then await status → terminal or timeout" over `GetWorkflowStatus` (bounded poll or a completion signal). Low risk; high demand for simple integrations.
-- [ ] **Q6 Execute-by-name version selection.** `POST /workflows/execute/{name}` with multiple versions — latest, or explicit `?version=`? `IWorkflowRepository.SearchAsync` matches by name substring; there's no "get latest active by exact name+version". **V1 recommendation: resolve by exact name → newest `Version` among active matches; accept optional `?version=` to pin.** May need a small `IWorkflowRepository.GetByNameAsync(name, version?)` helper (additive) or filter over `GetAllAsync` — flag during 2.7.2.
-- [ ] **Q7 Do the existing feature endpoints (`/api/webhooks`, `/api/database/*`, `/api/transform/script/*`) get `/api/v1` aliases?** **V1 recommendation: no in MVP — keep them at current paths (D4), document the distinction (resource API vs. feature tooling); add `/api/v1` aliases only if a consumer needs one (2.7.P5).** Avoids churn + breaking the 2.4/2.6 API tests.
+- [x] **Q1 Auth scope for MVP — bearer-validation only, or a full identity system?**
+  - **RESOLVED:** MVP ships **API-key auth + JWT bearer validation** of externally-issued tokens + `[Authorize]` policies, with caller identity flowing to execution audit (D9). A **local dev/test mode runs with no auth required** (`Api:Auth:Require=false` default). Full first-party login/refresh/user-store + RBAC → **2.7.P1**.
+- [x] **Q2 Prometheus metrics in MVP?**
+  - **RESOLVED:** MVP ships a JSON `/status` + `/metrics` counter seam behind a **generic, exporter-agnostic `IWorkflowMetrics` seam** (D11) so any exporter can plug in later. Prometheus text-format exporter → **2.7.P2**.
+- [x] **Q3 Rate limiting in MVP?**
+  - **RESOLVED:** In-box .NET 8 fixed-window limiter (D13), **keyed by API key / caller id**, **disabled unless `Api:RateLimit:Enabled`**. Per-key quota tiers + sliding window → **2.7.P3**.
+- [x] **Q4 Module upload / enable / disable endpoints?**
+  - **RESOLVED:** MVP module endpoints are **read-only** (`GET /modules`, `GET /modules/{id}`). Upload/install/enable/disable are implemented **in Phase 2.8** as part of the `.wfmod` package work (not a 2.7 post-MVP slice) — see the new "Module management HTTP endpoints" task added to [§2.8](Phase2-CoreFeatures.md#28-module-system-enhancements-deferred-from-phase-14-).
+- [x] **Q5 Sync execution (`/execute/sync`) in MVP?**
+  - **RESOLVED:** Yes — start-then-await-terminal-or-timeout over `GetWorkflowStatus`. On timeout, return **`202` with a continuation poll URL** (`Location: /api/v1/executions/{id}`) so the caller can keep checking; `200` + final status when it completes in time.
+- [x] **Q6 Execute-by-name version selection.**
+  - **RESOLVED:** Resolve by exact name → **newest active `Version`**, with an optional **`?version=` pin**. Add a small additive `IWorkflowRepository.GetByNameAsync(name, version?)` helper (or filter over `GetAllAsync`) — decided during 2.7.2.
+- [x] **Q7 `/api/v1` aliases for existing feature endpoints?**
+  - **RESOLVED:** No aliases in MVP — feature tooling (`/api/webhooks`, `/api/database/*`, `/api/transform/script/*`) stays at current paths (D4). Optional aliases → **2.7.P5**.
 
 ---
 
@@ -158,12 +165,12 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
   - [ ] `StartAsync(Guid definitionId, IReadOnlyDictionary<string,object?> inputs, ExecutionStartOptions options, ct) → Guid executionId` — load definition (`IWorkflowRepository`), `Ask<IWorkflowMessage>(new CreateWorkflowInstance(id, def, inputs, options))` (reuse `ActorWorkflowLauncher`'s linked-CTS+timeout pattern), unpack `WorkflowInstanceCreated`/`WorkflowInstanceCreationFailed`
   - [ ] `GetStatusAsync(Guid executionId, ct) → WorkflowStatusResponse?` — `Ask<WorkflowStatusResponse>(new GetWorkflowStatus(id))` with a fallback to `IExecutionHistoryRepository.GetExecutionAsync` for terminal/persisted executions the supervisor no longer tracks
   - [ ] `CancelAsync(Guid executionId, ct) → bool` — `Tell/Ask(new CancelExecution(id))`
-  - [ ] `StartAndWaitAsync(…, TimeSpan timeout, ct)` — start then await terminal state (Q5): poll `GetStatusAsync` with backoff (or a completion signal) until `Completed`/`Failed`/`Cancelled` or timeout
+  - [ ] `StartAndWaitAsync(…, TimeSpan timeout, ct)` — start then await terminal state (Q5): poll `GetStatusAsync` with backoff (or a completion signal) until `Completed`/`Failed`/`Cancelled` or timeout; on timeout the caller gets the execution id back so the endpoint can hand out a continuation poll URL
   - [ ] Registered singleton in `Program.cs`
 - [ ] **`V1/ExecutionEndpoints.cs`** (`MapExecutionEndpoints`)
   - [ ] `POST /api/v1/workflows/{id:guid}/execute` — body = inputs; resolve `CallerId` (D7) + optional `variableWriteMode` → `ExecutionStartOptions`; `202 Accepted` + `{ executionId }` + `Location: /api/v1/executions/{id}`
   - [ ] `POST /api/v1/workflows/execute/{name}` — resolve definition by name (Q6: newest active, optional `?version=`) → start
-  - [ ] `POST /api/v1/workflows/{id:guid}/execute/sync?timeoutSeconds=` — `StartAndWaitAsync` → `200` + final `ExecutionStatusDto` (or `408`/`202` on timeout, documented)
+  - [ ] `POST /api/v1/workflows/{id:guid}/execute/sync?timeoutSeconds=` — `StartAndWaitAsync` → `200` + final `ExecutionStatusDto` when it completes in time; **on timeout → `202` with a continuation poll URL** (`Location: /api/v1/executions/{id}` + `{ executionId, status: "running" }`) so the caller keeps polling (Q5)
   - [ ] `GET /api/v1/executions/{executionId:guid}` — `GetStatusAsync` → `ExecutionStatusDto` (state, progress, per-node states, start/end, error, outputs when complete); 404 if unknown
   - [ ] `POST /api/v1/executions/{executionId:guid}/cancel` — `CancelAsync` → `{ cancelled }`; 404 if unknown
   - [ ] `GET /api/v1/executions?workflowId=&status=&from=&to=&page=&pageSize=` — `IExecutionHistoryRepository.GetExecutionsForWorkflowAsync(...)` → `PagedResult<ExecutionDto>`
@@ -180,7 +187,7 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 - [ ] `Status_TerminalExecution_FallsBackToHistoryRepo`
 - [ ] `Status_UnknownExecution_Returns404`
 - [ ] `Cancel_RunningExecution_ReturnsCancelled` · `Cancel_UnknownExecution_Returns404`
-- [ ] `Sync_CompletesWithinTimeout_ReturnsResult` · `Sync_ExceedsTimeout_Returns202OrTimeout` *(Q5)*
+- [ ] `Sync_CompletesWithinTimeout_ReturnsResult` · `Sync_ExceedsTimeout_Returns202WithContinuationUrl` *(Q5 — `Location` header points at `/api/v1/executions/{id}`)*
 - [ ] `ListExecutions_FilterByWorkflowAndStatus_Paginated`
 - [ ] *(engine-decoupled)* execution-service unit tests with a `TestKit`/stub supervisor for start/status/cancel unpacking
 
@@ -203,7 +210,7 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 - [ ] **`V1/ModuleEndpoints.cs`** (`MapModuleEndpoints`)
   - [ ] `GET /api/v1/modules` — `IModuleRegistry.GetAllModules()` → `ModuleSummaryDto[]`; `?category=` → `GetModulesByCategory`; `?q=` → `SearchModules`; optional `?groupByCategory=true` → `{ category: [summaries] }`
   - [ ] `GET /api/v1/modules/{moduleId}` — `GetModule` → `ModuleDetailsDto`; 404 if unknown
-  - [ ] *(upload/enable/disable — deferred to 2.7.P4 per Q4; documented as not-yet-available)*
+  - [ ] *(upload/install/enable/disable — implemented in **Phase 2.8** alongside the `.wfmod` package format, per Q4; the MVP module endpoints are read-only and document that management operations arrive with 2.8)*
 
 ### Tests (target ~9): → `Workflow.Tests/Api/V1/ModuleEndpointsTests.cs` + `Workflow.Tests/Api/Contracts/ModuleDtoProjectionTests.cs`
 
@@ -355,8 +362,8 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 ### 2.7.P3 Rate-Limit Quota Tiers 🚦 *(post-MVP — Q3)*
 Per-key quotas, sliding window, tier config, `X-RateLimit-*` headers. ~6 tests.
 
-### 2.7.P4 Module Upload / Enable / Disable 📦 *(post-MVP — Q4, depends on Phase 2.8 `.wfmod` format)*
-`POST /api/v1/modules/upload` (`.wfmod`), install into a plugin ALC (`AssemblyModuleLoader`/`PluginAssemblyLoadContext`), enable/disable toggles. ~10 tests.
+### 2.7.P4 Module Upload / Enable / Disable 📦 *(handled in Phase 2.8, per Q4)*
+`POST /api/v1/modules/upload` (`.wfmod`), install into a plugin ALC (`AssemblyModuleLoader`/`PluginAssemblyLoadContext`), enable/disable toggles. **Not a 2.7 slice** — these HTTP endpoints are implemented **in Phase 2.8** as part of the `.wfmod` package-format work (a "Module management HTTP endpoints" task was added to §2.8). Listed here only as a pointer. ~10 tests (in 2.8).
 
 ### 2.7.P5 `/api/v1` Aliases for Feature Endpoints 🔀 *(post-MVP — Q7)*
 Optional versioned aliases for `/api/webhooks`, `/api/database/*`, `/api/transform/script/*` if a consumer standardises on `/api/v1`. ~4 tests.
@@ -379,7 +386,7 @@ When 2.7 ships (Week 20), all of the following must be true:
 
 **Auth + polish (Week 20 gate):**
 
-- [ ] **Auth** — API-key + JWT bearer schemes, `[Authorize]` policies, `Api:Auth:Require` toggle; caller id flows to execution audit
+- [ ] **Auth** — API-key + JWT bearer schemes, `[Authorize]` policies, `Api:Auth:Require` toggle (**no-auth by default for local dev/test**); caller id flows to execution audit
 - [ ] **Versioning** — `/api/v1` URL-segment versioning, supported-versions header
 - [ ] **OpenAPI** — enriched Swagger (auth schemes, XML docs, examples), `v1` document; ProblemDetails (RFC 7807) everywhere
 - [ ] **Rate limiting** — in-box fixed-window seam, disabled by default
@@ -443,21 +450,14 @@ Directory.Packages.props                 ← + Asp.Versioning.Http; (Prometheus.
 
 | # | Question | Resolution | Tracked in |
 |---|----------|------------|------------|
-| **Q1** | Auth scope for MVP? | ⏳ pending — V1 rec: API-key + JWT bearer validation; first-party login/refresh/RBAC → 2.7.P1 | TO RESOLVE + 2.7.7 |
-A: implement API-key + JWT bearer validation; `[Authorize]` policies; caller identity flows to execution audit. Full login/refresh/user-store/RBAC is deferred to 2.7.P1. Have a 'local dev/test mode' without auth required.
-| **Q2** | Prometheus metrics in MVP? | ⏳ pending — V1 rec: JSON counters + seam; Prometheus exporter → 2.7.P2 | TO RESOLVE + 2.7.5 |
-A: leave a seam for metrics via a generic exporter.
-| **Q3** | Rate limiting in MVP? | ⏳ pending — V1 rec: in-box middleware, disabled by default; tiers → 2.7.P3 | TO RESOLVE + 2.7.8 |
-A: In-box middleware for now, keyed by API key/caller id, fixed-window, disabled unless `Api:RateLimit:Enabled`. Tiers and sliding window are deferred to 2.7.P3.
-| **Q4** | Module upload/enable/disable? | ⏳ pending — V1 rec: read-only in MVP; upload → 2.7.P4 (needs Phase 2.8 `.wfmod`) | TO RESOLVE + 2.7.3 |
-A: Make sure we have the right step  in 2.8 for the `.wfmod` format, then implement upload/enable/disable as part of that.
-| **Q5** | Sync execution endpoint in MVP? | ⏳ pending — V1 rec: yes (start-then-await-terminal-or-timeout) | TO RESOLVE + 2.7.2 |
-A: Implement a sync execution endpoint that starts an execution and polls for terminal state until timeout, returning 200 with the final status or 202/408 on timeout. Ideally the timeout should give a continuation check url to poll for the final status.
-| **Q6** | Execute-by-name version selection? | ⏳ pending — V1 rec: newest active by exact name, optional `?version=` pin | TO RESOLVE + 2.7.2 |
-A: Yes, implement execute-by-name that resolves the newest active workflow by exact name, with an optional `?version=` query parameter to pin to a specific version.
-| **Q7** | `/api/v1` aliases for feature endpoints? | ⏳ pending — V1 rec: no in MVP; aliases → 2.7.P5 | TO RESOLVE + 2.7.6 |
-A: Agreed
+| **Q1** | Auth scope for MVP? | **API-key + JWT bearer validation + `[Authorize]` policies; caller id → execution audit; local dev/test runs no-auth (`Api:Auth:Require=false`).** Full login/refresh/RBAC → 2.7.P1 | 2.7.7 |
+| **Q2** | Prometheus metrics in MVP? | **JSON `/status`+`/metrics` behind a generic, exporter-agnostic `IWorkflowMetrics` seam.** Prometheus exporter → 2.7.P2 | 2.7.5 |
+| **Q3** | Rate limiting in MVP? | **In-box fixed-window limiter keyed by API key/caller id, disabled unless `Api:RateLimit:Enabled`.** Tiers + sliding window → 2.7.P3 | 2.7.8 |
+| **Q4** | Module upload/enable/disable? | **Read-only in 2.7; upload/enable/disable implemented in Phase 2.8** alongside the `.wfmod` format (endpoint task added to §2.8) | 2.7.3 + §2.8 |
+| **Q5** | Sync execution endpoint in MVP? | **Yes — start-then-await-terminal-or-timeout; `200` + final status when done, `202` + continuation poll URL (`Location`) on timeout** | 2.7.2 |
+| **Q6** | Execute-by-name version selection? | **Newest active by exact name, optional `?version=` pin** (additive `GetByNameAsync` helper) | 2.7.2 |
+| **Q7** | `/api/v1` aliases for feature endpoints? | **No in MVP** — feature tooling stays at current paths; aliases → 2.7.P5 | 2.7.6 |
 
 ---
 
-> 🌸 *uwu — Phase 2.7 is mostly a victory lap over work already done, senpai~! The repos, the execution messages, the supervisor, health checks, and webhooks all exist — 2.7 is `MapGet`/`MapPost` glue + DTO projection + the two genuinely-new bits (auth & versioning). Land 2.7.0's scaffolding, register that missing `IModuleRegistry`, and the resource endpoints practically write themselves. Nod at Q1–Q7 (especially Q1 — how much auth?) and we'll start slicing~!* 💖
+> 🌸 *uwu — Phase 2.7 is mostly a victory lap over work already done, senpai~! The repos, the execution messages, the supervisor, health checks, and webhooks all exist — 2.7 is `MapGet`/`MapPost` glue + DTO projection + the two genuinely-new bits (auth & versioning). Q1–Q7 are all resolved: API-key + JWT (no-auth for local dev), generic metrics seam, in-box rate-limit (off by default), sync-with-continuation-URL, execute-by-name+version, and module management pushed into Phase 2.8 with the `.wfmod` format. Land 2.7.0's scaffolding, register that missing `IModuleRegistry`, and the resource endpoints practically write themselves~!* 💖
