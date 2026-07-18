@@ -1288,101 +1288,105 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 > **📋 Detailed sliced plan available:** [Phase2-7-RestApi.md](Phase2-7-RestApi.md) — versioned `/api/v1` surface (workflow CRUD, execution start/status/cancel, modules, variables, monitoring) over the **existing** repositories + Akka execution messages, plus the two genuinely-new concerns (API-key/JWT auth, API versioning). **Timeline shifted to Weeks 19-20.** The checklist below is the legacy reference list — the sliced doc supersedes it (notably: **Minimal-API endpoint groups, not MVC controllers**; webhook endpoints already shipped in 2.3.6/2.3.9; the repos/execution messages/health checks already exist so most endpoints are thin adapters; auth MVP = API-key + JWT bearer validation with first-party login deferred).
 
 **Tasks:** *(legacy reference list — superseded by the sliced plan above)*
-- [ ] **Implement workflow CRUD endpoints** 📋
+- [ ] **Implement workflow CRUD endpoints** 📋 *(done via Minimal-API endpoint groups — see below)*
   - [ ] Create `WorkflowsController` class
-  - [ ] Implement GET /api/v1/workflows
-    - [ ] List all workflows with pagination
-    - [ ] Support filtering (by name, tags, status)
+  - [x] *(added)* Create `V1/WorkflowEndpoints.cs` Minimal-API group (`MapWorkflowEndpoints`) — Minimal APIs, not MVC
+  - [x] Implement GET /api/v1/workflows
+    - [x] List all workflows with pagination
+    - [x] Support filtering (by name, tags, status)
     - [ ] Support sorting (by name, created date)
-    - [ ] Return workflow summaries
-  - [ ] Implement GET /api/v1/workflows/{id}
-    - [ ] Get single workflow by ID
-    - [ ] Return full workflow definition
-    - [ ] Handle not found (404)
-  - [ ] Implement POST /api/v1/workflows
-    - [ ] Create new workflow
-    - [ ] Validate workflow definition
-    - [ ] Return created workflow with ID
-    - [ ] Return 201 Created
-  - [ ] Implement PUT /api/v1/workflows/{id}
-    - [ ] Update existing workflow
-    - [ ] Validate workflow definition
-    - [ ] Handle version conflicts
-    - [ ] Return updated workflow
-  - [ ] Implement DELETE /api/v1/workflows/{id}
-    - [ ] Delete workflow
-    - [ ] Check for running executions
-    - [ ] Return 204 No Content
-  - [ ] Add comprehensive tests
-    - [ ] Test list with pagination
-    - [ ] Test create workflow
-    - [ ] Test update workflow
-    - [ ] Test delete workflow
-    - [ ] Test validation errors
+    - [x] Return workflow summaries
+  - [x] Implement GET /api/v1/workflows/{id}
+    - [x] Get single workflow by ID
+    - [x] Return full workflow definition
+    - [x] Handle not found (404)
+  - [x] Implement POST /api/v1/workflows
+    - [x] Create new workflow
+    - [x] Validate workflow definition
+    - [x] Return created workflow with ID
+    - [x] Return 201 Created
+  - [x] Implement PUT /api/v1/workflows/{id}
+    - [x] Update existing workflow
+    - [x] Validate workflow definition
+    - [x] Handle version conflicts
+    - [x] Return updated workflow
+  - [x] Implement DELETE /api/v1/workflows/{id}
+    - [x] Delete workflow
+    - [x] Check for running executions
+    - [x] Return 204 No Content
+  - [x] *(added)* Implement POST /api/v1/workflows/{id}/restore — restore soft-deleted workflow
+  - [x] Add comprehensive tests
+    - [x] Test list with pagination
+    - [x] Test create workflow
+    - [x] Test update workflow
+    - [x] Test delete workflow
+    - [x] Test validation errors
 
-- [ ] **Implement execution endpoints** ⚡
+- [ ] **Implement execution endpoints** ⚡ *(done via Minimal-API endpoint groups — see below)*
   - [ ] Create `ExecutionsController` class
-  - [ ] Implement POST /api/v1/workflows/{id}/execute
-    - [ ] Start workflow execution
-    - [ ] Accept input parameters
-    - [ ] Resolve caller identity using `X-Caller-Id` override → claims (`NameIdentifier`/`sub`) → `"system"` fallback
-    - [ ] Pass `ExecutionStartOptions` (`CallerId`, `VariableWriteMode`) to `CreateWorkflowInstance`
-    - [ ] Return execution ID
-    - [ ] Return 202 Accepted
-  - [ ] Implement POST /api/v1/workflows/execute/{name}
-    - [ ] Execute by workflow name
-    - [ ] Handle multiple versions
-  - [ ] Implement GET /api/v1/executions/{executionId}
-    - [ ] Get execution status
-    - [ ] Return execution details
-    - [ ] Include node statuses
-    - [ ] Include outputs (if complete)
-  - [ ] Implement POST /api/v1/executions/{executionId}/cancel
-    - [ ] Cancel running execution
-    - [ ] Return cancellation status
-  - [ ] Implement GET /api/v1/executions
-    - [ ] List executions with filters
-    - [ ] Filter by workflow, status, date range
-    - [ ] Support pagination
-  - [ ] Implement POST /api/v1/workflows/{id}/execute/sync
-    - [ ] Execute and wait for completion
-    - [ ] Support timeout parameter
-    - [ ] Return execution result
-  - [ ] Add comprehensive tests
-    - [ ] Test async execution
-    - [ ] Test execution start persists `TriggeredBy` from caller identity resolution
+  - [x] *(added)* Create `V1/ExecutionEndpoints.cs` Minimal-API group + `Execution/IWorkflowExecutionService` (`ActorWorkflowExecutionService`)
+  - [x] Implement POST /api/v1/workflows/{id}/execute
+    - [x] Start workflow execution
+    - [x] Accept input parameters
+    - [x] Resolve caller identity using `X-Caller-Id` override → claims (`NameIdentifier`/`sub`) → `"system"` fallback
+    - [x] Pass `ExecutionStartOptions` (`CallerId`, `VariableWriteMode`) to `CreateWorkflowInstance`
+    - [x] Return execution ID
+    - [x] Return 202 Accepted
+  - [x] Implement POST /api/v1/workflows/execute/{name}
+    - [x] Execute by workflow name
+    - [x] Handle multiple versions
+  - [x] Implement GET /api/v1/executions/{executionId}
+    - [x] Get execution status
+    - [x] Return execution details
+    - [x] Include node statuses
+    - [x] Include outputs (if complete)
+  - [x] Implement POST /api/v1/executions/{executionId}/cancel
+    - [x] Cancel running execution
+    - [x] Return cancellation status
+  - [x] Implement GET /api/v1/executions
+    - [x] List executions with filters
+    - [x] Filter by workflow, status, date range
+    - [x] Support pagination
+  - [x] Implement POST /api/v1/workflows/{id}/execute/sync
+    - [x] Execute and wait for completion
+    - [x] Support timeout parameter
+    - [x] Return execution result
+  - [x] Add comprehensive tests
+    - [x] Test async execution
+    - [x] Test execution start persists `TriggeredBy` from caller identity resolution
     - [ ] Test runtime `VariableWriteMode` maps to expected variable scope writes
-    - [ ] Test sync execution
-    - [ ] Test status query
-    - [ ] Test cancel execution
-    - [ ] Test list executions
-  - [ ] Reuse Phase 2.1.5 persistence wiring (`IExecutionHistoryRepository` / `IVariableStore`) for execution creation and status reads
+    - [x] Test sync execution
+    - [x] Test status query
+    - [x] Test cancel execution
+    - [x] Test list executions
+  - [x] Reuse Phase 2.1.5 persistence wiring (`IExecutionHistoryRepository` / `IVariableStore`) for execution creation and status reads
 
-- [ ] **Create module schema DTO layer** 📐
-  - [ ] `ModuleSchemaDto` record — serializable version of `ModuleSchema`
-  - [ ] `PortDefinitionDto` record:
-    - [ ] `Name` (string)
-    - [ ] `DisplayName` (string)
-    - [ ] `DataType` (string) — type name, e.g. `"System.String"`, `"System.Int32"`
-    - [ ] `Description` (string?)
-    - [ ] `IsRequired` (bool)
-    - [ ] `DefaultValue` (JsonElement?) — serializable default
-  - [ ] `ModulePropertyDefinitionDto` — mirrors `ModulePropertyDefinition` with serializable types
-  - [ ] `ModuleSummaryDto` — lightweight list view (no schema, just id/name/category/description/version)
-  - [ ] `ModuleDetailsDto` — full view including `ModuleSchemaDto`
-  - [ ] Projection mapping: `IWorkflowModule → ModuleDetailsDto`
-  - [ ] Tests for DTO projection and round-trip JSON serialization
+- [x] **Create module schema DTO layer** 📐
+  - [x] `ModuleSchemaDto` record — serializable version of `ModuleSchema`
+  - [x] `PortDefinitionDto` record:
+    - [x] `Name` (string)
+    - [x] `DisplayName` (string)
+    - [x] `DataType` (string) — type name, e.g. `"System.String"`, `"System.Int32"`
+    - [x] `Description` (string?)
+    - [x] `IsRequired` (bool)
+    - [x] `DefaultValue` (JsonElement?) — serializable default
+  - [x] `ModulePropertyDefinitionDto` — mirrors `ModulePropertyDefinition` with serializable types
+  - [x] `ModuleSummaryDto` — lightweight list view (no schema, just id/name/category/description/version)
+  - [x] `ModuleDetailsDto` — full view including `ModuleSchemaDto`
+  - [x] Projection mapping: `IWorkflowModule → ModuleDetailsDto`
+  - [x] Tests for DTO projection and round-trip JSON serialization
 
-- [ ] **Add module management endpoints** 📦
+- [ ] **Add module management endpoints** 📦 *(read-only shipped; upload/enable/disable deferred to Phase 2.8)*
   - [ ] Create `ModulesController` class
-  - [ ] Implement GET /api/v1/modules
-    - [ ] List all registered modules
-    - [ ] Group by category
-    - [ ] Include module metadata
-  - [ ] Implement GET /api/v1/modules/{moduleId}
-    - [ ] Get module details
-    - [ ] Return schema information
-    - [ ] Include documentation
+  - [x] *(added)* Create `V1/ModuleEndpoints.cs` Minimal-API group over the DI `IModuleRegistry`
+  - [x] Implement GET /api/v1/modules
+    - [x] List all registered modules
+    - [x] Group by category
+    - [x] Include module metadata
+  - [x] Implement GET /api/v1/modules/{moduleId}
+    - [x] Get module details
+    - [x] Return schema information
+    - [x] Include documentation
   - [ ] Implement POST /api/v1/modules/upload
     - [ ] Upload module package (.wfmod)
     - [ ] Validate module package
@@ -1397,96 +1401,102 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
   - [ ] Implement POST /api/v1/modules/{moduleId}/disable
     - [ ] Disable module
   - [ ] Add comprehensive tests
-    - [ ] Test list modules
-    - [ ] Test get module details
+    - [x] Test list modules
+    - [x] Test get module details
     - [ ] Test upload module
     - [ ] Test enable/disable
 
-- [ ] **Implement variable management endpoints** 🔧
+- [ ] **Implement variable management endpoints** 🔧 *(done via Minimal-API endpoint groups)*
   - [ ] Create `VariablesController` class
-  - [ ] Implement GET /api/v1/variables
-    - [ ] List all variables
-    - [ ] Filter by scope
+  - [x] *(added)* Create `V1/VariableEndpoints.cs` Minimal-API group over `IVariableStore`
+  - [x] Implement GET /api/v1/variables
+    - [x] List all variables
+    - [x] Filter by scope
     - [ ] Support pagination
-  - [ ] Implement GET /api/v1/variables/{name}
-    - [ ] Get variable value
-    - [ ] Support scopes (global, workflow, execution)
-    - [ ] Return version information
-  - [ ] Implement PUT /api/v1/variables/{name}
-    - [ ] Set/update variable
-    - [ ] Support different scopes
-    - [ ] Return new version
-  - [ ] Implement DELETE /api/v1/variables/{name}
-    - [ ] Delete variable
-    - [ ] Return status
-  - [ ] Implement GET /api/v1/variables/{name}/history
-    - [ ] Get variable change history
-    - [ ] Return all versions
-  - [ ] Add comprehensive tests
-    - [ ] Test get variable
-    - [ ] Test set variable
-    - [ ] Test delete variable
-    - [ ] Test get history
+  - [x] Implement GET /api/v1/variables/{name}
+    - [x] Get variable value
+    - [x] Support scopes (global, workflow, execution)
+    - [x] Return version information
+  - [x] Implement PUT /api/v1/variables/{name}
+    - [x] Set/update variable
+    - [x] Support different scopes
+    - [x] Return new version
+  - [x] Implement DELETE /api/v1/variables/{name}
+    - [x] Delete variable
+    - [x] Return status
+  - [x] Implement GET /api/v1/variables/{name}/history
+    - [x] Get variable change history
+    - [x] Return all versions
+  - [x] Add comprehensive tests
+    - [x] Test get variable
+    - [x] Test set variable
+    - [x] Test delete variable
+    - [x] Test get history
 
-- [ ] **Add monitoring endpoints** 📊
+- [ ] **Add monitoring endpoints** 📊 *(done via Minimal-API endpoint groups; Prometheus exporter deferred to 2.7.P2)*
   - [ ] Create `MonitoringController` class
-  - [ ] Implement GET /api/v1/health
-    - [ ] Return health status
-    - [ ] Check database connectivity
-    - [ ] Check actor system status
-    - [ ] Return 200 if healthy, 503 if unhealthy
-  - [ ] Implement GET /api/v1/health/ready
-    - [ ] Readiness probe for Kubernetes
-    - [ ] Check all dependencies
-  - [ ] Implement GET /api/v1/health/live
-    - [ ] Liveness probe for Kubernetes
-    - [ ] Basic process check
-  - [ ] Implement GET /api/v1/metrics
+  - [x] *(added)* Create `V1/MonitoringEndpoints.cs` Minimal-API group + `Observability/IWorkflowMetrics`
+  - [x] Implement GET /api/v1/health
+    - [x] Return health status
+    - [x] Check database connectivity
+    - [x] Check actor system status
+    - [x] Return 200 if healthy, 503 if unhealthy
+  - [x] Implement GET /api/v1/health/ready
+    - [x] Readiness probe for Kubernetes
+    - [x] Check all dependencies
+  - [x] Implement GET /api/v1/health/live
+    - [x] Liveness probe for Kubernetes
+    - [x] Basic process check
+  - [x] Implement GET /api/v1/metrics
     - [ ] Return Prometheus metrics
-    - [ ] Workflow execution metrics
+    - [x] *(added)* Return JSON execution counters (Prometheus text exporter → 2.7.P2)
+    - [x] Workflow execution metrics
     - [ ] Performance metrics
-  - [ ] Implement GET /api/v1/status
-    - [ ] System status overview
+  - [x] Implement GET /api/v1/status
+    - [x] System status overview
     - [ ] Active workflows count
-    - [ ] Active executions count
+    - [x] Active executions count
     - [ ] Resource usage
-  - [ ] Add comprehensive tests
-    - [ ] Test health endpoint
-    - [ ] Test metrics endpoint
-    - [ ] Test status endpoint
+    - [x] *(added)* Provider name + health, registered module count, uptime, version
+  - [x] Add comprehensive tests
+    - [x] Test health endpoint
+    - [x] Test metrics endpoint
+    - [x] Test status endpoint
 
-- [ ] **Implement webhook endpoints** 🪝
+- [ ] **Implement webhook endpoints** 🪝 *(shipped in Phase 2.3.6/2.3.9 at `/api/webhooks` — feature tooling path, not `/api/v1`)*
   - [ ] Create `WebhooksController` class
-  - [ ] Implement POST /api/v1/webhooks/{webhookId}
-    - [ ] Receive webhook call
-    - [ ] Validate signature
-    - [ ] Trigger workflow
-    - [ ] Return response
-  - [ ] Implement GET /api/v1/webhooks
-    - [ ] List registered webhooks
-  - [ ] Implement POST /api/v1/webhooks
-    - [ ] Register new webhook
-    - [ ] Generate webhook ID
-    - [ ] Return webhook URL
-  - [ ] Implement DELETE /api/v1/webhooks/{webhookId}
-    - [ ] Unregister webhook
-  - [ ] Add comprehensive tests
-    - [ ] Test webhook trigger
-    - [ ] Test signature validation
-    - [ ] Test register webhook
-    - [ ] Test unregister webhook
+  - [x] *(added)* `Webhooks/WebhookEndpoints.cs` Minimal-API group (management + trigger)
+  - [x] Implement POST /api/v1/webhooks/{webhookId} *(shipped as `ANY /webhooks/{webhookId}` trigger)*
+    - [x] Receive webhook call
+    - [x] Validate signature
+    - [x] Trigger workflow
+    - [x] Return response
+  - [x] Implement GET /api/v1/webhooks *(shipped as `GET /api/webhooks`)*
+    - [x] List registered webhooks
+  - [x] Implement POST /api/v1/webhooks *(shipped as `POST /api/webhooks`)*
+    - [x] Register new webhook
+    - [x] Generate webhook ID
+    - [x] Return webhook URL
+  - [x] Implement DELETE /api/v1/webhooks/{webhookId} *(shipped as `DELETE /api/webhooks/{webhookId}`)*
+    - [x] Unregister webhook
+  - [x] Add comprehensive tests
+    - [x] Test webhook trigger
+    - [x] Test signature validation
+    - [x] Test register webhook
+    - [x] Test unregister webhook
 
-- [ ] **Add authentication (API Key + JWT)** 🔐
-  - [ ] Implement API Key authentication
-    - [ ] Create `ApiKeyAuthenticationHandler`
-    - [ ] Validate API key from header (X-API-Key)
-    - [ ] Load user/permissions from API key
-    - [ ] Set user identity
+- [ ] **Add authentication (API Key + JWT)** 🔐 *(API-key + JWT validation shipped; first-party login/refresh/RBAC deferred to 2.7.P1)*
+  - [x] Implement API Key authentication
+    - [x] Create `ApiKeyAuthenticationHandler`
+    - [x] Validate API key from header (X-API-Key)
+    - [x] Load user/permissions from API key
+    - [x] Set user identity
   - [ ] Implement JWT token authentication
     - [ ] Create `JwtAuthenticationHandler`
-    - [ ] Validate JWT token
-    - [ ] Extract claims
-    - [ ] Set user identity
+    - [x] *(added)* JWT bearer via `AddJwtBearer` + lazy `ConfigureJwtBearerOptions`
+    - [x] Validate JWT token
+    - [x] Extract claims
+    - [x] Set user identity
   - [ ] Create authentication endpoints
     - [ ] POST /api/v1/auth/login
       - [ ] Accept username/password
@@ -1500,20 +1510,22 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
     - [ ] POST /api/v1/auth/logout
       - [ ] Invalidate tokens
   - [ ] Implement authorization policies
-    - [ ] Create `[Authorize]` attribute usage
-    - [ ] Define roles (Admin, Developer, Viewer)
+    - [x] Create `[Authorize]` attribute usage *(via `.RequireAuthorization(policy)`)*
+    - [x] Define roles (Admin, Developer, Viewer)
     - [ ] Define permissions (WorkflowCreate, WorkflowExecute, etc.)
-  - [ ] Add comprehensive tests
-    - [ ] Test API key authentication
-    - [ ] Test JWT authentication
+    - [x] *(added)* Named policies (`WorkflowRead`/`WorkflowWrite`/`WorkflowExecute`/`Admin`); no-op when auth disabled
+  - [x] Add comprehensive tests
+    - [x] Test API key authentication
+    - [x] Test JWT authentication
     - [ ] Test login endpoint
     - [ ] Test token refresh
-    - [ ] Test authorization policies
+    - [x] Test authorization policies
 
-- [ ] **Implement API versioning** 🔢
+- [ ] **Implement API versioning** 🔢 *(lightweight `/api/v1` prefix + `api-supported-versions` header; the full Mvc.Versioning library intentionally deferred until v2)*
   - [ ] Install `Microsoft.AspNetCore.Mvc.Versioning`
+  - [x] *(added)* `V1/ApiVersioning.cs` — `MapV1Group()` `/api/v1` prefix + `api-supported-versions: 1.0` response header
   - [ ] Configure API versioning
-    - [ ] URL-based versioning (/api/v1/, /api/v2/)
+    - [x] URL-based versioning (/api/v1/, /api/v2/)
     - [ ] Header-based versioning (api-version header)
     - [ ] Query string versioning (?api-version=1.0)
   - [ ] Mark controllers with version
@@ -1522,32 +1534,32 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
     - [ ] Mark deprecated versions
     - [ ] Return deprecation warning in response header
   - [ ] Add comprehensive tests
-    - [ ] Test v1 endpoints
+    - [x] Test v1 endpoints
     - [ ] Test version negotiation
     - [ ] Test deprecated version warnings
 
-- [ ] **Add Swagger/OpenAPI documentation** 📚
-  - [ ] Install `Swashbuckle.AspNetCore`
-  - [ ] Configure Swagger generation
-    - [ ] Add XML documentation
-    - [ ] Configure schema generation
-    - [ ] Add authentication schemes
-  - [ ] Configure Swagger UI
-    - [ ] Enable at /swagger
-    - [ ] Add API key input
-    - [ ] Add JWT bearer token input
-    - [ ] Customize branding
-  - [ ] Generate OpenAPI spec
-    - [ ] Export as swagger.json
-    - [ ] Version the API specification
+- [x] **Add Swagger/OpenAPI documentation** 📚
+  - [x] Install `Swashbuckle.AspNetCore`
+  - [x] Configure Swagger generation
+    - [x] Add XML documentation
+    - [x] Configure schema generation
+    - [x] Add authentication schemes
+  - [x] Configure Swagger UI
+    - [x] Enable at /swagger
+    - [x] Add API key input
+    - [x] Add JWT bearer token input
+    - [x] Customize branding
+  - [x] Generate OpenAPI spec
+    - [x] Export as swagger.json
+    - [x] Version the API specification
   - [ ] Add API examples
     - [ ] Request examples
     - [ ] Response examples
     - [ ] Error examples
-  - [ ] Add comprehensive tests
-    - [ ] Test Swagger generation
+  - [x] Add comprehensive tests
+    - [x] Test Swagger generation
     - [ ] Test UI accessibility
-    - [ ] Validate OpenAPI spec
+    - [x] Validate OpenAPI spec
 
 **Controllers:**
 ```csharp
@@ -1569,40 +1581,40 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 ```
 
 **Tests:**
-- [ ] **API endpoint tests** 🧪
-  - [ ] Test all CRUD operations
-  - [ ] Test execution endpoints
-  - [ ] Test module endpoints
-  - [ ] Test variable endpoints
-  - [ ] Test monitoring endpoints
-  - [ ] Test webhook endpoints
-  - [ ] Test request/response formats
+- [x] **API endpoint tests** 🧪
+  - [x] Test all CRUD operations
+  - [x] Test execution endpoints
+  - [x] Test module endpoints
+  - [x] Test variable endpoints
+  - [x] Test monitoring endpoints
+  - [x] Test webhook endpoints
+  - [x] Test request/response formats
 
-- [ ] **Authentication tests** 🔐
-  - [ ] Test API key auth success
-  - [ ] Test API key auth failure
-  - [ ] Test JWT auth success
-  - [ ] Test JWT auth failure
+- [ ] **Authentication tests** 🔐 *(external-token validation covered; first-party login/refresh deferred to 2.7.P1)*
+  - [x] Test API key auth success
+  - [x] Test API key auth failure
+  - [x] Test JWT auth success
+  - [x] Test JWT auth failure
   - [ ] Test login with valid credentials
   - [ ] Test login with invalid credentials
   - [ ] Test token refresh
-  - [ ] Test expired token
+  - [x] Test expired token
 
-- [ ] **Authorization tests** 🛡️
-  - [ ] Test role-based access
+- [ ] **Authorization tests** 🛡️ *(role-based covered; fine-grained permissions deferred to 2.7.P1)*
+  - [x] Test role-based access
   - [ ] Test permission-based access
-  - [ ] Test unauthorized access (403)
-  - [ ] Test unauthenticated access (401)
+  - [x] Test unauthorized access (403)
+  - [x] Test unauthenticated access (401)
 
 - [ ] **Rate limiting tests** 🚦
-  - [ ] Test rate limit enforcement
+  - [x] Test rate limit enforcement
   - [ ] Test rate limit per user
   - [ ] Test rate limit per API key
-  - [ ] Test rate limit headers
-  - [ ] Test rate limit exceeded (429)
+  - [x] Test rate limit headers
+  - [x] Test rate limit exceeded (429)
 
 - [ ] **API versioning tests** 🔢
-  - [ ] Test v1 endpoints
+  - [x] Test v1 endpoints
   - [ ] Test version routing
   - [ ] Test deprecated version warnings
   - [ ] Test unsupported version (404)
