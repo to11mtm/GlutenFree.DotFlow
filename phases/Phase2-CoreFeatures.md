@@ -1165,385 +1165,70 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 
 ---
 
-### 2.5 File System Modules (Week 12-13)
+### 2.5 File System Modules (Week 12-13) ✅ COMPLETE
 
-> **✅ COMPLETE — detailed sliced plan:** [Phase2-5-FileSystemModules.md](Phase2-5-FileSystemModules.md). Shipped 2.5.a (local file family: `builtin.file.{read,write,csv.read,csv.write,json.read,json.write,xml.read,xml.write,compress,decompress}` + `IWorkflowPathValidator` sandbox) and 2.5.b (cloud storage: `builtin.cloud.s3` + `builtin.cloud.azureblob` in the quarantined `Workflow.Modules.Cloud` project). 80 Docker-free unit tests green + Docker-gated MinIO/Azurite/E2E suites. Docs at [`docs/file-modules.md`](../docs/file-modules.md). The checklist below is the legacy reference list — the sliced doc supersedes it (config values are Properties not input ports; `jsonquery`/`xmlquery` moved to 2.6; cloud credentials via named storage connections).
+> **✅ COMPLETE — full detail in the sliced plan:** [Phase2-5-FileSystemModules.md](Phase2-5-FileSystemModules.md) · module reference: [`docs/file-modules.md`](../docs/file-modules.md)
+>
+> Shipped as two families mirroring the 2.4 layout: **2.5.a** local file family (in `Workflow.Modules/Builtin/File/`) and **2.5.b** cloud storage (in the quarantined **`Workflow.Modules.Cloud`** project, opt-in `AddCloudStorageModules()` — SDK weight stays out of SDK-free deployments, same rule as 2.4's D14). **80 Docker-free unit tests green** + Docker-gated MinIO/Azurite/E2E suites (compile-verified).
 
-**Tasks:** *(legacy reference list — superseded by the sliced plan above)*
-- [ ] **Implement file read/write modules** 📁
-    - [ ] Create `FileReadModule` class
-        - [ ] ModuleId: `builtin.file.read`
-        - [ ] DisplayName: `Read File`
-        - [ ] Category: `File System`
-    - [ ] Define FileReadModule schema
-        - [ ] Input: `path` (string, required) - File path to read
-        - [ ] Input: `encoding` (enum, optional, default=UTF8) - Text encoding
-        - [ ] Input: `readAs` (enum, optional, default=Text) - Text, Binary, Lines
-        - [ ] Input: `maxSize` (long, optional) - Max file size in bytes
-        - [ ] Output: `content` (string or byte[]) - File content
-        - [ ] Output: `size` (long) - File size in bytes
-        - [ ] Output: `lastModified` (DateTime) - Last modified time
-    - [ ] Implement FileReadModule ExecuteAsync
-        - [ ] Validate file path (security check)
-        - [ ] Check file exists
-        - [ ] Check file size against limit
-        - [ ] Read file based on readAs option
-            - [ ] Text: Read all text with encoding
-            - [ ] Binary: Read all bytes
-            - [ ] Lines: Read lines into array
-        - [ ] Get file metadata
-        - [ ] Return content and metadata
-    - [ ] Add path security validation
-        - [ ] Prevent directory traversal attacks (../)
-        - [ ] Validate against allowed paths
-        - [ ] Check file extension whitelist
-    - [ ] Create `FileWriteModule` class
-        - [ ] ModuleId: `builtin.file.write`
-        - [ ] DisplayName: `Write File`
-        - [ ] Category: `File System`
-    - [ ] Define FileWriteModule schema
-        - [ ] Input: `path` (string, required) - File path to write
-        - [ ] Input: `content` (string or byte[], required) - Content to write
-        - [ ] Input: `encoding` (enum, optional) - Text encoding
-        - [ ] Input: `mode` (enum, optional, default=Overwrite) - Overwrite, Append, CreateNew
-        - [ ] Input: `createDirectory` (bool, optional, default=true)
-        - [ ] Output: `bytesWritten` (long)
-        - [ ] Output: `success` (bool)
-    - [ ] Implement FileWriteModule ExecuteAsync
-        - [ ] Validate file path
-        - [ ] Create directory if needed
-        - [ ] Write content based on mode
-        - [ ] Handle file locking
-        - [ ] Return bytes written
-    - [ ] Add comprehensive tests
-        - [ ] Test read text file
-        - [ ] Test read binary file
-        - [ ] Test write text file
-        - [ ] Test append mode
-        - [ ] Test path traversal prevention
-        - [ ] Test file not found error
-        - [ ] Test insufficient permissions error
+**Key corrections vs. the original checklist** *(the plan below was written pre-implementation)*:
+- Config values (`path`, `encoding`, `mode`, …) are **module Properties** (template-expandable via `PropertyBinder`), not a separate "input port" concept — the codebase has no config input ports (same correction as 2.4.a.1).
+- Cloud credentials use **named storage connections** (`storageConnectionId` → `IStorageConnectionRegistry`, config-bound, secrets redacted) — the checklist's inline `accessKey`/`secretKey` remain only as a documented dev escape hatch (D5).
+- `builtin.transform.jsonquery` / `builtin.transform.xmlquery` **moved to Phase 2.6** (pure transforms, no file I/O); `XmlReadModule` still ships an optional `xpath` property so 2.5 is self-sufficient (D9/Q2).
+- Compression uses **.NET in-box APIs only** (`System.IO.Compression` + `System.Formats.Tar`) — no SharpZipLib (D7).
+- Azure module id is **`builtin.cloud.azureblob`** (not `builtin.cloud.azure`), leaving room for other Azure services.
 
-- [ ] **Add CSV parsing and generation** 📊
-    - [ ] Install `CsvHelper` NuGet package
-    - [ ] Create `CsvReadModule` class
-        - [ ] ModuleId: `builtin.file.csv.read`
-        - [ ] DisplayName: `Read CSV`
-        - [ ] Category: `File System`
-    - [ ] Define CsvReadModule schema
-        - [ ] Input: `path` (string, required) - CSV file path
-        - [ ] Input: `hasHeader` (bool, optional, default=true)
-        - [ ] Input: `delimiter` (string, optional, default=",")
-        - [ ] Input: `encoding` (enum, optional)
-        - [ ] Input: `skipEmptyRows` (bool, optional, default=true)
-        - [ ] Output: `rows` (array) - Array of objects/dictionaries
-        - [ ] Output: `rowCount` (int)
-        - [ ] Output: `columns` (array) - Column names
-    - [ ] Implement CsvReadModule ExecuteAsync
-        - [ ] Read CSV file with CsvHelper
-        - [ ] Parse with configuration
-        - [ ] Map to dictionary/object array
-        - [ ] Handle quoted fields
-        - [ ] Handle escaped delimiters
-        - [ ] Return structured data
-    - [ ] Create `CsvWriteModule` class
-        - [ ] ModuleId: `builtin.file.csv.write`
-        - [ ] DisplayName: `Write CSV`
-        - [ ] Category: `File System`
-    - [ ] Define CsvWriteModule schema
-        - [ ] Input: `path` (string, required)
-        - [ ] Input: `data` (array, required) - Array of objects
-        - [ ] Input: `includeHeader` (bool, optional, default=true)
-        - [ ] Input: `delimiter` (string, optional)
-        - [ ] Input: `encoding` (enum, optional)
-        - [ ] Output: `rowsWritten` (int)
-        - [ ] Output: `success` (bool)
-    - [ ] Implement CsvWriteModule ExecuteAsync
-        - [ ] Generate CSV with CsvHelper
-        - [ ] Write to file
-        - [ ] Handle special characters
-        - [ ] Quote fields as needed
-    - [ ] Add comprehensive tests
-        - [ ] Test read CSV with header
-        - [ ] Test read CSV without header
-        - [ ] Test custom delimiter (tab, semicolon)
-        - [ ] Test quoted fields
-        - [ ] Test write CSV from objects
-        - [ ] Test empty data
+**Foundation — path-security sandbox (2.5.a.0):**
+- [x] `IWorkflowPathValidator` — the single gate every file-touching module passes paths through (canonicalise, reject `..` traversal + sibling-prefix escapes, symlink re-check, write-side blocked-extension policy)
+- [x] `FileSystemModuleOptions` (`Workflow:FileSystem`) — `AllowedRoots`, `UnrestrictedIfNoRoots` (+ startup warning), `BlockedExtensions`, `DefaultMaxReadBytes` (16 MB), `ResolveSymlinks`
+- [x] `EncodingResolver` (utf-8 no-BOM / utf-16 / ascii / latin1) · `FileModuleSupport` (shared readers + validate-then-resolve) · `FileModuleException`/`PathSecurityException`/`FileTooLargeException`
+- [x] Registered via `AddFileSystemModules()`, aggregated by `AddWorkflowModules()`
 
-- [ ] **Add JSON processing** 📝
-    - [ ] Create `JsonReadModule` class
-        - [ ] ModuleId: `builtin.file.json.read`
-        - [ ] DisplayName: `Read JSON`
-        - [ ] Category: `File System`
-    - [ ] Define JsonReadModule schema
-        - [ ] Input: `path` (string, required)
-        - [ ] Input: `encoding` (enum, optional)
-        - [ ] Output: `data` (object) - Parsed JSON
-        - [ ] Output: `isArray` (bool) - Whether root is array
-    - [ ] Implement JsonReadModule ExecuteAsync
-        - [ ] Read file content
-        - [ ] Parse JSON with System.Text.Json
-        - [ ] Handle parse errors
-        - [ ] Return deserialized object
-    - [ ] Create `JsonWriteModule` class
-        - [ ] ModuleId: `builtin.file.json.write`
-        - [ ] DisplayName: `Write JSON`
-        - [ ] Category: `File System`
-    - [ ] Define JsonWriteModule schema
-        - [ ] Input: `path` (string, required)
-        - [ ] Input: `data` (object, required)
-        - [ ] Input: `indented` (bool, optional, default=true)
-        - [ ] Input: `encoding` (enum, optional)
-        - [ ] Output: `success` (bool)
-    - [ ] Implement JsonWriteModule ExecuteAsync
-        - [ ] Serialize object to JSON
-        - [ ] Format with indentation if requested
-        - [ ] Write to file
-    - [ ] Create `JsonQueryModule` class (JSONPath queries)
-        - [ ] ModuleId: `builtin.transform.jsonquery`
-        - [ ] Input: JSONPath expression
-        - [ ] Output: Matching elements
-    - [ ] Add comprehensive tests
-        - [ ] Test read simple JSON object
-        - [ ] Test read JSON array
-        - [ ] Test write JSON with indentation
-        - [ ] Test write JSON compact
-        - [ ] Test JSONPath queries
-        - [ ] Test invalid JSON error
+**Modules (2.5.a — local, 10):**
+- [x] `builtin.file.read` — text / binary / lines, encoding + `maxSize` cap (no partial read)
+- [x] `builtin.file.write` — overwrite / append / createNew, `createDirectory`, port-or-property content
+- [x] `builtin.file.csv.read` / `builtin.file.csv.write` — CsvHelper; headerless → `column0..N`; quotes/escapes/embedded newlines handled
+- [x] `builtin.file.json.read` / `builtin.file.json.write` — System.Text.Json; `JsonNode` → CLR dict/list/scalar; `isArray`
+- [x] `builtin.file.xml.read` / `builtin.file.xml.write` — XDocument; **XXE-safe** (DTD prohibited, resolver disabled); `@attr`/`#text`/auto-list convention; optional XSD `validateSchema` + `xpath`
+- [x] `builtin.file.compress` / `builtin.file.decompress` — Zip / GZip / Tar / TarGz; **zip-slip protection** (pre-scan, whole-extraction fail); format inference on decompress
 
-- [ ] **Add XML processing** 🏷️
-    - [ ] Create `XmlReadModule` class
-        - [ ] ModuleId: `builtin.file.xml.read`
-        - [ ] DisplayName: `Read XML`
-        - [ ] Category: `File System`
-    - [ ] Define XmlReadModule schema
-        - [ ] Input: `path` (string, required)
-        - [ ] Input: `encoding` (enum, optional)
-        - [ ] Input: `validateSchema` (bool, optional, default=false)
-        - [ ] Input: `schemaPath` (string, optional) - XSD schema file
-        - [ ] Output: `data` (object) - Parsed XML
-        - [ ] Output: `rootElement` (string)
-    - [ ] Implement XmlReadModule ExecuteAsync
-        - [ ] Read XML file
-        - [ ] Parse with XDocument
-        - [ ] Optionally validate against schema
-        - [ ] Convert to dictionary/object
-        - [ ] Return structured data
-    - [ ] Create `XmlWriteModule` class
-        - [ ] ModuleId: `builtin.file.xml.write`
-        - [ ] DisplayName: `Write XML`
-        - [ ] Category: `File System`
-    - [ ] Define XmlWriteModule schema
-        - [ ] Input: `path` (string, required)
-        - [ ] Input: `data` (object, required)
-        - [ ] Input: `rootElement` (string, optional, default="root")
-        - [ ] Input: `indented` (bool, optional, default=true)
-        - [ ] Output: `success` (bool)
-    - [ ] Implement XmlWriteModule ExecuteAsync
-        - [ ] Convert object to XML
-        - [ ] Format with indentation
-        - [ ] Write to file
-    - [ ] Create `XmlQueryModule` class (XPath queries)
-        - [ ] ModuleId: `builtin.transform.xmlquery`
-        - [ ] Input: XPath expression
-        - [ ] Output: Matching nodes
-    - [ ] Add comprehensive tests
-        - [ ] Test read XML document
-        - [ ] Test write XML document
-        - [ ] Test XPath queries
-        - [ ] Test schema validation
-        - [ ] Test namespaces handling
-        - [ ] Test invalid XML error
-
-- [ ] **Implement file compression/decompression** 🗜️
-    - [ ] Create `CompressModule` class
-        - [ ] ModuleId: `builtin.file.compress`
-        - [ ] DisplayName: `Compress Files`
-        - [ ] Category: `File System`
-    - [ ] Define CompressModule schema
-        - [ ] Input: `sourcePath` (string or array, required) - Files to compress
-        - [ ] Input: `outputPath` (string, required) - Output archive path
-        - [ ] Input: `format` (enum, required) - Zip, GZip, Tar, TarGz
-        - [ ] Input: `compressionLevel` (enum, optional) - Optimal, Fastest, NoCompression
-        - [ ] Input: `includeBaseDirectory` (bool, optional)
-        - [ ] Output: `archivePath` (string)
-        - [ ] Output: `compressedSize` (long)
-        - [ ] Output: `originalSize` (long)
-        - [ ] Output: `compressionRatio` (decimal)
-    - [ ] Implement CompressModule ExecuteAsync
-        - [ ] Create archive based on format
-            - [ ] Zip: Use System.IO.Compression.ZipFile
-            - [ ] GZip: Use System.IO.Compression.GZipStream
-            - [ ] Tar: Use SharpZipLib
-            - [ ] TarGz: Combine Tar + GZip
-        - [ ] Add files/directories to archive
-        - [ ] Apply compression level
-        - [ ] Calculate compression ratio
-        - [ ] Return archive info
-    - [ ] Create `DecompressModule` class
-        - [ ] ModuleId: `builtin.file.decompress`
-        - [ ] DisplayName: `Decompress Files`
-        - [ ] Category: `File System`
-    - [ ] Define DecompressModule schema
-        - [ ] Input: `archivePath` (string, required)
-        - [ ] Input: `outputDirectory` (string, required)
-        - [ ] Input: `overwrite` (bool, optional, default=false)
-        - [ ] Output: `extractedFiles` (array)
-        - [ ] Output: `fileCount` (int)
-    - [ ] Implement DecompressModule ExecuteAsync
-        - [ ] Detect archive format
-        - [ ] Extract files to directory
-        - [ ] Handle existing files
-        - [ ] Return extraction info
-    - [ ] Add comprehensive tests
-        - [ ] Test Zip compression/decompression
-        - [ ] Test GZip compression/decompression
-        - [ ] Test Tar compression/decompression
-        - [ ] Test compression levels
-        - [ ] Test multiple files
-        - [ ] Test directory structure preservation
-
-- [ ] **Add cloud storage support (S3, Azure Blob)** ☁️
-    - [ ] Create `S3Module` class
-        - [ ] ModuleId: `builtin.cloud.s3`
-        - [ ] DisplayName: `Amazon S3 Operations`
-        - [ ] Category: `Cloud Storage`
-    - [ ] Define S3Module schema
-        - [ ] Input: `operation` (enum) - Upload, Download, Delete, List
-        - [ ] Input: `bucket` (string, required)
-        - [ ] Input: `key` (string, required for Upload/Download/Delete)
-        - [ ] Input: `localPath` (string, for Upload/Download)
-        - [ ] Input: `prefix` (string, for List)
-        - [ ] Input: `accessKey` (string, required)
-        - [ ] Input: `secretKey` (string, required)
-        - [ ] Input: `region` (string, optional)
-        - [ ] Input: `contentType` (string, optional)
-        - [ ] Output: `success` (bool)
-        - [ ] Output: `objects` (array, for List)
-        - [ ] Output: `url` (string, for Upload)
-    - [ ] Implement S3Module ExecuteAsync
-        - [ ] Initialize S3 client
-        - [ ] Execute operation
-            - [ ] Upload: PutObjectAsync
-            - [ ] Download: GetObjectAsync
-            - [ ] Delete: DeleteObjectAsync
-            - [ ] List: ListObjectsV2Async
-        - [ ] Handle errors
-        - [ ] Return operation result
-    - [ ] Create `AzureBlobModule` class
-        - [ ] ModuleId: `builtin.cloud.azure`
-        - [ ] DisplayName: `Azure Blob Storage`
-        - [ ] Category: `Cloud Storage`
-    - [ ] Define AzureBlobModule schema
-        - [ ] Input: `operation` (enum)
-        - [ ] Input: `connectionString` (string, required)
-        - [ ] Input: `containerName` (string, required)
-        - [ ] Input: `blobName` (string, required)
-        - [ ] Input: `localPath` (string, optional)
-        - [ ] Output: `success` (bool)
-        - [ ] Output: `blobs` (array, for List)
-    - [ ] Implement AzureBlobModule ExecuteAsync
-        - [ ] Initialize blob client
-        - [ ] Execute operation
-        - [ ] Handle errors
-        - [ ] Return result
-    - [ ] Add comprehensive tests
-        - [ ] Test S3 upload (with LocalStack)
-        - [ ] Test S3 download
-        - [ ] Test S3 list objects
-        - [ ] Test Azure Blob upload (with Azurite)
-        - [ ] Test Azure Blob download
-        - [ ] Test error handling (invalid credentials)
+**Modules (2.5.b — cloud, 2):**
+- [x] `builtin.cloud.s3` — upload / download / delete / list / exists; named connection or inline; default AWS credential chain fallback; MinIO/on-prem `serviceUrl`
+- [x] `builtin.cloud.azureblob` — upload / download / delete / list / exists; named connection or inline connection string; `createContainer`
+- [x] `IStorageConnectionRegistry` + `IStorageClientFactory` + `CloudStorageOptions` (`Workflow:CloudStorage`); credentials never logged (redaction test-locked)
 
 **Modules:**
 ```
-✅ builtin.file.read - Read file content
-✅ builtin.file.write - Write file content
-✅ builtin.file.csv.read - Read CSV
-✅ builtin.file.csv.write - Write CSV
-✅ builtin.file.json.read - Read JSON
-✅ builtin.file.json.write - Write JSON
-✅ builtin.file.xml.read - Read XML
-✅ builtin.file.xml.write - Write XML
-✅ builtin.file.compress - Compress files
-✅ builtin.file.decompress - Decompress files
-✅ builtin.cloud.s3 - Amazon S3 operations
-✅ builtin.cloud.azure - Azure Blob Storage
+✅ builtin.file.read           - Read file (text/binary/lines)
+✅ builtin.file.write          - Write file (overwrite/append/createNew)
+✅ builtin.file.csv.read       - Parse CSV → row dictionaries
+✅ builtin.file.csv.write      - Write row dictionaries → CSV
+✅ builtin.file.json.read      - Parse JSON → object graph
+✅ builtin.file.json.write     - Serialise object graph → JSON
+✅ builtin.file.xml.read       - Parse XML → dictionary graph (XXE-safe)
+✅ builtin.file.xml.write      - Write dictionary graph → XML
+✅ builtin.file.compress       - Zip/GZip/Tar/TarGz archive
+✅ builtin.file.decompress     - Extract archive (zip-slip safe)
+✅ builtin.cloud.s3            - Amazon S3 (+ S3-compatible: MinIO)
+✅ builtin.cloud.azureblob     - Azure Blob Storage
 ```
 
 **Tests:**
-- [ ] **File I/O tests** 📁
-    - [ ] Test read text file (UTF-8)
-    - [ ] Test read text file (other encodings)
-    - [ ] Test read binary file
-    - [ ] Test write text file
-    - [ ] Test write binary file
-    - [ ] Test append mode
-    - [ ] Test file not found
-    - [ ] Test permission denied
-    - [ ] Test path traversal prevention
-
-- [ ] **CSV parsing tests** 📊
-    - [ ] Test parse CSV with header
-    - [ ] Test parse CSV without header
-    - [ ] Test custom delimiter (tab, semicolon)
-    - [ ] Test quoted fields with commas
-    - [ ] Test escaped quotes
-    - [ ] Test empty fields
-    - [ ] Test write CSV from objects
-
-- [ ] **JSON/XML processing tests** 📝
-    - [ ] Test read JSON object
-    - [ ] Test read JSON array
-    - [ ] Test write JSON indented
-    - [ ] Test JSONPath queries
-    - [ ] Test read XML document
-    - [ ] Test write XML document
-    - [ ] Test XPath queries
-    - [ ] Test XML schema validation
-
-- [ ] **Compression tests** 🗜️
-    - [ ] Test Zip compression
-    - [ ] Test Zip decompression
-    - [ ] Test GZip compression
-    - [ ] Test preserve directory structure
-    - [ ] Test compression levels
-    - [ ] Test multiple files in archive
-
-- [ ] **Cloud storage integration tests** ☁️
-    - [ ] Test S3 upload (LocalStack container)
-    - [ ] Test S3 download
-    - [ ] Test S3 list objects with prefix
-    - [ ] Test S3 delete object
-    - [ ] Test Azure Blob upload (Azurite container)
-    - [ ] Test Azure Blob download
-    - [ ] Test authentication failures
+- [x] Path-security tests (traversal, sibling-prefix, symlink, blocked-extension, encoding) — `PathValidatorTests`
+- [x] File I/O tests (utf-8/latin1, binary, lines, not-found, max-size, round-trip) — `FileReadWriteModuleTests`
+- [x] CSV parsing tests (header/no-header, delimiters, quoted fields, round-trip) — `CsvModuleTests`
+- [x] JSON/XML processing tests (object/array, nested round-trip, `@attr`/`#text`, **XXE refused**) — `JsonXmlModuleTests`
+- [x] Compression tests (Zip/GZip/TarGz round-trip, dir structure, **zip-slip blocked**, corrupt/overwrite) — `CompressionModuleTests`
+- [x] Cloud infra + module unit tests (registry, factory, validation, DI-guard, redaction) — `StorageInfrastructureTests`, `CloudModuleUnitTests`
+- [x] Cloud storage integration tests (Docker-gated, compile-verified) — `MinioS3ModuleTests`, `AzuriteBlobModuleTests`, `FileCloudE2ETests`
 
 **Deliverables:**
-- ✅ Can read/write local files with encoding support
-- ✅ Can parse and generate CSV/JSON/XML formats
-- ✅ Can interact with cloud storage (S3, Azure Blob)
-- ✅ Can compress/decompress files in multiple formats
-- ✅ Path security prevents directory traversal
-- ✅ 90%+ test coverage on file system modules
-  ✅ builtin.file.json - JSON operations
-  ✅ builtin.file.xml - XML operations
-  ✅ builtin.file.compress - Zip/GZip
-  ✅ builtin.cloud.s3 - Amazon S3
-  ✅ builtin.cloud.azure - Azure Blob Storage
-
-**Tests:**
-- [ ] File I/O tests
-- [ ] CSV parsing tests
-- [ ] JSON/XML processing tests
-- [ ] Compression tests
-- [ ] Cloud storage integration tests
-
-**Deliverables:**
-- ✅ Can read/write local files
-- ✅ Can parse and generate CSV/JSON/XML
-- ✅ Can interact with cloud storage
+- ✅ Read/write local files with encoding support
+- ✅ Parse and generate CSV / JSON / XML formats
+- ✅ Interact with cloud storage (S3, Azure Blob) via named connections
+- ✅ Compress/decompress in Zip / GZip / Tar / TarGz
+- ✅ Path security prevents directory traversal, symlink escape, zip-slip, and XXE
+- ✅ 80 unit tests green; cloud SDK weight quarantined; `docs/file-modules.md` published
 
 ---
 
