@@ -1283,6 +1283,8 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 
 ### 2.7 REST API Implementation (Week 13-14)
 
+> **✅ COMPLETE (slices 2.7.0–2.7.8).** The versioned `/api/v1` surface shipped as **Minimal-API endpoint groups** (not MVC): workflow CRUD, execution start/sync/status/cancel/list, read-only module discovery, scoped/versioned variables, health/status/metrics monitoring, and API-key + JWT authentication with named authorization policies. Swagger is enriched with both security schemes, a rate-limit seam is in place (off by default), and an end-to-end smoke test covers the full flow. See [`docs/rest-api.md`](../docs/rest-api.md) for the endpoint reference and [Phase2-7-RestApi.md](Phase2-7-RestApi.md) for the sliced implementation record. Webhook **management** intentionally stays at `/api/webhooks` (feature tooling, shipped in 2.3.6/2.3.9). Deferred post-MVP: first-party login/RBAC (2.7.P1), Prometheus exporter (2.7.P2).
+
 > **📋 Detailed sliced plan available:** [Phase2-7-RestApi.md](Phase2-7-RestApi.md) — versioned `/api/v1` surface (workflow CRUD, execution start/status/cancel, modules, variables, monitoring) over the **existing** repositories + Akka execution messages, plus the two genuinely-new concerns (API-key/JWT auth, API versioning). **Timeline shifted to Weeks 19-20.** The checklist below is the legacy reference list — the sliced doc supersedes it (notably: **Minimal-API endpoint groups, not MVC controllers**; webhook endpoints already shipped in 2.3.6/2.3.9; the repos/execution messages/health checks already exist so most endpoints are thin adapters; auth MVP = API-key + JWT bearer validation with first-party login deferred).
 
 **Tasks:** *(legacy reference list — superseded by the sliced plan above)*

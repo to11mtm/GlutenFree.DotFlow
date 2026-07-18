@@ -1,13 +1,17 @@
-using System.Security.Claims;
 using Akka.Actor;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Workflow.Api.Auth;
 using Workflow.Api.Database;
+using Workflow.Api.Observability;
+using Workflow.Api.V1;
 using Workflow.Api.Webhooks;
 using Workflow.Core.Abstractions;
 using Workflow.Engine.Actors;
 using Workflow.Engine.Services;
 using Workflow.Modules;
+using Workflow.Modules.Abstractions;
+using Workflow.Modules.Builtin;
 using Workflow.Modules.Builtin.Http;
 using Workflow.Modules.Database;
 using Workflow.Modules.Database.Abstractions;
@@ -25,8 +29,53 @@ using Workflow.Persistence.Sqlite;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddWorkflowSwagger();
+
+// 🚨 Phase 2.7.0 — RFC 7807 ProblemDetails for consistent error responses (D8)~
+builder.Services.AddProblemDetails();
+
+// 🔤 Phase 2.7.0 — Teach the Minimal-API JSON pipeline the LanguageExt converters so
+// WorkflowDefinition (Arr<>/HashMap<>) binds + serializes over HTTP the same way persistence does~
+builder.Services.ConfigureHttpJsonOptions(o =>
+{
+    o.SerializerOptions.Converters.Add(new Workflow.Persistence.Sqlite.Serialization.ArrJsonConverterFactory());
+    o.SerializerOptions.Converters.Add(new Workflow.Persistence.Sqlite.Serialization.HashMapStringJsonConverterFactory());
+});
+
+// 🛡️ Phase 2.7.1 — Module-aware workflow validator (validates POST/PUT definitions → 422)~
+builder.Services.AddSingleton<Workflow.Modules.Validation.ModuleAwareWorkflowValidator>(sp =>
+    new Workflow.Modules.Validation.ModuleAwareWorkflowValidator(sp.GetRequiredService<IModuleRegistry>()));
+
+// 🧩 Phase 2.7.2 — The engine's WorkflowSupervisor resolves the base validator from DI when it
+// creates instances, so the API host must register it too~
+builder.Services.AddSingleton<Workflow.Core.Abstractions.WorkflowValidator>();
+
+// 📈 Phase 2.7.5 — Execution metrics seam + health checks (persistence + actor-system liveness)~
+builder.Services.AddSingleton<Workflow.Api.Observability.IWorkflowMetrics, Workflow.Api.Observability.InMemoryWorkflowMetrics>();
+builder.Services.AddHealthChecks()
+    .AddCheck<Workflow.Api.Observability.PersistenceHealthCheck>(
+        "persistence", tags: new[] { Workflow.Api.V1.MonitoringEndpoints.ReadyTag })
+    .AddCheck<Workflow.Api.Observability.ActorSystemHealthCheck>(
+        "actor-system", tags: new[] { Workflow.Api.V1.MonitoringEndpoints.LiveTag });
+
+// 📦 Phase 2.7.0 — Register the module registry (D5) — the one API-DI gap. Seed builtins + the
+// host-wired families (database/cloud/transform-script modules resolved from DI as IWorkflowModule)~
+builder.Services.AddSingleton<IModuleRegistry>(sp =>
+{
+    var registry = new InMemoryModuleRegistry(
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<InMemoryModuleRegistry>>());
+    foreach (var module in BuiltinModules.GetAll())
+    {
+        registry.RegisterModule(module, allowOverwrite: true);
+    }
+
+    foreach (var module in sp.GetServices<IWorkflowModule>())
+    {
+        registry.RegisterModule(module, allowOverwrite: true);
+    }
+
+    return registry;
+});
 
 builder.Services.AddSingleton<IExecutionStateStore, InMemoryExecutionStateStore>();
 
@@ -96,6 +145,9 @@ if (persistenceProvider is not null)
     builder.Services.AddSingleton(sp => sp.GetRequiredService<IPersistenceProvider>().ExecutionHistory);
     builder.Services.AddSingleton(sp => sp.GetRequiredService<IPersistenceProvider>().Variables);
 
+    // 🚀 Phase 2.7.2 — General execution service (start/status/cancel) — needs the repos above~
+    builder.Services.AddSingleton<Workflow.Api.Execution.IWorkflowExecutionService, Workflow.Api.Execution.ActorWorkflowExecutionService>();
+
     if (persistenceProvider.Blobs is not null)
     {
         builder.Services.AddSingleton<IBlobStore>(sp => sp.GetRequiredService<IPersistenceProvider>().Blobs!);
@@ -128,15 +180,29 @@ builder.Services.TryAddSingleton<IBlobStore, InMemoryBlobStore>();
 // compiled-assembly cache). Host-wired, NOT in AddWorkflowModules() (Roslyn quarantine, D4)~
 builder.Services.AddTransformScriptModules();
 
+// 🔐 Phase 2.7.7 — API authentication (API-key + JWT bearer) + named authorization policies~
+builder.Services.AddWorkflowApiAuth(builder.Configuration);
+
+// 🚦 Phase 2.7.8 — Rate-limiting seam (disabled unless Api:RateLimit:Enabled)~
+builder.Services.AddWorkflowRateLimiting(builder.Configuration);
+
 var app = builder.Build();
 
+// 📖 Phase 2.7.8 — Serve the OpenAPI document + UI (docs are useful in every environment)~
+app.UseSwagger();
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
     app.UseSwaggerUI();
 }
 
 app.UseHttpsRedirection();
+
+// 🔐 Phase 2.7.7 — Authenticate then authorize (no-op policies when Api:Auth:Require=false)~
+app.UseAuthentication();
+app.UseAuthorization();
+
+// 🚦 Phase 2.7.8 — Rate-limiting seam (no-op unless Api:RateLimit:Enabled)~
+app.UseRateLimiter();
 
 //  Phase 2.3.6 — Webhook trigger + management endpoints~
 app.MapWebhookEndpoints();
@@ -149,6 +215,21 @@ app.MapDatabaseLinqEndpoints();
 
 // 🌟 Phase 2.6.b.2 — Typed transform-script validate/preview/compile endpoints~
 app.MapTransformScriptEndpoints();
+
+// 📋 Phase 2.7.1 — Workflow definition CRUD endpoints (/api/v1/workflows)~
+app.MapWorkflowEndpoints();
+
+// ⚡ Phase 2.7.2 — Execution endpoints (start/by-name/sync/status/cancel/list)~
+app.MapExecutionEndpoints();
+
+// 📦 Phase 2.7.3 — Module discovery endpoints (/api/v1/modules)~
+app.MapModuleEndpoints();
+
+// 🔧 Phase 2.7.4 — Variable endpoints (/api/v1/variables)~
+app.MapVariableEndpoints();
+
+// 📊 Phase 2.7.5 — Monitoring endpoints (/api/v1/health, /status, /metrics)~
+app.MapMonitoringEndpoints();
 
 if (persistenceProvider is not null)
 {
@@ -167,7 +248,7 @@ var summaries = new[]
 
 app.MapGet("/weatherforecast", (HttpContext httpContext) =>
     {
-        var callerId = ResolveCallerId(httpContext);
+        var callerId = httpContext.ResolveCallerId();
         var forecast = Enumerable.Range(1, 5).Select(index =>
                 new WeatherForecast
                 (
@@ -284,30 +365,6 @@ static string NormalizeSqliteConnectionString(string? connectionString)
     }
 
     return connectionString;
-}
-
-static string ResolveCallerId(HttpContext context)
-{
-    if (context.Request.Headers.TryGetValue("X-Caller-Id", out var headerValue)
-        && !string.IsNullOrWhiteSpace(headerValue))
-    {
-        return headerValue.ToString();
-    }
-
-    var user = context.User;
-    if (user?.Identity?.IsAuthenticated == true)
-    {
-        var claim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? user.FindFirst("sub")?.Value
-            ?? user.Identity?.Name;
-
-        if (!string.IsNullOrWhiteSpace(claim))
-        {
-            return claim;
-        }
-    }
-
-    return "system";
 }
 
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)

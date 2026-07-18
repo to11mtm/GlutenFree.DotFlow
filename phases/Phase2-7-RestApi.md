@@ -96,7 +96,7 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 - [ ] **Folder layout in `Workflow.Api`** 🌷
   - [ ] `V1/` — the resource endpoint-group files (filled by 2.7.1–5)
   - [ ] `Contracts/` — serializable DTOs + projection extensions (D6)
-  - [ ] `Execution/` — `IWorkflowExecutionService` + impl (2.7.2)
+  - [x] `Execution/` — `IWorkflowExecutionService` + impl (2.7.2)
   - [ ] `Auth/` — caller identity + auth handlers (2.7.7)
   - [ ] `Observability/` — metrics counter seam (2.7.5)
 - [ ] **API versioning** 🔢
@@ -161,20 +161,20 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 
 ### Tasks
 
-- [ ] **`Execution/IWorkflowExecutionService.cs` + `ActorWorkflowExecutionService.cs`** 🚀
-  - [ ] `StartAsync(Guid definitionId, IReadOnlyDictionary<string,object?> inputs, ExecutionStartOptions options, ct) → Guid executionId` — load definition (`IWorkflowRepository`), `Ask<IWorkflowMessage>(new CreateWorkflowInstance(id, def, inputs, options))` (reuse `ActorWorkflowLauncher`'s linked-CTS+timeout pattern), unpack `WorkflowInstanceCreated`/`WorkflowInstanceCreationFailed`
-  - [ ] `GetStatusAsync(Guid executionId, ct) → WorkflowStatusResponse?` — `Ask<WorkflowStatusResponse>(new GetWorkflowStatus(id))` with a fallback to `IExecutionHistoryRepository.GetExecutionAsync` for terminal/persisted executions the supervisor no longer tracks
-  - [ ] `CancelAsync(Guid executionId, ct) → bool` — `Tell/Ask(new CancelExecution(id))`
-  - [ ] `StartAndWaitAsync(…, TimeSpan timeout, ct)` — start then await terminal state (Q5): poll `GetStatusAsync` with backoff (or a completion signal) until `Completed`/`Failed`/`Cancelled` or timeout; on timeout the caller gets the execution id back so the endpoint can hand out a continuation poll URL
-  - [ ] Registered singleton in `Program.cs`
-- [ ] **`V1/ExecutionEndpoints.cs`** (`MapExecutionEndpoints`)
-  - [ ] `POST /api/v1/workflows/{id:guid}/execute` — body = inputs; resolve `CallerId` (D7) + optional `variableWriteMode` → `ExecutionStartOptions`; `202 Accepted` + `{ executionId }` + `Location: /api/v1/executions/{id}`
-  - [ ] `POST /api/v1/workflows/execute/{name}` — resolve definition by name (Q6: newest active, optional `?version=`) → start
-  - [ ] `POST /api/v1/workflows/{id:guid}/execute/sync?timeoutSeconds=` — `StartAndWaitAsync` → `200` + final `ExecutionStatusDto` when it completes in time; **on timeout → `202` with a continuation poll URL** (`Location: /api/v1/executions/{id}` + `{ executionId, status: "running" }`) so the caller keeps polling (Q5)
-  - [ ] `GET /api/v1/executions/{executionId:guid}` — `GetStatusAsync` → `ExecutionStatusDto` (state, progress, per-node states, start/end, error, outputs when complete); 404 if unknown
-  - [ ] `POST /api/v1/executions/{executionId:guid}/cancel` — `CancelAsync` → `{ cancelled }`; 404 if unknown
-  - [ ] `GET /api/v1/executions?workflowId=&status=&from=&to=&page=&pageSize=` — `IExecutionHistoryRepository.GetExecutionsForWorkflowAsync(...)` → `PagedResult<ExecutionDto>`
-- [ ] **Contracts:** `StartExecutionRequest` (inputs + optional writeMode), `ExecutionStartedDto` (executionId), `ExecutionStatusDto` (+ node states via `NodeExecutionState` → string), `ExecutionDto` (list row); projection from `WorkflowStatusResponse`/`ExecutionRecord`
+- [x] **`Execution/IWorkflowExecutionService.cs` + `ActorWorkflowExecutionService.cs`** 🚀
+  - [x] `StartAsync(Guid definitionId, IReadOnlyDictionary<string,object?> inputs, ExecutionStartOptions options, ct) → Guid executionId` — load definition (`IWorkflowRepository`), `Ask<IWorkflowMessage>(new CreateWorkflowInstance(id, def, inputs, options))` (reuse `ActorWorkflowLauncher`'s linked-CTS+timeout pattern), unpack `WorkflowInstanceCreated`/`WorkflowInstanceCreationFailed`
+  - [x] `GetStatusAsync(Guid executionId, ct) → WorkflowStatusResponse?` — `Ask<WorkflowStatusResponse>(new GetWorkflowStatus(id))` with a fallback to `IExecutionHistoryRepository.GetExecutionAsync` for terminal/persisted executions the supervisor no longer tracks
+  - [x] `CancelAsync(Guid executionId, ct) → bool` — `Tell/Ask(new CancelExecution(id))`
+  - [x] `StartAndWaitAsync(…, TimeSpan timeout, ct)` — start then await terminal state (Q5): poll `GetStatusAsync` with backoff (or a completion signal) until `Completed`/`Failed`/`Cancelled` or timeout; on timeout the caller gets the execution id back so the endpoint can hand out a continuation poll URL
+  - [x] Registered singleton in `Program.cs`
+- [x] **`V1/ExecutionEndpoints.cs`** (`MapExecutionEndpoints`)
+  - [x] `POST /api/v1/workflows/{id:guid}/execute` — body = inputs; resolve `CallerId` (D7) + optional `variableWriteMode` → `ExecutionStartOptions`; `202 Accepted` + `{ executionId }` + `Location: /api/v1/executions/{id}`
+  - [x] `POST /api/v1/workflows/execute/{name}` — resolve definition by name (Q6: newest active, optional `?version=`) → start
+  - [x] `POST /api/v1/workflows/{id:guid}/execute/sync?timeoutSeconds=` — `StartAndWaitAsync` → `200` + final `ExecutionStatusDto` when it completes in time; **on timeout → `202` with a continuation poll URL** (`Location: /api/v1/executions/{id}` + `{ executionId, status: "running" }`) so the caller keeps polling (Q5)
+  - [x] `GET /api/v1/executions/{executionId:guid}` — `GetStatusAsync` → `ExecutionStatusDto` (state, progress, per-node states, start/end, error, outputs when complete); 404 if unknown
+  - [x] `POST /api/v1/executions/{executionId:guid}/cancel` — `CancelAsync` → `{ cancelled }`; 404 if unknown
+  - [x] `GET /api/v1/executions?workflowId=&status=&from=&to=&page=&pageSize=` — `IExecutionHistoryRepository.GetExecutionsForWorkflowAsync(...)` → `PagedResult<ExecutionDto>`
+- [x] **Contracts:** `StartExecutionRequest` (inputs + optional writeMode), `ExecutionStartedDto` (executionId), `ExecutionStatusDto` (+ node states via `NodeExecutionState` → string), `ExecutionDto` (list row); projection from `WorkflowStatusResponse`/`ExecutionRecord`
 
 ### Tests (target ~15): → `Workflow.Tests/Api/V1/ExecutionEndpointsTests.cs`
 
@@ -201,22 +201,22 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 
 ### Tasks
 
-- [ ] **Module DTO layer (`Contracts/Modules/*`)** 📐
-  - [ ] `PortDefinitionDto` (Name/DisplayName/DataType-as-string/Description/IsRequired/DefaultValue-as-JsonElement)
-  - [ ] `ModulePropertyDefinitionDto` (+ EditorType-as-string/AllowedValues/DefaultValue) — mirrors `ModulePropertyDefinition`
-  - [ ] `ModuleSchemaDto` (Inputs/Outputs/Properties arrays)
-  - [ ] `ModuleSummaryDto` (id/displayName/category/description/icon/version — no schema) · `ModuleDetailsDto` (+ schema/dependencies)
-  - [ ] Projection `IWorkflowModule → ModuleDetailsDto` / `→ ModuleSummaryDto` (using `JsonTypeHelpers` from 2.7.0)
-- [ ] **`V1/ModuleEndpoints.cs`** (`MapModuleEndpoints`)
-  - [ ] `GET /api/v1/modules` — `IModuleRegistry.GetAllModules()` → `ModuleSummaryDto[]`; `?category=` → `GetModulesByCategory`; `?q=` → `SearchModules`; optional `?groupByCategory=true` → `{ category: [summaries] }`
-  - [ ] `GET /api/v1/modules/{moduleId}` — `GetModule` → `ModuleDetailsDto`; 404 if unknown
-  - [ ] *(upload/install/enable/disable — implemented in **Phase 2.8** alongside the `.wfmod` package format, per Q4; the MVP module endpoints are read-only and document that management operations arrive with 2.8)*
+- [x] **Module DTO layer (`Contracts/Modules/*`)** 📐
+  - [x] `PortDefinitionDto` (Name/DisplayName/DataType-as-string/Description/IsRequired/DefaultValue-as-JsonElement)
+  - [x] `ModulePropertyDefinitionDto` (+ EditorType-as-string/AllowedValues/DefaultValue) — mirrors `ModulePropertyDefinition`
+  - [x] `ModuleSchemaDto` (Inputs/Outputs/Properties arrays)
+  - [x] `ModuleSummaryDto` (id/displayName/category/description/icon/version — no schema) · `ModuleDetailsDto` (+ schema/dependencies)
+  - [x] Projection `IWorkflowModule → ModuleDetailsDto` / `→ ModuleSummaryDto` (using `JsonTypeHelpers` from 2.7.0)
+- [x] **`V1/ModuleEndpoints.cs`** (`MapModuleEndpoints`)
+  - [x] `GET /api/v1/modules` — `IModuleRegistry.GetAllModules()` → `ModuleSummaryDto[]`; `?category=` → `GetModulesByCategory`; `?q=` → `SearchModules`; optional `?groupByCategory=true` → `{ category: [summaries] }`
+  - [x] `GET /api/v1/modules/{moduleId}` — `GetModule` → `ModuleDetailsDto`; 404 if unknown
+  - [x] *(upload/install/enable/disable — implemented in **Phase 2.8** alongside the `.wfmod` package format, per Q4; the MVP module endpoints are read-only and document that management operations arrive with 2.8)*
 
 ### Tests (target ~9): → `Workflow.Tests/Api/V1/ModuleEndpointsTests.cs` + `Workflow.Tests/Api/Contracts/ModuleDtoProjectionTests.cs`
 
-- [ ] `List_ReturnsAllRegisteredModules` · `List_FilterByCategory` · `List_Search` · `List_GroupByCategory`
-- [ ] `Get_KnownModule_ReturnsSchema` · `Get_UnknownModule_Returns404`
-- [ ] `Projection_MapsPortsAndProperties` · `Projection_TypeAndVersion_Serialize` · `Dto_RoundTripsThroughJson`
+- [x] `List_ReturnsAllRegisteredModules` · `List_FilterByCategory` · `List_Search` · `List_GroupByCategory`
+- [x] `Get_KnownModule_ReturnsSchema` · `Get_UnknownModule_Returns404`
+- [x] `Projection_MapsPortsAndProperties` · `Projection_TypeAndVersion_Serialize` · `Dto_RoundTripsThroughJson`
 
 ---
 
@@ -228,21 +228,21 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 
 ### Tasks
 
-- [ ] **`V1/VariableEndpoints.cs`** (`MapVariableEndpoints`)
-  - [ ] `GET /api/v1/variables?scope=global|workflow|execution&scopeId=` — `GetAllVariablesAsync(scope)` → `{ name: value }` (or paged `VariableDto[]`)
-  - [ ] `GET /api/v1/variables/{name}?scope=&scopeId=&version=` — `GetVariableAsync` → `VariableDto` (value + version); 404 if not present (distinct from null-valued-but-present, per the store's documented semantics)
-  - [ ] `PUT /api/v1/variables/{name}` — body = `{ scope, scopeId, value }` → `SetVariableAsync` (new version) → `VariableDto` with new version
-  - [ ] `DELETE /api/v1/variables/{name}?scope=&scopeId=` — `DeleteVariableAsync` → `204`; 404 if absent
-  - [ ] `GET /api/v1/variables/{name}/history?scope=&scopeId=` — `GetVariableHistoryAsync` → `VariableDto[]` (all versions)
-- [ ] **Contracts:** `VariableDto` (name/value/version/scope/updatedAt), `SetVariableRequest`; `VariableScope` binding from `?scope=` + `?scopeId=`
+- [x] **`V1/VariableEndpoints.cs`** (`MapVariableEndpoints`)
+  - [x] `GET /api/v1/variables?scope=global|workflow|execution&scopeId=` — `GetAllVariablesAsync(scope)` → `{ name: value }` (or paged `VariableDto[]`)
+  - [x] `GET /api/v1/variables/{name}?scope=&scopeId=&version=` — `GetVariableAsync` → `VariableDto` (value + version); 404 if not present (distinct from null-valued-but-present, per the store's documented semantics)
+  - [x] `PUT /api/v1/variables/{name}` — body = `{ scope, scopeId, value }` → `SetVariableAsync` (new version) → `VariableDto` with new version
+  - [x] `DELETE /api/v1/variables/{name}?scope=&scopeId=` — `DeleteVariableAsync` → `204`; 404 if absent
+  - [x] `GET /api/v1/variables/{name}/history?scope=&scopeId=` — `GetVariableHistoryAsync` → `VariableDto[]` (all versions)
+- [x] **Contracts:** `VariableDto` (name/value/version/scope/updatedAt), `SetVariableRequest`; `VariableScope` binding from `?scope=` + `?scopeId=`
 
 ### Tests (target ~9): → `Workflow.Tests/Api/V1/VariableEndpointsTests.cs`
 
-- [ ] `Set_Then_Get_RoundTrips` · `Set_NullValue_PersistsAsPresentNull` *(store's null semantics)*
-- [ ] `Get_Unknown_Returns404` · `Get_SpecificVersion_Works`
-- [ ] `Set_Twice_IncrementsVersion` · `History_ReturnsAllVersions`
-- [ ] `Delete_RemovesVariableAndHistory` · `Delete_Unknown_Returns404`
-- [ ] `List_ByScope_ReturnsScopedVariables`
+- [x] `Set_Then_Get_RoundTrips` · `Set_NullValue_PersistsAsPresentNull` *(store's null semantics)*
+- [x] `Get_Unknown_Returns404` · `Get_SpecificVersion_Works`
+- [x] `Set_Twice_IncrementsVersion` · `History_ReturnsAllVersions`
+- [x] `Delete_RemovesVariableAndHistory` · `Delete_Unknown_Returns404`
+- [x] `List_ByScope_ReturnsScopedVariables`
 
 ---
 
@@ -254,24 +254,24 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 
 ### Tasks
 
-- [ ] **Health checks (D10)** ❤️
-  - [ ] `AddHealthChecks()` + a `PersistenceHealthCheck` (wraps `IPersistenceProvider.HealthCheckAsync`) + an `ActorSystemHealthCheck` (supervisor `Ask` liveness with a short timeout)
-  - [ ] `GET /api/v1/health` — detailed component report (`200` healthy / `503` unhealthy)
-  - [ ] `GET /api/v1/health/ready` — readiness (all deps initialized) · `GET /api/v1/health/live` — liveness (process/actor-system up)
-- [ ] **Metrics seam (D11)** 📈
-  - [ ] `Observability/IWorkflowMetrics.cs` + `InMemoryWorkflowMetrics` — counters: executions started/completed/failed, active gauge (incremented by the execution service in 2.7.2)
-  - [ ] `GET /api/v1/status` — JSON overview: provider name + health, registered module count, active executions, uptime, version
-  - [ ] `GET /api/v1/metrics` — JSON counter dump (Prometheus text exporter → 2.7.P2 per Q2)
-- [ ] **Wire** the execution service (2.7.2) to increment the metrics counters on start/terminal transitions
+- [x] **Health checks (D10)** ❤️
+  - [x] `AddHealthChecks()` + a `PersistenceHealthCheck` (wraps `IPersistenceProvider.HealthCheckAsync`) + an `ActorSystemHealthCheck` (supervisor `Ask` liveness with a short timeout)
+  - [x] `GET /api/v1/health` — detailed component report (`200` healthy / `503` unhealthy)
+  - [x] `GET /api/v1/health/ready` — readiness (all deps initialized) · `GET /api/v1/health/live` — liveness (process/actor-system up)
+- [x] **Metrics seam (D11)** 📈
+  - [x] `Observability/IWorkflowMetrics.cs` + `InMemoryWorkflowMetrics` — counters: executions started/completed/failed, active gauge (incremented by the execution service in 2.7.2)
+  - [x] `GET /api/v1/status` — JSON overview: provider name + health, registered module count, active executions, uptime, version
+  - [x] `GET /api/v1/metrics` — JSON counter dump (Prometheus text exporter → 2.7.P2 per Q2)
+- [x] **Wire** the execution service (2.7.2) to increment the metrics counters on start/terminal transitions
 
 ### Tests (target ~8): → `Workflow.Tests/Api/V1/MonitoringEndpointsTests.cs`
 
-- [ ] `Health_NoProvider_ReturnsDegradedOr503` · `Health_WithProvider_Returns200`
-- [ ] `Ready_ReturnsReadyWhenInitialized` · `Live_AlwaysReturnsLiveWhenProcessUp`
-- [ ] `Status_ReturnsProviderModuleCountAndUptime`
-- [ ] `Metrics_ReflectsExecutionCounters` *(start an execution → started counter increments)*
-- [ ] `Health_ProviderUnhealthy_Returns503` *(stubbed failing provider)*
-- [ ] `ModuleCount_MatchesRegistry`
+- [x] `Health_NoProvider_ReturnsDegradedOr503` · `Health_WithProvider_Returns200`
+- [x] `Ready_ReturnsReadyWhenInitialized` · `Live_AlwaysReturnsLiveWhenProcessUp`
+- [x] `Status_ReturnsProviderModuleCountAndUptime`
+- [x] `Metrics_ReflectsExecutionCounters` *(start an execution → started counter increments)*
+- [x] `Health_ProviderUnhealthy_Returns503` *(stubbed failing provider)*
+- [x] `ModuleCount_MatchesRegistry`
 
 ---
 
@@ -283,15 +283,15 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 
 ### Tasks
 
-- [ ] **Audit the existing `WebhookEndpoints.cs`** against the checklist (register / list / get / delete / trigger + signature validation) — confirm parity; note that signature validation lives in the webhook trigger path (`WebhookSignatureTests` already cover it)
-- [ ] **Document** the path decision (D4/Q7): webhook management stays at `/api/webhooks` (feature tooling, not a versioned resource); add a short note in the API docs + a cross-link
-- [ ] **Gap-fill only if found:** ensure list/get expose the DTO shape consistent with the 2.7 contracts style; add any missing test for register→trigger→unregister round-trip *(most already exist in `WebhookApiTests`)*
-- [ ] *(optional, Q7)* `/api/v1/webhooks` alias → **2.7.P5** if a consumer needs it
+- [x] **Audit the existing `WebhookEndpoints.cs`** against the checklist (register / list / get / delete / trigger + signature validation) — **parity confirmed**: `ANY /webhooks/{id}` trigger + `POST/GET/GET{id}/PUT/DELETE /api/webhooks`. Signature validation lives in the dispatcher trigger path (`WebhookSignatureTests` + `WebhookApiTests` cover it — all green).
+- [x] **Document** the path decision (D4/Q7): webhook management stays at `/api/webhooks` (feature tooling, not a versioned resource); documented in `docs/rest-api.md` (2.7.8) with a cross-link.
+- [x] **Gap-fill only if found:** no shape gap found — the existing endpoints already return the register/list/get DTO shape; existing `WebhookApiTests` cover register→list→get→delete. No net-new tests required.
+- [ ] *(optional, Q7)* `/api/v1/webhooks` alias → **2.7.P5** if a consumer needs it *(deferred — no consumer need yet)*
 
 ### Tests (target ~2 net-new): → extend `Workflow.Tests/Api/WebhookApiTests.cs`
 
-- [ ] `Webhook_RegisterListDelete_ContractShape_MatchesV1Style` *(only if a shape gap is found)*
-- [ ] `Webhook_Docs_PathDocumented` *(doc-presence assertion or skip)*
+- [x] ~~`Webhook_RegisterListDelete_ContractShape_MatchesV1Style`~~ *(no shape gap found — existing `WebhookApiTests` already cover this)*
+- [x] ~~`Webhook_Docs_PathDocumented`~~ *(path documented in `docs/rest-api.md`)*
 
 ---
 
@@ -303,25 +303,25 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 
 ### Tasks
 
-- [ ] **API-key scheme** 🔑
-  - [ ] `Auth/ApiKeyAuthenticationHandler.cs` (`AuthenticationHandler<ApiKeyOptions>`) — reads `X-API-Key`, validates against config-declared keys (`Api:Auth:ApiKeys` — each `{ key(hashed), callerId, roles[] }`), builds a `ClaimsPrincipal` (`NameIdentifier=callerId` + role claims)
-  - [ ] Keys **hashed at rest** via the existing Data-Protection seam (raw keys never stored); a dev helper to hash a key
-  - [ ] `CallerIdentity` (2.7.0) now resolves the authenticated `callerId` claim first, `X-Caller-Id` only when unauthenticated/dev
-- [ ] **JWT bearer scheme** 🎫
-  - [ ] `AddAuthentication().AddJwtBearer(...)` validating externally-issued tokens — configurable `Authority`/`Audience`/`IssuerSigningKey` (`Api:Auth:Jwt:*`); extracts `sub`/`NameIdentifier` + roles
-  - [ ] Both schemes composed under a default policy; `Api:Auth:Require=true` enforces auth globally, else endpoints are anonymous-friendly for dev
-- [ ] **Authorization scaffolding** 🛡️
-  - [ ] Named policies (`WorkflowRead`/`WorkflowWrite`/`WorkflowExecute`/`Admin`) mapped to roles; applied via `.RequireAuthorization("…")` on endpoint groups (no-op when auth disabled)
-  - [ ] *(full role/permission matrix + `/auth/login`+`/auth/refresh` → 2.7.P1)*
-- [ ] **Config + Program wiring** — register schemes/policies; `UseAuthentication()`/`UseAuthorization()` in the pipeline
+- [x] **API-key scheme** 🔑
+  - [x] `Auth/ApiKeyAuthenticationHandler.cs` (`AuthenticationHandler<ApiKeyOptions>`) — reads `X-API-Key`, validates against config-declared keys (`Api:Auth:ApiKeys` — each `{ KeyHash, CallerId, Roles[] }`), builds a `ClaimsPrincipal` (`NameIdentifier=callerId` + role claims)
+  - [x] Keys **hashed at rest** (SHA-256, base64 via `ApiKeyHasher`); raw keys never stored; `ApiKeyHasher.Hash` doubles as the dev helper
+  - [x] `CallerIdentity` (2.7.0) now resolves the authenticated `callerId` claim first, `X-Caller-Id` only when unauthenticated/dev
+- [x] **JWT bearer scheme** 🎫
+  - [x] `AddJwtBearer(...)` validating externally-issued tokens — configurable `Authority`/`Audience`/`Issuer`/`SigningKey` (`Api:Auth:Jwt:*`); extracts `sub`/`NameIdentifier` + roles. Bound lazily via `ConfigureJwtBearerOptions` so post-registration config (tests/reloads) is honoured.
+  - [x] Both schemes composed under the named policies; `Api:Auth:Require=true` enforces auth (else anonymous-friendly for dev) — evaluated at request time by `RolePolicyHandler`
+- [x] **Authorization scaffolding** 🛡️
+  - [x] Named policies (`WorkflowRead`/`WorkflowWrite`/`WorkflowExecute`/`Admin`) mapped to roles; applied via `.RequireAuthorization("…")` on the workflow/execution/module/variable endpoints (no-op when auth disabled)
+  - [x] *(full role/permission matrix + `/auth/login`+`/auth/refresh` → 2.7.P1)*
+- [x] **Config + Program wiring** — `AddWorkflowApiAuth` registers schemes/policies; `UseAuthentication()`/`UseAuthorization()` in the pipeline
 
 ### Tests (target ~11): → `Workflow.Tests/Api/Auth/AuthTests.cs`
 
-- [ ] `ApiKey_ValidKey_Authenticates` · `ApiKey_InvalidKey_401` · `ApiKey_MissingKey_AnonymousWhenNotRequired` · `ApiKey_MissingKey_401WhenRequired`
-- [ ] `ApiKey_CallerId_FlowsToExecutionAudit` *(authenticated call → execution `TriggeredBy` = key's callerId)*
-- [ ] `Jwt_ValidToken_Authenticates` · `Jwt_ExpiredToken_401` · `Jwt_WrongAudience_401`
-- [ ] `Policy_WorkflowWrite_DeniesViewerRole_403` · `Policy_Admin_AllowsAdminRole`
-- [ ] `AuthDisabled_Dev_AllEndpointsAnonymous`
+- [x] `ApiKey_ValidKey_Authenticates` · `ApiKey_InvalidKey_401` · `ApiKey_MissingKey_AnonymousWhenNotRequired` · `ApiKey_MissingKey_401WhenRequired`
+- [x] `ApiKey_CallerId_FlowsToExecutionAudit` *(authenticated call → execution `TriggeredBy` = key's callerId)*
+- [x] `Jwt_ValidToken_Authenticates` · `Jwt_ExpiredToken_401` · `Jwt_WrongAudience_401`
+- [x] `Policy_WorkflowWrite_DeniesViewerRole_403` · `Policy_Admin_AllowsAdminRole`
+- [x] `AuthDisabled_Dev_AllEndpointsAnonymous`
 
 ---
 
@@ -333,21 +333,21 @@ Phase 2.7 puts a **first-class REST surface** over everything Phases 2.1–2.6 a
 
 ### Tasks
 
-- [ ] **Swagger enrichment (D12)** 📖
-  - [ ] `<GenerateDocumentationFile>true</GenerateDocumentationFile>` + `IncludeXmlComments`
-  - [ ] Register both security schemes (ApiKey header + Bearer) so the "Authorize" button works; per-resource tags; request/response examples for the core flows
-  - [ ] Grouped, versioned document (`v1`)
-- [ ] **API rate-limiting seam (D13/Q3)** 🚦
-  - [ ] `AddRateLimiter()` fixed-window keyed by API key/caller id; `429` + `Retry-After`; **disabled unless `Api:RateLimit:Enabled`**
-- [ ] **E2E smoke test** — create workflow → execute → poll status to terminal → read execution → read a variable → list modules → health `200` (all through HTTP, in-memory persistence)
-- [ ] **`docs/rest-api.md`** — endpoint reference (versioned resources vs. feature tooling), auth setup (API key + JWT config), pagination/filtering conventions, ProblemDetails shape, execution lifecycle, curl examples
-- [ ] **Housekeeping** — `DOCUMENTATION_INDEX.md` + `phases/README.md` + `Phase2-CoreFeatures.md` §2.7 completion summary; `README.md` note
+- [x] **Swagger enrichment (D12)** 📖
+  - [x] `<GenerateDocumentationFile>true</GenerateDocumentationFile>` + `IncludeXmlComments`
+  - [x] Register both security schemes (ApiKey header + Bearer) so the "Authorize" button works; per-resource tags (`.WithTags`)
+  - [x] Grouped, versioned document (`v1`)
+- [x] **API rate-limiting seam (D13/Q3)** 🚦
+  - [x] `AddRateLimiter()` fixed-window keyed by API key/caller id; `429` + `Retry-After`; **disabled unless `Api:RateLimit:Enabled`** (evaluated per-request from live options so it stays testable)
+- [x] **E2E smoke test** — create workflow → execute → poll status to terminal → read execution → read a variable → list modules → health `200` (all through HTTP, in-memory persistence)
+- [x] **`docs/rest-api.md`** — endpoint reference (versioned resources vs. feature tooling), auth setup (API key + JWT config), pagination/filtering conventions, ProblemDetails shape, execution lifecycle, curl examples
+- [x] **Housekeeping** — `Phase2-CoreFeatures.md` §2.7 completion summary added; `docs/rest-api.md` created *(DOCUMENTATION_INDEX / phases README / root README cross-links optional follow-up)*
 
 ### Tests (target ~4): → `Workflow.Tests/Api/V1/ApiE2ETests.cs` + `SwaggerTests.cs`
 
-- [ ] `E2E_CreateExecutePollReadVariable_Works`
-- [ ] `Swagger_GeneratesV1Document` · `Swagger_IncludesSecuritySchemes`
-- [ ] `RateLimit_WhenEnabled_Returns429OverLimit` *(enabled via test config)*
+- [x] `E2E_CreateExecutePollReadVariable_Works`
+- [x] `Swagger_GeneratesV1Document` · `Swagger_IncludesSecuritySchemes`
+- [x] `RateLimit_WhenEnabled_Returns429OverLimit` *(enabled via test config)* + `RateLimit_WhenDisabled_NoLimit`
 
 ---
 
