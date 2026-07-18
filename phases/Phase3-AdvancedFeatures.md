@@ -511,6 +511,8 @@ Phase 3 adds the most user-facing features:
 
 ### 3.3 UI - Visual Workflow Designer (Week 18-19)
 
+> **CopilotNote (from Phase 2.8 Q3):** Module version pinning currently rides `NodeDefinition.Metadata["moduleVersion"]` (zero-migration, see [Phase2-8-ModuleSystem.md](Phase2-8-ModuleSystem.md) D6). **If the designer needs first-class version-pin UI, promote it to a real `NodeDefinition.ModuleVersion` field here** (serializer + migration + designer support — tracked as 2.8.P4). The metadata route remains supported either way~ 🔢
+
 **Tasks:**
 - [ ] **Choose UI framework (Blazor WebAssembly or React)** 🎨
   - [ ] Evaluate Blazor WebAssembly

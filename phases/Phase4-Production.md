@@ -281,6 +281,8 @@ Phase 4 is all about production readiness:
 
 ### 4.7 Deployment & DevOps (Week 27-28)
 
+> **CopilotNote (from Phase 2.8 Q6):** The engine is expected to be **SemVer-versioned** — `.wfmod` module packages declare a `MinEngineVersion` that the installer compares SemVer-style against the engine version, refusing install with `422` when the engine is older (see [Phase2-8-ModuleSystem.md](Phase2-8-ModuleSystem.md) D2). Release/versioning automation here must keep the engine assembly version SemVer-accurate so that gate stays meaningful~ 🔢
+
 **Tasks:**
 - [ ] Create Docker images
 - [ ] Create Kubernetes manifests
@@ -289,6 +291,7 @@ Phase 4 is all about production readiness:
 - [ ] Create deployment automation
 - [ ] Implement blue-green deployment
 - [ ] Add rollback procedures
+- [ ] Establish SemVer release versioning for the engine (feeds the Phase 2.8 `MinEngineVersion` install gate)
 
 **Deployment Options:**
 ```

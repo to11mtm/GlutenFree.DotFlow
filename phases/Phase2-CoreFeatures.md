@@ -1633,6 +1633,8 @@ Per product direction ("users should not have to hand-write raw SQL unless absol
 
 ### 2.8 Module System Enhancements (Deferred from Phase 1.4) 📦
 
+> **📋 Detailed sliced plan available:** [Phase2-8-ModuleSystem.md](Phase2-8-ModuleSystem.md) — `.wfmod` package format + installer, dependency resolution (topological sort + cycle detection), side-by-side versioning with `Metadata["moduleVersion"]` pinning, pluggable module-state store (file default / persistence-backed optional), hot-reload with unload safety, optional strong-name verification, and the module upload/enable/disable/uninstall HTTP endpoints deferred from Phase 2.7 (Q4). The sliced doc reconciles this checklist against what already exists (the 1.4.6 `IModuleLoader`/`AssemblyModuleLoader`/`PluginAssemblyLoadContext` load/unload machinery and the 2.7 read-only module endpoints + DTO/auth conventions) and supersedes it. **Timeline: Weeks 21-22.** Q1–Q7 resolved ✅.
+
 > **CopilotNote:** These items were deferred from Phase 1.4 (Module System Foundation) because they go beyond foundational work. Phase 1.4 establishes the core module contracts, registry, validation, property binding, discovery, and basic dynamic loading. These items build on top of that foundation~ 💖
 
 **Tasks:**
