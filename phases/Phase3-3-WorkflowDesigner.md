@@ -30,8 +30,10 @@ React-swap-later strategy work (D2)~ 🌷
 > (WASM) projects already scaffolded in `Workflow.sln`; `Workflow.UI.Client/Designer/*`
 > (canvas, palette, properties panel as Blazor components over **plain-C# state services**);
 > `Workflow.UI.Client/Api/*` (typed REST + SignalR client); `Workflow.Tests.UI` (new bUnit
-> test project). The API needs **zero new endpoints** for MVP — the designer speaks
-> `/api/v1/workflows`, `/api/v1/modules`, `/api/v1/executions`, `/hubs/workflow` verbatim~ 🌸
+> test project). The API needs exactly **one new endpoint** for MVP — `POST
+> /api/v1/workflows/validate` (D14, a thin wrapper over the existing
+> `ModuleAwareWorkflowValidator`); everything else speaks `/api/v1/workflows`,
+> `/api/v1/modules`, `/api/v1/executions`, `/hubs/workflow` verbatim~ 🌸
 
 > **Reality-check note (July 2026):** The §3.3 checklist in
 > [`Phase3-AdvancedFeatures.md`](Phase3-AdvancedFeatures.md#33-ui---visual-workflow-designer-week-18-19)
@@ -69,34 +71,30 @@ coordinate math) and undo/redo correctness are the risky parts; everything serve
 | **D10 Testing: bUnit for components, xUnit for state services, E2E deferred** | New `Workflow.Tests.UI` project (bUnit + xUnit + FluentAssertions, mirroring repo conventions). The framework-free state services get plain xUnit tests (the bulk of the logic — cheap and fast); Blazor components get bUnit render/interaction tests; browser E2E (Playwright) is **post-MVP (3.3.P2)** — the seams make it additive. |
 | **D11 Read-only-first slicing** | 3.3.a ships a **read-only** designer (browse, open, render, pan/zoom) before any editing exists — de-risks the canvas math with the simplest possible interaction set, and is independently demoable. Editing (3.3.b) and runtime (3.3.c) layer on top. Mirrors the 2.4 shared-infrastructure-first pattern. |
 | **D12 Designer-specific layout data stays in the definition** | Node position persists in `NodeDefinition.Position` (exists). Any *future* designer-only annotations (notes, colors, collapsed groups) ride `NodeDefinition.Metadata["ui.*"]` keys — the same zero-migration convention as 2.8's `moduleVersion` pin. No parallel "layout file". |
+| **D13 Monaco code editor in MVP (Q3 override)** | `Code`/`Expression`/`Json` properties use the **Monaco editor** via JS interop, **lazy-loaded** so the WASM app's initial payload doesn't carry it (fetched on first code-editor open). Wrapped behind an `ICodeEditor` component seam with the plain-textarea implementation kept as the built-in fallback (load failure → textarea, and a user-facing settings toggle to force the textarea → 3.3.P1). Language modes: `javascript`/`csharp`/`lua` from the node's `language` property, `json` for Json editors, plain for Expression (with `{{ }}` hinting). The interop wrapper is view-layer only (D2-safe — React ports swap in `@monaco-editor/react`). |
+| **D14 Server validate endpoint in MVP (Q5 override)** | `POST /api/v1/workflows/validate` — the **only new API code in Phase 3.3** — accepts a full `WorkflowDefinition` body and returns the issue list from the **existing** `ModuleAwareWorkflowValidator` (graph structure + per-module `ValidateConfiguration`, already implemented and tested) without persisting anything. `WorkflowRead` policy (it's a dry-run, not a write). The save pipeline runs client structural checks first (instant feedback), then the server validate (authoritative), then PUT/POST. Errors render with node-id links in the save dialog. |
 
 ---
 
-## TO RESOLVE 🤔
+## TO RESOLVE 🤔 → RESOLVED ✅
 
-> Proposed answers below so work can proceed; please confirm/override~ ✅
+> All Q1–Q7 resolved (July 2026) — user answers folded into the design decisions + slices
+> (Q3/Q5 overrode the proposals; Q6 got a compromise)~ ✅
 
-- [ ] **Q1 Canvas approach: custom SVG/HTML (D3) or the `Z.Blazor.Diagrams` library?**
-  - **Proposed:** Custom (D3). The library would be faster for week 1 but costs us the React exit, adds a dependency with its own event model, and its feature surface (groups, auto-layout) exceeds MVP needs. Revisit only if 3.3.a canvas work overruns badly.
-    - Agree with proposed.
-- [ ] **Q2 Component library: plain CSS (D4) or MudBlazor?**
-  - **Proposed:** Plain CSS + design tokens (D4). MudBlazor is lovely but heavy for a mostly-custom-canvas app and mismatches the React exit (MUI ≠ MudBlazor). If form-building in 3.3.b drags, MudBlazor can be adopted *inside* the thin view layer without touching state services.
-    - Agree with proposed. 
-- [ ] **Q3 Code editor for `Code`/`Expression` properties: plain `<textarea>` MVP or Monaco via JS interop?**
-  - **Proposed:** Plain textarea with mono font + tab handling for MVP; **Monaco → 3.3.P1** (it's a large JS dependency with interop surface — additive later, and the `POST /api/v1/scripts/test` endpoint already gives script authors a validation path).
-    - No we want to use Monaco for the MVP. It is a large dependency, but it is a better experience for the user and will save us time in the long run. We can always add a toggle to switch between Monaco and a plain textarea if we want to reduce the dependency size.
-- [ ] **Q4 Auto-save: none, or 30s draft timer?**
-  - **Proposed:** **None in MVP** — explicit save + dirty indicator + close warning (D7). Auto-save needs draft semantics the API doesn't have (saving a broken half-edit over a good definition is worse than losing 30s). Draft/auto-save → **3.3.P4**.
-    - Agree with proposed. Auto-save is a nice to have, but it is not worth the complexity for MVP. We can always add it later if we find that users are losing work.
-- [ ] **Q5 Workflow validation before save: client-side only, or add a server dry-run validate endpoint?**
-  - **Proposed:** Client-side structural checks (unknown module ids, dangling connections, cycle detection, required-property presence) + surface **server** 400/422 ProblemDetails from the existing PUT/POST as save errors. A dedicated `/workflows/validate` endpoint → **3.3.P5** if client checks prove insufficient.
-    - We want a server-side validate endpoint in MVP. The client-side checks are good, but they are not sufficient for all cases. We want to be able to validate the workflow on the server before saving it, and we want to be able to provide detailed error messages to the user if the workflow is invalid.
-- [ ] **Q6 Minimap: MVP or post-MVP?**
-  - **Proposed:** **Post-MVP (3.3.P6)** — the checklist marks it optional; zoom-to-fit covers the navigation need for typical workflow sizes.
-    - Would like a compromise for MVP if we could. 
-- [ ] **Q7 Module version-pin UI (the 2.8 Q3/2.8.P4 note): in 3.3 MVP?**
-  - **Proposed:** **No** — show the pinned version read-only in the node inspector when `Metadata["moduleVersion"]` is present; full pin/unpin UI lands with 2.8.P4 (promoting the field) rather than building UI over the metadata convention twice.
-    - Agree with proposed.
+- [x] **Q1 Canvas approach: custom SVG/HTML (D3) or the `Z.Blazor.Diagrams` library?**
+  - **RESOLVED (agreed):** Custom (D3). Revisit only if 3.3.a canvas work overruns badly.
+- [x] **Q2 Component library: plain CSS (D4) or MudBlazor?**
+  - **RESOLVED (agreed):** Plain CSS + design tokens (D4). If form-building in 3.3.b drags, MudBlazor can be adopted *inside* the thin view layer without touching state services.
+- [x] **Q3 Code editor for `Code`/`Expression` properties: plain `<textarea>` MVP or Monaco via JS interop?**
+  - **RESOLVED (overridden): Monaco in MVP.** It's a large dependency, but the authoring experience is worth it and saves time long-run. Ships **lazy-loaded** (only fetched when a Code/Expression/Json editor first opens) behind an `ICodeEditor` seam with a plain-textarea fallback — a settings toggle to force the textarea (dependency-size escape hatch, per the user note) lands as **3.3.P1**. See D13 + 3.3.b.3.
+- [x] **Q4 Auto-save: none, or 30s draft timer?**
+  - **RESOLVED (agreed):** None in MVP — explicit save + dirty indicator + close warning (D7). Not worth the complexity; add later if users lose work. Draft/auto-save → **3.3.P4**.
+- [x] **Q5 Workflow validation before save: client-side only, or add a server dry-run validate endpoint?**
+  - **RESOLVED (overridden): server validate endpoint in MVP.** Client structural checks alone aren't sufficient; users need detailed server-grade errors *before* saving. `POST /api/v1/workflows/validate` wraps the **existing** `ModuleAwareWorkflowValidator` (module-aware config validation already implemented) — a thin endpoint, the only new API code in 3.3. See D14 + 3.3.b.4; former 3.3.P5 is absorbed.
+- [x] **Q6 Minimap: MVP or post-MVP?**
+  - **RESOLVED (compromise):** A **lightweight minimap in MVP** — corner overlay drawing node bounds as scaled rectangles + a viewport frame, click/drag-to-navigate, collapsible, no live node content. Lands in 3.3.c.2. Full-fidelity minimap (rendered thumbnails) + auto-layout stay post-MVP (**3.3.P6**).
+- [x] **Q7 Module version-pin UI (the 2.8 Q3/2.8.P4 note): in 3.3 MVP?**
+  - **RESOLVED (agreed):** No — read-only pinned-version chip in the node inspector when `Metadata["moduleVersion"]` is present; full pin/unpin UI → 3.3.P8/2.8.P4.
 
 ---
 
@@ -115,10 +113,12 @@ coordinate math) and undo/redo correctness are the risky parts; everything serve
 | Variables API | `GET/PUT/DELETE /api/v1/variables` (2.7.4) | ✅ Workflow-variables editor backend |
 | Script test endpoint (code-property authoring aid) | `POST /api/v1/scripts/test` (3.1.6) | ✅ Optional "test script" button (3.3.b) |
 | ProblemDetails error convention | 2.7 `ApiResults` | ✅ Uniform save/execute error surfaces |
+| Module-aware workflow validation (server-side) | `Workflow.Modules/Validation/ModuleAwareWorkflowValidator.cs`, `Workflow.Core/Abstractions/WorkflowValidator.cs` | ✅ D14 validate endpoint wraps it as-is |
 
-> **CopilotNote:** The mirror of the 2.4/3.1/3.2 insight: **the entire backend for this phase
-> already exists**. Phase 3.3 writes no C# in `Workflow.Api`/`Workflow.Engine` (except
-> optionally serving the WASM app). Budget risk on **canvas interaction math** and
+> **CopilotNote:** The mirror of the 2.4/3.1/3.2 insight: **the backend for this phase
+> already exists** — Phase 3.3 adds exactly one thin API endpoint (D14 validate, wrapping
+> the existing validator) and otherwise writes no C# in `Workflow.Api`/`Workflow.Engine`
+> beyond serving the WASM app. Budget risk on **canvas interaction math** and
 > **undo/redo correctness** — not on plumbing~ 💖
 
 ---
@@ -271,9 +271,13 @@ Workflow.UI/Workflow.UI.Client/
     Components/
       CanvasView.razor(+.cs/.css) · NodeView.razor · EdgeLayer.razor
       ModulePalette.razor · PropertiesPanel.razor · PropertyEditors/*.razor
+      CodeEditor.razor (+ monaco-interop.js — lazy-loaded, D13)
+      Minimap.razor (lightweight, Q6 compromise)
       Toolbar.razor · RunOverlay.razor · StatusBar.razor · ContextMenu.razor
   Pages/ (WorkflowList.razor · Designer.razor · Settings.razor)
   wwwroot/css/tokens.css
+  wwwroot/js/monaco/ (lazy-loaded Monaco assets, D13)
+Workflow.Api/V1/WorkflowEndpoints.cs           ← + POST /workflows/validate (D14 — the one API change)
 Workflow.Tests.UI/                              ← NEW project (bUnit + xUnit)
   State/*.cs (document/commands/geometry/validator specs)
   Components/*.cs (bUnit render + interaction tests)
@@ -297,15 +301,16 @@ docs/designer.md · docs/designer-architecture.md
 | 3.3.b.4 Undo/redo + save + dirty tracking + shortcuts | [3-3b](Phase3-3b-DesignerEditing.md) | b.0–b.3 |
 | 3.3.c.0 Execute from designer | [3-3c](Phase3-3c-DesignerRuntime.md) | b.4 |
 | 3.3.c.1 Real-time overlay (3.2 hub) | [3-3c](Phase3-3c-DesignerRuntime.md) | c.0 |
-| 3.3.c.2 Docs + polish + a11y/perf pass | [3-3c](Phase3-3c-DesignerRuntime.md) | c.1 |
+| 3.3.c.2 Docs + polish + minimap + a11y/perf pass | [3-3c](Phase3-3c-DesignerRuntime.md) | c.1 |
 
 ---
 
 ## Post-MVP Slices 🚧 *(deferred — not blocking Phase 4)*
 
-### 3.3.P1 Monaco code editor 🖋️ *(Q3)*
-Monaco via JS interop for `Code`/`Expression`/`Json` editors: syntax highlight per language,
-inline diagnostics, wired to `POST /api/v1/scripts/test` for run-in-editor.
+### 3.3.P1 Code-editor preference toggle 🖋️ *(Q3 — Monaco is MVP per D13)*
+A settings toggle to force the plain-textarea implementation of `ICodeEditor` (dependency-
+size / restricted-environment escape hatch, per the Q3 resolution). Also: deeper Monaco
+integration — inline diagnostics + run-in-editor wired to `POST /api/v1/scripts/test`.
 
 ### 3.3.P2 Browser E2E suite 🎭 *(D10)*
 Playwright E2E over the hosted app: open→edit→save→run happy path, drag/connect flows,
@@ -319,11 +324,13 @@ paste-a-token pane.
 Server-side draft slots (or localStorage drafts) + 30s auto-save without clobbering the
 published definition.
 
-### 3.3.P5 Server-side validate endpoint ✅ *(Q5)*
-`POST /api/v1/workflows/validate` running full engine validation for pre-save feedback.
+### 3.3.P5 Validation depth extensions ✅ *(Q5 — the validate endpoint itself is MVP per D14)*
+Extend `POST /api/v1/workflows/validate` beyond the current validator: expression syntax
+pre-checks (via the 3.1 evaluator), script compile dry-runs, connection-condition linting.
 
-### 3.3.P6 Minimap + auto-layout 🗺️ *(Q6)*
-Viewport minimap; dagre-style auto-layout button for imported/position-less workflows.
+### 3.3.P6 Full-fidelity minimap + auto-layout 🗺️ *(Q6 — a lightweight minimap is MVP per the compromise)*
+Upgrade the MVP rectangle minimap to rendered thumbnails with live run-state tinting;
+dagre-style auto-layout button for imported/position-less workflows.
 
 ### 3.3.P7 React + TypeScript port 🎯 *(D2 exit)*
 Execute the port checklist in `docs/designer-architecture.md`: TS mirrors of the state
@@ -340,12 +347,13 @@ Pin/unpin module versions per node once `NodeDefinition.ModuleVersion` is promot
 - [ ] Open a workflow → nodes + connections render at their persisted positions; pan/zoom/fit work smoothly (S2)
 - [ ] Drag a module from the palette onto the canvas → a configured node is created with a unique id
 - [ ] Drag port-to-port → a valid connection is created; cycles/self/duplicate connections are rejected with visible feedback (S4)
-- [ ] Properties panel renders the right editor for every `PropertyEditorType`, validates per schema rules, and writes back to the document (D6)
+- [ ] Properties panel renders the right editor for every `PropertyEditorType`, validates per schema rules, and writes back to the document (D6); `Code`/`Expression`/`Json` properties get the lazy-loaded Monaco editor with textarea fallback (D13)
 - [ ] Undo/redo works across all mutation types with a 50-entry history; dirty indicator + unsaved-changes warning behave (D7)
-- [ ] Save round-trips through `PUT/POST /api/v1/workflows` — reload reproduces the identical canvas (D5)
+- [ ] Save round-trips through `PUT/POST /api/v1/workflows` — reload reproduces the identical canvas (D5); the save pipeline runs client structural checks **and** `POST /api/v1/workflows/validate` (D14) with detailed, node-linked error messages
 - [ ] ▶ Run starts an execution and the canvas lights up live via the 3.2 hub: pending→running→completed/failed per node + progress bar (S3, D8)
+- [ ] A lightweight minimap shows node bounds + viewport frame with click-to-navigate (Q6 compromise)
 - [ ] The designer works against an auth-required API using a pasted JWT/API key (D9)
-- [ ] **Zero new API/engine code required** (except UI hosting); the client touches only public REST + hub contracts (D2)
+- [ ] **API/engine changes limited to the single D14 validate endpoint** (wrapping the existing validator) + UI hosting; the client touches only public REST + hub contracts (D2)
 - [ ] `docs/designer.md` (user guide) + `docs/designer-architecture.md` (incl. React port checklist) exist
 - [ ] State services ≥ 80% covered by xUnit specs; all components have bUnit render tests; full suite green
 

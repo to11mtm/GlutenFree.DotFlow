@@ -63,15 +63,17 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 ---
 
-## 3.3.c.2 Docs + Polish + A11y/Perf Pass 📚✨
+## 3.3.c.2 Docs + Polish + Minimap + A11y/Perf Pass 📚✨
 
-> **Purpose:** Close the phase: user + architecture docs (incl. the React port checklist,
-> D2), UX polish debt from a/b, and a basic accessibility/performance sweep.
+> **Purpose:** Close the phase: the lightweight minimap (Q6 compromise), user +
+> architecture docs (incl. the React port checklist, D2), UX polish debt from a/b, and a
+> basic accessibility/performance sweep.
 
 **Complexity:** 🟢 Low-Medium
 
 ### Tasks
 
+- [ ] **Lightweight minimap (Q6 compromise)** — `Minimap.razor`: corner overlay (bottom-right, collapsible) rendering **node bounds as scaled rectangles** + a viewport frame, driven by the same `CanvasGeometry` content-bounds math as Fit; click/drag on the minimap pans the main canvas; run-mode tints rectangles by node state (cheap — reuses the state classes); **no rendered thumbnails** (that's 3.3.P6); ~4 tests (`Minimap_RendersRectPerNode`, `Minimap_ViewportFrame_MatchesTransform`, `Minimap_Click_PansCanvas`, `Minimap_Collapse_Persists`)
 - [ ] **`docs/designer.md` (user guide)** — getting started (run API + UI, auth token), screen tour matching mockups S1–S4, edit walkthrough (palette → connect → configure → save), run walkthrough (S3), keyboard shortcut table, troubleshooting (CORS, auth, hub blocked → polling fallback)
 - [ ] **`docs/designer-architecture.md` (D2)** — the layering diagram (thin views / framework-free state / wire DTOs), the state-service catalog with behavioral contracts (pointing at the xUnit specs as the source of truth), **the React+TypeScript port checklist**: DTOs→TS types, state services→TS classes (spec-driven), views→React Flow-or-custom, auth/hub equivalents (`@microsoft/signalr`), what stays untouched (the entire backend)
 - [ ] **Cross-links** — README doc index + `phases/README.md` breakout entry; `docs/rest-api.md` gets a "consumed by the designer" note; `docs/realtime.md` links the overlay as a reference client
@@ -91,6 +93,7 @@ Made with 💖 by Ami-Chan! UwU ✨
 - [ ] From the designer: ▶ Run executes the open workflow and the canvas animates live through to ✅/❌, matching mockup S3
 - [ ] Late-join and reconnect both repaint correctly from the snapshot; hub-blocked environments degrade to polling with a visible notice
 - [ ] Run mode never mutates the document; closing returns to a clean edit mode
+- [ ] The lightweight minimap navigates the canvas and tints with run state (Q6 compromise)
 - [ ] `docs/designer.md` + `docs/designer-architecture.md` shipped with the React port checklist
 - [ ] Full solution + test suite green; Phase 3.3 Success Criteria in the [master plan](Phase3-3-WorkflowDesigner.md#success-criteria-) all check off
 

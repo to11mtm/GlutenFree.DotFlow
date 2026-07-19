@@ -127,8 +127,9 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
   - `MultilineText` → textarea · `Number` → numeric input (min/max from rules) · `Boolean` → checkbox
   - `Dropdown` → select over `AllowedValues`
   - `Expression` → mono-font input with `{{ }}` placeholder hint (3.1.7 syntax link)
-  - `Json` → mono textarea + parse-on-blur validation (⚠ on invalid JSON)
-  - `Code` → mono textarea (tab inserts spaces); language chip read from a sibling `language` property when present; *(Monaco → 3.3.P1)*; optional **[🧪 Test]** button for `builtin.script` nodes calling `POST /api/v1/scripts/test` with the current code/language and showing result/logs in a flyout
+  - `Code` → **Monaco editor via `CodeEditor.razor` (D13)** — lazy-loaded JS interop (assets fetched on first open), language mode from a sibling `language` property when present (`javascript`/`csharp`/`lua`), mono theme from tokens; **plain-textarea fallback** renders automatically if Monaco fails to load; optional **[🧪 Test]** button for `builtin.script` nodes calling `POST /api/v1/scripts/test` with the current code/language and showing result/logs in a flyout
+  - `Json` → **Monaco with `json` language mode (D13)** + parse-on-blur validation (⚠ on invalid JSON); same fallback rules
+  - *(`Expression` stays a plain mono input — single-line expressions don't need Monaco)*
 - [ ] **Value plumbing** — editors read/write `JsonElement` values via a small `JsonValueEditor` helper (string/number/bool/object round-trip preserving JSON types — a `Number` property must not become a JSON string)
 - [ ] **Validation (schema rules → client checks)** — `Required` (non-empty), `Min`/`Max`, `MinLength`/`MaxLength`, `Regex`, `Enum`; inline ⚠ messages under the field (S2); panel-level summary; invalid values still *editable* but flagged (save gate handles blocking, b.4)
 - [ ] **Apply semantics** — edits buffer locally; **[Apply]** (or field blur — pick one, document it) → one `EditNodePropertiesCommand` with before/after property bags; Esc reverts the buffer
@@ -143,6 +144,7 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 - [ ] `Esc_RevertsBuffer_NoCommand` · `Rename_ViaHeader_UsesRenameCommand`
 - [ ] `NumberValue_StaysJsonNumber_NotString` *(JsonElement typing)* · `MultiSelect_ShowsSummaryOnly`
 - [ ] `NoSelection_ShowsWorkflowMeta` · `Variables_EditRoundTrip`
+- [ ] `CodeEditor_MonacoInterop_InitializedWithLanguage` *(bUnit + JS interop fake)* · `CodeEditor_MonacoLoadFailure_FallsBackToTextarea`
 
 ---
 
@@ -159,12 +161,13 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 - [ ] **Toolbar (S2)** — `[💾 Save]` `[↩ Undo]` `[↪ Redo]` with enabled-state binding + hover tooltips showing the command description ("Undo: Move 3 nodes"); dirty dot `●unsaved` next to the workflow name
 - [ ] **Keyboard shortcuts** — global handler on the designer page: `Ctrl+Z` undo · `Ctrl+Y`/`Ctrl+Shift+Z` redo · `Delete` remove selection · `Ctrl+A` select all · `Ctrl+C`/`Ctrl+V` copy/paste · `Ctrl+S` save (preventDefault); **suppressed while focus is in an input/textarea**
 - [ ] **Copy/paste** — clipboard = in-app serialized node set + *internal* connections; paste → AddNode commands with fresh ids + offset positions, internal edges re-created between the new ids; works across undo boundaries
-- [ ] **Save pipeline (D5/Q5)** — `GraphValidator.Validate` gate: **errors block** save (dialog lists issues, jump-to-node links); warnings allow with confirm; then `ToDto()` → `PUT /api/v1/workflows/{id}` (or `POST` for `/designer/new`, then navigate to the real id); success → `MarkSaved()` + toast; server 400/409/422 ProblemDetails rendered in the save dialog
+- [ ] **Validate endpoint (D14 — the one API change in 3.3)** — `POST /api/v1/workflows/validate` in `Workflow.Api/V1/WorkflowEndpoints.cs`: accepts a full `WorkflowDefinition` body, runs the **existing** `ModuleAwareWorkflowValidator` (graph + per-module `ValidateConfiguration`), returns `{ valid, issues: [{ severity, message, nodeId? }] }` without persisting; `WorkflowRead` policy (dry-run); Swagger-tagged `Workflows`; documented in `docs/rest-api.md`; ~4 API tests in `Workflow.Tests/Api/V1/WorkflowEndpointsTests.cs` (valid → `valid:true`; unknown module / bad module config / structural issue → itemized issues)
+- [ ] **Save pipeline (D5/D14/Q5)** — two-stage gate: **(1)** client `GraphValidator.Validate` (instant — errors block with dialog + jump-to-node links); **(2)** `POST /workflows/validate` (authoritative server check — issues render in the same dialog with node links; validate-endpoint-unavailable degrades to stage 1 with a notice); then `ToDto()` → `PUT /api/v1/workflows/{id}` (or `POST` for `/designer/new`, then navigate to the real id); success → `MarkSaved()` + toast; residual server 400/409/422 ProblemDetails rendered in the save dialog
 - [ ] **Save As** — name prompt → `POST` a copy with a fresh id/name → navigate
 - [ ] **Unsaved-changes protection** — `beforeunload` browser warning when dirty; in-app navigation guard (leaving `/designer/*` while dirty → confirm dialog with Save/Discard/Cancel)
 - [ ] **New-workflow flow** — `/designer/new`: blank document + staged name; first save POSTs
 
-### Tests (target ~12): → `Workflow.Tests.UI/State/CommandStackTests.cs` + `Components/SaveFlowTests.cs`
+### Tests (target ~15): → `Workflow.Tests.UI/State/CommandStackTests.cs` + `Components/SaveFlowTests.cs` + `Workflow.Tests/Api/V1/WorkflowEndpointsTests.cs` *(validate endpoint)*
 
 - [ ] `Stack_UndoRedo_RoundTrips_AllCommandTypes` *(theory over every command)*
 - [ ] `Stack_CapAt50_DropsOldest` · `Stack_NewCommand_TruncatesRedoTail`
@@ -172,6 +175,7 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 - [ ] `Shortcuts_UndoRedoDeleteSelectAll_Work` · `Shortcuts_SuppressedInInputs`
 - [ ] `CopyPaste_ClonesNodesAndInternalEdges_FreshIds`
 - [ ] `Save_ValidatorErrors_BlocksWithDialog` · `Save_CallsPut_MarksSaved`
+- [ ] `Save_CallsServerValidate_BeforePut` · `Save_ServerValidateIssues_BlockWithNodeLinks` · `Save_ValidateUnavailable_DegradesWithNotice`
 - [ ] `SaveNew_Posts_ThenNavigates` · `Save_ServerProblem_ShownInDialog`
 - [ ] `NavigateAwayDirty_PromptsSaveDiscardCancel`
 
@@ -183,7 +187,8 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 - [ ] Every mutation is undoable/redoable; dirty tracking + both unsaved-changes guards behave
 - [ ] Connection rules hold under manual abuse (cycles/self/duplicates impossible to create)
 - [ ] Properties panel renders correct editors for **all** `PropertyEditorType`s across the real builtin module set; validation messages match schema rules
-- [ ] Save gate blocks structurally-broken definitions with actionable messages; server errors surface cleanly
+- [ ] Save gate blocks structurally-broken definitions with actionable messages (client + `POST /workflows/validate` server stage, D14); server errors surface cleanly
+- [ ] `Code`/`Json` properties open the lazy-loaded Monaco editor (D13); the textarea fallback engages when Monaco can't load
 - [ ] All state-service specs + component tests green; full repo suite unaffected
 
 ---
