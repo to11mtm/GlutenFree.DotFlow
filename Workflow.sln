@@ -31,6 +31,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "phases", "phases", "{AA4347
 		phases\Phase2-8-ModuleSystem.md = phases\Phase2-8-ModuleSystem.md
 		phases\Phase3-1-ScriptingEngine.md = phases\Phase3-1-ScriptingEngine.md
 		phases\Phase3-2-SignalRRealTime.md = phases\Phase3-2-SignalRRealTime.md
+		phases\Phase3-3b-DesignerEditing.md = phases\Phase3-3b-DesignerEditing.md
+		phases\Phase3-3a-DesignerFoundation.md = phases\Phase3-3a-DesignerFoundation.md
+		phases\Phase3-3c-DesignerRuntime.md = phases\Phase3-3c-DesignerRuntime.md
+		phases\Phase3-3-WorkflowDesigner.md = phases\Phase3-3-WorkflowDesigner.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ignore", "ignore", "{B9EB3407-915D-422B-8BD3-CE0DA7923FF3}"
