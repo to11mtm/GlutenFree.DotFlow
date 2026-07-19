@@ -81,6 +81,8 @@
     <!-- 🧮 Expression Evaluators (Phase 2.2.5) -->
     <PackageVersion Include="Jint" Version="4.9.2" />
     <PackageVersion Include="DynamicExpresso.Core" Version="2.19.3" />
+    <!-- 🌙 Phase 3.1.3 — Lua scripting engine (MoonSharp, MIT, pure-managed)~ -->
+    <PackageVersion Include="MoonSharp" Version="2.0.0" />
     <PackageVersion Include="Microsoft.Extensions.ObjectPool" Version="8.0.11" />
     <!--  Code Quality & Analysis -->
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />

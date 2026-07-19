@@ -7,22 +7,15 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- ðŸ“œ Language-agnostic scripting abstractions + the JS executor (Jint, already in-tree)~ -->
         <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
-        <ProjectReference Include="..\Workflow.Scripting\Workflow.Scripting.csproj" />
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Jint" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.Http" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-        <!-- ?? Phase 2.3.4 — Polly v8 resilience pipelines~ -->
-        <PackageReference Include="Polly.Core" />
-        <!-- ?? Phase 2.3.5 — JSONPath extraction via JsonPath.Net (json-everything, MIT)~ -->
-        <PackageReference Include="JsonPath.Net" />
-        <!-- ? Phase 2.6.a.4 — JSON Schema validation via JsonSchema.Net (json-everything, MIT)~ -->
-        <PackageReference Include="JsonSchema.Net" />
-        <!-- ?? Phase 2.5.a.2 — CSV parsing/generation via CsvHelper~ -->
-        <PackageReference Include="CsvHelper" />
         <PackageReference Include="StyleCop.Analyzers">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

@@ -6,9 +6,11 @@ namespace Workflow.Scripting.Roslyn;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Workflow.Scripting.Abstractions;
 using Workflow.Scripting.Roslyn.Abstractions;
 using Workflow.Scripting.Roslyn.Compilation;
 using Workflow.Scripting.Roslyn.Execution;
+using Workflow.Scripting.Roslyn.Executors;
 
 /// <summary>
 /// 🧬 DI registration for the shared, domain-agnostic Roslyn scripting core~ ✨💖.
@@ -33,4 +35,18 @@ public static class ScriptingRoslynServiceCollectionExtensions
         services.TryAddSingleton<CollectibleScriptRunner>();
         return services;
     }
+
+    /// <summary>
+    /// 🟪 Phase 3.1.2 — Registers the C# <see cref="IScriptExecutor"/> for <c>builtin.script</c> +
+    /// the script test endpoint. Adds the scripting core if not already present~ 🧬.
+    /// </summary>
+    /// <param name="services">The DI service collection.</param>
+    /// <returns>The same <paramref name="services"/> for chaining~ 💖.</returns>
+    public static IServiceCollection AddRoslynScripting(this IServiceCollection services)
+    {
+        services.AddScriptingCore();
+        services.AddSingleton<IScriptExecutor, CSharpScriptExecutor>();
+        return services;
+    }
 }
+

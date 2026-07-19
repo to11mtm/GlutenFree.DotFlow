@@ -111,6 +111,9 @@ public static class BuiltinModules
         new JsonTransformModule(),
         new ValidateDataModule(),
         new StringTransformModule(),
+
+        // Phase 3.1.4 — General-purpose script module~ 📜
+        new Script.ScriptModule(),
     };
 
     /// <summary>

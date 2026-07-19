@@ -20,6 +20,9 @@ using Workflow.Modules.Database.Linq;
 using Workflow.Modules.Cloud;
 using Workflow.Modules.Cloud.Configuration;
 using Workflow.Modules.Transform.Script;
+using Workflow.Scripting;
+using Workflow.Scripting.Roslyn;
+using Workflow.Scripting.Lua;
 using Workflow.Api.Transform;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Composite;
@@ -257,6 +260,25 @@ builder.Services.TryAddSingleton<IBlobStore, InMemoryBlobStore>();
 // compiled-assembly cache). Host-wired, NOT in AddWorkflowModules() (Roslyn quarantine, D4)~
 builder.Services.AddTransformScriptModules();
 
+// 📜 Phase 3.1 — General-purpose scripting: JS (Jint) + C# (Roslyn) + Lua (MoonSharp) executors for
+// builtin.script + the /api/v1/scripts endpoints. Host ceilings bound from Scripting:*~
+builder.Services.AddSingleton(sp =>
+{
+    var ceilings = new Workflow.Scripting.Abstractions.ScriptHostCeilings();
+    builder.Configuration.GetSection(Workflow.Scripting.Abstractions.ScriptHostCeilings.SectionName).Bind(ceilings);
+    return ceilings;
+});
+builder.Services.AddWorkflowScripting();
+builder.Services.AddRoslynScripting();
+builder.Services.AddLuaScripting();
+builder.Services.AddSingleton<Workflow.Scripting.Libraries.IScriptLibraryStore>(sp =>
+{
+    var blob = sp.GetService<IBlobStore>();
+    return blob is not null
+        ? new Workflow.Scripting.Libraries.PersistedScriptLibraryStore(new Workflow.Api.Modules.BlobScriptLibraryPersistence(blob))
+        : new Workflow.Scripting.Libraries.InMemoryScriptLibraryStore();
+});
+
 // 🔐 Phase 2.7.7 — API authentication (API-key + JWT bearer) + named authorization policies~
 builder.Services.AddWorkflowApiAuth(builder.Configuration);
 
@@ -307,6 +329,9 @@ app.MapModuleManagementEndpoints();
 
 // 🔧 Phase 2.7.4 — Variable endpoints (/api/v1/variables)~
 app.MapVariableEndpoints();
+
+// 📜 Phase 3.1.6 — Script test + language + library endpoints (/api/v1/scripts)~
+app.MapScriptEndpoints();
 
 // 📊 Phase 2.7.5 — Monitoring endpoints (/api/v1/health, /status, /metrics)~
 app.MapMonitoringEndpoints();

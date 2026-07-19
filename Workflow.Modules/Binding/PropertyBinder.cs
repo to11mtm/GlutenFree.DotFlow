@@ -50,6 +50,38 @@ public class PropertyBinder : IPropertyBinder
         @"\{\{\s*(.+?)\s*\}\}",
         RegexOptions.Compiled);
 
+    /// <summary>
+    /// 🧮 Phase 3.1.7 — Matches a *pure* reference (dotted identifier path, no operators/literals),
+    /// distinguishing <c>{{Variable.Count}}</c> from an expression like <c>{{Variable.Count &gt; 5}}</c>.
+    /// </summary>
+    private static readonly Regex PureReferencePattern = new(
+        @"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$",
+        RegexOptions.Compiled);
+
+    private static readonly Regex ReferenceTokenPattern = new(
+        @"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+",
+        RegexOptions.Compiled);
+
+    private readonly Workflow.Core.Abstractions.IExpressionEvaluator? _evaluator;
+    private readonly bool _enableExpressions;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PropertyBinder"/> class~ 🌸.
+    /// </summary>
+    /// <param name="evaluator">
+    /// 🧮 Phase 3.1.7 — Optional expression evaluator. When provided (and <paramref name="enableExpressions"/>
+    /// is true), non-reference templates like <c>{{Variable.Count &gt; 5}}</c> are evaluated as expressions.
+    /// When null, only pure <c>{{Variable.X}}</c>/<c>{{NodeId.Output}}</c> references resolve (pre-3.1 behavior).
+    /// </param>
+    /// <param name="enableExpressions">Whether inline expression evaluation is enabled (default true).</param>
+    public PropertyBinder(
+        Workflow.Core.Abstractions.IExpressionEvaluator? evaluator = null,
+        bool enableExpressions = true)
+    {
+        _evaluator = evaluator;
+        _enableExpressions = enableExpressions;
+    }
+
     /// <inheritdoc />
     public PropertyBindingResult BindProperties(
         IReadOnlyDictionary<string, object?> rawValues,
@@ -176,7 +208,7 @@ public class PropertyBinder : IPropertyBinder
     /// references mixed with text (e.g., <c>"Hello {{Variable.Name}}!"</c>), the result
     /// is always a string with interpolated values. Smart and kawaii. 💖.
     /// </remarks>
-    private static ReferenceResolution ResolveReferences(
+    private ReferenceResolution ResolveReferences(
         string stringValue,
         PropertyBindingContext context,
         string portName)
@@ -219,11 +251,22 @@ public class PropertyBinder : IPropertyBinder
     /// Resolves a single reference expression (the part inside <c>{{ }}</c>).
     /// Routes to variable resolution or node output resolution. 🔀.
     /// </summary>
-    private static ReferenceResolution ResolveSingleReference(
+    private ReferenceResolution ResolveSingleReference(
         string expression,
         PropertyBindingContext context,
         string portName)
     {
+        // 🧮 Phase 3.1.7 — Non-pure-reference templates are evaluated as expressions when enabled~
+        if (!PureReferencePattern.IsMatch(expression))
+        {
+            if (_enableExpressions && _evaluator is not null)
+            {
+                return EvaluateExpression(expression, context, portName);
+            }
+
+            // No evaluator → fall through to the reference error below (pre-3.1 behavior).
+        }
+
         // Check for Variable.X pattern. 💾
         if (expression.StartsWith(VariablePrefix, StringComparison.OrdinalIgnoreCase))
         {
@@ -246,6 +289,40 @@ public class PropertyBinder : IPropertyBinder
             $"Input '{portName}': unrecognized reference pattern '{{{{{expression}}}}}'. " +
             $"Expected '{{{{Variable.Name}}}}' or '{{{{NodeId.OutputName}}}}'.",
         });
+    }
+
+    /// <summary>
+    /// 🧮 Phase 3.1.7 — Evaluates an inline expression (e.g. <c>Variable.Count &gt; 5</c>) via the
+    /// injected <see cref="Workflow.Core.Abstractions.IExpressionEvaluator"/>. Reference tokens inside
+    /// the expression are resolved to evaluator-scope variables first~ ✨.
+    /// </summary>
+    private ReferenceResolution EvaluateExpression(
+        string expression,
+        PropertyBindingContext context,
+        string portName)
+    {
+        var scope = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var rewritten = ReferenceTokenPattern.Replace(expression, match =>
+        {
+            var token = match.Value;
+            var resolution = ResolveSingleReference(token, context, portName);
+            var safeName = "__ref_" + token.Replace('.', '_');
+            scope[safeName] = resolution.HasErrors ? null : resolution.ResolvedValue;
+            return safeName;
+        });
+
+        try
+        {
+            var value = _evaluator!.EvaluateAsync(rewritten, scope).AsTask().GetAwaiter().GetResult();
+            return ReferenceResolution.Resolved(value);
+        }
+        catch (Exception ex)
+        {
+            return ReferenceResolution.Failed(new List<string>
+            {
+                $"Input '{portName}': expression '{{{{{expression}}}}}' failed to evaluate: {ex.Message}",
+            });
+        }
     }
 
     /// <summary>
