@@ -63,7 +63,7 @@ public static class ModuleEndpoints
         var summaries = modules
             .OrderBy(m => m.Category)
             .ThenBy(m => m.ModuleId)
-            .Select(ModuleSummaryDto.From)
+            .Select(m => ModuleSummaryDto.From(m, registry.IsModuleEnabled(m.ModuleId, m.Version)))
             .ToList();
 
         if (groupByCategory == true)
@@ -77,7 +77,7 @@ public static class ModuleEndpoints
         return Results.Ok(summaries);
     }
 
-    private static IResult GetHandler(HttpContext http, string moduleId)
+    private static IResult GetHandler(HttpContext http, string moduleId, string? version)
     {
         var registry = http.RequestServices.GetService<IModuleRegistry>();
         if (registry is null)
@@ -85,9 +85,23 @@ public static class ModuleEndpoints
             return ApiResults.ServiceUnavailableProblem("No module registry is configured.");
         }
 
-        var module = registry.GetModule(moduleId);
+        var versions = registry.GetModuleVersions(moduleId).Select(v => v.ToString()).ToList();
+
+        IWorkflowModule? module;
+        bool enabled;
+        if (!string.IsNullOrWhiteSpace(version) && System.Version.TryParse(version, out var pinned))
+        {
+            module = registry.GetModule(moduleId, pinned);
+            enabled = module is not null && registry.IsModuleEnabled(moduleId, pinned);
+        }
+        else
+        {
+            module = registry.GetModule(moduleId);
+            enabled = module is not null && registry.IsModuleEnabled(moduleId, module.Version);
+        }
+
         return module is null
-            ? ApiResults.NotFoundProblem($"Module '{moduleId}' was not found.")
-            : Results.Ok(ModuleDetailsDto.From(module));
+            ? ApiResults.NotFoundProblem($"Module '{moduleId}'{(version is null ? string.Empty : $" v{version}")} was not found.")
+            : Results.Ok(ModuleDetailsDto.From(module, enabled, versions));
     }
 }

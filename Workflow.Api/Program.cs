@@ -79,6 +79,69 @@ builder.Services.AddSingleton<IModuleRegistry>(sp =>
 
 builder.Services.AddSingleton<IExecutionStateStore, InMemoryExecutionStateStore>();
 
+// 📦 Phase 2.8 — Module packaging / install / versioning / hot-reload services~
+builder.Services.Configure<Workflow.Modules.Packaging.ModulePackagingOptions>(
+    builder.Configuration.GetSection(Workflow.Modules.Packaging.ModulePackagingOptions.SectionName));
+builder.Services.AddSingleton(sp =>
+{
+    var opts = new Workflow.Modules.Packaging.ModulePackagingOptions();
+    builder.Configuration.GetSection(Workflow.Modules.Packaging.ModulePackagingOptions.SectionName).Bind(opts);
+
+    // The engine's SemVer version drives the MinEngineVersion install gate (Q6)~
+    opts.EngineVersion ??= typeof(Workflow.Engine.Actors.WorkflowSupervisor).Assembly.GetName().Version?.ToString();
+
+    // Bind the security sub-section (RequireSigned + trusted tokens, D9)~
+    builder.Configuration.GetSection("Modules:Security").Bind(opts);
+
+    // Q1: default archival on when a persistence provider is configured (unless explicitly set)~
+    if (builder.Configuration["Modules:ArchivePackages"] is null
+        && !string.IsNullOrWhiteSpace(builder.Configuration["Persistence:Provider"]))
+    {
+        opts.ArchivePackages = true;
+    }
+
+    return opts;
+});
+builder.Services.AddSingleton<Workflow.Modules.Packaging.ModulePackageReader>();
+builder.Services.AddSingleton<Workflow.Modules.Packaging.IModulePackageArchive>(sp =>
+{
+    var blob = sp.GetService<IBlobStore>();
+    return blob is not null
+        ? new Workflow.Api.Modules.BlobStoreModulePackageArchive(blob)
+        : new Workflow.Api.Modules.NoOpModulePackageArchive();
+});
+builder.Services.AddSingleton<Workflow.Modules.Security.IAssemblyVerifier>(sp =>
+{
+    var opts = sp.GetRequiredService<Workflow.Modules.Packaging.ModulePackagingOptions>();
+    return new Workflow.Modules.Security.StrongNameVerifier(opts.TrustedPublicKeyTokens);
+});
+builder.Services.AddSingleton<Workflow.Modules.Loading.IModuleLoader>(sp =>
+    new Workflow.Modules.Loading.AssemblyModuleLoader(
+        sp.GetRequiredService<IModuleRegistry>(),
+        logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<Workflow.Modules.Loading.AssemblyModuleLoader>>()));
+builder.Services.AddSingleton<Workflow.Modules.Packaging.ModulePackageInstaller>(sp =>
+    new Workflow.Modules.Packaging.ModulePackageInstaller(
+        sp.GetRequiredService<Workflow.Modules.Loading.IModuleLoader>(),
+        sp.GetRequiredService<IModuleRegistry>(),
+        sp.GetRequiredService<Workflow.Modules.Packaging.ModulePackagingOptions>(),
+        sp.GetRequiredService<Workflow.Modules.Packaging.ModulePackageReader>(),
+        sp.GetService<Workflow.Modules.Packaging.IModulePackageArchive>(),
+        sp.GetService<Workflow.Modules.Security.IAssemblyVerifier>(),
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<Workflow.Modules.Packaging.ModulePackageInstaller>>()));
+builder.Services.AddSingleton<Workflow.Modules.Loading.IActiveExecutionTracker, Workflow.Api.Modules.MetricsActiveExecutionTracker>();
+
+// 🗂️ Phase 2.8.2 — Module state store (file default; repository when Modules:StateStore=repository + provider, Q2)~
+builder.Services.AddSingleton<Workflow.Modules.State.IModuleStateStore>(sp =>
+{
+    var opts = sp.GetRequiredService<Workflow.Modules.Packaging.ModulePackagingOptions>();
+    var path = Workflow.Modules.State.ModuleStateStoreFactory.DefaultStateFilePath(opts.PackagesPath);
+    return Workflow.Modules.State.ModuleStateStoreFactory.Create(
+        builder.Configuration["Modules:StateStore"],
+        path,
+        sp.GetService<Workflow.Modules.State.IModuleStatePersistence>(),
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<Workflow.Modules.State.FileModuleStateStore>>());
+});
+
 //  Expression Evaluators (Phase 2.2.5)~ — default: Jint (JS/ES2020); opt-in fallback: DynamicExpresso (C#)
 builder.Services.AddSingleton<IExpressionEvaluator, JintExpressionEvaluator>();
 builder.Services.AddKeyedSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>("csharp");
@@ -124,15 +187,19 @@ builder.Services.Configure<LinqEndpointsOptions>(
 //  Akka actor system + WorkflowSupervisor (Phase 2.3.9)~
 // CopilotNote: The factory runs lazily on first IWorkflowLauncher resolution so the full DI
 // container (including IWorkflowRepository) is available at that point~
+builder.Services.AddSingleton(sp => ActorSystem.Create("dotflow"));
 builder.Services.AddSingleton(sp =>
 {
-    var system = ActorSystem.Create("dotflow");
+    var system = sp.GetRequiredService<ActorSystem>();
     // CopilotNote: WorkflowSupervisor.Props(sp) captures the root IServiceProvider — safe for
     // singleton actors that live for the process lifetime~
     var supervisorRef = system.ActorOf(WorkflowSupervisor.Props(sp), "workflow-supervisor");
     return new WorkflowSupervisorActorRef(supervisorRef);
 });
 builder.Services.AddSingleton<IWorkflowLauncher, ActorWorkflowLauncher>();  // 2.3.9 — replaces NullWorkflowLauncher~
+
+// 🔄 Phase 2.8.3 — Hot-reload hosted service (self-disables unless Modules:HotReload:Enabled)~
+builder.Services.AddHostedService<Workflow.Api.Modules.ModuleHotReloadHostedService>();
 
 var persistenceProvider = BuildPersistenceProvider(builder.Configuration);
 if (persistenceProvider is not null)
@@ -147,6 +214,16 @@ if (persistenceProvider is not null)
 
     // 🚀 Phase 2.7.2 — General execution service (start/status/cancel) — needs the repos above~
     builder.Services.AddSingleton<Workflow.Api.Execution.IWorkflowExecutionService, Workflow.Api.Execution.ActorWorkflowExecutionService>();
+
+    // 🗄️ Phase 2.8.2 — When a provider with blob support is configured, expose a persistence-backed
+    // module state seam so Modules:StateStore=repository is available (Q2)~
+    builder.Services.AddSingleton<Workflow.Modules.State.IModuleStatePersistence>(sp =>
+    {
+        var blob = sp.GetService<IBlobStore>();
+        return blob is not null
+            ? new Workflow.Api.Modules.BlobStoreModuleStatePersistence(blob)
+            : new Workflow.Api.Modules.NoOpModuleStatePersistence();
+    });
 
     if (persistenceProvider.Blobs is not null)
     {
@@ -225,6 +302,9 @@ app.MapExecutionEndpoints();
 // 📦 Phase 2.7.3 — Module discovery endpoints (/api/v1/modules)~
 app.MapModuleEndpoints();
 
+// 📦 Phase 2.8.5 — Module management endpoints (upload/enable/disable/uninstall)~
+app.MapModuleManagementEndpoints();
+
 // 🔧 Phase 2.7.4 — Variable endpoints (/api/v1/variables)~
 app.MapVariableEndpoints();
 
@@ -240,6 +320,9 @@ if (persistenceProvider is not null)
 // SQLite-persisted registry still honours appsettings Workflow:Database:Connections). Idempotent:
 // only inserts ids that aren't already present~
 await SeedConfiguredConnectionsAsync(app.Services).ConfigureAwait(false);
+
+// 🔁 Phase 2.8 — Rehydrate previously-installed module packages + apply persisted enabled state~
+await RehydrateModulesAsync(app.Services).ConfigureAwait(false);
 
 var summaries = new[]
 {
@@ -306,6 +389,48 @@ static async Task SeedConfiguredConnectionsAsync(IServiceProvider services)
         if (existing.IsNone)
         {
             await registry.UpsertAsync(descriptor with { Id = key }).ConfigureAwait(false);
+        }
+    }
+}
+
+// 🔁 Phase 2.8 — Reload installed packages on start and apply persisted enabled/disabled state~
+static async Task RehydrateModulesAsync(IServiceProvider services)
+{
+    var installer = services.GetService<Workflow.Modules.Packaging.ModulePackageInstaller>();
+    if (installer is not null)
+    {
+        try
+        {
+            await installer.RehydrateAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?
+                .CreateLogger("ModuleRehydration")
+                .LogWarning(ex, "🔁 Module rehydration failed~");
+        }
+    }
+
+    var stateStore = services.GetService<Workflow.Modules.State.IModuleStateStore>();
+    var moduleRegistry = services.GetService<IModuleRegistry>();
+    if (stateStore is not null && moduleRegistry is not null)
+    {
+        try
+        {
+            var snapshot = await stateStore.LoadAsync().ConfigureAwait(false);
+            foreach (var record in snapshot.Modules)
+            {
+                if (Version.TryParse(record.Version, out var version))
+                {
+                    moduleRegistry.SetModuleEnabled(record.ModuleId, version, record.Enabled);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()?
+                .CreateLogger("ModuleState")
+                .LogWarning(ex, "🗂️ Applying module state failed~");
         }
     }
 }

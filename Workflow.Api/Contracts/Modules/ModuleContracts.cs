@@ -114,19 +114,22 @@ public sealed record ModuleSummaryDto(
     string Category,
     string Description,
     string Icon,
-    string? Version)
+    string? Version,
+    bool Enabled = true)
 {
     /// <summary>Projects an <see cref="IWorkflowModule"/> into a summary DTO~ 📦.</summary>
     /// <param name="module">The module.</param>
+    /// <param name="enabled">Whether the resolved version is enabled.</param>
     /// <returns>A serializable <see cref="ModuleSummaryDto"/>.</returns>
-    public static ModuleSummaryDto From(IWorkflowModule module)
+    public static ModuleSummaryDto From(IWorkflowModule module, bool enabled = true)
         => new(
             module.ModuleId,
             module.DisplayName,
             module.Category,
             module.Description,
             module.Icon,
-            JsonTypeHelpers.VersionString(module.Version));
+            JsonTypeHelpers.VersionString(module.Version),
+            enabled);
 }
 
 /// <summary>
@@ -140,6 +143,8 @@ public sealed record ModuleSummaryDto(
 /// <param name="Version">The module version as a string.</param>
 /// <param name="Schema">The module schema (ports + properties).</param>
 /// <param name="Dependencies">Module ids this module depends on.</param>
+/// <param name="Enabled">Whether the resolved version is enabled (Phase 2.8.2).</param>
+/// <param name="AvailableVersions">All installed versions of this module id (Phase 2.8.2).</param>
 public sealed record ModuleDetailsDto(
     string Id,
     string DisplayName,
@@ -148,12 +153,19 @@ public sealed record ModuleDetailsDto(
     string Icon,
     string? Version,
     ModuleSchemaDto Schema,
-    IReadOnlyList<string> Dependencies)
+    IReadOnlyList<string> Dependencies,
+    bool Enabled = true,
+    IReadOnlyList<string>? AvailableVersions = null)
 {
     /// <summary>Projects an <see cref="IWorkflowModule"/> into a details DTO~ 📦.</summary>
     /// <param name="module">The module.</param>
+    /// <param name="enabled">Whether the resolved version is enabled.</param>
+    /// <param name="availableVersions">All installed versions of this module id.</param>
     /// <returns>A serializable <see cref="ModuleDetailsDto"/>.</returns>
-    public static ModuleDetailsDto From(IWorkflowModule module)
+    public static ModuleDetailsDto From(
+        IWorkflowModule module,
+        bool enabled = true,
+        IReadOnlyList<string>? availableVersions = null)
         => new(
             module.ModuleId,
             module.DisplayName,
@@ -162,8 +174,25 @@ public sealed record ModuleDetailsDto(
             module.Icon,
             JsonTypeHelpers.VersionString(module.Version),
             ModuleSchemaDto.From(module.Schema),
-            module.Dependencies.ToList());
+            module.Dependencies.ToList(),
+            enabled,
+            availableVersions);
 }
+
+/// <summary>
+/// 📦 Phase 2.8.5 — The result of installing a module package (details + warnings)~ ✨.
+/// </summary>
+/// <param name="Module">The installed module's details.</param>
+/// <param name="Warnings">Non-fatal advisories (missing hashes, schema-compat, signature).</param>
+public sealed record ModuleInstallResultDto(ModuleDetailsDto Module, IReadOnlyList<string> Warnings);
+
+/// <summary>
+/// 🔘 Phase 2.8.5 — The result of an enable/disable toggle~ ✨.
+/// </summary>
+/// <param name="ModuleId">The module id.</param>
+/// <param name="Enabled">The new enabled state.</param>
+/// <param name="AffectedVersions">The versions whose state changed.</param>
+public sealed record ModuleToggleResultDto(string ModuleId, bool Enabled, IReadOnlyList<string> AffectedVersions);
 
 /// <summary>
 /// 🔤 Internal helper — serializes an arbitrary CLR value (module default/allowed values) into a

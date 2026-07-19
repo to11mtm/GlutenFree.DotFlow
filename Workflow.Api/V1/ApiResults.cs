@@ -48,6 +48,12 @@ public static class ApiResults
     public static IResult BadRequestProblem(string detail)
         => Results.Problem(detail: detail, statusCode: StatusCodes.Status400BadRequest, title: "Bad Request");
 
+    /// <summary>Creates a generic 422 Unprocessable Entity problem~ 🛡️.</summary>
+    /// <param name="detail">Human-readable detail.</param>
+    /// <returns>A ProblemDetails result.</returns>
+    public static IResult Problem422(string detail)
+        => Results.Problem(detail: detail, statusCode: StatusCodes.Status422UnprocessableEntity, title: "Unprocessable Entity");
+
     /// <summary>Creates a 503 Service Unavailable problem~ 🚧.</summary>
     /// <param name="detail">Human-readable detail.</param>
     /// <returns>A ProblemDetails result.</returns>

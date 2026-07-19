@@ -38,6 +38,51 @@ public interface IModuleRegistry
     public IWorkflowModule? GetModule(string moduleId);
 
     /// <summary>
+    /// 🔢 Phase 2.8.2 — Get a specific version of a module (side-by-side versioning). When
+    /// <paramref name="version"/> is <c>null</c>, returns the latest **enabled** version (same as
+    /// <see cref="GetModule(string)"/>)~ ✨.
+    /// </summary>
+    /// <param name="moduleId">The module ID to look up.</param>
+    /// <param name="version">The exact version to resolve, or <c>null</c> for latest enabled.</param>
+    /// <returns>The resolved module, or <c>null</c> when absent/disabled.</returns>
+    /// <remarks>
+    /// Default implementation ignores the version (single-version registries) so existing
+    /// <see cref="IModuleRegistry"/> implementers keep compiling~ 🌸.
+    /// </remarks>
+    public IWorkflowModule? GetModule(string moduleId, Version? version) => this.GetModule(moduleId);
+
+    /// <summary>
+    /// 🔢 Phase 2.8.2 — Get the installed versions of a module, ascending~ ✨.
+    /// </summary>
+    /// <param name="moduleId">The module ID.</param>
+    /// <returns>The available versions (empty when the module is not registered).</returns>
+    public IReadOnlyList<Version> GetModuleVersions(string moduleId)
+    {
+        var module = this.GetModule(moduleId);
+        return module is null ? System.Array.Empty<Version>() : new[] { module.Version };
+    }
+
+    /// <summary>
+    /// 🔘 Phase 2.8.2 — Enable or disable a specific module version. Disabled versions are excluded
+    /// from latest-version resolution and workflow validation~ ✨.
+    /// </summary>
+    /// <param name="moduleId">The module ID.</param>
+    /// <param name="version">The version to toggle.</param>
+    /// <param name="enabled">Whether the version should be enabled.</param>
+    /// <returns><c>true</c> when the version was found and updated.</returns>
+    /// <remarks>Default implementation is a no-op for single-version registries~ 🌸.</remarks>
+    public bool SetModuleEnabled(string moduleId, Version version, bool enabled) => false;
+
+    /// <summary>
+    /// 🔘 Phase 2.8.2 — Reports whether a specific module version is enabled~ ✨.
+    /// </summary>
+    /// <param name="moduleId">The module ID.</param>
+    /// <param name="version">The version to check.</param>
+    /// <returns><c>true</c> when the version exists and is enabled.</returns>
+    public bool IsModuleEnabled(string moduleId, Version version)
+        => this.GetModule(moduleId, version) is not null;
+
+    /// <summary>
     /// Register a module instance. ➕.
     /// </summary>
     /// <param name="module">The module to register.</param>

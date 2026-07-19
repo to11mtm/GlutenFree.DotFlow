@@ -5,6 +5,7 @@
 namespace Workflow.Modules.Discovery;
 
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
@@ -96,5 +97,40 @@ public static class ModuleRegistryExtensions
 
         var callingAssembly = Assembly.GetCallingAssembly();
         return registry.DiscoverAndRegisterFrom(callingAssembly, services, logger);
+    }
+
+    /// <summary>
+    /// Registers a batch of modules in **dependency order** (Phase 2.8.1) so a module is always
+    /// registered after the modules it depends on. Fails fast (registering nothing) when the batch
+    /// has missing dependencies or a dependency cycle~ 🔗.
+    /// </summary>
+    /// <param name="registry">The registry to populate.</param>
+    /// <param name="modules">The modules to register.</param>
+    /// <param name="allowOverwrite">Whether to overwrite existing modules with the same id.</param>
+    /// <returns>
+    /// A <see cref="Workflow.Modules.Dependencies.DependencyResolution"/> — on success every module
+    /// was registered in order; on failure nothing was registered and <c>Errors</c> explain why.
+    /// </returns>
+    public static Workflow.Modules.Dependencies.DependencyResolution RegisterInDependencyOrder(
+        this IModuleRegistry registry,
+        IEnumerable<IWorkflowModule> modules,
+        bool allowOverwrite = false)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(modules);
+
+        var resolver = new Workflow.Modules.Dependencies.ModuleDependencyResolver(registry);
+        var resolution = resolver.Resolve(modules);
+        if (!resolution.Success)
+        {
+            return resolution;
+        }
+
+        foreach (var module in resolution.Ordered)
+        {
+            registry.RegisterModule(module, allowOverwrite);
+        }
+
+        return resolution;
     }
 }

@@ -1,11 +1,10 @@
-﻿// <copyright file="InMemoryModuleRegistry.cs" company="GlutenFree">
+// <copyright file="InMemoryModuleRegistry.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
 namespace Workflow.Modules;
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,25 +20,24 @@ using Workflow.Modules.Validation;
 /// </summary>
 /// <remarks>
 /// <para>
-/// CopilotNote: Thread-safe via ConcurrentDictionary and lock on observer list.
-/// Observers are invoked in registration order. Exceptions in one observer
-/// do NOT block others — each is wrapped in try/catch. UwU ✨.
+/// CopilotNote: Thread-safe via a per-instance lock. Observers are invoked in
+/// registration order; exceptions in one observer do NOT block others~ ✨.
 /// </para>
 /// <para>
-/// Phase 1.4.3: ModuleValidator is wired in — modules are validated at
-/// registration time. Use <c>skipValidation: true</c> to bypass for testing~ 🧪.
+/// Phase 2.8.2: storage is keyed by <c>(moduleId, version)</c> to support side-by-side
+/// versioning + enabled/disabled state. The single-arg <see cref="GetModule(string)"/>,
+/// <see cref="GetAllModules"/>, category, and search APIs preserve their pre-2.8 semantics
+/// by resolving the **latest enabled** version per id~ 🔢.
 /// </para>
 /// </remarks>
 public class InMemoryModuleRegistry : IModuleRegistry
 {
-    private readonly ConcurrentDictionary<string, IWorkflowModule> _modules = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<ModuleEntry>> _modules = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _lock = new();
     private readonly List<IModuleRegistryObserver> _observers = new();
     private readonly object _observerLock = new();
     private readonly ILogger _logger;
     private readonly ModuleValidator _validator = new();
-
-    // CopilotNote: skipValidation flag stored at registry level — set once at construction
-    // so test code using `new InMemoryModuleRegistry(skipValidation: true)` works cleanly~ 🧪
     private readonly bool _skipValidation;
 
     /// <summary>
@@ -57,24 +55,96 @@ public class InMemoryModuleRegistry : IModuleRegistry
     /// <inheritdoc />
     public IReadOnlyList<IWorkflowModule> GetAllModules()
     {
-        return _modules.Values.ToList().AsReadOnly();
+        lock (_lock)
+        {
+            return _modules.Values
+                .Select(LatestEnabled)
+                .Where(m => m != null)
+                .Cast<IWorkflowModule>()
+                .ToList()
+                .AsReadOnly();
+        }
     }
 
     /// <inheritdoc />
     public IWorkflowModule? GetModule(string moduleId)
     {
-        _modules.TryGetValue(moduleId, out var module);
-        return module;
+        lock (_lock)
+        {
+            return _modules.TryGetValue(moduleId, out var entries) ? LatestEnabled(entries) : null;
+        }
+    }
+
+    /// <inheritdoc />
+    public IWorkflowModule? GetModule(string moduleId, Version? version)
+    {
+        if (version is null)
+        {
+            return GetModule(moduleId);
+        }
+
+        lock (_lock)
+        {
+            if (!_modules.TryGetValue(moduleId, out var entries))
+            {
+                return null;
+            }
+
+            var entry = entries.FirstOrDefault(e => e.Version == version);
+            return entry is { Enabled: true } ? entry.Module : null;
+        }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<Version> GetModuleVersions(string moduleId)
+    {
+        lock (_lock)
+        {
+            return _modules.TryGetValue(moduleId, out var entries)
+                ? entries.Select(e => e.Version).OrderBy(v => v).ToList().AsReadOnly()
+                : (IReadOnlyList<Version>)Array.Empty<Version>();
+        }
+    }
+
+    /// <inheritdoc />
+    public bool SetModuleEnabled(string moduleId, Version version, bool enabled)
+    {
+        lock (_lock)
+        {
+            if (!_modules.TryGetValue(moduleId, out var entries))
+            {
+                return false;
+            }
+
+            var entry = entries.FirstOrDefault(e => e.Version == version);
+            if (entry is null)
+            {
+                return false;
+            }
+
+            entry.Enabled = enabled;
+            return true;
+        }
+    }
+
+    /// <inheritdoc />
+    public bool IsModuleEnabled(string moduleId, Version version)
+    {
+        lock (_lock)
+        {
+            return _modules.TryGetValue(moduleId, out var entries)
+                && entries.Any(e => e.Version == version && e.Enabled);
+        }
     }
 
     /// <summary>
     /// Registers a module instance. Validates the module first unless skipped. ➕.
     /// </summary>
     /// <param name="module">The module to register.</param>
-    /// <param name="allowOverwrite">If true, silently overwrites an existing module with the same ID.</param>
+    /// <param name="allowOverwrite">If true, silently overwrites an existing module with the same ID + version.</param>
     /// <param name="skipValidation">If true, skips ModuleValidator checks (useful for testing). 🧪.</param>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the module fails validation or when a duplicate is found and
+    /// Thrown when the module fails validation or when a duplicate id+version is found and
     /// <paramref name="allowOverwrite"/> is false.
     /// </exception>
     public void RegisterModule(IWorkflowModule module, bool allowOverwrite = false, bool skipValidation = false)
@@ -84,7 +154,6 @@ public class InMemoryModuleRegistry : IModuleRegistry
             throw new ArgumentNullException(nameof(module));
         }
 
-        // Validate the module before registration (unless explicitly skipped)~ ✅
         if (!skipValidation && !_skipValidation)
         {
             var validation = _validator.Validate(module);
@@ -96,13 +165,32 @@ public class InMemoryModuleRegistry : IModuleRegistry
             }
         }
 
-        if (!allowOverwrite && _modules.ContainsKey(module.ModuleId))
+        lock (_lock)
         {
-            throw new InvalidOperationException(
-                $"Module '{module.ModuleId}' is already registered. Use allowOverwrite: true to replace it~ 💔");
+            if (!_modules.TryGetValue(module.ModuleId, out var entries))
+            {
+                entries = new List<ModuleEntry>();
+                _modules[module.ModuleId] = entries;
+            }
+
+            var existing = entries.FirstOrDefault(e => e.Version == module.Version);
+            if (existing is not null)
+            {
+                if (!allowOverwrite)
+                {
+                    throw new InvalidOperationException(
+                        $"Module '{module.ModuleId}' v{module.Version} is already registered. Use allowOverwrite: true to replace it~ 💔");
+                }
+
+                existing.Module = module;
+                existing.Enabled = true;
+            }
+            else
+            {
+                entries.Add(new ModuleEntry(module));
+            }
         }
 
-        _modules[module.ModuleId] = module;
         NotifyRegistered(module);
     }
 
@@ -127,7 +215,6 @@ public class InMemoryModuleRegistry : IModuleRegistry
                 nameof(moduleType));
         }
 
-        // Instantiate via DI if services available, otherwise plain Activator~ 🏭
         IWorkflowModule module;
         if (services != null)
         {
@@ -146,25 +233,72 @@ public class InMemoryModuleRegistry : IModuleRegistry
     /// <inheritdoc />
     public bool UnregisterModule(string moduleId)
     {
-        if (_modules.TryRemove(moduleId, out var removedModule))
+        List<ModuleEntry>? removed;
+        lock (_lock)
         {
-            NotifyUnregistered(moduleId, removedModule);
-            return true;
+            if (!_modules.TryGetValue(moduleId, out removed))
+            {
+                return false;
+            }
+
+            _modules.Remove(moduleId);
         }
 
-        return false;
+        foreach (var entry in removed)
+        {
+            NotifyUnregistered(moduleId, entry.Module);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 🔢 Phase 2.8.2 — Unregisters a single version of a module. Removes the id entirely when its
+    /// last version is removed~ ✨.
+    /// </summary>
+    /// <param name="moduleId">The module ID.</param>
+    /// <param name="version">The version to remove.</param>
+    /// <returns><c>true</c> when the version was found and removed.</returns>
+    public bool UnregisterModule(string moduleId, Version version)
+    {
+        ModuleEntry? removed;
+        lock (_lock)
+        {
+            if (!_modules.TryGetValue(moduleId, out var entries))
+            {
+                return false;
+            }
+
+            removed = entries.FirstOrDefault(e => e.Version == version);
+            if (removed is null)
+            {
+                return false;
+            }
+
+            entries.Remove(removed);
+            if (entries.Count == 0)
+            {
+                _modules.Remove(moduleId);
+            }
+        }
+
+        NotifyUnregistered(moduleId, removed.Module);
+        return true;
     }
 
     /// <inheritdoc />
     public bool HasModule(string moduleId)
     {
-        return _modules.ContainsKey(moduleId);
+        lock (_lock)
+        {
+            return _modules.ContainsKey(moduleId);
+        }
     }
 
     /// <inheritdoc />
     public IReadOnlyList<IWorkflowModule> GetModulesByCategory(string category)
     {
-        return _modules.Values
+        return GetAllModules()
             .Where(m => m.Category.Equals(category, StringComparison.OrdinalIgnoreCase))
             .ToList()
             .AsReadOnly();
@@ -178,7 +312,7 @@ public class InMemoryModuleRegistry : IModuleRegistry
             return Array.Empty<IWorkflowModule>();
         }
 
-        return _modules.Values
+        return GetAllModules()
             .Where(m =>
                 m.ModuleId.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 m.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
@@ -203,10 +337,14 @@ public class InMemoryModuleRegistry : IModuleRegistry
         return new ObserverSubscription(this, observer);
     }
 
-    /// <summary>
-    /// Notifies all observers that a module was registered. 🔔➕
-    /// Each observer is wrapped in try/catch — one failure doesn't block others~ 💖.
-    /// </summary>
+    /// <summary>Resolves the latest enabled version's module from an entry list~ 🔢.</summary>
+    private static IWorkflowModule? LatestEnabled(List<ModuleEntry> entries)
+        => entries
+            .Where(e => e.Enabled)
+            .OrderByDescending(e => e.Version)
+            .Select(e => e.Module)
+            .FirstOrDefault();
+
     private void NotifyRegistered(IWorkflowModule module)
     {
         List<IModuleRegistryObserver> snapshot;
@@ -232,9 +370,6 @@ public class InMemoryModuleRegistry : IModuleRegistry
         }
     }
 
-    /// <summary>
-    /// Notifies all observers that a module was unregistered. 🔔➖.
-    /// </summary>
     private void NotifyUnregistered(string moduleId, IWorkflowModule module)
     {
         List<IModuleRegistryObserver> snapshot;
@@ -260,15 +395,29 @@ public class InMemoryModuleRegistry : IModuleRegistry
         }
     }
 
-    /// <summary>
-    /// Removes an observer from the subscription list. Called by <see cref="ObserverSubscription.Dispose"/>~ 🧹.
-    /// </summary>
     private void RemoveObserver(IModuleRegistryObserver observer)
     {
         lock (_observerLock)
         {
             _observers.Remove(observer);
         }
+    }
+
+    /// <summary>A single registered (version, module, enabled) entry~ 🗂️.</summary>
+    private sealed class ModuleEntry
+    {
+        public ModuleEntry(IWorkflowModule module)
+        {
+            Module = module;
+            Version = module.Version;
+            Enabled = true;
+        }
+
+        public Version Version { get; }
+
+        public IWorkflowModule Module { get; set; }
+
+        public bool Enabled { get; set; }
     }
 
     /// <summary>

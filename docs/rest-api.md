@@ -113,14 +113,42 @@ curl -X POST http://localhost:5000/api/v1/workflows \
 
 The execution lifecycle states are `Pending → Running → (Completed | Failed | Cancelled)`.
 
-## Modules 📦 (`/api/v1/modules`) — read-only
+## Modules 📦 (`/api/v1/modules`)
 
-| Method & path                | Description                                            |
-| ---------------------------- | ----------------------------------------------------- |
-| `GET /modules`               | List summaries; `?category=`, `?q=`, `?groupByCategory=true` |
-| `GET /modules/{moduleId}`    | Full details incl. schema (ports/properties)          |
+Read endpoints are available to any authenticated reader; management verbs (Phase 2.8) require
+elevated policies.
 
-Module upload / enable / disable arrive with the `.wfmod` package format in **Phase 2.8**.
+| Method & path                | Description                                            | Policy |
+| ---------------------------- | ----------------------------------------------------- | ------ |
+| `GET /modules`               | List summaries; `?category=`, `?q=`, `?groupByCategory=true` | Read |
+| `GET /modules/{moduleId}`    | Full details incl. schema, `enabled`, `availableVersions`; `?version=` | Read |
+| `POST /modules/upload`       | Install a `.wfmod` package (multipart, field `package`) → `201` + details/warnings; `422` invalid, `409` duplicate | Admin |
+| `POST /modules/{moduleId}/enable` / `.../disable` | Toggle a module (optional `?version=`) | WorkflowWrite |
+| `DELETE /modules/{moduleId}?version=` | Uninstall a packaged module; `409` if depended-upon / in use / not packaged | Admin |
+
+```bash
+curl -X POST http://localhost:5000/api/v1/modules/upload \
+  -H 'X-API-Key: my-admin-key' \
+  -F 'package=@my-module.wfmod'
+```
+
+See the [Module Author Guide](module-author-guide.md#-the-wfmod-package-format-phase-28) for the
+`.wfmod` format, the `minEngineVersion` gate, `contentHashes` integrity, versioning/pinning,
+hot-reload, and signing.
+
+### Module signing / trusted publishers
+
+Assembly signature verification is optional. By default unsigned/untrusted module assemblies **load
+with a warning**; to enforce signing, configure:
+
+```jsonc
+"Modules": { "Security": {
+  "RequireSigned": true,
+  "TrustedPublicKeyTokens": [ "b77a5c561934e089" ]   // hex strong-name tokens you trust
+} }
+```
+
+With `RequireSigned=true`, an unsigned or untrusted package upload is refused with `422`.
 
 ## Variables 🔧 (`/api/v1/variables`)
 

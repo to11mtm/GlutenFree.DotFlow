@@ -343,5 +343,86 @@ Use `ExcludeAssets="runtime"` on those package references~ 🎯
 
 ---
 
+## 📦 The `.wfmod` Package Format (Phase 2.8)
+
+A `.wfmod` is a ZIP archive that bundles your module DLL(s) with a manifest so DotFlow can install,
+version, and manage it over the REST API. Structure:
+
+```
+my-module.wfmod  (ZIP)
+├── module.json          # the manifest (required, at the root)
+├── lib/                 # your entry DLL + private dependencies (incl. its .deps.json)
+│   ├── MyCompany.MyModule.dll
+│   └── MyCompany.MyModule.deps.json
+├── docs/                # optional — README, changelog, examples
+└── assets/              # optional — icons, screenshots
+```
+
+### `module.json` manifest
+
+```jsonc
+{
+  "id": "mycompany.mymodule",          // matches IWorkflowModule.ModuleId
+  "version": "1.2.0",                   // SemVer-style major.minor.patch
+  "displayName": "My Module",
+  "description": "Does something useful.",
+  "author": "MyCompany",
+  "minEngineVersion": "1.0.0",          // optional — see the engine gate below
+  "entryAssembly": "lib/MyCompany.MyModule.dll",
+  "dependencies": [                     // optional — other modules this one needs
+    { "id": "builtin.http.request", "minVersion": "1.0.0", "maxVersion": "2.0.0" }
+  ],
+  "contentHashes": {                    // optional but recommended — see integrity below
+    "lib/MyCompany.MyModule.dll": "<base64 SHA-256 of the file>"
+  }
+}
+```
+
+### 🔢 Engine version gate (`minEngineVersion`)
+
+The DotFlow engine is **SemVer-versioned**. On install, the engine version is compared against your
+`minEngineVersion`: **if the running engine is older, the install is refused with `422`**. Set this
+to the lowest engine version your module is known to work with (omit it if you don't need a floor).
+
+### 🔐 Package integrity (`contentHashes`)
+
+`contentHashes` maps package-relative file paths → base64 SHA-256 hashes. When present, every listed
+file is verified on import and a **mismatch rejects the package** (tamper-evidence). When **absent**,
+the package still installs but **trips a warning on import** — always ship hashes for production
+modules. Compute a hash in C# with `Convert.ToBase64String(SHA256.HashData(File.ReadAllBytes(path)))`.
+
+### 🔗 Dependencies
+
+Declare cross-module dependencies in `dependencies` (and/or via `IWorkflowModule.Dependencies`).
+DotFlow resolves them in **topological order**, detects cycles, and refuses to install a package
+whose dependencies aren't present. Uninstalling a module that others depend on is refused (`409`).
+
+### 🔢 Side-by-side versions & pinning
+
+Multiple versions of the same module id can be installed at once. By default a workflow node resolves
+to the **latest enabled** version; pin a specific version on a node via
+`Metadata["moduleVersion"] = "1.2.0"`. Disabled versions are skipped by latest-resolution and fail
+validation when pinned.
+
+### 🔄 Hot-reload (opt-in)
+
+When `Modules:HotReload:Enabled=true`, DotFlow watches the installed-packages root (and, when
+`Modules:HotReload:WatchLooseDlls=true`, loose dev DLL folders) and reloads changed modules — but
+**never while an execution using that module is in flight** (it defers until executions drain).
+
+### 🔏 Signing (optional)
+
+Assemblies may be strong-name signed. By default unsigned/untrusted assemblies **load with a
+warning**; set `Modules:Security:RequireSigned=true` (and `Modules:Security:TrustedPublicKeyTokens`)
+to **block** them.
+
+### Installing over HTTP
+
+`POST /api/v1/modules/upload` (multipart, field name `package`) installs a `.wfmod`; see
+[`rest-api.md`](rest-api.md#modules--apiv1modules) for the full management API (upload / enable /
+disable / uninstall).
+
+---
+
 *Made with 💖 by Ami-Chan! Happy module building, senpai~ UwU* ✨
 

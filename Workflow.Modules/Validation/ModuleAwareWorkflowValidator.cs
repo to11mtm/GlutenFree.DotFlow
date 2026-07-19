@@ -113,6 +113,24 @@ public sealed class ModuleAwareWorkflowValidator
             }
             else
             {
+                // 🔢 Phase 2.8.2 — When the node pins a module version, that version must exist and be enabled~
+                var pinned = ResolvePinnedVersion(node);
+                if (pinned is not null)
+                {
+                    var pinnedModule = this.registry.GetModule(node.ModuleId, pinned);
+                    if (pinnedModule is null)
+                    {
+                        errors.Add(new ValidationError(
+                            "MA003",
+                            $"Node '{node.Id}' pins module '{node.ModuleId}' version {pinned}, which is not available (missing or disabled).",
+                            node.Id,
+                            nameof(node.ModuleId)));
+                        continue;
+                    }
+
+                    module = pinnedModule;
+                }
+
                 // 💾 Cache for use in checks 2 & 3 below~
                 nodeModules[node.Id] = module;
 
@@ -128,14 +146,35 @@ public sealed class ModuleAwareWorkflowValidator
     }
 
     /// <summary>
+    /// 🔢 Phase 2.8.2 — Reads an optional pinned module version from a node's metadata
+    /// (<c>Metadata["moduleVersion"]</c>)~ ✨.
+    /// </summary>
+    /// <param name="node">The node definition.</param>
+    /// <returns>The pinned version, or <c>null</c> when unset/unparseable.</returns>
+    private static Version? ResolvePinnedVersion(NodeDefinition node)
+    {
+        if (node.Metadata is null)
+        {
+            return null;
+        }
+
+        var metadata = node.Metadata.Value;
+        if (!metadata.ContainsKey("moduleVersion"))
+        {
+            return null;
+        }
+
+        return Version.TryParse(metadata["moduleVersion"], out var parsed) ? parsed : null;
+    }
+
+    /// <summary>
     /// Validates that the property keys configured on a node are all declared
     /// in the module's <see cref="Core.Models.ModuleSchema.Properties"/>~ ⚙️.
     /// </summary>
     /// <param name="node">The node to validate properties on.</param>
     /// <param name="module">The resolved module for this node.</param>
     /// <param name="errors">The error accumulator list.</param>
-    private static void ValidateNodeProperties(
-        NodeDefinition node,
+    private static void ValidateNodeProperties(        NodeDefinition node,
         IWorkflowModule module,
         List<ValidationError> errors)
     {
