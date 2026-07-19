@@ -9,6 +9,13 @@ Made with 💖 by Ami-Chan! UwU ✨
 > At the end of 3.3.a a user can log in, browse workflows, open one, and inspect it
 > visually — no editing yet (D11 read-only-first).
 
+> **🤖 Agent notes (read [master instructions](Phase3-3-WorkflowDesigner.md#agent-implementation-instructions-) first):**
+> - Slice order: **a.0 → (a.1 ∥ a.2) → a.3**. a.1 and a.2 are independent after a.0.
+> - Before a.0: inspect the real wire JSON — run the API and capture `GET /api/v1/workflows/{id}` + `GET /api/v1/modules` responses (or read the contract records in `Workflow.Api/Contracts/*`); build the DTO mirrors from *observed* shapes, then lock them with the golden-file round-trip tests.
+> - a.2 is **pure C#** — if you find yourself importing a Blazor namespace there, stop (D2 guardrail).
+> - a.0's refit should also fix `.gitignore` for `Workflow.UI/**/bin|obj` and untrack committed build artifacts.
+> - bUnit JS-interop: use `JSInterop.Mode = JSRuntimeMode.Loose` in the test context for canvas components; pointer-event tests assert on state/transform changes, not real hit-testing.
+
 ---
 
 ## 3.3.a.0 Project Refit + API Client Layer 🧰

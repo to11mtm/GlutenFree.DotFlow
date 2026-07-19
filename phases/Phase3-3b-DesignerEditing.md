@@ -10,6 +10,14 @@ Made with 💖 by Ami-Chan! UwU ✨
 > `IDesignerCommand` on the `CommandStack` (D7) — **no component mutates the document
 > directly.**
 
+> **🤖 Agent notes (read [master instructions](Phase3-3-WorkflowDesigner.md#agent-implementation-instructions-) first):**
+> - Slice order: **b.0 ∥ b.1 → b.2 → b.3 → b.4** (b.0 and b.1 are independent after a.3).
+> - **Command-pattern discipline:** write the command + its Do/Undo xUnit spec *first*, then the component that invokes it. Audit at b.4: grep the Components tree for direct `DesignerDocument` mutation — there must be none outside `Commands/*`.
+> - b.3: enumerate `PropertyEditorType` from `Workflow.Core/Models/ModuleSchema.cs` (11 values) — the editor-matrix theory test must cover every enum member so a future enum addition fails loudly.
+> - b.3 Monaco (D13): pin a specific Monaco version; loader lives in `CodeEditor.razor` + `monaco-interop.js`; the textarea fallback must be reachable in tests (fake a load failure). Do not let Monaco types leak below the view layer.
+> - b.4 D14 endpoint: implement in `Workflow.Api/V1/WorkflowEndpoints.cs` following that file's existing handler style; resolve `ModuleAwareWorkflowValidator` (see `Workflow.Modules/Validation/`) via DI as the existing endpoints resolve services; tests go in `Workflow.Tests` (not Tests.UI); update `docs/rest-api.md` in the same slice.
+> - Keyboard shortcuts: suppression-when-focused-in-input is a frequent bug source — test it explicitly (`Shortcuts_SuppressedInInputs`).
+
 ---
 
 ## Command Pattern Contract (D7) 📜

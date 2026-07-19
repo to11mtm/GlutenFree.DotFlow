@@ -311,6 +311,98 @@ docs/designer.md · docs/designer-architecture.md
 
 ---
 
+## Agent Implementation Instructions 🤖
+
+> **Audience:** an AI coding agent (e.g. Claude Opus 4.8) implementing this phase. These
+> instructions encode the repo's process + gotchas learned in Phases 2.4–3.2. Follow them
+> exactly; when a decision isn't covered here or in D1–D14, **ask the user before
+> improvising** — do not silently change scope, dependencies, or public contracts.
+
+### Workflow loop (per slice)
+
+1. **Work strictly in dependency order** from the Sub-Phase Index above. One slice at a
+   time: read the slice's Tasks + Tests blocks in its breakout file *before* writing code.
+2. **Read before you write.** Before touching a file, view it. Before consuming an
+   existing contract (DTO shape, endpoint, hub event), grep/read the real source — do not
+   code from memory of this document alone. Key sources of truth:
+   `Workflow.Core/Models/*` (WorkflowDefinition/NodeDefinition/ModuleSchema),
+   `Workflow.Api/V1/*` + `Workflow.Api/Contracts/*` (wire shapes),
+   `Workflow.Api/RealTime/*` + `Workflow.Api/Contracts/RealTime/*` (hub),
+   `Workflow.Api/Auth/AuthConfiguration.cs` (policies/schemes).
+3. **Build early, build often:** `dotnet build <project>.csproj` after each meaningful
+   unit of work; run the slice's tests before moving on. Never start slice N+1 with slice
+   N red.
+4. **Check off plan boxes as you go** — both the **Tasks** and **Tests** checkboxes in the
+   breakout file (`- [ ]` → `- [x]`). When a slice completes: set its `##` header to
+   `✅ DONE`, and when a whole breakout file completes, check its Exit Criteria. When the
+   phase completes: check the master Success Criteria, add a completion banner under
+   `## Overview`, and flip the pointer notes in `Phase3-AdvancedFeatures.md` §3.3 and
+   `phases/README.md` to COMPLETE ✅. *(This mirrors how 3.1/3.2 were closed — see those
+   files for the exact style.)*
+5. **Track progress in todos** (one todo per slice, `3-3a-0` … `3-3c-3`, with
+   dependencies) and update statuses (`in_progress`/`done`) as you work.
+6. **If you deviate** from a Task (better approach, blocked, deferred detail), do not
+   silently skip the checkbox — annotate the plan line with a short note
+   (*"done via X instead"* / *"deferred to c.3 because Y"*) so the plan stays truthful.
+
+### Repo conventions & gotchas (hard-won — respect these)
+
+- **Solution file is `Workflow.sln`** (not GlutenFree.DotFlow.sln). Add new projects with
+  `dotnet sln Workflow.sln add <csproj>`.
+- **Central Package Management:** every `PackageReference` needs a matching
+  `PackageVersion` in `Directory.Packages.props` (no `Version=` on references). New
+  packages for this phase: `bunit` (tests). Monaco is **static JS assets** under
+  `wwwroot/js/monaco/`, not a NuGet package — download/pin a specific version and note it.
+- **Some csproj/md files contain UTF-8 emoji** that can mangle with naive string edits —
+  if a targeted edit fails to match, fall back to PowerShell `-replace` on raw content.
+- **PowerShell environment:** no `&&`/`||` operators — use `;` and `if ($?)`. Each command
+  runs in a fresh process (no persisted cwd/env).
+- **Known flaky tests (pre-existing, parallel-timing only):** `NodeTimeout_OverHostCeiling_Clamped`,
+  `Parallel_BranchFails_FailFastTrue_WorkflowFails`, `Status_AfterCompletion_ReturnsCompleted`,
+  occasional Roslyn script tests under full parallel load. A full-suite run with 1–3
+  failures from this set that **pass in isolation** is not a regression — verify by
+  re-running the failing test alone; never "fix" these as part of 3.3.
+- **Style:** repo uses StyleCop analyzers + XML doc comments with the established emoji
+  voice (see any 3.2 file in `Workflow.Api/RealTime/*` for the register). Match it in new
+  C# files. `this.`-prefix convention in `Workflow.Api`-style projects; check the target
+  project's existing files and mirror them.
+- **Do not commit `bin/`/`obj/`** — `Workflow.UI` has stray build artifacts in git; the
+  a.0 refit should fix `.gitignore` coverage and remove them from tracking, not add more.
+- **Never edit generated/lock files by hand.**
+
+### Architecture guardrails (D2 — non-negotiable)
+
+- `Workflow.UI.Client/Designer/State/*` and `Api/*` must have **zero Blazor/JSInterop
+  types** (no `ComponentBase`, `IJSRuntime`, `EventCallback`). JS interop lives only in
+  view-layer wrappers (`CodeEditor.razor`, canvas pointer glue). If a state service needs
+  something from the DOM, pass it in as plain data.
+- **No LanguageExt in the client.** DTOs are plain System.Text.Json records.
+- **No new server endpoints** beyond D14's `POST /api/v1/workflows/validate`. If a slice
+  seems to need one, stop and ask.
+- The Blazor host (`Workflow.UI`) holds **no designer logic** — static hosting + optional
+  dev proxy only.
+
+### Verification gates
+
+- **Per slice:** slice tests green + `dotnet build Workflow.sln` clean.
+- **Per breakout file (a/b/c):** full `Workflow.Tests` + `Workflow.Tests.UI` suites green
+  (modulo the known flaky set, verified in isolation); Exit Criteria checklist satisfied;
+  **manual smoke** against a live API (`dotnet run` on `Workflow.Api`, then the UI) for
+  the flows that bUnit can't cover (real pan/zoom feel, real SignalR).
+- **API-affecting work (D14 endpoint):** its tests live in `Workflow.Tests` (not
+  Tests.UI), follow the existing `WebApplicationFactory` endpoint-test pattern, and
+  `docs/rest-api.md` gets the endpoint row in the same edit.
+
+### Scope discipline
+
+- Post-MVP slices (3.3.P1–P8) are **out of scope** — do not implement them opportunistically.
+- Don't refactor backend code you pass through unless a slice explicitly says so; the
+  known-flaky tests and pre-existing analyzer warnings are not yours to fix here.
+- Mockups S1–S5 are **layout guides, not pixel specs** — match structure and affordances,
+  not exact box-drawing.
+
+---
+
 ## Post-MVP Slices 🚧 *(deferred — not blocking Phase 4)*
 
 ### 3.3.P1 Code-editor preference toggle 🖋️ *(Q3 — Monaco is MVP per D13)*

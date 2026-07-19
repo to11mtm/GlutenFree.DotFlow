@@ -10,6 +10,13 @@ Made with 💖 by Ami-Chan! UwU ✨
 > polish pass that closes the phase. **No new backend** — everything rides
 > `POST /execute`, `GET /executions[/{id}]`, and `/hubs/workflow` as shipped (D8).
 
+> **🤖 Agent notes (read [master instructions](Phase3-3-WorkflowDesigner.md#agent-implementation-instructions-) first):**
+> - Slice order: **c.0 → c.1 → c.2 → c.3** (strictly sequential — each reuses the previous slice's machinery).
+> - Hub contracts: read `Workflow.Api/RealTime/IWorkflowHubClient.cs` + `Contracts/RealTime/RealTimeEvents.cs` for exact method names/payloads, and mirror the client patterns in `Workflow.Tests/Api/RealTime/*` (harness, re-subscribe-on-reconnect). Event *method names* are the SignalR `connection.On("…")` keys.
+> - c.1 tests: drive `RunState` mapping with plain xUnit (no hub needed); for component tests, feed events through the `RealTimeClient` seam with a fake — do not spin real SignalR in bUnit. The real-hub path is covered by the manual smoke + the existing 3.2 server tests.
+> - c.2 reuse rule: history-mode painting must go through the **same** `RunState`/overlay code path as c.1's snapshot seeding — if you find yourself writing a second painter, stop and refactor.
+> - c.3 closes the phase: run the full checklist in the master's Agent Instructions step 4 (headers → DONE, Exit + Success Criteria, completion banner, pointer notes in `Phase3-AdvancedFeatures.md` + `phases/README.md`).
+
 ---
 
 ## 3.3.c.0 Execute From Designer ▶️
