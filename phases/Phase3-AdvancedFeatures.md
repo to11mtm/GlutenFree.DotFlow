@@ -46,6 +46,8 @@ Phase 3 adds the most user-facing features:
 
 ### 3.1 Scripting Engine (Week 15-17)
 
+> **📋 Detailed sliced plan available:** [Phase3-1-ScriptingEngine.md](Phase3-1-ScriptingEngine.md) — `IScriptExecutor` seam + JavaScript (Jint, already in the tree), C# (adapting the existing `Workflow.Scripting.Roslyn` core), and Lua (MoonSharp, quarantined project); capability-gated `IWorkflowScriptApi` (variables/logging/utilities always-on; HTTP/file gated, **no raw database API**); `builtin.script` module; blob-backed script libraries; `/api/v1/scripts/test` Minimal-API endpoints; and the deferred PropertyBinder inline-expression evaluation. **Python is deferred to 3.1.P1** (IronPython dialect lag / Python.NET native-CPython requirement). The sliced doc reconciles this checklist against Phase 2's existing scripting infrastructure and supersedes it. **Timeline: Weeks 23-25.** Q1–Q7 clarifications pending in the sliced doc.
+
 **Tasks:**
 - [ ] **Implement JavaScript executor (Jint)** 🟨
   - [ ] Install `Jint` NuGet package

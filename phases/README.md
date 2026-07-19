@@ -58,6 +58,9 @@ This directory contains individual phase breakdown files to make it easier to na
 - Module manager UI
 - Client SDKs (C#, TypeScript, Python)
 
+**Detailed sub-phase breakouts:**
+- [Phase3-1-ScriptingEngine.md](Phase3-1-ScriptingEngine.md) ⏳ — `IScriptExecutor` seam with JavaScript (Jint, already in-tree), C# (existing Roslyn core adapter), and Lua (MoonSharp, quarantined); capability-gated `IWorkflowScriptApi` (deny-by-default network/file, no raw DB); `builtin.script` module; script libraries; `/api/v1/scripts/test` endpoints; PropertyBinder inline expressions (deferred 1.4 item). Python → post-MVP 3.1.P1. Weeks 23-25; Q1–Q7 clarifications pending~ 🌷
+
 ### [Phase4-Production.md](Phase4-Production.md) 💎
 **Weeks 23-28** - Polish and Production Readiness
 - Performance optimization
