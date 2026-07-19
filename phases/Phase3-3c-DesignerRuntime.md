@@ -5,10 +5,10 @@ Made with 💖 by Ami-Chan! UwU ✨
 [Master plan: Phase3-3-WorkflowDesigner.md](Phase3-3-WorkflowDesigner.md) | [Prev: 3.3.b Editing](Phase3-3b-DesignerEditing.md)
 
 > **Scope:** Running workflows from the designer and watching them live: the ▶ Run flow,
-> the real-time execution overlay driven by the Phase 3.2 hub (mockup **S3**), a run
-> log/history side pane, plus the docs + polish pass that closes the phase. **No new
-> backend** — everything rides `POST /execute`, `GET /executions/{id}`, and
-> `/hubs/workflow` as shipped (D8).
+> the real-time execution overlay driven by the Phase 3.2 hub (mockup **S3**), an
+> **execution history panel** for reviewing past runs (mockup **S5**), plus the docs +
+> polish pass that closes the phase. **No new backend** — everything rides
+> `POST /execute`, `GET /executions[/{id}]`, and `/hubs/workflow` as shipped (D8).
 
 ---
 
@@ -63,7 +63,60 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 ---
 
-## 3.3.c.2 Docs + Polish + Minimap + A11y/Perf Pass 📚✨
+## 3.3.c.2 Execution History Panel 📜
+
+> **Purpose:** Review past runs, not just live ones: a per-workflow execution history
+> list, opening a finished execution to inspect outputs/errors, and painting its final
+> node states onto the canvas by **reusing the c.1 overlay machinery**. Backend is fully
+> shipped (2.7.2): `GET /api/v1/executions?workflowId=` + `GET /api/v1/executions/{id}`.
+
+**Complexity:** 🟢 Low-Medium *(mostly reuse — list UI + a read-only overlay variant)*
+
+### Mockup S5 — history panel + inspection
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│ 🌊 order-pipeline v1.4.0            [💾 Save] [▶ Run] [🕘 History ▾]        [⤢ Fit]    │
+├────────────────┬─────────────────────────────────────────────────────┬───────────────┤
+│ EXECUTIONS 🕘  │        CANVAS (final states painted, read-only)      │ EXECUTION     │
+│ ┌────────────┐ │                                                      │ 7f3a… ❌      │
+│ │ ❌ 7f3a…    │ │   ✅ trigger ─▶ ✅ http-1 ─▶ ✅ cond-1 ─▶ ❌ script-1 │ Failed 14:03  │
+│ │ 14:03 8.2s │◀┼── selected                                           │ Duration 8.2s │
+│ ├────────────┤ │                 (log-fail: ⏭ skipped)                │ ───────────── │
+│ │ ✅ 51c0…    │ │                                                      │ Error         │
+│ │ 13:40 6.1s │ │                                                      │  script-1:    │
+│ ├────────────┤ │                                                      │  "boom …"     │
+│ │ ✅ 2ab9…    │ │                                                      │ Outputs       │
+│ │ 12:15 5.9s │ │                                                      │  { "total":…} │
+│ ├────────────┤ │                                                      │ Node states   │
+│ │  ‹ more ›  │ │                                                      │  ✅✅✅❌⏭ list │
+│ └────────────┘ │                                                      │ [↻ Re-run]    │
+├────────────────┴─────────────────────────────────────────────────────┴───────────────┤
+│ Viewing past execution 7f3a… (read-only)  ·  [✖ Back to edit]                          │
+└──────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+- [ ] **`ExecutionsClient.ListAsync(workflowId, page)`** — wraps `GET /api/v1/executions?workflowId=` (paged); DTO: id, state, startedAt, completedAt, triggeredBy
+- [ ] **History panel (`ExecutionHistory.razor`)** — `[🕘 History]` toolbar toggle opens a left-rail list (replaces the palette while open): state icon (✅/❌/🛑/🔄), short id, start time, duration; paging; auto-refresh of the top entry while a run is live; empty state ("no executions yet")
+- [ ] **Inspect a past execution** — selecting an entry enters **history mode** (a read-only variant of c.0's run mode — same editing guards): `GetStatusAsync(id)` → paint final per-node states through the existing `RunState`/overlay path (c.1 reuse — the snapshot-seeding code path IS this feature); right rail shows overall state, duration, error, **outputs** (pretty-printed JSON, collapsible), and the per-node state list with click-to-navigate
+- [ ] **Live-to-history continuity** — when a live run (c.1) completes, it appears at the top of the history list; "view details" from the completion toast opens it in history mode
+- [ ] **Re-run** — `[↻ Re-run]` starts a fresh execution with the same inputs (from the stored run-dialog inputs when available, else the execution record's inputs if present, else `{}` with the dialog shown) → jumps into live run mode
+- [ ] **Deep link** — `/designer/{id}?execution={executionId}` opens directly in history mode (shareable failure links)
+- [ ] **Exit** — `[✖ Back to edit]` clears the overlay and returns to edit mode, document untouched (same contract as run mode)
+
+### Tests (target ~9): → `Workflow.Tests.UI/Components/ExecutionHistoryTests.cs` + `State/HistoryModeTests.cs`
+
+- [ ] `History_ListsExecutions_PagedWithStates` · `History_Empty_ShowsEmptyState`
+- [ ] `SelectExecution_PaintsFinalNodeStates` *(completed/failed/skipped mapping)*
+- [ ] `SelectExecution_ShowsOutputsAndError` · `HistoryMode_DisablesEditing`
+- [ ] `LiveRunCompletion_AppearsInHistoryList` · `ReRun_StartsExecution_WithRememberedInputs`
+- [ ] `DeepLink_OpensHistoryMode` · `BackToEdit_ClearsOverlay_DocumentIntact`
+
+---
+
+## 3.3.c.3 Docs + Polish + Minimap + A11y/Perf Pass 📚✨
 
 > **Purpose:** Close the phase: the lightweight minimap (Q6 compromise), user +
 > architecture docs (incl. the React port checklist, D2), UX polish debt from a/b, and a
@@ -74,7 +127,7 @@ Made with 💖 by Ami-Chan! UwU ✨
 ### Tasks
 
 - [ ] **Lightweight minimap (Q6 compromise)** — `Minimap.razor`: corner overlay (bottom-right, collapsible) rendering **node bounds as scaled rectangles** + a viewport frame, driven by the same `CanvasGeometry` content-bounds math as Fit; click/drag on the minimap pans the main canvas; run-mode tints rectangles by node state (cheap — reuses the state classes); **no rendered thumbnails** (that's 3.3.P6); ~4 tests (`Minimap_RendersRectPerNode`, `Minimap_ViewportFrame_MatchesTransform`, `Minimap_Click_PansCanvas`, `Minimap_Collapse_Persists`)
-- [ ] **`docs/designer.md` (user guide)** — getting started (run API + UI, auth token), screen tour matching mockups S1–S4, edit walkthrough (palette → connect → configure → save), run walkthrough (S3), keyboard shortcut table, troubleshooting (CORS, auth, hub blocked → polling fallback)
+- [ ] **`docs/designer.md` (user guide)** — getting started (run API + UI, auth token), screen tour matching mockups S1–S5, edit walkthrough (palette → connect → configure → save), run walkthrough (S3), **execution history review walkthrough (S5)**, keyboard shortcut table, troubleshooting (CORS, auth, hub blocked → polling fallback)
 - [ ] **`docs/designer-architecture.md` (D2)** — the layering diagram (thin views / framework-free state / wire DTOs), the state-service catalog with behavioral contracts (pointing at the xUnit specs as the source of truth), **the React+TypeScript port checklist**: DTOs→TS types, state services→TS classes (spec-driven), views→React Flow-or-custom, auth/hub equivalents (`@microsoft/signalr`), what stays untouched (the entire backend)
 - [ ] **Cross-links** — README doc index + `phases/README.md` breakout entry; `docs/rest-api.md` gets a "consumed by the designer" note; `docs/realtime.md` links the overlay as a reference client
 - [ ] **Polish debt sweep** — pinch-zoom if deferred from a.3; edge hover hit-area widening (invisible fat stroke); node title ellipsis + tooltips; palette drag ghost fidelity; toast timing; empty-canvas onboarding hint ("drag a module here to start")
@@ -93,6 +146,7 @@ Made with 💖 by Ami-Chan! UwU ✨
 - [ ] From the designer: ▶ Run executes the open workflow and the canvas animates live through to ✅/❌, matching mockup S3
 - [ ] Late-join and reconnect both repaint correctly from the snapshot; hub-blocked environments degrade to polling with a visible notice
 - [ ] Run mode never mutates the document; closing returns to a clean edit mode
+- [ ] Past executions are reviewable: history list per workflow, final node states painted on the canvas, outputs/errors inspectable, re-run works (S5)
 - [ ] The lightweight minimap navigates the canvas and tints with run state (Q6 compromise)
 - [ ] `docs/designer.md` + `docs/designer-architecture.md` shipped with the React port checklist
 - [ ] Full solution + test suite green; Phase 3.3 Success Criteria in the [master plan](Phase3-3-WorkflowDesigner.md#success-criteria-) all check off

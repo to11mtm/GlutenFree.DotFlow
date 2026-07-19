@@ -220,6 +220,10 @@ coordinate math) and undo/redo correctness are the risky parts; everything serve
    invalid target (cycle / same node / type clash) shows ⛔ and cancels.
 ```
 
+> **S5 — Execution history panel** (past-run review: list, final-state canvas painting,
+> outputs/errors, re-run) lives with its slice in
+> [Phase3-3c-DesignerRuntime.md §3.3.c.2](Phase3-3c-DesignerRuntime.md#33c2-execution-history-panel-).
+
 ---
 
 ## Architecture (framework-swap ready) 🏗️
@@ -273,6 +277,7 @@ Workflow.UI/Workflow.UI.Client/
       ModulePalette.razor · PropertiesPanel.razor · PropertyEditors/*.razor
       CodeEditor.razor (+ monaco-interop.js — lazy-loaded, D13)
       Minimap.razor (lightweight, Q6 compromise)
+      ExecutionHistory.razor (past-run review, 3.3.c.2)
       Toolbar.razor · RunOverlay.razor · StatusBar.razor · ContextMenu.razor
   Pages/ (WorkflowList.razor · Designer.razor · Settings.razor)
   wwwroot/css/tokens.css
@@ -301,7 +306,8 @@ docs/designer.md · docs/designer-architecture.md
 | 3.3.b.4 Undo/redo + save + dirty tracking + shortcuts | [3-3b](Phase3-3b-DesignerEditing.md) | b.0–b.3 |
 | 3.3.c.0 Execute from designer | [3-3c](Phase3-3c-DesignerRuntime.md) | b.4 |
 | 3.3.c.1 Real-time overlay (3.2 hub) | [3-3c](Phase3-3c-DesignerRuntime.md) | c.0 |
-| 3.3.c.2 Docs + polish + minimap + a11y/perf pass | [3-3c](Phase3-3c-DesignerRuntime.md) | c.1 |
+| 3.3.c.2 Execution history panel | [3-3c](Phase3-3c-DesignerRuntime.md) | c.1 |
+| 3.3.c.3 Docs + polish + minimap + a11y/perf pass | [3-3c](Phase3-3c-DesignerRuntime.md) | c.2 |
 
 ---
 
@@ -351,6 +357,7 @@ Pin/unpin module versions per node once `NodeDefinition.ModuleVersion` is promot
 - [ ] Undo/redo works across all mutation types with a 50-entry history; dirty indicator + unsaved-changes warning behave (D7)
 - [ ] Save round-trips through `PUT/POST /api/v1/workflows` — reload reproduces the identical canvas (D5); the save pipeline runs client structural checks **and** `POST /api/v1/workflows/validate` (D14) with detailed, node-linked error messages
 - [ ] ▶ Run starts an execution and the canvas lights up live via the 3.2 hub: pending→running→completed/failed per node + progress bar (S3, D8)
+- [ ] Past executions are reviewable in the designer: per-workflow history list, final node states painted on the canvas, outputs/errors inspectable, re-run (S5, 3.3.c.2)
 - [ ] A lightweight minimap shows node bounds + viewport frame with click-to-navigate (Q6 compromise)
 - [ ] The designer works against an auth-required API using a pasted JWT/API key (D9)
 - [ ] **API/engine changes limited to the single D14 validate endpoint** (wrapping the existing validator) + UI hosting; the client touches only public REST + hub contracts (D2)
