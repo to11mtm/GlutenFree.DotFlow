@@ -164,6 +164,39 @@ Scoped by `?scope=global|workflow|execution` (+ `?scopeId=` for workflow/executi
 
 A `null` value is stored as a *present null* entry, distinct from a missing variable (`404`).
 
+## Scripts 📜 (`/api/v1/scripts`)
+
+Sandboxed multi-language script execution and library management (see [Scripting](scripting.md)).
+
+| Method & path                          | Policy         | Description                                        |
+| -------------------------------------- | -------------- | -------------------------------------------------- |
+| `POST /scripts/test`                   | WorkflowWrite  | Run a script; returns result, logs, staged variable updates, duration |
+| `GET /scripts/languages`               | WorkflowRead   | Registered executor ids + display names            |
+| `GET /scripts/libraries?language=`     | WorkflowRead   | List libraries (optional language filter)          |
+| `GET /scripts/libraries/{id}`          | WorkflowRead   | One library                                        |
+| `PUT /scripts/libraries/{id}`          | WorkflowWrite  | Create/update a library                            |
+| `DELETE /scripts/libraries/{id}`       | WorkflowWrite  | Delete a library                                   |
+
+`POST /scripts/test` body:
+
+```json
+{
+  "language": "javascript",
+  "code": "return input.a + input.b;",
+  "inputs": { "a": 2, "b": 3 },
+  "libraries": [],
+  "config": { "timeoutSeconds": 5, "allowNetwork": false, "allowFileSystem": false, "allowedPaths": [] }
+}
+```
+
+Response (a script *error* is reported in a `200` body with `success: false`):
+
+```json
+{ "success": true, "result": 5, "logs": [], "variableUpdates": {}, "durationMs": 12.4, "error": null }
+```
+
+Config is clamped to the host `Scripting:*` ceilings. Unknown language or empty code → `422`.
+
 ## Monitoring 📊 (`/api/v1/health`, `/status`, `/metrics`)
 
 | Method & path            | Description                                            |

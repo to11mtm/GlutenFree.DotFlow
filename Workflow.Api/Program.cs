@@ -150,6 +150,12 @@ builder.Services.AddSingleton<IExpressionEvaluator, JintExpressionEvaluator>();
 builder.Services.AddKeyedSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>("csharp");
 builder.Services.AddSingleton<IExpressionEvaluatorFactory, KeyedExpressionEvaluatorFactory>();
 
+//  PropertyBinder (Phase 3.1.7)~ — inline expression evaluation ({{Variable.Count > 5}}) via the
+//  default IExpressionEvaluator. Registered explicitly so NodeExecutor resolves an expression-enabled
+//  binder instead of the parameterless (reference-only) fallback.
+builder.Services.AddSingleton<Workflow.Modules.Binding.IPropertyBinder>(sp =>
+    new Workflow.Modules.Binding.PropertyBinder(sp.GetService<IExpressionEvaluator>()));
+
 //  HTTP built-in modules (Phase 2.3.0)~ — IHttpClientFactory named client "dotflow.http"
 // (was: builder.Services.AddHttpModules(); — now aggregated under AddWorkflowModules)
 builder.Services.AddWorkflowModules();

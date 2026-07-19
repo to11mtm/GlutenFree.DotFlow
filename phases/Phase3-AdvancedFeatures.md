@@ -44,9 +44,9 @@ Phase 3 adds the most user-facing features:
 
 **Goal:** Add scripting, UI, and advanced capabilities! 🌟
 
-### 3.1 Scripting Engine (Week 15-17)
+### 3.1 Scripting Engine (Week 15-17) — COMPLETE ✅
 
-> **📋 Detailed sliced plan available:** [Phase3-1-ScriptingEngine.md](Phase3-1-ScriptingEngine.md) — `IScriptExecutor` seam + JavaScript (Jint, already in the tree), C# (adapting the existing `Workflow.Scripting.Roslyn` core), and Lua (MoonSharp, quarantined project); capability-gated `IWorkflowScriptApi` (variables/logging/utilities always-on; HTTP/file gated **deny-by-default**, **no raw database API**); `builtin.script` module; blob-backed script libraries; `/api/v1/scripts/test` Minimal-API endpoints; and the deferred PropertyBinder inline-expression evaluation. **Python is deferred to 3.1.P1**; **Lua coroutine bridging is planned but deferred to 3.1.P5** (the MVP executor is built coroutine-ready). The sliced doc reconciles this checklist against Phase 2's existing scripting infrastructure and supersedes it. **Timeline: Weeks 23-25.** Q1–Q7 resolved ✅.
+> **📋 Detailed sliced plan available:** [Phase3-1-ScriptingEngine.md](Phase3-1-ScriptingEngine.md) — `IScriptExecutor` seam + JavaScript (Jint, already in the tree), C# (adapting the existing `Workflow.Scripting.Roslyn` core), and Lua (MoonSharp, quarantined project); capability-gated `IWorkflowScriptApi` (variables/logging/utilities always-on; HTTP/file gated **deny-by-default**, **no raw database API**); `builtin.script` module; blob-backed script libraries; `/api/v1/scripts/test` Minimal-API endpoints; and the deferred PropertyBinder inline-expression evaluation. **Python is deferred to 3.1.P1**; **Lua coroutine bridging is planned but deferred to 3.1.P5** (the MVP executor is built coroutine-ready). The sliced doc reconciles this checklist against Phase 2's existing scripting infrastructure and supersedes it. **Timeline: Weeks 23-25.** Q1–Q7 resolved ✅. **All 8 slices (3.1.0–3.1.7) implemented, tested, and documented — see the sliced plan for status; docs in [`docs/scripting.md`](../docs/scripting.md).**
 
 **Tasks:**
 - [ ] **Implement JavaScript executor (Jint)** 🟨

@@ -8,6 +8,8 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 ## Overview
 
+> **Progress (2026-07-19):** Phase 3.1 is **COMPLETE ✅**. All 8 slices (3.1.0–3.1.7) are implemented, tested, and documented — abstractions + JS/C#/Lua executors, unified script API, `builtin.script`, library system, `/api/v1/scripts` endpoints, and PropertyBinder inline expressions. ~1,285 tests green (the only intermittent failures are pre-existing parallel-timing flakes that pass in isolation). A timing race in the JavaScript executor's timeout reporting was fixed as part of this work, and the builtin-module count tests were updated for `builtin.script`. Docs: `docs/scripting.md` (new) + `docs/rest-api.md` + `docs/module-author-guide.md`.
+
 Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.script`) with a unified, sandboxed, multi-language execution seam — plus the **workflow script API** (variables/logging/utilities and gated HTTP/file access), a **script library system** for reusable snippets, a **script test endpoint**, and the long-deferred **PropertyBinder inline expression evaluation** from Phase 1.4. Much of the underlying machinery **already exists**: Jint is in the tree as the sandboxed `IExpressionEvaluator` (Phase 2.2.5), the `Workflow.Scripting.Roslyn` core ships typed C# script compilation with forbidden-syntax analysis and collectible-ALC execution (Phase 2.6.b), and the transform-script family already proves out the validate/preview/compile endpoint pattern. Phase 3.1 is about **generalizing** these proven seams into a first-class scripting surface, not building from scratch~ 🌷
 
 > **Reality-check note (July 2026):** The §3.1 checklist in [`Phase3-AdvancedFeatures.md`](Phase3-AdvancedFeatures.md#31-scripting-engine-week-15-17) was written before Phase 2 landed. Since then: (a) **Jint is already integrated** as `JintExpressionEvaluator` with memory/timeout/recursion sandboxing — the "Implement JavaScript executor (Jint)" task is a generalization, not a green-field build; (b) **typed C# scripting already exists** (`Workflow.Scripting.Roslyn` + `builtin.transform.script`) — C# joins the language set nearly for free; (c) the checklist's `ScriptTestController` becomes a **Minimal-API endpoint group** per the D1 convention from 2.7; (d) the checklist's script Database API overlaps with the Phase 2.4 database module family and its named-connection registry — raw connection strings in scripts are a **security anti-pattern** we won't ship; (e) `PropertyBinder` exists with `{{Variable.X}}`/`{{NodeId.Output}}` resolution and an explicit note deferring inline expressions to this phase. This plan reconciles all five.
@@ -77,7 +79,7 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ---
 
-## 3.1.0 Scripting Abstractions + JavaScript Executor 🟨 (`Workflow.Scripting/*`)
+## 3.1.0 Scripting Abstractions + JavaScript Executor ✅ DONE (`Workflow.Scripting/*`)
 
 > **Purpose:** The seam everything else plugs into — `IScriptExecutor`, config/result contracts, and the first executor (Jint/JS), generalized from the proven evaluator posture~ ✨
 
@@ -85,29 +87,29 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### Tasks
 
-- [ ] **New project `Workflow.Scripting`** 📦 — references `Workflow.Core` only (+ Jint); wired into the solution + `Directory.Packages.props`
-- [ ] **`Abstractions/IScriptExecutor.cs`** — `LanguageId` (e.g. `"javascript"`), `DisplayName`, `ExecuteAsync(string code, ScriptExecutionContext context, CancellationToken ct) → ScriptExecutionResult`
-- [ ] **`Abstractions/ScriptExecutionContext.cs`** — `Inputs` (dict), `Variables` (read snapshot), `Api` (the bridge object, D6), `Config` (`ScriptExecutionConfig`), `ExecutionId`/`WorkflowId`/`NodeId`, `Logger`
-- [ ] **`Abstractions/ScriptExecutionConfig.cs` (D12)** — `TimeoutSeconds=30`, `MaxMemoryBytes=64MB`, `AllowNetwork=false`, `AllowFileSystem=false`, `AllowedPaths=[]`, `MaxHttpRequests=10`; `Clamp(hostCeilings)` helper so node-level config can never exceed host limits
-- [ ] **`Abstractions/ScriptExecutionResult.cs`** — `Success`, `ReturnValue` (object?/JsonElement), `VariableUpdates` (staged, D7), `Logs` (captured api log calls), `Error`/`Diagnostics`, `Duration`
-- [ ] **`Abstractions/IScriptExecutorFactory.cs`** + keyed-DI implementation (`GetExecutor(languageId)`, `GetRegisteredLanguages()`) — mirrors `KeyedExpressionEvaluatorFactory`
-- [ ] **`Executors/JavaScriptScriptExecutor.cs` (D2)** 🟨
-  - [ ] Jint engine per execution: strict mode, `MemoryLimit`/`TimeoutInterval`/recursion from config, linked-CTS interrupt (same pattern as `JintExpressionEvaluator`)
-  - [ ] Inject `workflow` API object + `input` global; marshal .NET↔JS via Jint interop + `JsonValueConverter` fallback for complex graphs
-  - [ ] Promise support: a returned promise is awaited (Q7); script errors → structured `ScriptExecutionResult.Error` (line info when available)
-- [ ] **DI:** `AddWorkflowScripting()` (factory + JS executor); host ceilings bound from `Scripting:*` config
+- [x] **New project `Workflow.Scripting`** 📦 — references `Workflow.Core` only (+ Jint); wired into the solution + `Directory.Packages.props`
+- [x] **`Abstractions/IScriptExecutor.cs`** — `LanguageId` (e.g. `"javascript"`), `DisplayName`, `ExecuteAsync(string code, ScriptExecutionContext context, CancellationToken ct) → ScriptExecutionResult`
+- [x] **`Abstractions/ScriptExecutionContext.cs`** — `Inputs` (dict), `Variables` (read snapshot), `Api` (the bridge object, D6), `Config` (`ScriptExecutionConfig`), `ExecutionId`/`WorkflowId`/`NodeId`, `Logger`
+- [x] **`Abstractions/ScriptExecutionConfig.cs` (D12)** — `TimeoutSeconds=30`, `MaxMemoryBytes=64MB`, `AllowNetwork=false`, `AllowFileSystem=false`, `AllowedPaths=[]`, `MaxHttpRequests=10`; `Clamp(hostCeilings)` helper so node-level config can never exceed host limits
+- [x] **`Abstractions/ScriptExecutionResult.cs`** — `Success`, `ReturnValue` (object?/JsonElement), `VariableUpdates` (staged, D7), `Logs` (captured api log calls), `Error`/`Diagnostics`, `Duration`
+- [x] **`Abstractions/IScriptExecutorFactory.cs`** + keyed-DI implementation (`GetExecutor(languageId)`, `GetRegisteredLanguages()`) — mirrors `KeyedExpressionEvaluatorFactory`
+- [x] **`Executors/JavaScriptScriptExecutor.cs` (D2)** 🟨
+  - [x] Jint engine per execution: strict mode, `MemoryLimit`/`TimeoutInterval`/recursion from config, linked-CTS interrupt (same pattern as `JintExpressionEvaluator`)
+  - [x] Inject `workflow` API object + `input` global; marshal .NET↔JS via Jint interop + `JsonValueConverter` fallback for complex graphs
+  - [x] Promise support: a returned promise is awaited (Q7); script errors → structured `ScriptExecutionResult.Error` (line info when available)
+- [x] **DI:** `AddWorkflowScripting()` (factory + JS executor); host ceilings bound from `Scripting:*` config
 
 ### Tests (target ~12): → `Workflow.Tests/Scripting/JavaScriptScriptExecutorTests.cs`
 
-- [ ] `Execute_SimpleScript_ReturnsValue` · `Execute_InputData_Accessible` · `Execute_ObjectReturn_MarshalsToNet`
-- [ ] `Execute_SyntaxError_StructuredError` · `Execute_RuntimeError_StructuredError`
-- [ ] `Execute_Timeout_Enforced` · `Execute_MemoryLimit_Enforced` · `Execute_CancellationToken_Honoured`
-- [ ] `Execute_Promise_Awaited` *(Q7)* · `Execute_StrictMode_UndeclaredThrows`
-- [ ] `Config_Clamp_NodeCannotExceedHostCeilings` · `Factory_ResolvesRegisteredLanguages`
+- [x] `Execute_SimpleScript_ReturnsValue` · `Execute_InputData_Accessible` · `Execute_ObjectReturn_MarshalsToNet`
+- [x] `Execute_SyntaxError_StructuredError` · `Execute_RuntimeError_StructuredError`
+- [x] `Execute_Timeout_Enforced` · `Execute_MemoryLimit_Enforced` · `Execute_CancellationToken_Honoured`
+- [x] `Execute_Promise_Awaited` *(Q7)* · `Execute_StrictMode_UndeclaredThrows`
+- [x] `Config_Clamp_NodeCannotExceedHostCeilings` · `Factory_ResolvesRegisteredLanguages`
 
 ---
 
-## 3.1.1 Unified Workflow Script API 🔧 (`Workflow.Scripting/Api/*`)
+## 3.1.1 Unified Workflow Script API ✅ DONE (`Workflow.Scripting/Api/*`)
 
 > **Purpose:** The `workflow` object scripts see — variables, logging, utilities always-on; HTTP/file capability-gated; no raw database access (D6/D7/Q2)~ ✨
 
@@ -115,28 +117,28 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### Tasks
 
-- [ ] **`Api/IWorkflowScriptApi.cs` + `WorkflowScriptApi.cs`** 🔧
-  - [ ] **Variables (D7):** `GetVariable(name)` · `SetVariable(name, value)` (staged) · `DeleteVariable(name)` (staged tombstone) · `VariableExists(name)`
-  - [ ] **Logging:** `LogDebug/LogInfo/LogWarning/LogError` — forwarded to the module logger **and** captured into `ScriptExecutionResult.Logs` (for the test endpoint)
-  - [ ] **Utilities:** `NewGuid()` · `Now()`/`UtcNow()` · `FormatDateTime(date, format)` · `Base64Encode/Decode` · `Hash(data, algorithm)` (SHA-256/SHA-512/MD5) · `ParseJson`/`ToJson` · `ParseCsv`/`ToCsv` (reuse the 2.5.a CsvHelper internals)
-  - [ ] **Workflow context:** `GetExecutionId()` · `GetWorkflowId()` · `GetNodeId()` · `WaitAsync(ms)` (CT-linked, capped by remaining timeout)
-- [ ] **Gated HTTP (D6/Q3)** 🌐 — `HttpGetAsync/HttpPostAsync/HttpPutAsync/HttpDeleteAsync(url, body?, headers?)`; throws a clear `ScriptSecurityException` when `AllowNetwork=false`; per-execution request counter enforcing `MaxHttpRequests`; uses the named `dotflow.http` client; responses surfaced as `{ status, headers, body }`
-- [ ] **Gated file system (D6)** 📁 — `ReadFileAsync/WriteFileAsync/FileExists/DeleteFile(path)`; throws when `AllowFileSystem=false`; every path validated against `AllowedPaths` via the 2.5.a path-security sandbox (traversal-proof)
-- [ ] **No database API** — document the decision + the node-composition alternative (Q2)
-- [ ] **Language bridging:** JS interop shapes verified (camelCase aliases where idiomatic); marshalling helpers shared for 3.1.2/3.1.3
+- [x] **`Api/IWorkflowScriptApi.cs` + `WorkflowScriptApi.cs`** 🔧
+  - [x] **Variables (D7):** `GetVariable(name)` · `SetVariable(name, value)` (staged) · `DeleteVariable(name)` (staged tombstone) · `VariableExists(name)`
+  - [x] **Logging:** `LogDebug/LogInfo/LogWarning/LogError` — forwarded to the module logger **and** captured into `ScriptExecutionResult.Logs` (for the test endpoint)
+  - [x] **Utilities:** `NewGuid()` · `Now()`/`UtcNow()` · `FormatDateTime(date, format)` · `Base64Encode/Decode` · `Hash(data, algorithm)` (SHA-256/SHA-512/MD5) · `ParseJson`/`ToJson` · `ParseCsv`/`ToCsv` (reuse the 2.5.a CsvHelper internals)
+  - [x] **Workflow context:** `GetExecutionId()` · `GetWorkflowId()` · `GetNodeId()` · `WaitAsync(ms)` (CT-linked, capped by remaining timeout)
+- [x] **Gated HTTP (D6/Q3)** 🌐 — `HttpGetAsync/HttpPostAsync/HttpPutAsync/HttpDeleteAsync(url, body?, headers?)`; throws a clear `ScriptSecurityException` when `AllowNetwork=false`; per-execution request counter enforcing `MaxHttpRequests`; uses the named `dotflow.http` client; responses surfaced as `{ status, headers, body }`
+- [x] **Gated file system (D6)** 📁 — `ReadFileAsync/WriteFileAsync/FileExists/DeleteFile(path)`; throws when `AllowFileSystem=false`; every path validated against `AllowedPaths` via the 2.5.a path-security sandbox (traversal-proof)
+- [x] **No database API** — document the decision + the node-composition alternative (Q2)
+- [x] **Language bridging:** JS interop shapes verified (camelCase aliases where idiomatic); marshalling helpers shared for 3.1.2/3.1.3
 
 ### Tests (target ~16): → `Workflow.Tests/Scripting/WorkflowScriptApiTests.cs`
 
-- [ ] Variables: `SetVariable_StagedInResult` · `GetVariable_ReadsSnapshot` · `DeleteVariable_StagedTombstone` · `VariableExists_Works`
-- [ ] Logging: `Logs_CapturedAndForwarded` (all four levels)
-- [ ] Utilities: `Guid_Now_Format_Base64_Hash_Json_Csv_RoundTrips` *(theory-style batch)*
-- [ ] HTTP: `Http_Blocked_WhenNetworkDisallowed` · `Http_Allowed_MakesRequest` *(local test server)* · `Http_RequestCount_CapEnforced`
-- [ ] Files: `File_Blocked_WhenFileSystemDisallowed` · `File_AllowedPath_ReadsWrites` · `File_PathTraversal_Rejected` · `File_OutsideAllowedPaths_Rejected`
-- [ ] `Wait_RespectsCancellation` · `Api_FromJavaScript_EndToEnd` *(script calls each API family)*
+- [x] Variables: `SetVariable_StagedInResult` · `GetVariable_ReadsSnapshot` · `DeleteVariable_StagedTombstone` · `VariableExists_Works`
+- [x] Logging: `Logs_CapturedAndForwarded` (all four levels)
+- [x] Utilities: `Guid_Now_Format_Base64_Hash_Json_Csv_RoundTrips` *(theory-style batch)*
+- [x] HTTP: `Http_Blocked_WhenNetworkDisallowed` · `Http_Allowed_MakesRequest` *(local test server)* · `Http_RequestCount_CapEnforced`
+- [x] Files: `File_Blocked_WhenFileSystemDisallowed` · `File_AllowedPath_ReadsWrites` · `File_PathTraversal_Rejected` · `File_OutsideAllowedPaths_Rejected`
+- [x] `Wait_RespectsCancellation` · `Api_FromJavaScript_EndToEnd` *(script calls each API family)*
 
 ---
 
-## 3.1.2 C# Executor (Roslyn adapter) 🟪 (`Workflow.Scripting.Roslyn/Executors/*`)
+## 3.1.2 C# Executor (Roslyn adapter) ✅ DONE (`Workflow.Scripting.Roslyn/Executors/*`)
 
 > **Purpose:** C# joins the language set by adapting the existing 2.6.b core to `IScriptExecutor` — staying inside the Roslyn-quarantined project (D3)~ ✨
 
@@ -144,21 +146,21 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### Tasks
 
-- [ ] **`Executors/CSharpScriptExecutor.cs`** — `LanguageId="csharp"`; compiles via `IRoslynScriptCompiler` (globals type exposing `Input`, `Workflow` api, `Variables`), executes via `CollectibleScriptRunner`, caches via `ICompiledScriptCache` (keyed by code hash)
-- [ ] **`ForbiddenSyntaxWalker` reuse** — same deny-list (no `System.IO` unless api-gated, no reflection, no P/Invoke, no `Environment`); extend with script-API-specific allowances
-- [ ] **Async:** scripts may `await` (Q7) — natively supported by Roslyn scripting
-- [ ] **DI:** `AddRoslynScripting()` gains the keyed executor registration; hosts without the Roslyn project simply lack the `"csharp"` key
-- [ ] Marshalling: `Input` as `IReadOnlyDictionary<string, object?>`; return value materialized via the existing `ScriptResultMaterializer`
+- [x] **`Executors/CSharpScriptExecutor.cs`** — `LanguageId="csharp"`; compiles via `IRoslynScriptCompiler` (globals type exposing `Input`, `Workflow` api, `Variables`), executes via `CollectibleScriptRunner`, caches via `ICompiledScriptCache` (keyed by code hash)
+- [x] **`ForbiddenSyntaxWalker` reuse** — same deny-list (no `System.IO` unless api-gated, no reflection, no P/Invoke, no `Environment`); extend with script-API-specific allowances
+- [x] **Async:** scripts may `await` (Q7) — natively supported by Roslyn scripting
+- [x] **DI:** `AddRoslynScripting()` gains the keyed executor registration; hosts without the Roslyn project simply lack the `"csharp"` key
+- [x] Marshalling: `Input` as `IReadOnlyDictionary<string, object?>`; return value materialized via the existing `ScriptResultMaterializer`
 
 ### Tests (target ~8): → `Workflow.Tests/Scripting/CSharpScriptExecutorTests.cs`
 
-- [ ] `Execute_SimpleScript_ReturnsValue` · `Execute_InputAccessible` · `Execute_WorkflowApi_Callable`
-- [ ] `Execute_ForbiddenSyntax_Rejected` · `Execute_CompileError_StructuredDiagnostics`
-- [ ] `Execute_Async_Awaited` · `Execute_Timeout_Enforced` · `Cache_SecondRun_UsesCompiled`
+- [x] `Execute_SimpleScript_ReturnsValue` · `Execute_InputAccessible` · `Execute_WorkflowApi_Callable`
+- [x] `Execute_ForbiddenSyntax_Rejected` · `Execute_CompileError_StructuredDiagnostics`
+- [x] `Execute_Async_Awaited` · `Execute_Timeout_Enforced` · `Cache_SecondRun_UsesCompiled`
 
 ---
 
-## 3.1.3 Lua Executor (MoonSharp) 🌙 (`Workflow.Scripting.Lua/*`)
+## 3.1.3 Lua Executor (MoonSharp) ✅ DONE (`Workflow.Scripting.Lua/*`)
 
 > **Purpose:** The one genuinely-new engine — MoonSharp in its own quarantined project (D4)~ ✨
 
@@ -166,25 +168,25 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### Tasks
 
-- [ ] **New project `Workflow.Scripting.Lua`** — MoonSharp package added to `Directory.Packages.props`; references `Workflow.Scripting`
-- [ ] **`LuaScriptExecutor.cs`** — `LanguageId="lua"`; `CoreModules.Preset_SoftSandbox` (no `io`/`os`/`load`); per-execution `Script` instance; instruction-count-based abort + linked-CTS timeout; memory observed via instruction budget (MoonSharp has no direct memory cap — document)
-- [ ] **Coroutine-ready execution shape (Q7):** the script body is loaded as a **Lua function and invoked via `DynValue`** (not `Script.DoString` top-level statements) so 3.1.P5 can later wrap the same entry point in `coroutine.create` + resume-loop without changing the executor contract; `coroutine.*` core module stays available inside scripts (pure-Lua coroutines work today — only .NET async *bridging* is deferred)
-- [ ] **API bridging:** register `IWorkflowScriptApi` via `UserData.RegisterType`; `workflow` global + `input` table; Lua tables ↔ .NET dictionaries/lists (recursive marshaller with depth cap, reusing `JsonValueConverter` shapes)
-- [ ] **Sync model (Q7):** Lua scripts are synchronous; `workflow.wait(ms)` provided; async HTTP api methods exposed as blocking wrappers with CT propagation
-- [ ] **DI:** `AddLuaScripting()` keyed registration
-- [ ] **Docs:** language nuances (1-based arrays, table semantics, coroutine status/roadmap) in the scripting guide
+- [x] **New project `Workflow.Scripting.Lua`** — MoonSharp package added to `Directory.Packages.props`; references `Workflow.Scripting`
+- [x] **`LuaScriptExecutor.cs`** — `LanguageId="lua"`; `CoreModules.Preset_SoftSandbox` (no `io`/`os`/`load`); per-execution `Script` instance; instruction-count-based abort + linked-CTS timeout; memory observed via instruction budget (MoonSharp has no direct memory cap — document)
+- [x] **Coroutine-ready execution shape (Q7):** the script body is loaded as a **Lua function and invoked via `DynValue`** (not `Script.DoString` top-level statements) so 3.1.P5 can later wrap the same entry point in `coroutine.create` + resume-loop without changing the executor contract; `coroutine.*` core module stays available inside scripts (pure-Lua coroutines work today — only .NET async *bridging* is deferred)
+- [x] **API bridging:** register `IWorkflowScriptApi` via `UserData.RegisterType`; `workflow` global + `input` table; Lua tables ↔ .NET dictionaries/lists (recursive marshaller with depth cap, reusing `JsonValueConverter` shapes)
+- [x] **Sync model (Q7):** Lua scripts are synchronous; `workflow.wait(ms)` provided; async HTTP api methods exposed as blocking wrappers with CT propagation
+- [x] **DI:** `AddLuaScripting()` keyed registration
+- [x] **Docs:** language nuances (1-based arrays, table semantics, coroutine status/roadmap) in the scripting guide
 
 ### Tests (target ~11): → `Workflow.Tests/Scripting/LuaScriptExecutorTests.cs`
 
-- [ ] `Execute_SimpleScript_ReturnsValue` · `Execute_InputTable_Accessible` · `Execute_TableReturn_MarshalsToNet` · `Execute_NestedTables_DepthCapped`
-- [ ] `Execute_ApiCalls_Work` *(variables + logging + utilities from Lua)*
-- [ ] `Execute_SyntaxError_StructuredError` · `Execute_RuntimeError_StructuredError`
-- [ ] `Execute_Timeout_Enforced` · `Sandbox_NoIoOsLoad_Modules` · `Http_Gated_FromLua`
-- [ ] `Execute_PureLuaCoroutines_Work` *(coroutine.create/resume/yield inside a script — guards the 3.1.P5-ready shape)*
+- [x] `Execute_SimpleScript_ReturnsValue` · `Execute_InputTable_Accessible` · `Execute_TableReturn_MarshalsToNet` · `Execute_NestedTables_DepthCapped`
+- [x] `Execute_ApiCalls_Work` *(variables + logging + utilities from Lua)*
+- [x] `Execute_SyntaxError_StructuredError` · `Execute_RuntimeError_StructuredError`
+- [x] `Execute_Timeout_Enforced` · `Sandbox_NoIoOsLoad_Modules` · `Http_Gated_FromLua`
+- [x] `Execute_PureLuaCoroutines_Work` *(coroutine.create/resume/yield inside a script — guards the 3.1.P5-ready shape)*
 
 ---
 
-## 3.1.4 `builtin.script` Module 🧩 (`Workflow.Modules/Builtin/Script/*`)
+## 3.1.4 `builtin.script` Module ✅ DONE (`Workflow.Modules/Builtin/Script/*`)
 
 > **Purpose:** The workflow-facing node: pick a language, write code, run it in the sandbox with staged variable writes (D8)~ ✨
 
@@ -192,25 +194,25 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### Tasks
 
-- [ ] **`ScriptModule.cs` (`builtin.script`)** 🧩
-  - [ ] Properties: `language` (Dropdown, `AllowedValues` = registered executor keys) · `code` (Code editor) · `timeoutSeconds` (Number) · `allowNetwork`/`allowFileSystem` (Boolean) · `allowedPaths` (Json)
-  - [ ] Inputs: `input` (object, optional — flows to the script's `input` global); Outputs: `result` (object)
-  - [ ] `ExecuteAsync`: resolve executor via `IScriptExecutorFactory` (from `context.Services`), build `ScriptExecutionContext` (variables snapshot from `context.Variables`, config clamped to host ceilings), run, map `ScriptExecutionResult` → `ModuleResult` (`Ok(outputs, variableUpdates)` on success, `Fail` with diagnostics otherwise)
-  - [ ] `ValidateConfiguration`: language key registered, code non-empty, timeout within ceiling
-- [ ] **Registration:** in `BuiltinModules.GetAll()`/host wiring so the API host + engine both resolve it; language dropdown reflects registered executors at schema-build time
-- [ ] **No `ActivePorts` from scripts (Q6)** — document; scripts return data only
-- [ ] **Docs:** `docs/scripting.md` — the node, per-language examples, API reference, sandbox flags
+- [x] **`ScriptModule.cs` (`builtin.script`)** 🧩
+  - [x] Properties: `language` (Dropdown, `AllowedValues` = registered executor keys) · `code` (Code editor) · `timeoutSeconds` (Number) · `allowNetwork`/`allowFileSystem` (Boolean) · `allowedPaths` (Json)
+  - [x] Inputs: `input` (object, optional — flows to the script's `input` global); Outputs: `result` (object)
+  - [x] `ExecuteAsync`: resolve executor via `IScriptExecutorFactory` (from `context.Services`), build `ScriptExecutionContext` (variables snapshot from `context.Variables`, config clamped to host ceilings), run, map `ScriptExecutionResult` → `ModuleResult` (`Ok(outputs, variableUpdates)` on success, `Fail` with diagnostics otherwise)
+  - [x] `ValidateConfiguration`: language key registered, code non-empty, timeout within ceiling
+- [x] **Registration:** in `BuiltinModules.GetAll()`/host wiring so the API host + engine both resolve it; language dropdown reflects registered executors at schema-build time
+- [x] **No `ActivePorts` from scripts (Q6)** — document; scripts return data only
+- [x] **Docs:** `docs/scripting.md` — the node, per-language examples, API reference, sandbox flags
 
 ### Tests (target ~10): → `Workflow.Tests/Modules/Script/ScriptModuleTests.cs`
 
-- [ ] `Execute_JavaScript_EndToEnd` · `Execute_Lua_EndToEnd` · `Execute_CSharp_EndToEnd` *(engine E2E via BuiltinModuleEndToEnd harness)*
-- [ ] `VariableUpdates_AppliedByEngine_DownstreamSees` · `Inputs_FlowIntoScript` · `Result_FlowsToOutputPort`
-- [ ] `UnknownLanguage_FailsValidation` · `EmptyCode_FailsValidation`
-- [ ] `NodeTimeout_OverHostCeiling_Clamped` · `ScriptFailure_ProducesModuleFailure`
+- [x] `Execute_JavaScript_EndToEnd` · `Execute_Lua_EndToEnd` · `Execute_CSharp_EndToEnd` *(engine E2E via BuiltinModuleEndToEnd harness)*
+- [x] `VariableUpdates_AppliedByEngine_DownstreamSees` · `Inputs_FlowIntoScript` · `Result_FlowsToOutputPort`
+- [x] `UnknownLanguage_FailsValidation` · `EmptyCode_FailsValidation`
+- [x] `NodeTimeout_OverHostCeiling_Clamped` · `ScriptFailure_ProducesModuleFailure`
 
 ---
 
-## 3.1.5 Script Library System 📚 (`Workflow.Scripting/Libraries/*`)
+## 3.1.5 Script Library System ✅ DONE (`Workflow.Scripting/Libraries/*`)
 
 > **Purpose:** Reusable, per-language code snippets that scripts can import (D9)~ ✨
 
@@ -218,26 +220,26 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### Tasks
 
-- [ ] **`Libraries/ScriptLibraryDefinition.cs`** — `LibraryId`, `Name`, `Description`, `Language`, `Code`, `ExportedFunctions` (documentation metadata), `Dependencies` (other library ids, same language)
-- [ ] **`Libraries/IScriptLibraryStore.cs`** — `SaveAsync`/`GetAsync`/`GetAllAsync(language?)`/`DeleteAsync`; validation (id format, language key registered, dependency cycles via the 2.8.1-style resolver)
-- [ ] **`Libraries/BlobScriptLibraryStore.cs`** (default when a blob store exists) + `InMemoryScriptLibraryStore` fallback — mirrors the 2.8 state-store fallback pattern
-- [ ] **Import mechanics (per language):**
-  - [ ] JS: libraries injected as pre-evaluated module objects (`const lib = workflow.require('libraryId')`)
-  - [ ] Lua: preloaded into `package.preload` → `local lib = require('libraryId')`
-  - [ ] C#: library source prepended in dependency order (compile-time inclusion)
-  - [ ] Dependency-ordered load; missing/wrong-language imports → clear structured error
-- [ ] **`builtin.script` + test endpoint** accept a `libraries` list (explicit imports — no auto-injection)
+- [x] **`Libraries/ScriptLibraryDefinition.cs`** — `LibraryId`, `Name`, `Description`, `Language`, `Code`, `ExportedFunctions` (documentation metadata), `Dependencies` (other library ids, same language)
+- [x] **`Libraries/IScriptLibraryStore.cs`** — `SaveAsync`/`GetAsync`/`GetAllAsync(language?)`/`DeleteAsync`; validation (id format, language key registered, dependency cycles via the 2.8.1-style resolver)
+- [x] **`Libraries/BlobScriptLibraryStore.cs`** (default when a blob store exists) + `InMemoryScriptLibraryStore` fallback — mirrors the 2.8 state-store fallback pattern
+- [x] **Import mechanics (per language):**
+  - [x] JS: libraries injected as pre-evaluated module objects (`const lib = workflow.require('libraryId')`)
+  - [x] Lua: preloaded into `package.preload` → `local lib = require('libraryId')`
+  - [x] C#: library source prepended in dependency order (compile-time inclusion)
+  - [x] Dependency-ordered load; missing/wrong-language imports → clear structured error
+- [x] **`builtin.script` + test endpoint** accept a `libraries` list (explicit imports — no auto-injection)
 
 ### Tests (target ~10): → `Workflow.Tests/Scripting/ScriptLibraryTests.cs`
 
-- [ ] `Store_SaveGetDelete_RoundTrips` · `Store_ListByLanguage_Filters` · `Store_DependencyCycle_Rejected`
-- [ ] `Js_Require_CallsLibraryFunction` · `Lua_Require_CallsLibraryFunction` · `CSharp_Prepend_CallsLibraryFunction`
-- [ ] `Import_MissingLibrary_ClearError` · `Import_WrongLanguage_ClearError`
-- [ ] `Dependencies_LoadInOrder` · `BlobStore_Fallback_InMemoryWhenNoProvider`
+- [x] `Store_SaveGetDelete_RoundTrips` · `Store_ListByLanguage_Filters` · `Store_DependencyCycle_Rejected`
+- [x] `Js_Require_CallsLibraryFunction` · `Lua_Require_CallsLibraryFunction` · `CSharp_Prepend_CallsLibraryFunction`
+- [x] `Import_MissingLibrary_ClearError` · `Import_WrongLanguage_ClearError`
+- [x] `Dependencies_LoadInOrder` · `BlobStore_Fallback_InMemoryWhenNoProvider`
 
 ---
 
-## 3.1.6 Script Endpoints 🧪🌐 (`/api/v1/scripts`)
+## 3.1.6 Script Endpoints ✅ DONE (`/api/v1/scripts`)
 
 > **Purpose:** Test-before-you-save + library management over HTTP, on the 2.7 conventions (D10)~ ✨
 
@@ -245,24 +247,24 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### Tasks
 
-- [ ] **`V1/ScriptEndpoints.cs`** (`MapScriptEndpoints`) 🗺️
-  - [ ] `POST /api/v1/scripts/test` — `{ language, code, inputs?, libraries?, config? }` → `{ success, result, logs, variableUpdates, durationMs, error? }`; config clamped to host ceilings; `WorkflowWrite` policy; `422` for unknown language/empty code
-  - [ ] `GET /api/v1/scripts/languages` — registered executor keys + display names; `WorkflowRead`
-  - [ ] `GET/PUT/DELETE /api/v1/scripts/libraries[/{id}]` — library CRUD over `IScriptLibraryStore`; `?language=` filter on list; `WorkflowRead`/`WorkflowWrite`
-- [ ] **Contracts:** `ScriptTestRequest/ResultDto`, `ScriptLibraryDto` in `Contracts/Scripts/`
-- [ ] **Swagger:** tagged `Scripts`; request/response examples
-- [ ] **Docs:** endpoint section in `docs/rest-api.md` + cross-link from `docs/scripting.md`
+- [x] **`V1/ScriptEndpoints.cs`** (`MapScriptEndpoints`) 🗺️
+  - [x] `POST /api/v1/scripts/test` — `{ language, code, inputs?, libraries?, config? }` → `{ success, result, logs, variableUpdates, durationMs, error? }`; config clamped to host ceilings; `WorkflowWrite` policy; `422` for unknown language/empty code
+  - [x] `GET /api/v1/scripts/languages` — registered executor keys + display names; `WorkflowRead`
+  - [x] `GET/PUT/DELETE /api/v1/scripts/libraries[/{id}]` — library CRUD over `IScriptLibraryStore`; `?language=` filter on list; `WorkflowRead`/`WorkflowWrite`
+- [x] **Contracts:** `ScriptTestRequest/ResultDto`, `ScriptLibraryDto` in `Contracts/Scripts/`
+- [x] **Swagger:** tagged `Scripts`; request/response examples
+- [x] **Docs:** endpoint section in `docs/rest-api.md` + cross-link from `docs/scripting.md`
 
 ### Tests (target ~10): → `Workflow.Tests/Api/V1/ScriptEndpointsTests.cs`
 
-- [ ] `Test_JavaScript_ReturnsResultAndLogs` · `Test_Lua_ReturnsResult` · `Test_CSharp_ReturnsResult`
-- [ ] `Test_UnknownLanguage_422` · `Test_EmptyCode_422` · `Test_ScriptError_StructuredErrorIn200Body`
-- [ ] `Test_ConfigCeilings_Clamped` · `Languages_ListsRegistered`
-- [ ] `Libraries_CrudRoundTrip` · `Test_WithLibrary_ImportsWork`
+- [x] `Test_JavaScript_ReturnsResultAndLogs` · `Test_Lua_ReturnsResult` · `Test_CSharp_ReturnsResult`
+- [x] `Test_UnknownLanguage_422` · `Test_EmptyCode_422` · `Test_ScriptError_StructuredErrorIn200Body`
+- [x] `Test_ConfigCeilings_Clamped` · `Languages_ListsRegistered`
+- [x] `Libraries_CrudRoundTrip` · `Test_WithLibrary_ImportsWork`
 
 ---
 
-## 3.1.7 PropertyBinder Expression Evaluation 🧮 (deferred from Phase 1.4)
+## 3.1.7 PropertyBinder Expression Evaluation ✅ DONE (deferred from Phase 1.4)
 
 > **Purpose:** `{{Variable.Count > 5}}`, `{{1 + 2}}`, `{{Variable.Name + '!'}}` — inline expressions in property bindings via the existing Jint evaluator (D11)~ ✨
 
@@ -270,21 +272,23 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### Tasks
 
-- [ ] **Detection (Q5):** inner template that isn't a pure `Variable.X`/`NodeId.Output` reference → expression path; pure references keep the existing fast path untouched
-- [ ] **Evaluation:** references inside the expression are resolved to evaluator variables first (`Variable.Count` → injected `Count`-style scope), then evaluated via `IExpressionEvaluator` (Jint — 250 ms/4 MB sandbox is already right-sized); supports arithmetic/comparison/logical/string ops per the checklist (Jint gives them all for free)
-- [ ] **Whole-template vs interpolated:** single-expression templates preserve the raw typed result (like references today); mixed text interpolates `ToString`
-- [ ] **Caching:** memoize prepared scripts per expression string (Jint `Engine` reuse or parsed-script cache) — the binder is hot-path
-- [ ] **Failure semantics:** parse/runtime/timeout → binding error listing the expression (never silent null)
-- [ ] **Compat:** `enableExpressions` constructor flag (default true); `PropertyBinder` acquires the evaluator optionally (null → reference-only behavior, existing tests unchanged)
-- [ ] **Docs:** expression syntax in the module author guide + `docs/scripting.md`
+> **Status (2026-07-19):** ✅ Complete. `PropertyBinder` gains an optional `IExpressionEvaluator` + `enableExpressions` flag; non-pure-reference templates are evaluated as sandboxed JS with reference tokens resolved into scope (built-ins like `Math`/`JSON` left intact), whole-template results keep their type, mixed templates interpolate, failures become binding errors, and token spans are memoized. `IPropertyBinder` is registered in DI with the default evaluator so `NodeExecutor` gets expression support. 12 new tests in `PropertyBinderExpressionTests.cs` pass; the 23 existing binder tests stay green. Docs added to `docs/scripting.md` + `docs/module-author-guide.md`.
+
+- [x] **Detection (Q5):** inner template that isn't a pure `Variable.X`/`NodeId.Output` reference → expression path; pure references keep the existing fast path untouched
+- [x] **Evaluation:** references inside the expression are resolved to evaluator variables first (`Variable.Count` → injected `Count`-style scope), then evaluated via `IExpressionEvaluator` (Jint — 250 ms/4 MB sandbox is already right-sized); supports arithmetic/comparison/logical/string ops per the checklist (Jint gives them all for free)
+- [x] **Whole-template vs interpolated:** single-expression templates preserve the raw typed result (like references today); mixed text interpolates `ToString`
+- [x] **Caching:** memoize prepared scripts per expression string (Jint `Engine` reuse or parsed-script cache) — the binder is hot-path
+- [x] **Failure semantics:** parse/runtime/timeout → binding error listing the expression (never silent null)
+- [x] **Compat:** `enableExpressions` constructor flag (default true); `PropertyBinder` acquires the evaluator optionally (null → reference-only behavior, existing tests unchanged)
+- [x] **Docs:** expression syntax in the module author guide + `docs/scripting.md`
 
 ### Tests (target ~10): → `Workflow.Tests/Modules/Binding/PropertyBinderExpressionTests.cs`
 
-- [ ] `Arithmetic_Evaluates` · `Comparison_Evaluates` · `Logical_Evaluates` · `StringConcat_Evaluates`
-- [ ] `VariableReference_InExpression_Resolves` · `NodeOutput_InExpression_Resolves`
-- [ ] `WholeTemplate_PreservesType` · `MixedTemplate_Interpolates`
-- [ ] `InvalidExpression_BindingError` · `ExpensiveExpression_TimesOut`
-- [ ] *(regression)* existing reference-only binder tests stay green with expressions enabled
+- [x] `Arithmetic_Evaluates` · `Comparison_Evaluates` · `Logical_Evaluates` · `StringConcat_Evaluates`
+- [x] `VariableReference_InExpression_Resolves` · `NodeOutput_InExpression_Resolves`
+- [x] `WholeTemplate_PreservesType` · `MixedTemplate_Interpolates`
+- [x] `InvalidExpression_BindingError` · `ExpensiveExpression_TimesOut`
+- [x] *(regression)* existing reference-only binder tests stay green with expressions enabled
 
 ---
 
@@ -364,10 +368,10 @@ Bridge .NET async into Lua coroutines so `workflow.httpGet(...)` and friends **y
 
 ## Success Criteria ✅
 
-- [ ] A workflow with a `builtin.script` node runs JavaScript, Lua, and C# scripts end-to-end through the engine, with inputs in and results out
-- [ ] Scripts read variables and stage writes that downstream nodes observe (via `VariableUpdates`)
-- [ ] The sandbox holds: timeout/memory enforced per engine; network and file access **denied by default** and gated by config under host ceilings; path traversal impossible; no raw database access from scripts
-- [ ] Script libraries round-trip through the store and import correctly in all three languages
-- [ ] `POST /api/v1/scripts/test` executes all registered languages and returns outputs + captured logs + duration
-- [ ] `{{Variable.Count > 5}}`-style expressions evaluate in property bindings with the documented failure semantics — and every pre-existing reference-only binding behaves identically
-- [ ] All existing tests stay green — `IExpressionEvaluator`, transform-script, and binder behavior are provably unchanged
+- [x] A workflow with a `builtin.script` node runs JavaScript, Lua, and C# scripts end-to-end through the engine, with inputs in and results out
+- [x] Scripts read variables and stage writes that downstream nodes observe (via `VariableUpdates`)
+- [x] The sandbox holds: timeout/memory enforced per engine; network and file access **denied by default** and gated by config under host ceilings; path traversal impossible; no raw database access from scripts
+- [x] Script libraries round-trip through the store and import correctly in all three languages
+- [x] `POST /api/v1/scripts/test` executes all registered languages and returns outputs + captured logs + duration
+- [x] `{{Variable.Count > 5}}`-style expressions evaluate in property bindings with the documented failure semantics — and every pre-existing reference-only binding behaves identically
+- [x] All existing tests stay green — `IExpressionEvaluator`, transform-script, and binder behavior are provably unchanged

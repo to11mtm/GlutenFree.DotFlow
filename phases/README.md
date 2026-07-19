@@ -59,7 +59,7 @@ This directory contains individual phase breakdown files to make it easier to na
 - Client SDKs (C#, TypeScript, Python)
 
 **Detailed sub-phase breakouts:**
-- [Phase3-1-ScriptingEngine.md](Phase3-1-ScriptingEngine.md) ⏳ — `IScriptExecutor` seam with JavaScript (Jint, already in-tree), C# (existing Roslyn core adapter), and Lua (MoonSharp, quarantined, coroutine-ready); capability-gated `IWorkflowScriptApi` (deny-by-default network/file, no raw DB); `builtin.script` module; script libraries; `/api/v1/scripts/test` endpoints; PropertyBinder inline expressions (deferred 1.4 item). Python → 3.1.P1; Lua async-coroutine bridging → 3.1.P5 (plan sketched). Weeks 23-25; Q1–Q7 resolved ✅~ 🌷
+- [Phase3-1-ScriptingEngine.md](Phase3-1-ScriptingEngine.md) ✅ — `IScriptExecutor` seam with JavaScript (Jint, already in-tree), C# (existing Roslyn core adapter), and Lua (MoonSharp, quarantined, coroutine-ready); capability-gated `IWorkflowScriptApi` (deny-by-default network/file, no raw DB); `builtin.script` module; script libraries; `/api/v1/scripts/test` endpoints; PropertyBinder inline expressions (deferred 1.4 item). Python → 3.1.P1; Lua async-coroutine bridging → 3.1.P5 (plan sketched). Weeks 23-25; Q1–Q7 resolved ✅. **COMPLETE — all 8 slices implemented, tested, documented ([`docs/scripting.md`](../docs/scripting.md))**~ 🌷
 
 ### [Phase4-Production.md](Phase4-Production.md) 💎
 **Weeks 23-28** - Polish and Production Readiness

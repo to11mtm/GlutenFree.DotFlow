@@ -62,14 +62,17 @@ public sealed class JavaScriptScriptExecutor : IScriptExecutor
             sw.Stop();
             return ScriptExecutionResult.Ok(returnValue, context.Api.GetVariableUpdates(), context.Api.GetLogs(), sw.Elapsed);
         }
-        catch (OperationCanceledException) when (linked.IsCancellationRequested && !ct.IsCancellationRequested)
-        {
-            sw.Stop();
-            return ScriptExecutionResult.Fail($"Script timed out after {context.Config.TimeoutSeconds}s.", context.Api.GetLogs(), sw.Elapsed);
-        }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
+        }
+        catch (Exception) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            // Timeout fired. Jint surfaces this as either System.TimeoutException (TimeoutInterval)
+            // or Jint.Runtime.ExecutionCanceledException (CancellationToken) — neither derives from
+            // OperationCanceledException — so catch broadly to report a deterministic timeout~ ⏰.
+            sw.Stop();
+            return ScriptExecutionResult.Fail($"Script timed out after {context.Config.TimeoutSeconds}s.", context.Api.GetLogs(), sw.Elapsed);
         }
         catch (Exception ex)
         {

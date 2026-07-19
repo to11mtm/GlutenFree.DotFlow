@@ -424,5 +424,16 @@ disable / uninstall).
 
 ---
 
+## Property binding expressions 🧮
+
+Input values may embed `{{ ... }}` templates. Beyond plain `{{Variable.X}}` /
+`{{NodeId.Output}}` references, a template that contains operators, literals, or calls is
+evaluated as a sandboxed JavaScript expression (e.g. `{{Variable.Count > 5}}`,
+`{{Variable.Name + '!'}}`). Whole-template expressions preserve the evaluated type; mixed
+text interpolates to a string; failures surface as binding errors. Full semantics live in
+[`scripting.md` › Inline expressions in property bindings](scripting.md#inline-expressions-in-property-bindings).
+
+---
+
 *Made with 💖 by Ami-Chan! Happy module building, senpai~ UwU* ✨
 

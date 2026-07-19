@@ -6,9 +6,11 @@
 namespace Workflow.Modules.Binding;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using LanguageExt;
@@ -64,6 +66,13 @@ public class PropertyBinder : IPropertyBinder
 
     private readonly Workflow.Core.Abstractions.IExpressionEvaluator? _evaluator;
     private readonly bool _enableExpressions;
+
+    /// <summary>
+    /// 🧮 Phase 3.1.7 — Memoized token spans per raw expression string. The regex scan is the
+    /// hot-path cost; the spans are context-independent so caching them is always safe. Values
+    /// are still resolved fresh on every evaluation~ 💨.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, IReadOnlyList<TokenSpan>> _tokenCache = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PropertyBinder"/> class~ 🌸.
@@ -293,23 +302,51 @@ public class PropertyBinder : IPropertyBinder
 
     /// <summary>
     /// 🧮 Phase 3.1.7 — Evaluates an inline expression (e.g. <c>Variable.Count &gt; 5</c>) via the
-    /// injected <see cref="Workflow.Core.Abstractions.IExpressionEvaluator"/>. Reference tokens inside
-    /// the expression are resolved to evaluator-scope variables first~ ✨.
+    /// injected <see cref="Workflow.Core.Abstractions.IExpressionEvaluator"/>. Dotted reference tokens
+    /// (<c>Variable.X</c> / <c>NodeId.Output</c>) that resolve are rewritten to flat evaluator-scope
+    /// variables; tokens that don't resolve (e.g. <c>Math.max</c>, <c>JSON.parse</c>) are left intact
+    /// for the evaluator to interpret~ ✨.
     /// </summary>
     private ReferenceResolution EvaluateExpression(
         string expression,
         PropertyBindingContext context,
         string portName)
     {
+        var tokens = _tokenCache.GetOrAdd(expression, PrepareTokenSpans);
         var scope = new Dictionary<string, object?>(StringComparer.Ordinal);
-        var rewritten = ReferenceTokenPattern.Replace(expression, match =>
+
+        string rewritten;
+        if (tokens.Count == 0)
         {
-            var token = match.Value;
-            var resolution = ResolveSingleReference(token, context, portName);
-            var safeName = "__ref_" + token.Replace('.', '_');
-            scope[safeName] = resolution.HasErrors ? null : resolution.ResolvedValue;
-            return safeName;
-        });
+            rewritten = expression;
+        }
+        else
+        {
+            var builder = new StringBuilder(expression.Length + 16);
+            var cursor = 0;
+            foreach (var token in tokens)
+            {
+                builder.Append(expression, cursor, token.Start - cursor);
+
+                var resolution = ResolveSingleReference(token.Text, context, portName);
+                if (resolution.HasErrors)
+                {
+                    // Not a workflow reference (e.g. Math.max, JSON.parse) — leave for the evaluator. 🔧
+                    builder.Append(token.Text);
+                }
+                else
+                {
+                    var safeName = "__ref_" + token.Text.Replace('.', '_');
+                    scope[safeName] = resolution.ResolvedValue;
+                    builder.Append(safeName);
+                }
+
+                cursor = token.Start + token.Length;
+            }
+
+            builder.Append(expression, cursor, expression.Length - cursor);
+            rewritten = builder.ToString();
+        }
 
         try
         {
@@ -324,6 +361,30 @@ public class PropertyBinder : IPropertyBinder
             });
         }
     }
+
+    /// <summary>
+    /// 🧮 Phase 3.1.7 — Scans an expression for dotted reference tokens (context-independent),
+    /// so the regex work can be memoized in <see cref="_tokenCache"/>~ 💾.
+    /// </summary>
+    private static IReadOnlyList<TokenSpan> PrepareTokenSpans(string expression)
+    {
+        var matches = ReferenceTokenPattern.Matches(expression);
+        if (matches.Count == 0)
+        {
+            return Array.Empty<TokenSpan>();
+        }
+
+        var spans = new List<TokenSpan>(matches.Count);
+        foreach (Match match in matches)
+        {
+            spans.Add(new TokenSpan(match.Index, match.Length, match.Value));
+        }
+
+        return spans;
+    }
+
+    /// <summary>🧮 Phase 3.1.7 — A cached dotted-reference token position within an expression~ 📍.</summary>
+    private sealed record TokenSpan(int Start, int Length, string Text);
 
     /// <summary>
     /// Resolves a <c>{{Variable.Name}}</c> or <c>{{Variable.User.Name}}</c> reference
