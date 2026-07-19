@@ -336,6 +336,8 @@ Phase 3 adds the most user-facing features:
 
 ### 3.2 SignalR Real-Time Hub (Week 17)
 
+> **📋 Detailed sliced plan available:** [Phase3-2-SignalRRealTime.md](Phase3-2-SignalRRealTime.md) — a `WorkflowHub` that streams execution/node lifecycle events to subscribed clients via a hosted `ExecutionEventBridge` subscribing to the Akka `EventStream` the engine **already publishes** (`ExecutionStateChanged`/`NodeStateChanged`/`ProgressUpdate`/`WorkflowCompleted`/`WorkflowFailed`/`NodeExecution*`), so **`Workflow.Engine` gains no ASP.NET/SignalR dependency**. Typed client contracts (plain camelCase records, no LanguageExt leakage); group-based subscriptions (`workflow:{id}`/`execution:{id}`, `SubscribeToAll` admin-only); auth reuses the existing `WorkflowRead`/`Admin` policies with a query-string-token exemption for WebSockets; connection/subscription counts on `/api/v1/metrics`; reconnect via SignalR auto-reconnect + client re-subscribe. **Removes the legacy `Microsoft.AspNetCore.SignalR` 1.1.0 package** (server SignalR ships in the Web SDK shared framework). **Redis backplane → 3.2.P1; missed-event replay → 3.2.P2; `WorkflowUpdated` → 3.2.P4; resource-level authz → 3.2.P5.** The sliced doc reconciles this checklist against Phase 2's existing observability and supersedes it. **Timeline: Week 26.** Q1–Q7 resolved ✅.
+
 **Tasks:**
 - [ ] **Implement `WorkflowHub` SignalR hub** 📡
   - [ ] Install `Microsoft.AspNetCore.SignalR` NuGet package
