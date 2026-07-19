@@ -18,6 +18,8 @@
         <PackageReference Include="WireMock.Net" />
         <!-- 🪝 Phase 2.3.6 — WebApplicationFactory for webhook API integration tests~ -->
         <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+        <!-- 📡 Phase 3.2 — SignalR client for the WorkflowHub integration test harness~ -->
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
         <PackageReference Include="xunit" />
         <PackageReference Include="xunit.runner.visualstudio" />
         <PackageReference Include="FluentAssertions" />

@@ -5,6 +5,7 @@
 namespace Workflow.Api.V1;
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -94,6 +95,7 @@ public static class MonitoringEndpoints
         var registry = http.RequestServices.GetService<IModuleRegistry>();
         var provider = http.RequestServices.GetService<IPersistenceProvider>();
         var metrics = http.RequestServices.GetService<IWorkflowMetrics>();
+        var tracker = http.RequestServices.GetService<Workflow.Api.RealTime.IConnectionTracker>();
 
         var providerHealthy = false;
         string providerName = "none";
@@ -113,6 +115,8 @@ public static class MonitoringEndpoints
             persistence = new { provider = providerName, healthy = providerHealthy },
             moduleCount = registry?.GetAllModules().Count ?? 0,
             activeExecutions = snapshot?.Active ?? 0,
+            activeConnections = tracker?.ConnectionCount ?? 0,
+            activeSubscriptions = tracker?.SubscriptionCount ?? 0,
         };
 
         return Results.Ok(payload);
@@ -126,7 +130,16 @@ public static class MonitoringEndpoints
             return ApiResults.ServiceUnavailableProblem("Metrics are not configured.");
         }
 
-        return Results.Ok(metrics.Snapshot().ToDictionary());
+        // 📡 Phase 3.2 — augment execution counters with real-time connection/subscription gauges~
+        var values = new Dictionary<string, long>(metrics.Snapshot().ToDictionary());
+        var tracker = http.RequestServices.GetService<Workflow.Api.RealTime.IConnectionTracker>();
+        if (tracker is not null)
+        {
+            values["realtime_connections_active"] = tracker.ConnectionCount;
+            values["realtime_subscriptions_active"] = tracker.SubscriptionCount;
+        }
+
+        return Results.Ok(values);
     }
 
     private static string ApiVersion

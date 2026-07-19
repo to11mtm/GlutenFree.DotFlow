@@ -197,6 +197,14 @@ Response (a script *error* is reported in a `200` body with `success: false`):
 
 Config is clamped to the host `Scripting:*` ceilings. Unknown language or empty code → `422`.
 
+## Real-time 📡 (`/hubs/workflow`)
+
+A SignalR hub streams execution/node lifecycle events to subscribed clients in real time
+(no polling). Requires the `WorkflowRead` policy; browser clients pass the JWT via the
+`access_token` query string. Subscribe with `SubscribeToExecution(executionId)` /
+`SubscribeToWorkflow(workflowId)` (or `SubscribeToAll()` for admins). See
+[**Real-Time Hub**](realtime.md) for the full event catalog, auth, reconnection, and CORS.
+
 ## Monitoring 📊 (`/api/v1/health`, `/status`, `/metrics`)
 
 | Method & path            | Description                                            |

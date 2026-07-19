@@ -29,7 +29,10 @@
     <!--  ASP.NET Core -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="8.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR" Version="1.1.0" />
+    <!-- 📡 Phase 3.2 — SignalR: server bits ship in the Microsoft.NET.Sdk.Web shared framework
+         (no server package needed). Only the client library is referenced, by tests, for the
+         HubConnection harness~ -->
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.11" />
     <PackageVersion Include="NATS.Net" Version="2.7.3" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <!--  Logging - Serilog is super kawaii! -->

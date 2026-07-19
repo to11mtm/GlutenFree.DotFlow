@@ -6,7 +6,9 @@ namespace Workflow.Api.Auth;
 
 using System;
 using System.Text;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -58,6 +60,23 @@ public sealed class ConfigureJwtBearerOptions : IConfigureNamedOptions<JwtBearer
                 : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30),
+        };
+
+        // 📡 Phase 3.2 — WebSocket handshakes can't set an Authorization header, so accept the JWT
+        // from the `access_token` query string for the SignalR hub path only~
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
         };
     }
 }

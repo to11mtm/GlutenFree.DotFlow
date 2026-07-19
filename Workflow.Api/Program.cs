@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Workflow.Api.Auth;
 using Workflow.Api.Database;
 using Workflow.Api.Observability;
+using Workflow.Api.RealTime;
 using Workflow.Api.V1;
 using Workflow.Api.Webhooks;
 using Workflow.Core.Abstractions;
@@ -288,6 +289,10 @@ builder.Services.AddSingleton<Workflow.Scripting.Libraries.IScriptLibraryStore>(
 // 🔐 Phase 2.7.7 — API authentication (API-key + JWT bearer) + named authorization policies~
 builder.Services.AddWorkflowApiAuth(builder.Configuration);
 
+// 📡 Phase 3.2 — SignalR real-time hub (WorkflowHub), connection tracker, execution-event
+// bridge (hosted), and the deny-by-default CORS policy for browser clients~
+builder.Services.AddRealTime(builder.Configuration);
+
 // 🚦 Phase 2.7.8 — Rate-limiting seam (disabled unless Api:RateLimit:Enabled)~
 builder.Services.AddWorkflowRateLimiting(builder.Configuration);
 
@@ -301,6 +306,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// 📡 Phase 3.2 — CORS middleware (the named policy is applied to the hub endpoint via RequireCors)~
+app.UseCors();
 
 // 🔐 Phase 2.7.7 — Authenticate then authorize (no-op policies when Api:Auth:Require=false)~
 app.UseAuthentication();
@@ -341,6 +349,10 @@ app.MapScriptEndpoints();
 
 // 📊 Phase 2.7.5 — Monitoring endpoints (/api/v1/health, /status, /metrics)~
 app.MapMonitoringEndpoints();
+
+// 📡 Phase 3.2 — Real-time hub (/hubs/workflow) streaming execution/node lifecycle events~
+app.MapHub<WorkflowHub>(RealTimeServiceCollectionExtensions.HubPath)
+    .RequireCors(RealTimeServiceCollectionExtensions.CorsPolicy);
 
 if (persistenceProvider is not null)
 {

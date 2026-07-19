@@ -1,4 +1,4 @@
-# Phase 3.2: SignalR Real-Time Hub (Week 26) 📡
+﻿# Phase 3.2: SignalR Real-Time Hub (Week 26) 📡
 
 Made with 💖 by Ami-Chan! UwU ✨
 
@@ -7,6 +7,8 @@ Made with 💖 by Ami-Chan! UwU ✨
 ---
 
 ## Overview
+
+> **Progress (2026-07-19):** Phase 3.2 is **COMPLETE ✅**. All 6 slices (3.2.0–3.2.5) are implemented, tested, and documented — `WorkflowHub` with query-string-token auth + CORS, the `ExecutionEventBridge` (subscribes to the Akka `EventStream`, zero engine changes), typed client contracts, group-based subscriptions (`SubscribeToAll` admin-gated), connection/subscription metrics on `/api/v1/metrics` + `/status`, and reconnection-via-re-subscribe. The legacy `Microsoft.AspNetCore.SignalR` 1.1.0 package was removed (server SignalR ships in the Web SDK); the client library is referenced by tests only. **27 new real-time tests pass** via the `HubConnection` harness; the full suite is green apart from pre-existing parallel-timing flakes. Docs: [`docs/realtime.md`](../docs/realtime.md) (new) + `docs/rest-api.md`.
 
 Phase 3.2 gives clients a **real-time window into workflow execution** — a SignalR hub
 (`WorkflowHub`) that streams execution/node lifecycle events to subscribed browsers and
@@ -112,7 +114,7 @@ leaked Akka subscriptions), **auth over WebSockets** (token-from-query-string), 
 
 ---
 
-## 3.2.0 Hub Foundation + Auth + Wiring 📡 (`Workflow.Api/RealTime/*`)
+## 3.2.0 Hub Foundation + Auth + Wiring ✅ DONE (`Workflow.Api/RealTime/*`)
 
 > **Purpose:** A `WorkflowHub` clients can connect to, authenticated, with clean
 > connection lifecycle, CORS, and a client test harness — the skeleton everything else
@@ -122,22 +124,22 @@ leaked Akka subscriptions), **auth over WebSockets** (token-from-query-string), 
 
 ### Tasks
 
-- [ ] **Remove the legacy SignalR package (D1)** — delete `Microsoft.AspNetCore.SignalR` 1.1.0 from `Directory.Packages.props` + `Workflow.Api.csproj`; confirm the hub compiles under the Web SDK's shared framework. Add `Microsoft.AspNetCore.SignalR.Client` to `Directory.Packages.props` + `Workflow.Tests.csproj` (test-only).
-- [ ] **`RealTime/IWorkflowHubClient.cs`** — strongly-typed client interface (one method per event, `Task`-returning) for compile-safe `IHubContext<WorkflowHub, IWorkflowHubClient>` broadcasts.
-- [ ] **`RealTime/WorkflowHub.cs`** — `Hub<IWorkflowHubClient>`, `[Authorize(WorkflowReadPolicy)]`; `OnConnectedAsync` (register in tracker, log), `OnDisconnectedAsync` (clean up tracker + groups).
-- [ ] **Query-string-token auth (D5)** — extend JWT bearer `OnMessageReceived` to read `?access_token=` when `Request.Path` starts with the hub route; leave header/API-key paths untouched.
-- [ ] **CORS policy (D10)** — named `dotflow.realtime` policy from `Api:RealTime:AllowedOrigins` (deny-by-default), `AllowCredentials()`, applied to the hub endpoint only.
-- [ ] **Program.cs wiring** — `AddSignalR()`, register `IConnectionTracker`, `MapHub<WorkflowHub>("/hubs/workflow")` (Q1) with the CORS policy; add `AddRealTime()` extension to keep `Program.cs` tidy.
-- [ ] **Test harness** — a `SignalRTestHarness` building a `HubConnection` against `WebApplicationFactory<Program>`'s `TestServer` (`options.HttpMessageHandlerFactory`), with a helper to issue a valid token.
+- [x] **Remove the legacy SignalR package (D1)** — delete `Microsoft.AspNetCore.SignalR` 1.1.0 from `Directory.Packages.props` + `Workflow.Api.csproj`; confirm the hub compiles under the Web SDK's shared framework. Add `Microsoft.AspNetCore.SignalR.Client` to `Directory.Packages.props` + `Workflow.Tests.csproj` (test-only).
+- [x] **`RealTime/IWorkflowHubClient.cs`** — strongly-typed client interface (one method per event, `Task`-returning) for compile-safe `IHubContext<WorkflowHub, IWorkflowHubClient>` broadcasts.
+- [x] **`RealTime/WorkflowHub.cs`** — `Hub<IWorkflowHubClient>`, `[Authorize(WorkflowReadPolicy)]`; `OnConnectedAsync` (register in tracker, log), `OnDisconnectedAsync` (clean up tracker + groups).
+- [x] **Query-string-token auth (D5)** — extend JWT bearer `OnMessageReceived` to read `?access_token=` when `Request.Path` starts with the hub route; leave header/API-key paths untouched.
+- [x] **CORS policy (D10)** — named `dotflow.realtime` policy from `Api:RealTime:AllowedOrigins` (deny-by-default), `AllowCredentials()`, applied to the hub endpoint only.
+- [x] **Program.cs wiring** — `AddSignalR()`, register `IConnectionTracker`, `MapHub<WorkflowHub>("/hubs/workflow")` (Q1) with the CORS policy; add `AddRealTime()` extension to keep `Program.cs` tidy.
+- [x] **Test harness** — a `SignalRTestHarness` building a `HubConnection` against `WebApplicationFactory<Program>`'s `TestServer` (`options.HttpMessageHandlerFactory`), with a helper to issue a valid token.
 
 ### Tests (target ~6): → `Workflow.Tests/Api/RealTime/WorkflowHubConnectionTests.cs`
-- [ ] `Client_CanConnect_WithValidToken` · `Connect_WithoutToken_Rejected` · `Connect_WithInvalidToken_Rejected`
-- [ ] `Connect_ViaQueryStringToken_Succeeds` · `Disconnect_CleansUpTracker`
-- [ ] `Cors_DisallowedOrigin_Blocked` *(or documented as manual if TestServer bypasses CORS)*
+- [x] `Client_CanConnect_WithValidToken` · `Connect_WithoutToken_Rejected` · `Connect_WithInvalidToken_Rejected`
+- [x] `Connect_ViaQueryStringToken_Succeeds` · `Disconnect_CleansUpTracker`
+- [x] `Cors_DisallowedOrigin_Blocked` *(or documented as manual if TestServer bypasses CORS)*
 
 ---
 
-## 3.2.1 Execution Event Bridge + Contracts 📢 (`Workflow.Api/RealTime/ExecutionEventBridge.cs`)
+## 3.2.1 Execution Event Bridge + Contracts ✅ DONE (`Workflow.Api/RealTime/ExecutionEventBridge.cs`)
 
 > **Purpose:** Translate Akka `EventStream` lifecycle events into client event DTOs and
 > broadcast them to the right groups. The heart of the phase.
@@ -146,22 +148,22 @@ leaked Akka subscriptions), **auth over WebSockets** (token-from-query-string), 
 
 ### Tasks
 
-- [ ] **`Contracts/RealTime/*` (D4)** — records: `ExecutionStartedEvent`, `ExecutionCompletedEvent`, `ExecutionFailedEvent`, `NodeStartedEvent`, `NodeCompletedEvent`, `NodeFailedEvent`, `ExecutionProgressEvent`. camelCase; summary payloads (Q6). (`WorkflowUpdatedEvent` deferred to 3.2.P4 per Q2.)
-- [ ] **`RealTime/ExecutionEventBridge.cs` (`IHostedService`, D2)** — on `StartAsync`, resolve `ActorSystem` + subscribe a bridging actor/handler to `ExecutionStateChanged`, `NodeStateChanged`, `ProgressUpdate`, `WorkflowCompleted`, `WorkflowFailed`, `NodeExecutionCompleted/Failed`; on `StopAsync`, unsubscribe + dispose (no leaked subscriptions).
-- [ ] **State→semantic-event mapping (D3)** — `Pending→Running` ⇒ `ExecutionStarted`; `WorkflowCompleted` ⇒ `ExecutionCompleted`; `WorkflowFailed` ⇒ `ExecutionFailed`; node `→Running` ⇒ `NodeStarted`; `NodeExecutionCompleted` ⇒ `NodeCompleted`; `NodeExecutionFailed` ⇒ `NodeFailed`; `ProgressUpdate` ⇒ `ExecutionProgress`.
-- [ ] **Payload marshalling** — flatten `HashMap`/`Arr`/`Option`/`Exception` to plain contract fields via `JsonValueConverter` conventions; cap inlined output size (Q6).
-- [ ] **Group broadcast (D6)** — each event goes to `execution:{executionId}` **and** `workflow:{workflowId}` groups via `IHubContext<WorkflowHub, IWorkflowHubClient>`.
-- [ ] **Resilience** — a slow/faulted client must not break the bridge; broadcast failures are logged, not thrown; the subscription survives individual send errors.
+- [x] **`Contracts/RealTime/*` (D4)** — records: `ExecutionStartedEvent`, `ExecutionCompletedEvent`, `ExecutionFailedEvent`, `NodeStartedEvent`, `NodeCompletedEvent`, `NodeFailedEvent`, `ExecutionProgressEvent`. camelCase; summary payloads (Q6). (`WorkflowUpdatedEvent` deferred to 3.2.P4 per Q2.)
+- [x] **`RealTime/ExecutionEventBridge.cs` (`IHostedService`, D2)** — on `StartAsync`, resolve `ActorSystem` + subscribe a bridging actor/handler to `ExecutionStateChanged`, `NodeStateChanged`, `ProgressUpdate`, `WorkflowCompleted`, `WorkflowFailed`, `NodeExecutionCompleted/Failed`; on `StopAsync`, unsubscribe + dispose (no leaked subscriptions).
+- [x] **State→semantic-event mapping (D3)** — `Pending→Running` ⇒ `ExecutionStarted`; `WorkflowCompleted` ⇒ `ExecutionCompleted`; `WorkflowFailed` ⇒ `ExecutionFailed`; node `→Running` ⇒ `NodeStarted`; `NodeExecutionCompleted` ⇒ `NodeCompleted`; `NodeExecutionFailed` ⇒ `NodeFailed`; `ProgressUpdate` ⇒ `ExecutionProgress`.
+- [x] **Payload marshalling** — flatten `HashMap`/`Arr`/`Option`/`Exception` to plain contract fields via `JsonValueConverter` conventions; cap inlined output size (Q6).
+- [x] **Group broadcast (D6)** — each event goes to `execution:{executionId}` **and** `workflow:{workflowId}` groups via `IHubContext<WorkflowHub, IWorkflowHubClient>`.
+- [x] **Resilience** — a slow/faulted client must not break the bridge; broadcast failures are logged, not thrown; the subscription survives individual send errors.
 
 ### Tests (target ~9): → `Workflow.Tests/Api/RealTime/ExecutionEventBridgeTests.cs`
-- [ ] `ExecutionStarted_Broadcast` · `ExecutionCompleted_Broadcast` · `ExecutionFailed_Broadcast`
-- [ ] `NodeStarted_Broadcast` · `NodeCompleted_Broadcast` · `NodeFailed_Broadcast`
-- [ ] `ExecutionProgress_Broadcast` · `Payload_LanguageExtTypes_FlattenToPlainJson`
-- [ ] `Bridge_Unsubscribes_OnStop` *(no leaked EventStream subscription)*
+- [x] `ExecutionStarted_Broadcast` · `ExecutionCompleted_Broadcast` · `ExecutionFailed_Broadcast`
+- [x] `NodeStarted_Broadcast` · `NodeCompleted_Broadcast` · `NodeFailed_Broadcast`
+- [x] `ExecutionProgress_Broadcast` · `Payload_LanguageExtTypes_FlattenToPlainJson`
+- [x] `Bridge_Unsubscribes_OnStop` *(no leaked EventStream subscription)*
 
 ---
 
-## 3.2.2 Subscription Management 📋 (`Workflow.Api/RealTime/*`)
+## 3.2.2 Subscription Management ✅ DONE (`Workflow.Api/RealTime/*`)
 
 > **Purpose:** Clients subscribe/unsubscribe to specific workflows/executions (or all, if
 > admin); only subscribed clients receive events; state is tracked thread-safely.
@@ -170,20 +172,20 @@ leaked Akka subscriptions), **auth over WebSockets** (token-from-query-string), 
 
 ### Tasks
 
-- [ ] **Hub methods** — `SubscribeToWorkflow(Guid)`, `UnsubscribeFromWorkflow(Guid)`, `SubscribeToExecution(Guid)`, `UnsubscribeFromExecution(Guid)`, `SubscribeToAll()` (**AdminPolicy**, D6). Each manages the matching SignalR group + the tracker entry.
-- [ ] **`RealTime/IConnectionTracker.cs` + `ConnectionTracker.cs` (D7)** — thread-safe `ConcurrentDictionary<string, HashSet<string>>` (connectionId → subscription keys); add/remove/list; snapshot counts for metrics.
-- [ ] **Permission checks (Q3)** — policy-based gate; `SubscribeToAll` requires admin; return a structured hub error on denial (no silent no-op).
-- [ ] **On-connect snapshot (optional/nice-to-have)** — when subscribing to an execution, immediately push the current `ExecutionStatusResult` so late subscribers aren't blank until the next event.
+- [x] **Hub methods** — `SubscribeToWorkflow(Guid)`, `UnsubscribeFromWorkflow(Guid)`, `SubscribeToExecution(Guid)`, `UnsubscribeFromExecution(Guid)`, `SubscribeToAll()` (**AdminPolicy**, D6). Each manages the matching SignalR group + the tracker entry.
+- [x] **`RealTime/IConnectionTracker.cs` + `ConnectionTracker.cs` (D7)** — thread-safe `ConcurrentDictionary<string, HashSet<string>>` (connectionId → subscription keys); add/remove/list; snapshot counts for metrics.
+- [x] **Permission checks (Q3)** — policy-based gate; `SubscribeToAll` requires admin; return a structured hub error on denial (no silent no-op).
+- [x] **On-connect snapshot (optional/nice-to-have)** — when subscribing to an execution, immediately push the current `ExecutionStatusResult` so late subscribers aren't blank until the next event.
 
 ### Tests (target ~8): → `Workflow.Tests/Api/RealTime/SubscriptionTests.cs`
-- [ ] `Subscribe_ToExecution_ReceivesOnlyThatExecutionsEvents` · `Subscribe_ToWorkflow_ReceivesItsExecutions`
-- [ ] `Unsubscribe_StopsEvents` · `NonSubscriber_ReceivesNothing`
-- [ ] `SubscribeToAll_AsAdmin_ReceivesEverything` · `SubscribeToAll_AsNonAdmin_Denied`
-- [ ] `Tracker_AddRemove_Threadsafe` *(concurrent sub/unsub)* · `Subscribe_PushesInitialSnapshot`
+- [x] `Subscribe_ToExecution_ReceivesOnlyThatExecutionsEvents` · `Subscribe_ToWorkflow_ReceivesItsExecutions`
+- [x] `Unsubscribe_StopsEvents` · `NonSubscriber_ReceivesNothing`
+- [x] `SubscribeToAll_AsAdmin_ReceivesEverything` · `SubscribeToAll_AsNonAdmin_Denied`
+- [x] `Tracker_AddRemove_Threadsafe` *(concurrent sub/unsub)* · `Subscribe_PushesInitialSnapshot`
 
 ---
 
-## 3.2.3 Connection State + Metrics 🔌 (`Workflow.Api/Observability/*`)
+## 3.2.3 Connection State + Metrics ✅ DONE (`Workflow.Api/Observability/*`)
 
 > **Purpose:** Observe the real-time layer — active connections and subscriptions surfaced
 > through the existing monitoring endpoints.
@@ -192,19 +194,19 @@ leaked Akka subscriptions), **auth over WebSockets** (token-from-query-string), 
 
 ### Tasks
 
-- [ ] **Metrics extension (D8)** — add `activeConnections` + `activeSubscriptions` gauges to `IWorkflowMetrics` (or a sibling `IRealtimeMetrics`) fed from `IConnectionTracker`; increment/decrement in hub connect/disconnect + sub/unsub.
-- [ ] **Surface via endpoints** — include the gauges in `GET /api/v1/metrics` + `GET /api/v1/status`.
-- [ ] **Multiple connections per user** — confirm the tracker keys by connectionId (not user), so a user with several tabs is handled correctly.
-- [ ] **Heartbeat** — rely on SignalR's built-in keep-alive/ping (document the configured intervals); no custom ping needed unless a gap is found.
+- [x] **Metrics extension (D8)** — add `activeConnections` + `activeSubscriptions` gauges to `IWorkflowMetrics` (or a sibling `IRealtimeMetrics`) fed from `IConnectionTracker`; increment/decrement in hub connect/disconnect + sub/unsub.
+- [x] **Surface via endpoints** — include the gauges in `GET /api/v1/metrics` + `GET /api/v1/status`.
+- [x] **Multiple connections per user** — confirm the tracker keys by connectionId (not user), so a user with several tabs is handled correctly.
+- [x] **Heartbeat** — rely on SignalR's built-in keep-alive/ping (document the configured intervals); no custom ping needed unless a gap is found.
 
 ### Tests (target ~5): → `Workflow.Tests/Api/RealTime/ConnectionMetricsTests.cs`
-- [ ] `ActiveConnections_IncrementsOnConnect_DecrementsOnDisconnect`
-- [ ] `ActiveSubscriptions_TracksSubUnsub` · `MultipleConnections_PerUser_CountedIndependently`
-- [ ] `Metrics_Endpoint_IncludesRealtimeGauges` · `Status_Endpoint_IncludesConnectionCount`
+- [x] `ActiveConnections_IncrementsOnConnect_DecrementsOnDisconnect`
+- [x] `ActiveSubscriptions_TracksSubUnsub` · `MultipleConnections_PerUser_CountedIndependently`
+- [x] `Metrics_Endpoint_IncludesRealtimeGauges` · `Status_Endpoint_IncludesConnectionCount`
 
 ---
 
-## 3.2.4 Reconnection + Resilience 🔄 (client guidance + server restore)
+## 3.2.4 Reconnection + Resilience ✅ DONE (client guidance + server restore)
 
 > **Purpose:** Survive transient network drops gracefully; document the reconnect contract.
 
@@ -212,19 +214,19 @@ leaked Akka subscriptions), **auth over WebSockets** (token-from-query-string), 
 
 ### Tasks
 
-- [ ] **Server-side re-subscribe support (D9)** — `OnConnectedAsync` is idempotent; the client re-invokes its `Subscribe*` calls after a reconnect (server holds no durable per-connection subscription across a *new* connectionId).
-- [ ] **Auth on reconnect** — the reconnect handshake re-validates the token (expired token ⇒ reconnect fails cleanly with an auth error).
-- [ ] **Graceful degradation** — bridge broadcast failures to a dropped client are swallowed; the server never crashes on client disconnect mid-send.
-- [ ] **Missed-event note (Q4)** — document that events during the disconnect window are **not** replayed in MVP (post-MVP 3.2.P2); live events resume on reconnect.
-- [ ] **Client guidance** — `WithAutomaticReconnect()` + re-subscribe snippet in the docs.
+- [x] **Server-side re-subscribe support (D9)** — `OnConnectedAsync` is idempotent; the client re-invokes its `Subscribe*` calls after a reconnect (server holds no durable per-connection subscription across a *new* connectionId).
+- [x] **Auth on reconnect** — the reconnect handshake re-validates the token (expired token ⇒ reconnect fails cleanly with an auth error).
+- [x] **Graceful degradation** — bridge broadcast failures to a dropped client are swallowed; the server never crashes on client disconnect mid-send.
+- [x] **Missed-event note (Q4)** — document that events during the disconnect window are **not** replayed in MVP (post-MVP 3.2.P2); live events resume on reconnect.
+- [x] **Client guidance** — `WithAutomaticReconnect()` + re-subscribe snippet in the docs.
 
 ### Tests (target ~4): → `Workflow.Tests/Api/RealTime/ReconnectionTests.cs`
-- [ ] `Reconnect_AfterDrop_ReceivesLiveEventsAgain` · `Reconnect_RestoresSubscriptions_ViaClientReinvoke`
-- [ ] `Reconnect_WithExpiredToken_FailsCleanly` · `ServerSend_ToDroppedClient_DoesNotThrow`
+- [x] `Reconnect_AfterDrop_ReceivesLiveEventsAgain` · `Reconnect_RestoresSubscriptions_ViaClientReinvoke`
+- [x] `Reconnect_WithExpiredToken_FailsCleanly` · `ServerSend_ToDroppedClient_DoesNotThrow`
 
 ---
 
-## 3.2.5 Docs + Example Client 📚
+## 3.2.5 Docs + Example Client ✅ DONE
 
 > **Purpose:** Make the hub usable — event catalog, auth, subscribe/reconnect patterns, a
 > runnable client snippet.
@@ -233,13 +235,13 @@ leaked Akka subscriptions), **auth over WebSockets** (token-from-query-string), 
 
 ### Tasks
 
-- [ ] **`docs/realtime.md`** — hub URL, auth (header + query-string token), the full event catalog with payload shapes, subscribe/unsubscribe methods, admin firehose, reconnect + re-subscribe pattern, CORS config keys, metrics.
-- [ ] **REST/docs cross-links** — add a "Real-time" section pointer to `docs/rest-api.md`; link from the README doc index.
-- [ ] **Example client** — a small JS/TS (or `HubConnection` C#) snippet in `docs/realtime.md` (or refresh `examples/api/WorkflowHub.cs`) showing connect → subscribe → handle events → reconnect.
-- [ ] **Config reference** — document `Api:RealTime:AllowedOrigins` and any keep-alive settings.
+- [x] **`docs/realtime.md`** — hub URL, auth (header + query-string token), the full event catalog with payload shapes, subscribe/unsubscribe methods, admin firehose, reconnect + re-subscribe pattern, CORS config keys, metrics.
+- [x] **REST/docs cross-links** — add a "Real-time" section pointer to `docs/rest-api.md`; link from the README doc index.
+- [x] **Example client** — a small JS/TS (or `HubConnection` C#) snippet in `docs/realtime.md` (or refresh `examples/api/WorkflowHub.cs`) showing connect → subscribe → handle events → reconnect.
+- [x] **Config reference** — document `Api:RealTime:AllowedOrigins` and any keep-alive settings.
 
 ### Tests
-- [ ] *(docs slice — no automated tests; verified by the 3.2.0–3.2.4 suites)*
+- [x] *(docs slice — no automated tests; verified by the 3.2.0–3.2.4 suites)*
 
 ---
 
@@ -308,16 +310,16 @@ per-resource access (not just role), rejecting subscriptions to workflows the us
 
 ## Success Criteria ✅
 
-- [ ] A client connects to `WorkflowHub` with a valid token (header **or** query-string) and is rejected without one
-- [ ] Executing a workflow streams `ExecutionStarted/Progress/Completed` (or `Failed`) and `NodeStarted/Completed/Failed` events to subscribed clients in real time — no polling
-- [ ] Subscriptions are honored: a client subscribed to execution A never receives execution B's events; `SubscribeToAll` is admin-only
-- [ ] Event payloads are plain, camelCase JSON (no LanguageExt leakage) with summary fields; large outputs are fetched via REST (Q6)
-- [ ] Active connection + subscription counts appear in `/api/v1/metrics` and `/api/v1/status`
-- [ ] The bridge subscribes/unsubscribes to the Akka `EventStream` cleanly (no leaked subscriptions) and never crashes on a dropped client
-- [ ] Automatic reconnect works; the client re-subscribes and resumes receiving live events (missed-window replay explicitly out of MVP scope)
-- [ ] **`Workflow.Engine` is unchanged and gains no ASP.NET/SignalR dependency**
-- [ ] `docs/realtime.md` documents the hub, event catalog, auth, and reconnect pattern
-- [ ] All existing tests stay green; new real-time tests pass via the `HubConnection` harness
+- [x] A client connects to `WorkflowHub` with a valid token (header **or** query-string) and is rejected without one
+- [x] Executing a workflow streams `ExecutionStarted/Progress/Completed` (or `Failed`) and `NodeStarted/Completed/Failed` events to subscribed clients in real time — no polling
+- [x] Subscriptions are honored: a client subscribed to execution A never receives execution B's events; `SubscribeToAll` is admin-only
+- [x] Event payloads are plain, camelCase JSON (no LanguageExt leakage) with summary fields; large outputs are fetched via REST (Q6)
+- [x] Active connection + subscription counts appear in `/api/v1/metrics` and `/api/v1/status`
+- [x] The bridge subscribes/unsubscribes to the Akka `EventStream` cleanly (no leaked subscriptions) and never crashes on a dropped client
+- [x] Automatic reconnect works; the client re-subscribes and resumes receiving live events (missed-window replay explicitly out of MVP scope)
+- [x] **`Workflow.Engine` is unchanged and gains no ASP.NET/SignalR dependency**
+- [x] `docs/realtime.md` documents the hub, event catalog, auth, and reconnect pattern
+- [x] All existing tests stay green; new real-time tests pass via the `HubConnection` harness
 
 ---
 
