@@ -24,7 +24,7 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 | **D1 A new `IScriptExecutor` seam in a new `Workflow.Scripting` project** | `IScriptExecutor` (language id, `ExecuteAsync(code, ScriptExecutionContext, ct) → ScriptExecutionResult`) lives in a new dependency-light `Workflow.Scripting` project. Language executors register keyed in DI (`AddKeyedSingleton<IScriptExecutor>("javascript")`, matching the 2.2.5 keyed-evaluator convention) with an `IScriptExecutorFactory` resolver. **`IExpressionEvaluator` stays untouched** — it remains the lightweight single-expression seam for control-flow modules; `IScriptExecutor` is the multi-statement, API-bridged big sibling. |
 | **D2 JavaScript = Jint (already in the tree), generalized** | `JavaScriptScriptExecutor` wraps Jint with the same safety posture as `JintExpressionEvaluator` (strict mode, memory cap, recursion cap, timeout via `TimeoutInterval` + linked CTS) but with **script-level limits** from `ScriptExecutionConfig` (default 30 s / 64 MB vs the evaluator's 250 ms / 4 MB) and the `workflow` API object injected. No new package — Jint is already a dependency. |
 | **D3 C# joins the language set via the existing Roslyn core** | `CSharpScriptExecutor` adapts `Workflow.Scripting.Roslyn` (compiler + `ForbiddenSyntaxWalker` + collectible runner + compiled cache) to the `IScriptExecutor` seam. It lives in the **existing Roslyn-quarantined project** (`Workflow.Scripting.Roslyn`) so the heavy Roslyn dependency stays opt-in; hosts that call `AddRoslynScripting()` get C# scripts, others simply don't have the language key registered. |
-| **D4 Lua = MoonSharp in a quarantined `Workflow.Scripting.Lua` project** | MoonSharp (MIT, pure managed, no native deps) implements `LuaScriptExecutor`. New dependency → new quarantined project per the cloud/Roslyn convention, wired via `AddLuaScripting()`. Lua tables ↔ .NET marshalling via MoonSharp `DynValue` conversion + a JSON-round-trip fallback for complex object graphs. |
+| **D4 Lua = MoonSharp in a quarantined `Workflow.Scripting.Lua` project** | MoonSharp (MIT, pure managed, no native deps) implements `LuaScriptExecutor`. New dependency → new quarantined project per the cloud/Roslyn convention, wired via `AddLuaScripting()`. Lua tables ↔ .NET marshalling via MoonSharp `DynValue` conversion + a JSON-round-trip fallback for complex object graphs. The executor loads the script body as a **function invoked via `DynValue`** (not top-level `DoString`) so async coroutine bridging (3.1.P5) is purely additive — pure-Lua `coroutine.*` works in MVP; only .NET-async bridging is deferred (Q7). |
 | **D5 Python is deferred to post-MVP (3.1.P1)** | IronPython lags CPython (3.4 dialect), and Python.NET requires a native CPython install on the host — both are poor fits for a sandboxed, portable engine. The MVP language set is **JavaScript + Lua + C#** (all pure-managed, all sandboxable). The `IScriptExecutor` seam makes Python purely additive later; the checklist's Python items map to **3.1.P1**. |
 | **D6 The script API is capability-gated, not all-powerful** | `IWorkflowScriptApi` exposes: **always-on** — variables (get/set/delete/exists, staged as `VariableUpdates` per the ModuleResult convention), logging (debug/info/warn/error), utilities (guid/now/format/base64/hash/json/csv), workflow context (executionId/workflowId), `WaitAsync`; **gated by `ScriptExecutionConfig`** — HTTP (`AllowNetwork`, via `IHttpClientFactory`'s existing `dotflow.http` client, request-count capped) and file system (`AllowFileSystem` **default false** + `AllowedPaths`, reusing the Phase 2.5 path-security sandbox). **No raw database API** — the checklist's `QueryDatabase(connectionString, …)` is rejected: scripts that need data go through workflow nodes (2.4 database modules + named connections) instead of carrying raw connection strings (Q2). |
 | **D7 Variable writes are staged, not direct** | Scripts mutate variables through the API, but writes are **collected and returned** as `ModuleResult.VariableUpdates` (the same mechanism `builtin.setvariable` uses) so the engine applies them transactionally after the node completes. Reads see execution-scope variables passed into the `ModuleExecutionContext`. No direct `IVariableStore` access from inside a running script. |
@@ -36,27 +36,22 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 ### TO RESOLVE 🤔
 
-- [ ] **Q1 MVP language set: is JavaScript + Lua + C# (Python deferred) acceptable?**
-  - IronPython is stuck at a 3.4-era dialect; Python.NET needs native CPython on the host (deployment + sandbox pain). **Proposed:** defer Python to **3.1.P1** and revisit with Python.NET + containerized isolation — *needs confirmation*.
-    - OK
-- [ ] **Q2 Script Database API: OK to reject the raw `QueryDatabase(connectionString, …)` checklist item?**
-  - Raw connection strings in script code bypass the 2.4 named-connection registry + encryption-at-rest. **Proposed:** no database API in scripts for MVP; workflows compose `builtin.database.*` nodes with script nodes instead. A named-connection-based script API (`QueryAsync(connectionName, sql, params)`) can be **3.1.P2** if demanded — *needs confirmation*.
-    - OK 
-- [ ] **Q3 Script HTTP API default: `AllowNetwork` default false (deny-by-default) even though the checklist says default true?**
-  - D12 proposes deny-by-default with per-node opt-in under host ceilings. **Proposed:** default false — *needs confirmation*.
-    - Okay
-- [ ] **Q4 Library storage: blob-store seam (D9) or a dedicated `IScriptLibraryRepository` in persistence?**
-  - Blob storage is zero-migration and matches 2.8's pattern; a repository adds queryability (list by language) at the cost of a new table/migration per provider. **Proposed:** blob-backed for MVP with an in-memory fallback; repository promotion tracked as **3.1.P3** — *needs confirmation*.
-    - Okay
-- [ ] **Q5 PropertyBinder expression detection: implicit (any non-reference template = expression, D11) or explicit marker (e.g. `{{= expr }}`)?**
-  - Implicit is what the deferred checklist describes and reads naturally; explicit is safer against accidental evaluation of literal text that happens to contain braces. **Proposed:** implicit with the constructor opt-out, since today non-reference templates resolve to null/unchanged (so semantics only *improve*) — *needs confirmation*.
-    -  Okay
-- [ ] **Q6 Should `builtin.script` support returning `ActivePorts` (control-flow from scripts)?**
-  - Letting scripts pick output ports would make them mini-routers. **Proposed:** not in MVP — scripts return data; routing stays with `builtin.condition`/`builtin.switch`. Revisit post-MVP — *needs confirmation*.
-    - OKay 
-- [ ] **Q7 Script async support: JS `async/await` + `WaitAsync` only, or full task-bridging for Lua/C# too?**
-  - Jint 4.x handles promises; MoonSharp coroutines are a different model; Roslyn scripts can be `async` natively. **Proposed:** MVP = JS promises + C# async natively supported; Lua scripts are synchronous (with `workflow.wait(ms)` provided); coroutine bridging deferred — *needs confirmation*.
-    - Have a plan for Lua coroutines, but defer bridging to post-MVP. JS and C# should allow async.
+> All Q1–Q7 resolved (July 2026) — answers folded into the design decisions + slices below~ ✅
+
+- [x] **Q1 MVP language set: is JavaScript + Lua + C# (Python deferred) acceptable?**
+  - **RESOLVED:** Yes — Python deferred to **3.1.P1** (IronPython dialect lag; Python.NET needs native CPython). Revisit with Python.NET + containerized isolation.
+- [x] **Q2 Script Database API: OK to reject the raw `QueryDatabase(connectionString, …)` checklist item?**
+  - **RESOLVED:** Yes — no database API in scripts for MVP; workflows compose `builtin.database.*` nodes with script nodes instead. A named-connection-based script API (`QueryAsync(connectionName, sql, params)`) → **3.1.P2** if demanded.
+- [x] **Q3 Script HTTP API default: `AllowNetwork` default false (deny-by-default)?**
+  - **RESOLVED:** Yes — deny-by-default with per-node opt-in under host ceilings (D12), superseding the checklist's default-true.
+- [x] **Q4 Library storage: blob-store seam (D9) or a dedicated `IScriptLibraryRepository` in persistence?**
+  - **RESOLVED:** Blob-backed for MVP with an in-memory fallback (mirrors the 2.8 state-store pattern); repository promotion → **3.1.P3**.
+- [x] **Q5 PropertyBinder expression detection: implicit (any non-reference template = expression, D11) or explicit marker?**
+  - **RESOLVED:** Implicit, with the constructor opt-out — today non-reference templates resolve to null/unchanged, so semantics only improve.
+- [x] **Q6 Should `builtin.script` support returning `ActivePorts` (control-flow from scripts)?**
+  - **RESOLVED:** Not in MVP — scripts return data; routing stays with `builtin.condition`/`builtin.switch`. Revisit post-MVP (**3.1.P4**).
+- [x] **Q7 Script async support: JS `async/await` + `WaitAsync` only, or full task-bridging for Lua/C# too?**
+  - **RESOLVED:** **JS and C# support async natively** (Jint promises awaited; Roslyn scripts may `await`). **Lua is synchronous in MVP** (with `workflow.wait(ms)`), but the executor is built so coroutine bridging is purely additive: MoonSharp coroutines land post-MVP as **3.1.P5** with a concrete plan (see the P-slice) — the MVP `LuaScriptExecutor` must not preclude it (script function entry point + `DynValue`-based invocation kept coroutine-compatible).
 
 ---
 
@@ -173,17 +168,19 @@ Phase 3.1 gives workflow authors a **general-purpose script node** (`builtin.scr
 
 - [ ] **New project `Workflow.Scripting.Lua`** — MoonSharp package added to `Directory.Packages.props`; references `Workflow.Scripting`
 - [ ] **`LuaScriptExecutor.cs`** — `LanguageId="lua"`; `CoreModules.Preset_SoftSandbox` (no `io`/`os`/`load`); per-execution `Script` instance; instruction-count-based abort + linked-CTS timeout; memory observed via instruction budget (MoonSharp has no direct memory cap — document)
+- [ ] **Coroutine-ready execution shape (Q7):** the script body is loaded as a **Lua function and invoked via `DynValue`** (not `Script.DoString` top-level statements) so 3.1.P5 can later wrap the same entry point in `coroutine.create` + resume-loop without changing the executor contract; `coroutine.*` core module stays available inside scripts (pure-Lua coroutines work today — only .NET async *bridging* is deferred)
 - [ ] **API bridging:** register `IWorkflowScriptApi` via `UserData.RegisterType`; `workflow` global + `input` table; Lua tables ↔ .NET dictionaries/lists (recursive marshaller with depth cap, reusing `JsonValueConverter` shapes)
 - [ ] **Sync model (Q7):** Lua scripts are synchronous; `workflow.wait(ms)` provided; async HTTP api methods exposed as blocking wrappers with CT propagation
 - [ ] **DI:** `AddLuaScripting()` keyed registration
-- [ ] **Docs:** language nuances (1-based arrays, table semantics) in the scripting guide
+- [ ] **Docs:** language nuances (1-based arrays, table semantics, coroutine status/roadmap) in the scripting guide
 
-### Tests (target ~10): → `Workflow.Tests/Scripting/LuaScriptExecutorTests.cs`
+### Tests (target ~11): → `Workflow.Tests/Scripting/LuaScriptExecutorTests.cs`
 
 - [ ] `Execute_SimpleScript_ReturnsValue` · `Execute_InputTable_Accessible` · `Execute_TableReturn_MarshalsToNet` · `Execute_NestedTables_DepthCapped`
 - [ ] `Execute_ApiCalls_Work` *(variables + logging + utilities from Lua)*
 - [ ] `Execute_SyntaxError_StructuredError` · `Execute_RuntimeError_StructuredError`
 - [ ] `Execute_Timeout_Enforced` · `Sandbox_NoIoOsLoad_Modules` · `Http_Gated_FromLua`
+- [ ] `Execute_PureLuaCoroutines_Work` *(coroutine.create/resume/yield inside a script — guards the 3.1.P5-ready shape)*
 
 ---
 
@@ -353,6 +350,15 @@ Promote the blob-backed store to a persistence repository with library versionin
 
 ### 3.1.P4 Script-driven routing 🎯 *(Q6)*
 `ActivePorts` returns from `builtin.script` so scripts can participate in control flow — needs designer support (Phase 3.3) to be usable.
+
+### 3.1.P5 Lua coroutine bridging 🌙 *(Q7 — plan agreed, bridging deferred)*
+Bridge .NET async into Lua coroutines so `workflow.httpGet(...)` and friends **yield instead of block**. The concrete plan:
+
+1. **Entry point (already MVP-ready):** the 3.1.3 executor loads the script body as a Lua function invoked via `DynValue` — 3.1.P5 wraps that same function in `Script.CreateCoroutine(fn)` without contract changes.
+2. **Async API surface:** each gated async API method gets a coroutine-aware variant registered as a **yielding callback** (`DynValue.NewYieldReq`): the Lua side calls `workflow.httpGet(url)`, the callback starts the .NET `Task` and yields; the C# resume-loop (`coroutine.Resume()`) awaits the task off-thread and resumes the coroutine with the marshalled result.
+3. **Resume loop:** `while (coroutine.State != CoroutineState.Dead) { result = coroutine.Resume(pendingValue); if (result is yield-request) pendingValue = await RunPendingTask(ct); }` — CT-linked so timeout/cancellation aborts between resumes (MoonSharp's `AutoYieldCounter` keeps CPU-bound segments interruptible too).
+4. **Compat:** synchronous blocking wrappers stay for scripts that don't opt in; a `workflow.async = true` script pragma (or config flag) selects the coroutine execution path.
+5. **Tests (~6):** yield-resume round-trip, HTTP-yield end-to-end, timeout across a suspended coroutine, cancellation between resumes, error propagation from a faulted task into a Lua `error()`, mixed sync+async API usage.
 
 ---
 
