@@ -1,4 +1,4 @@
-# Phase 3.3.a: Designer Foundation (Weeks 27-28) 🏗️
+﻿# Phase 3.3.a: Designer Foundation (Weeks 27-28) 🏗️
 
 Made with 💖 by Ami-Chan! UwU ✨
 
@@ -28,23 +28,23 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 ### Tasks
 
-- [ ] **Refit the existing projects** — confirm `Workflow.UI` (host) + `Workflow.UI.Client` (WASM) build in `Workflow.sln`; align both csproj files with repo conventions (nullable, implicit usings, StyleCop where practical); delete template pages (Counter/Weather remnants) if present
-- [ ] **Dev API connectivity** — `ApiClientOptions` (`BaseUrl` from `appsettings.json`/`wwwroot/appsettings.json`); document the two dev modes: (a) CORS — API allows the UI origin via `Api:RealTime:AllowedOrigins` + a REST CORS note, or (b) host proxy — `Workflow.UI` forwards `/api` + `/hubs` to the API in dev (keeps a single origin; **no designer logic in the proxy** per D2)
-- [ ] **Wire DTO mirrors (D2)** — `Api/Dtos/*`: plain System.Text.Json records mirroring the wire JSON: `WorkflowDto` (id/name/description/version/nodes/connections/variables/tags/updatedAt), `NodeDto` (id/moduleId/name/properties as `Dictionary<string, JsonElement>`/position/metadata), `ConnectionDto`, `PositionDto`, `WorkflowSummaryDto` + paged envelope, `ModuleDto` + `ModuleSchemaDto` (ports, properties incl. `editorType`/`allowedValues`/`validationRules`), `ExecutionStatusDto`, `StartExecutionResultDto`, and the 3.2 event payload records — **no LanguageExt types anywhere in the client**
-- [ ] **`WorkflowsClient`** — `ListAsync(search?, page)`, `GetAsync(id)`, `CreateAsync(dto)`, `UpdateAsync(dto)`, `DeleteAsync(id)`; ProblemDetails-aware error surface (`ApiError` with status/title/detail/errors[])
-- [ ] **`ModulesClient`** — `ListAsync()` (palette), `GetAsync(moduleId)` (schema detail); client-side cache (modules change rarely)
-- [ ] **`ExecutionsClient`** — `ExecuteAsync(workflowId, inputs?)`, `GetStatusAsync(executionId)`, `CancelAsync(executionId)`
-- [ ] **`RealTimeClient`** — thin SignalR wrapper: `ConnectAsync(token?)`, `SubscribeToExecutionAsync(id)`, typed C# events for `ExecutionStarted/Completed/Failed`, `NodeStarted/Completed/Failed`, `ExecutionProgress`, `ExecutionSnapshot`; auto-reconnect + re-subscribe on `Reconnected` (3.2 D9); `Microsoft.AspNetCore.SignalR.Client` PackageReference added to the **client** csproj (version already in `Directory.Packages.props` from 3.2)
-- [ ] **`AuthState`** — holds the JWT/API key (in-memory + `localStorage` persist opt-in); a `DelegatingHandler` stamps `Authorization: Bearer`/`X-API-Key` on REST; feeds `access_token` to `RealTimeClient`
-- [ ] **`Workflow.Tests.UI` project** — new xUnit + bUnit + FluentAssertions test project added to the solution; `bunit` PackageVersion added to `Directory.Packages.props`; API clients tested against a fake `HttpMessageHandler`
+- [x] **Refit the existing projects** — confirm `Workflow.UI` (host) + `Workflow.UI.Client` (WASM) build in `Workflow.sln`; align both csproj files with repo conventions (nullable, implicit usings, StyleCop where practical); delete template pages (Counter/Weather remnants) if present
+- [x] **Dev API connectivity** — `ApiClientOptions` (`BaseUrl` from `appsettings.json`/`wwwroot/appsettings.json`); document the two dev modes: (a) CORS — API allows the UI origin via `Api:RealTime:AllowedOrigins` + a REST CORS note, or (b) host proxy — `Workflow.UI` forwards `/api` + `/hubs` to the API in dev (keeps a single origin; **no designer logic in the proxy** per D2)
+- [x] **Wire DTO mirrors (D2)** — `Api/Dtos/*`: plain System.Text.Json records mirroring the wire JSON: `WorkflowDto` (id/name/description/version/nodes/connections/variables/tags/updatedAt), `NodeDto` (id/moduleId/name/properties as `Dictionary<string, JsonElement>`/position/metadata), `ConnectionDto`, `PositionDto`, `WorkflowSummaryDto` + paged envelope, `ModuleDto` + `ModuleSchemaDto` (ports, properties incl. `editorType`/`allowedValues`/`validationRules`), `ExecutionStatusDto`, `StartExecutionResultDto`, and the 3.2 event payload records — **no LanguageExt types anywhere in the client**
+- [x] **`WorkflowsClient`** — `ListAsync(search?, page)`, `GetAsync(id)`, `CreateAsync(dto)`, `UpdateAsync(dto)`, `DeleteAsync(id)`; ProblemDetails-aware error surface (`ApiError` with status/title/detail/errors[])
+- [x] **`ModulesClient`** — `ListAsync()` (palette), `GetAsync(moduleId)` (schema detail); client-side cache (modules change rarely)
+- [x] **`ExecutionsClient`** — `ExecuteAsync(workflowId, inputs?)`, `GetStatusAsync(executionId)`, `CancelAsync(executionId)`
+- [x] **`RealTimeClient`** — thin SignalR wrapper: `ConnectAsync(token?)`, `SubscribeToExecutionAsync(id)`, typed C# events for `ExecutionStarted/Completed/Failed`, `NodeStarted/Completed/Failed`, `ExecutionProgress`, `ExecutionSnapshot`; auto-reconnect + re-subscribe on `Reconnected` (3.2 D9); `Microsoft.AspNetCore.SignalR.Client` PackageReference added to the **client** csproj (version already in `Directory.Packages.props` from 3.2)
+- [x] **`AuthState`** — holds the JWT/API key (in-memory + `localStorage` persist opt-in); a `DelegatingHandler` stamps `Authorization: Bearer`/`X-API-Key` on REST; feeds `access_token` to `RealTimeClient`
+- [x] **`Workflow.Tests.UI` project** — new xUnit + bUnit + FluentAssertions test project added to the solution; `bunit` PackageVersion added to `Directory.Packages.props`; API clients tested against a fake `HttpMessageHandler`
 
 ### Tests (target ~10): → `Workflow.Tests.UI/Api/ApiClientTests.cs`
 
-- [ ] `WorkflowsClient_List_ParsesPagedEnvelope` · `WorkflowsClient_Get_ParsesFullDefinition` *(nodes, connections, positions, JsonElement properties)*
-- [ ] `WorkflowsClient_Update_SendsWireShapeJson` *(golden-file JSON: what we PUT equals what GET returned, modulo edits)*
-- [ ] `WorkflowsClient_ServerError_SurfacesProblemDetails` · `ModulesClient_List_ParsesSchemas` *(editorType/allowedValues/validation preserved)*
-- [ ] `ModulesClient_Caches_SecondCallNoHttp` · `ExecutionsClient_Execute_ReturnsExecutionId`
-- [ ] `AuthState_Handler_StampsBearer` · `AuthState_Handler_StampsApiKey` · `Dtos_RoundTrip_NoDataLoss` *(deserialize → serialize → byte-compare canonical JSON)*
+- [x] `WorkflowsClient_List_ParsesPagedEnvelope` · `WorkflowsClient_Get_ParsesFullDefinition` *(nodes, connections, positions, JsonElement properties)*
+- [x] `WorkflowsClient_Update_SendsWireShapeJson` *(golden-file JSON: what we PUT equals what GET returned, modulo edits)*
+- [x] `WorkflowsClient_ServerError_SurfacesProblemDetails` · `ModulesClient_List_ParsesSchemas` *(editorType/allowedValues/validation preserved)*
+- [x] `ModulesClient_Caches_SecondCallNoHttp` · `ExecutionsClient_Execute_ReturnsExecutionId`
+- [x] `AuthState_Handler_StampsBearer` · `AuthState_Handler_StampsApiKey` · `Dtos_RoundTrip_NoDataLoss` *(deserialize → serialize → byte-compare canonical JSON)*
 
 ---
 
@@ -84,23 +84,23 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 ### Tasks
 
-- [ ] **`DesignerDocument`** — `Id`, `Name`, `Description`, `Version`, `List<DesignerNode>`, `List<DesignerConnection>`, `Dictionary<string, VariableDto>`, `Tags`; `FromDto(WorkflowDto)` / `ToDto()` round-trip (lossless — unknown/extra fields preserved via the DTO layer); node lookup by id; `Changed` event for view invalidation
-- [ ] **`DesignerNode`** — `Id`, `ModuleId`, `Name`, `Properties (Dictionary<string, JsonElement>)`, `X`, `Y`, `Metadata`; plus resolved-at-load `ModuleSchemaDto? Schema` (ports for rendering; null-safe for unknown modules → "missing module" visual)
-- [ ] **`DesignerConnection`** — source/target node + port names, `Condition`, `Priority`
-- [ ] **`CanvasGeometry`** — pure functions: `ScreenToCanvas(point, pan, zoom)` / `CanvasToScreen`; zoom-about-cursor math (`NewPanForZoom(cursor, oldPan, oldZoom, newZoom)`); zoom clamping (0.1–3.0); `FitToContent(nodeBounds[], viewport, padding)` → (pan, zoom); node bounds calc (port-count-aware height); **bezier path builder** for edges (`M sx,sy C sx+dx,sy sx′−dx,ty tx,ty` with dx from horizontal distance) + port anchor positions (left edge inputs / right edge outputs, evenly spaced)
-- [ ] **`GraphValidator` (structural core)** — `Validate(document, knownModules)` → issues list: unknown `moduleId`, connection referencing missing node/port, duplicate connection, **cycle detection** (DFS), self-connection; used read-only in 3.3.a (status bar) and as the save gate in 3.3.b
-- [ ] **Unique id generation** — `MakeNodeId(moduleId, existingIds)` → `http-1`, `http-2`, … (short module stem + counter; stable, human-friendly)
+- [x] **`DesignerDocument`** — `Id`, `Name`, `Description`, `Version`, `List<DesignerNode>`, `List<DesignerConnection>`, `Dictionary<string, VariableDto>`, `Tags`; `FromDto(WorkflowDto)` / `ToDto()` round-trip (lossless — unknown/extra fields preserved via the DTO layer); node lookup by id; `Changed` event for view invalidation
+- [x] **`DesignerNode`** — `Id`, `ModuleId`, `Name`, `Properties (Dictionary<string, JsonElement>)`, `X`, `Y`, `Metadata`; plus resolved-at-load `ModuleSchemaDto? Schema` (ports for rendering; null-safe for unknown modules → "missing module" visual)
+- [x] **`DesignerConnection`** — source/target node + port names, `Condition`, `Priority`
+- [x] **`CanvasGeometry`** — pure functions: `ScreenToCanvas(point, pan, zoom)` / `CanvasToScreen`; zoom-about-cursor math (`NewPanForZoom(cursor, oldPan, oldZoom, newZoom)`); zoom clamping (0.1–3.0); `FitToContent(nodeBounds[], viewport, padding)` → (pan, zoom); node bounds calc (port-count-aware height); **bezier path builder** for edges (`M sx,sy C sx+dx,sy sx′−dx,ty tx,ty` with dx from horizontal distance) + port anchor positions (left edge inputs / right edge outputs, evenly spaced)
+- [x] **`GraphValidator` (structural core)** — `Validate(document, knownModules)` → issues list: unknown `moduleId`, connection referencing missing node/port, duplicate connection, **cycle detection** (DFS), self-connection; used read-only in 3.3.a (status bar) and as the save gate in 3.3.b
+- [x] **Unique id generation** — `MakeNodeId(moduleId, existingIds)` → `http-1`, `http-2`, … (short module stem + counter; stable, human-friendly)
 
 ### Tests (target ~16): → `Workflow.Tests.UI/State/DocumentAndGeometryTests.cs` *(pure xUnit — these specs double as the React port spec, D2)*
 
-- [ ] `Document_FromDto_ToDto_RoundTripsLosslessly` *(golden JSON)* · `Document_UnknownModule_KeptNotDropped`
-- [ ] `Geometry_ScreenToCanvas_InvertsCanvasToScreen` *(property-style across pans/zooms)*
-- [ ] `Geometry_ZoomAboutCursor_KeepsCursorPointFixed` · `Geometry_Zoom_ClampedToLimits`
-- [ ] `Geometry_FitToContent_ContainsAllNodes_WithPadding` · `Geometry_FitToContent_EmptyDocument_DefaultView`
-- [ ] `Geometry_PortAnchors_EvenlySpaced_InputsLeft_OutputsRight` · `Geometry_BezierPath_EndpointsMatchAnchors`
-- [ ] `Validator_DetectsCycle` · `Validator_AllowsDiamond_NotACycle` *(A→B, A→C, B→D, C→D)*
-- [ ] `Validator_UnknownModule_Flagged` · `Validator_DanglingConnection_Flagged` · `Validator_DuplicateConnection_Flagged` · `Validator_SelfConnection_Flagged`
-- [ ] `NodeId_Generation_UniqueAndStable`
+- [x] `Document_FromDto_ToDto_RoundTripsLosslessly` *(golden JSON)* · `Document_UnknownModule_KeptNotDropped`
+- [x] `Geometry_ScreenToCanvas_InvertsCanvasToScreen` *(property-style across pans/zooms)*
+- [x] `Geometry_ZoomAboutCursor_KeepsCursorPointFixed` · `Geometry_Zoom_ClampedToLimits`
+- [x] `Geometry_FitToContent_ContainsAllNodes_WithPadding` · `Geometry_FitToContent_EmptyDocument_DefaultView`
+- [x] `Geometry_PortAnchors_EvenlySpaced_InputsLeft_OutputsRight` · `Geometry_BezierPath_EndpointsMatchAnchors`
+- [x] `Validator_DetectsCycle` · `Validator_AllowsDiamond_NotACycle` *(A→B, A→C, B→D, C→D)*
+- [x] `Validator_UnknownModule_Flagged` · `Validator_DanglingConnection_Flagged` · `Validator_DuplicateConnection_Flagged` · `Validator_SelfConnection_Flagged`
+- [x] `NodeId_Generation_UniqueAndStable`
 
 ---
 

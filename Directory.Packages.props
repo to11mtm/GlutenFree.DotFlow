@@ -70,6 +70,8 @@
     <PackageVersion Include="WireMock.Net" Version="2.6.0" />
     <!-- 🪝 API integration test infrastructure (Phase 2.3.6) — WebApplicationFactory for webhook tests~ -->
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
+    <!-- 🎨 Blazor component testing (Phase 3.3) — bUnit for the workflow designer~ -->
+    <PackageVersion Include="bunit" Version="1.34.0" />
     <!-- 🔄 HTTP resilience (Phase 2.3.4) — retry / timeout / circuit breaker via Polly v8~ -->
     <PackageVersion Include="Polly.Core" Version="8.6.6" />
     <!-- 🎯 JSONPath extraction (Phase 2.3.5) — JsonPath.Net by json-everything, MIT licensed~ -->

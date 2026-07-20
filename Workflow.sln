@@ -155,6 +155,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Scripting", "Workf
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Scripting.Lua", "Workflow.Scripting.Lua\Workflow.Scripting.Lua.csproj", "{312DFCD1-68CC-44DE-8F32-D1946A2D2884}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Tests.UI", "Workflow.Tests.UI\Workflow.Tests.UI.csproj", "{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UI", "UI", "{7B790C14-DA2B-61A2-3ECA-AC71E95411D0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -429,6 +433,18 @@ Global
 		{312DFCD1-68CC-44DE-8F32-D1946A2D2884}.Release|x64.Build.0 = Release|Any CPU
 		{312DFCD1-68CC-44DE-8F32-D1946A2D2884}.Release|x86.ActiveCfg = Release|Any CPU
 		{312DFCD1-68CC-44DE-8F32-D1946A2D2884}.Release|x86.Build.0 = Release|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Debug|x64.Build.0 = Debug|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Debug|x86.Build.0 = Debug|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|x64.ActiveCfg = Release|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|x64.Build.0 = Release|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|x86.ActiveCfg = Release|Any CPU
+		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
