@@ -165,39 +165,39 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 
 ### Tasks
 
-- [ ] **`CommandStack` finalization (D7)** — 50-entry cap (drop oldest), redo-tail truncation on new command, `MarkSaved()`/`IsDirty`, `Changed` event; **all** b.0–b.3 commands registered through it (audit)
-- [ ] **Toolbar (S2)** — `[💾 Save]` `[↩ Undo]` `[↪ Redo]` with enabled-state binding + hover tooltips showing the command description ("Undo: Move 3 nodes"); dirty dot `●unsaved` next to the workflow name
-- [ ] **Keyboard shortcuts** — global handler on the designer page: `Ctrl+Z` undo · `Ctrl+Y`/`Ctrl+Shift+Z` redo · `Delete` remove selection · `Ctrl+A` select all · `Ctrl+C`/`Ctrl+V` copy/paste · `Ctrl+S` save (preventDefault); **suppressed while focus is in an input/textarea**
-- [ ] **Copy/paste** — clipboard = in-app serialized node set + *internal* connections; paste → AddNode commands with fresh ids + offset positions, internal edges re-created between the new ids; works across undo boundaries
+- [x] **`CommandStack` finalization (D7)** — 50-entry cap (drop oldest), redo-tail truncation on new command, `MarkSaved()`/`IsDirty`, `Changed` event; **all** b.0–b.3 commands registered through it (audit)
+- [x] **Toolbar (S2)** — `[💾 Save]` `[↩ Undo]` `[↪ Redo]` with enabled-state binding + hover tooltips showing the command description ("Undo: Move 3 nodes"); dirty dot `●unsaved` next to the workflow name
+- [x] **Keyboard shortcuts** — global handler on the designer page: `Ctrl+Z` undo · `Ctrl+Y`/`Ctrl+Shift+Z` redo · `Delete` remove selection · `Ctrl+A` select all · `Ctrl+C`/`Ctrl+V` copy/paste · `Ctrl+S` save (preventDefault); **suppressed while focus is in an input/textarea**
+- [x] **Copy/paste** — clipboard = in-app serialized node set + *internal* connections; paste → AddNode commands with fresh ids + offset positions, internal edges re-created between the new ids; works across undo boundaries
 - [x] **Validate endpoint (D14 — the one API change in 3.3)** — `POST /api/v1/workflows/validate` in `Workflow.Api/V1/WorkflowEndpoints.cs`: accepts a full `WorkflowDefinition` body, runs the **existing** `ModuleAwareWorkflowValidator` (graph + per-module `ValidateConfiguration`), returns `{ valid, issues: [{ severity, message, nodeId? }] }` without persisting; `WorkflowRead` policy (dry-run); Swagger-tagged `Workflows`; documented in `docs/rest-api.md`; ~4 API tests in `Workflow.Tests/Api/V1/WorkflowEndpointsTests.cs` (valid → `valid:true`; unknown module / bad module config / structural issue → itemized issues)
-- [ ] **Save pipeline (D5/D14/Q5)** — two-stage gate: **(1)** client `GraphValidator.Validate` (instant — errors block with dialog + jump-to-node links); **(2)** `POST /workflows/validate` (authoritative server check — issues render in the same dialog with node links; validate-endpoint-unavailable degrades to stage 1 with a notice); then `ToDto()` → `PUT /api/v1/workflows/{id}` (or `POST` for `/designer/new`, then navigate to the real id); success → `MarkSaved()` + toast; residual server 400/409/422 ProblemDetails rendered in the save dialog
-- [ ] **Save As** — name prompt → `POST` a copy with a fresh id/name → navigate
-- [ ] **Unsaved-changes protection** — `beforeunload` browser warning when dirty; in-app navigation guard (leaving `/designer/*` while dirty → confirm dialog with Save/Discard/Cancel)
-- [ ] **New-workflow flow** — `/designer/new`: blank document + staged name; first save POSTs
+- [x] **Save pipeline (D5/D14/Q5)** — two-stage gate: **(1)** client `GraphValidator.Validate` (instant — errors block with dialog + jump-to-node links); **(2)** `POST /workflows/validate` (authoritative server check — issues render in the same dialog with node links; validate-endpoint-unavailable degrades to stage 1 with a notice); then `ToDto()` → `PUT /api/v1/workflows/{id}` (or `POST` for `/designer/new`, then navigate to the real id); success → `MarkSaved()` + toast; residual server 400/409/422 ProblemDetails rendered in the save dialog
+- [x] **Save As** — name prompt → `POST` a copy with a fresh id/name → navigate
+- [x] **Unsaved-changes protection** — `beforeunload` browser warning when dirty; in-app navigation guard (leaving `/designer/*` while dirty → confirm dialog with Save/Discard/Cancel)
+- [x] **New-workflow flow** — `/designer/new`: blank document + staged name; first save POSTs
 
 ### Tests (target ~15): → `Workflow.Tests.UI/State/CommandStackTests.cs` + `Components/SaveFlowTests.cs` + `Workflow.Tests/Api/V1/WorkflowEndpointsTests.cs` *(validate endpoint)*
 
-- [ ] `Stack_UndoRedo_RoundTrips_AllCommandTypes` *(theory over every command)*
-- [ ] `Stack_CapAt50_DropsOldest` · `Stack_NewCommand_TruncatesRedoTail`
-- [ ] `Dirty_TrueAfterEdit_FalseAfterSave_TrueAfterUndoPastSavePoint`
-- [ ] `Shortcuts_UndoRedoDeleteSelectAll_Work` · `Shortcuts_SuppressedInInputs`
-- [ ] `CopyPaste_ClonesNodesAndInternalEdges_FreshIds`
-- [ ] `Save_ValidatorErrors_BlocksWithDialog` · `Save_CallsPut_MarksSaved`
+- [x] `Stack_UndoRedo_RoundTrips_AllCommandTypes` *(theory over every command)*
+- [x] `Stack_CapAt50_DropsOldest` · `Stack_NewCommand_TruncatesRedoTail`
+- [x] `Dirty_TrueAfterEdit_FalseAfterSave_TrueAfterUndoPastSavePoint`
+- [x] `Shortcuts_UndoRedoDeleteSelectAll_Work` · `Shortcuts_SuppressedInInputs`
+- [x] `CopyPaste_ClonesNodesAndInternalEdges_FreshIds`
+- [x] `Save_ValidatorErrors_BlocksWithDialog` · `Save_CallsPut_MarksSaved`
 - [x] `Save_CallsServerValidate_BeforePut` · `Save_ServerValidateIssues_BlockWithNodeLinks` · `Save_ValidateUnavailable_DegradesWithNotice`
-- [ ] `SaveNew_Posts_ThenNavigates` · `Save_ServerProblem_ShownInDialog`
-- [ ] `NavigateAwayDirty_PromptsSaveDiscardCancel`
+- [x] `SaveNew_Posts_ThenNavigates` · `Save_ServerProblem_ShownInDialog`
+- [x] `NavigateAwayDirty_PromptsSaveDiscardCancel`
 
 ---
 
 ## Exit Criteria for 3.3.b ✅
 
-- [ ] Full edit loop works end-to-end against the live API: open → drag nodes in → connect → configure → save → reopen reproduces the identical canvas
-- [ ] Every mutation is undoable/redoable; dirty tracking + both unsaved-changes guards behave
-- [ ] Connection rules hold under manual abuse (cycles/self/duplicates impossible to create)
-- [ ] Properties panel renders correct editors for **all** `PropertyEditorType`s across the real builtin module set; validation messages match schema rules
-- [ ] Save gate blocks structurally-broken definitions with actionable messages (client + `POST /workflows/validate` server stage, D14); server errors surface cleanly
-- [ ] `Code`/`Json` properties open the lazy-loaded Monaco editor (D13); the textarea fallback engages when Monaco can't load
-- [ ] All state-service specs + component tests green; full repo suite unaffected
+- [x] Full edit loop works end-to-end against the live API: open → drag nodes in → connect → configure → save → reopen reproduces the identical canvas
+- [x] Every mutation is undoable/redoable; dirty tracking + both unsaved-changes guards behave
+- [x] Connection rules hold under manual abuse (cycles/self/duplicates impossible to create)
+- [x] Properties panel renders correct editors for **all** `PropertyEditorType`s across the real builtin module set; validation messages match schema rules
+- [x] Save gate blocks structurally-broken definitions with actionable messages (client + `POST /workflows/validate` server stage, D14); server errors surface cleanly
+- [x] `Code`/`Json` properties open the lazy-loaded Monaco editor (D13); the textarea fallback engages when Monaco can't load
+- [x] All state-service specs + component tests green; full repo suite unaffected
 
 ---
 

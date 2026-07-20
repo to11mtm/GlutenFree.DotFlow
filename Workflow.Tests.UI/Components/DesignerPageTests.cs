@@ -30,6 +30,7 @@ public sealed class DesignerPageTests : TestContext
         this.Services.AddSingleton(new ToastService());
         this.Services.AddSingleton(new AuthState());
         this.Services.AddSingleton(new Workflow.UI.Client.Services.PaletteDragState());
+        this.Services.AddSingleton(new Workflow.UI.Client.Designer.State.DesignerClipboard());
     }
 
     private static string Json(object o) => JsonSerializer.Serialize(o, ApiHttp.Json);

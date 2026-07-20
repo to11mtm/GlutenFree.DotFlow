@@ -5,17 +5,23 @@
 @using Workflow.UI.Client.Designer.Components
 @using Workflow.UI.Client.Designer.State
 @using Workflow.UI.Client.Designer.State.Commands
-@implements IDisposable
+@implements IAsyncDisposable
 @inject Workflow.UI.Client.Api.WorkflowsClient Workflows
 @inject Workflow.UI.Client.Api.ModulesClient Modules
 @inject Workflow.UI.Client.Services.ToastService Toasts
+@inject Workflow.UI.Client.Designer.State.DesignerClipboard Clipboard
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Designer · DotFlow</PageTitle>
 
 <TopBar Subtitle="@(document?.Name)">
     @if (commands is not null)
     {
-        <span class="df-topbar__dirty">@(commands.IsDirty ? "●unsaved" : "")</span>
+        <button class="df-btn df-btn--primary" data-testid="save" @onclick="Save">💾 Save</button>
+        <button class="df-btn" data-testid="undo" disabled="@(!commands.CanUndo)" title="@commands.UndoDescription" @onclick="() => commands.Undo()">↩</button>
+        <button class="df-btn" data-testid="redo" disabled="@(!commands.CanRedo)" title="@commands.RedoDescription" @onclick="() => commands.Redo()">↪</button>
+        <span class="df-topbar__dirty" data-testid="dirty">@(commands.IsDirty ? "●unsaved" : "")</span>
     }
 </TopBar>
 <ToastHost />
@@ -66,6 +72,28 @@ else if (document is not null)
             </div>
         </div>
     }
+
+    @if (showSaveDialog)
+    {
+        <div class="df-modal-backdrop" @onclick="() => showSaveDialog = false">
+            <div class="df-modal" @onclick:stopPropagation="true" data-testid="save-dialog">
+                <div class="df-label">Cannot save — fix these first:</div>
+                <ul class="df-issue-list">
+                    @foreach (var issue in saveIssues)
+                    {
+                        <li class="df-issue df-issue--@issue.Severity">
+                            @issue.Message
+                            @if (issue.NodeId is not null)
+                            {
+                                <button class="df-link" @onclick="() => JumpTo(issue.NodeId)">→ @issue.NodeId</button>
+                            }
+                        </li>
+                    }
+                </ul>
+                <button class="df-btn" @onclick="() => showSaveDialog = false">Close</button>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -79,15 +107,19 @@ else if (document is not null)
     private bool loading = true;
     private string? loadError;
     private readonly string statusInfo = "editing";
+    private DotNetObjectReference<Designer>? keysRef;
 
-    // Context menu.
     private bool menuVisible;
     private double menuX, menuY;
     private IReadOnlyList<ContextMenu.MenuItem> menuItems = System.Array.Empty<ContextMenu.MenuItem>();
 
-    // Rename dialog.
     private string? renameNodeId;
     private string renameValue = string.Empty;
+
+    private bool showSaveDialog;
+    private List<SaveIssue> saveIssues = new();
+
+    private sealed record SaveIssue(string Severity, string Message, string? NodeId);
 
     /// <summary>The workflow id from the route (or <c>new</c>).</summary>
     [Parameter]
@@ -197,7 +229,6 @@ else if (document is not null)
 
     private void OnNodeContextMenu((DesignerNode Node, MouseEventArgs Args) e)
     {
-        // Ensure the right-clicked node is selected.
         if (!this.selection.IsNodeSelected(e.Node.Id))
         {
             this.selection.SelectNode(e.Node.Id);
@@ -218,6 +249,7 @@ else if (document is not null)
         this.menuItems = new List<ContextMenu.MenuItem>
         {
             new("select-all", "Select all", () => { this.selection.SelectAll(this.document!); return Task.CompletedTask; }),
+            new("paste", "Paste", () => { this.Paste(); return Task.CompletedTask; }),
             new("fit", "Fit to screen", async () => { if (this.canvas is not null) { await this.canvas.FitAsync(); } }),
         };
         this.ShowMenu(e);
@@ -229,6 +261,8 @@ else if (document is not null)
         this.menuY = e.ClientY;
         this.menuVisible = true;
     }
+
+    // ─── Edit operations ─────────────────────────────────────────────────────────
 
     private void DeleteSelected()
     {
@@ -256,6 +290,41 @@ else if (document is not null)
         this.commands.Execute(new AddNodeCommand(clone));
     }
 
+    private void Copy()
+    {
+        if (this.document is not null && this.selection.Nodes.Count > 0)
+        {
+            this.Clipboard.Copy(this.document, this.selection.Nodes);
+        }
+    }
+
+    private void Paste()
+    {
+        if (this.commands is null || this.document is null || !this.Clipboard.HasContent)
+        {
+            return;
+        }
+
+        var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+        var (nodes, conns) = this.Clipboard.BuildPaste(existing);
+        var children = new List<IDesignerCommand>();
+        foreach (var n in nodes)
+        {
+            children.Add(new AddNodeCommand(n));
+        }
+
+        foreach (var c in conns)
+        {
+            children.Add(new AddConnectionCommand(c));
+        }
+
+        if (children.Count > 0)
+        {
+            this.commands.Execute(new CompositeCommand("Paste", children));
+            this.selection.SetNodes(nodes.Select(n => n.Id));
+        }
+    }
+
     private void BeginRename(DesignerNode node)
     {
         this.renameNodeId = node.Id;
@@ -276,6 +345,118 @@ else if (document is not null)
         this.renameNodeId = null;
     }
 
+    private void JumpTo(string nodeId)
+    {
+        this.selection.SelectNode(nodeId);
+        this.showSaveDialog = false;
+    }
+
+    // ─── Keyboard shortcuts (called from keys.js) ────────────────────────────────
+
+    /// <summary>Handles a window-level shortcut forwarded by keys.js~ ⌨️.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="ctrl">Whether Ctrl/Cmd was held.</param>
+    /// <param name="shift">Whether Shift was held.</param>
+    /// <returns>A task.</returns>
+    [JSInvokable]
+    public async Task OnShortcut(string key, bool ctrl, bool shift)
+    {
+        if (this.commands is null || this.document is null)
+        {
+            return;
+        }
+
+        var k = key.ToLowerInvariant();
+        if (ctrl && k == "z" && !shift)
+        {
+            this.commands.Undo();
+        }
+        else if (ctrl && (k == "y" || (k == "z" && shift)))
+        {
+            this.commands.Redo();
+        }
+        else if (ctrl && k == "a")
+        {
+            this.selection.SelectAll(this.document);
+        }
+        else if (ctrl && k == "c")
+        {
+            this.Copy();
+        }
+        else if (ctrl && k == "v")
+        {
+            this.Paste();
+        }
+        else if (ctrl && k == "s")
+        {
+            await this.Save();
+        }
+        else if (k is "delete" or "backspace")
+        {
+            this.DeleteSelected();
+        }
+
+        await this.InvokeAsync(this.StateHasChanged);
+    }
+
+    // ─── Save pipeline (D5/D14/Q5) ───────────────────────────────────────────────
+
+    private async Task Save()
+    {
+        if (this.document is null || this.commands is null)
+        {
+            return;
+        }
+
+        // Stage 1: client structural gate.
+        var clientErrors = this.issues.Where(i => i.Severity == IssueSeverity.Error).ToList();
+        if (clientErrors.Count > 0)
+        {
+            this.saveIssues = clientErrors.Select(i => new SaveIssue("error", i.Message, i.NodeId)).ToList();
+            this.showSaveDialog = true;
+            return;
+        }
+
+        // Stage 2: authoritative server validate (degrade gracefully if unavailable).
+        try
+        {
+            var vr = await Workflows.ValidateAsync(this.document.ToDto());
+            if (!vr.Valid)
+            {
+                this.saveIssues = vr.Issues.Select(i => new SaveIssue(i.Severity, i.Message, i.NodeId)).ToList();
+                this.showSaveDialog = true;
+                return;
+            }
+        }
+        catch (Workflow.UI.Client.Api.ApiException)
+        {
+            Toasts.Warning("Server validation unavailable — saving with client checks only.");
+        }
+
+        // Stage 3: persist.
+        try
+        {
+            if (this.document.Id == System.Guid.Empty)
+            {
+                var created = await Workflows.CreateAsync(this.document.ToDto());
+                this.commands.MarkSaved();
+                Toasts.Success("Workflow created");
+                Nav.NavigateTo($"/designer/{created.Id}");
+            }
+            else
+            {
+                await Workflows.UpdateAsync(this.document.ToDto());
+                this.commands.MarkSaved();
+                Toasts.Success("Workflow saved");
+            }
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            this.saveIssues = new List<SaveIssue> { new("error", ex.Error.Summarize(), null) };
+            this.showSaveDialog = true;
+        }
+    }
+
     private static string DisplayNameFor(string moduleId)
     {
         var lastDot = moduleId.LastIndexOf('.');
@@ -285,7 +466,20 @@ else if (document is not null)
     private void OnDocumentChanged()
     {
         this.Revalidate();
+        _ = this.SyncDirty();
         this.InvokeAsync(this.StateHasChanged);
+    }
+
+    private async Task SyncDirty()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dotflowKeys.setDirty", this.commands?.IsDirty ?? false);
+        }
+        catch
+        {
+            // JS not ready — ignore.
+        }
     }
 
     private void OnSelectionChanged() => this.InvokeAsync(this.StateHasChanged);
@@ -300,13 +494,26 @@ else if (document is not null)
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && this.canvas is not null && this.document is not null)
+        if (firstRender)
         {
-            await this.canvas.FitAsync();
+            this.keysRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("dotflowKeys.register", this.keysRef);
+            }
+            catch
+            {
+                // JS unavailable (tests) — shortcuts simply won't fire from the window.
+            }
+
+            if (this.canvas is not null && this.document is not null)
+            {
+                await this.canvas.FitAsync();
+            }
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         if (this.commands is not null)
         {
@@ -314,5 +521,16 @@ else if (document is not null)
         }
 
         this.selection.Changed -= this.OnSelectionChanged;
+
+        try
+        {
+            await JS.InvokeVoidAsync("dotflowKeys.unregister");
+        }
+        catch
+        {
+            // ignore~
+        }
+
+        this.keysRef?.Dispose();
     }
 }

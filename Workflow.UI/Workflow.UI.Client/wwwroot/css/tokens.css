@@ -187,3 +187,9 @@ a.df-link:hover { text-decoration: underline; }
 .df-input--mono { font-family: var(--df-mono); }
 .df-code-editor__monaco { height: 200px; border: 1px solid var(--df-border); border-radius: var(--df-radius); }
 .df-hidden { display: none; }
+
+/* 💾 Save dialog */
+.df-issue-list { list-style: none; padding: 0; margin: var(--df-space-3) 0; max-height: 300px; overflow-y: auto; }
+.df-issue { padding: var(--df-space-2); border-radius: var(--df-radius); margin-bottom: var(--df-space-1); }
+.df-issue--error { border-left: 3px solid var(--df-state-failed); }
+.df-issue--warning { border-left: 3px solid #e0b341; }

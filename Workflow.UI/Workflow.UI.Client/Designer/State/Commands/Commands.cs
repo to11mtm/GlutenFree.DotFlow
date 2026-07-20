@@ -299,3 +299,39 @@ public sealed class EditWorkflowMetaCommand : IDesignerCommand
         document.Tags.AddRange(meta.Tags);
     }
 }
+
+/// <summary>🧩 Phase 3.3.b.4 — Runs several commands as a single undoable unit (e.g. paste)~ ✨.</summary>
+public sealed class CompositeCommand : IDesignerCommand
+{
+    private readonly IReadOnlyList<IDesignerCommand> commands;
+
+    /// <summary>Initializes a new instance of the <see cref="CompositeCommand"/> class~ 🧩.</summary>
+    /// <param name="description">The combined description.</param>
+    /// <param name="commands">The child commands (applied in order; undone in reverse).</param>
+    public CompositeCommand(string description, IReadOnlyList<IDesignerCommand> commands)
+    {
+        this.Description = description;
+        this.commands = commands;
+    }
+
+    /// <inheritdoc/>
+    public string Description { get; }
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document)
+    {
+        foreach (var c in this.commands)
+        {
+            c.Do(document);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document)
+    {
+        for (var i = this.commands.Count - 1; i >= 0; i--)
+        {
+            this.commands[i].Undo(document);
+        }
+    }
+}
