@@ -77,6 +77,24 @@ behavioral contracts a TypeScript port must satisfy:
 5. **Untouched:** the **entire backend** — REST endpoints, the validate endpoint, the 3.2
    hub, and all engine code. A React client is a drop-in replacement for `Workflow.UI.Client`.
 
+## Script Studio state services (Phase 3.4)
+
+Script Studio (`/scripts`, see [`script-studio.md`](script-studio.md)) follows the same D2
+framework-free boundary — these `Scripts/State/*` + `Api/*` types are pure C# with xUnit specs and
+port mechanically:
+
+| Service | Responsibility | Spec |
+|---------|----------------|------|
+| `ScriptsClient` + `Api/Dtos/ScriptDtos` | typed `/scripts/*` REST (test/languages/libraries) | `ScriptsClientTests` |
+| `WorkflowApiDescriptor` + `ApiMethodInfo` | the `workflow.*` catalog driving completions/hover + the reference panel; drift-guarded vs `IWorkflowScriptApi` | `DescriptorTests` |
+| `ScriptTemplateCatalog` + `ScriptTemplate` | the static starter-template catalog | `TemplateCatalogTests` |
+| `TestRunState` | inputs/config/run status + log filtering | `TestRunStateTests` |
+| `ScriptEditorOptions` | theme/options + language↔Monaco-mode map | `ScriptsClientTests` |
+| `ScriptStudioHandoff` | designer ↔ studio code round-trip carrier | `DesignerIntegrationTests` |
+
+The only JS-interop surface is the shared `monaco-interop.js` (editor + completion/hover provider
+registration) — swap for `@monaco-editor/react` in a port.
+
 ## Performance notes
 
 - Node views are keyed by id (`@key`); pan/zoom mutate only the transform style, so panning

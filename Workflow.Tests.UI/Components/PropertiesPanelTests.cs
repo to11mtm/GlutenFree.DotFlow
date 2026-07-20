@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using Bunit;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Workflow.UI.Client.Api.Dtos;
 using Workflow.UI.Client.Designer.Components;
 using Workflow.UI.Client.Designer.State;
@@ -19,7 +20,11 @@ using Xunit;
 /// </summary>
 public sealed class PropertiesPanelTests : TestContext
 {
-    public PropertiesPanelTests() => this.JSInterop.Mode = JSRuntimeMode.Loose;
+    public PropertiesPanelTests()
+    {
+        this.JSInterop.Mode = JSRuntimeMode.Loose;
+        this.Services.AddSingleton(new Workflow.UI.Client.Scripts.State.ScriptStudioHandoff());
+    }
 
     private static JsonElement El(string j) => JsonDocument.Parse(j).RootElement.Clone();
 

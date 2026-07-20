@@ -13,6 +13,7 @@
     @ChildContent
     <span class="df-status-dot @(Auth.HasCredential ? "df-status-dot--ok" : "df-status-dot--idle")"
           title="@(Auth.HasCredential ? "Authenticated" : "No credential")"></span>
+    <button class="df-btn" data-testid="nav-scripts" @onclick="@(() => Nav.NavigateTo("/scripts"))">💻 Scripts</button>
     <button class="df-btn" @onclick="@(() => Nav.NavigateTo("/settings"))">⚙ Settings</button>
 </div>
 

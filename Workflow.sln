@@ -35,6 +35,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "phases", "phases", "{AA4347
 		phases\Phase3-3a-DesignerFoundation.md = phases\Phase3-3a-DesignerFoundation.md
 		phases\Phase3-3c-DesignerRuntime.md = phases\Phase3-3c-DesignerRuntime.md
 		phases\Phase3-3-WorkflowDesigner.md = phases\Phase3-3-WorkflowDesigner.md
+		phases\Phase3-4-ScriptEditor.md = phases\Phase3-4-ScriptEditor.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ignore", "ignore", "{B9EB3407-915D-422B-8BD3-CE0DA7923FF3}"

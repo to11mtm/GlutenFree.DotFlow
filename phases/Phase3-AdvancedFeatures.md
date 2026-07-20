@@ -814,6 +814,8 @@ Option B: React 🎯
 
 ### 3.4 UI - Script Editor (Week 20)
 
+> **📋 Detailed sliced plan available:** [Phase3-4-ScriptEditor.md](Phase3-4-ScriptEditor.md) — a dedicated in-browser **"Script Studio"** (`/scripts` in `Workflow.UI.Client`) for writing, testing, and managing scripts. **Reuses shipped infrastructure**: the lazy Monaco `CodeEditor` (3.3 D13, +textarea fallback), the `POST /api/v1/scripts/test` sandbox-run endpoint + `GET /scripts/languages` + `GET/PUT/DELETE /scripts/libraries` (3.1.6), and the `IWorkflowScriptApi` surface (3.1.1) as the IntelliSense target. Six slices: generalized `ScriptEditor` + `ScriptsClient` (3.4.0), a drift-guarded workflow-API **descriptor** driving Monaco completions/hover + a searchable API reference panel (3.4.1), a 14-item **template catalog** (3.4.2), an inline **test runner** over `/scripts/test` with logs/results/errors (3.4.3), **library management** CRUD (3.4.4), and designer round-trip ("Edit in Script Studio") + docs (3.4.5). **Zero new backend for the MVP** — a client feature over the existing `/scripts/*` endpoints; the D2 contracts-only + framework-free boundary keeps the React+TS port additive. ASCII mockup S1 included. **✅ COMPLETE — all 6 slices implemented, 58 Script Studio tests (200 total in `Workflow.Tests.UI`), documented ([`docs/script-studio.md`](../docs/script-studio.md)).** Q1–Q6 resolved ✅.
+
 **Tasks:**
 - [ ] **Integrate Monaco Editor** 💻
   - [ ] Install Monaco Editor package

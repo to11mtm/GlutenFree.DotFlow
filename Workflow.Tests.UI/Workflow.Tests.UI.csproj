@@ -23,6 +23,8 @@
         <!-- Core + Sqlite converters: used only to generate golden wire JSON for DTO round-trip specs -->
         <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
         <ProjectReference Include="..\Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj" />
+        <!-- Scripting abstractions: the drift-guard reflects IWorkflowScriptApi (Phase 3.4.1 D4) -->
+        <ProjectReference Include="..\Workflow.Scripting\Workflow.Scripting.csproj" />
     </ItemGroup>
 
     <ItemGroup>

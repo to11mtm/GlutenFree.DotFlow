@@ -1,0 +1,117 @@
+@namespace Workflow.UI.Client.Scripts.Components
+@using Workflow.UI.Client.Scripts.State
+
+@* 📄 Phase 3.4.2 — A dropdown of starter templates, grouped by category and filtered to the current
+   language (with an "all languages" toggle). Inserting into an empty editor replaces it; into a
+   non-empty editor it confirms first (insert at cursor vs replace). *@
+<div class="df-templates">
+    <button type="button" class="df-btn" data-testid="templates-btn" @onclick="Toggle">📄 Templates ▾</button>
+    @if (open)
+    {
+        <div class="df-templates__menu" data-testid="templates-menu">
+            <label class="df-templates__toggle">
+                <input type="checkbox" data-testid="templates-all-langs" @bind="showAllLanguages" /> All languages
+            </label>
+
+            @if (pending is not null)
+            {
+                <div class="df-templates__confirm" data-testid="templates-confirm">
+                    <p>The editor isn't empty. Insert <strong>@pending.Name</strong> where?</p>
+                    <button class="df-btn" data-testid="confirm-insert" @onclick="ConfirmInsert">Insert at cursor</button>
+                    <button class="df-btn df-btn--danger" data-testid="confirm-replace" @onclick="ConfirmReplace">Replace all</button>
+                    <button class="df-btn" data-testid="confirm-cancel" @onclick="() => pending = null">Cancel</button>
+                </div>
+            }
+            else
+            {
+                @foreach (var group in Groups)
+                {
+                    <div class="df-templates__group" data-testid="templates-group">
+                        <div class="df-templates__category">@group.Category</div>
+                        @foreach (var template in group.Templates)
+                        {
+                            <button type="button" class="df-templates__item" data-testid="template-item"
+                                    title="@template.Description" @onclick="() => Choose(template)">
+                                <span class="df-templates__name">@template.Name</span>
+                                @if (showAllLanguages)
+                                {
+                                    <span class="df-templates__lang">@template.Language</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                }
+                @if (Groups.Count == 0)
+                {
+                    <div class="df-templates__empty" data-testid="templates-empty">No templates for @Language</div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool open;
+    private bool showAllLanguages;
+    private ScriptTemplate? pending;
+
+    /// <summary>The current studio language (filters the catalog unless "all languages" is on)~ 🌈.</summary>
+    [Parameter]
+    public string Language { get; set; } = "javascript";
+
+    /// <summary>The current editor contents (drives replace-vs-confirm)~ ✍️.</summary>
+    [Parameter]
+    public string CurrentCode { get; set; } = string.Empty;
+
+    /// <summary>Raised to replace the whole editor with the template code~ ✍️.</summary>
+    [Parameter]
+    public EventCallback<string> OnReplace { get; set; }
+
+    /// <summary>Raised to insert the template code at the cursor~ ✍️.</summary>
+    [Parameter]
+    public EventCallback<string> OnInsertAtCursor { get; set; }
+
+    private List<(string Category, IReadOnlyList<ScriptTemplate> Templates)> Groups
+        => ScriptTemplateCatalog.ByCategory(this.showAllLanguages ? null : this.Language).ToList();
+
+    private void Toggle()
+    {
+        this.open = !this.open;
+        this.pending = null;
+    }
+
+    private async Task Choose(ScriptTemplate template)
+    {
+        if (string.IsNullOrWhiteSpace(this.CurrentCode))
+        {
+            await this.OnReplace.InvokeAsync(template.Code);
+            this.open = false;
+        }
+        else
+        {
+            this.pending = template;
+        }
+    }
+
+    private async Task ConfirmInsert()
+    {
+        if (this.pending is not null)
+        {
+            await this.OnInsertAtCursor.InvokeAsync(this.pending.Code);
+        }
+
+        this.pending = null;
+        this.open = false;
+    }
+
+    private async Task ConfirmReplace()
+    {
+        if (this.pending is not null)
+        {
+            await this.OnReplace.InvokeAsync(this.pending.Code);
+        }
+
+        this.pending = null;
+        this.open = false;
+    }
+}

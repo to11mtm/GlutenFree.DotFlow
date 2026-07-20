@@ -1,0 +1,198 @@
+@namespace Workflow.UI.Client.Scripts.Components
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@using Workflow.UI.Client.Scripts.State
+
+@* 📜 Phase 3.4.0 (D3) — A richer Monaco-backed editor for Script Studio: language + options +
+   a provider-registration hook (3.4.1) + cursor insertion, over the same lazy-load + textarea
+   fallback seam as the designer's CodeEditor. The textarea stays where Monaco can't load. *@
+<div class="df-code-editor df-script-editor">
+    <div class="df-code-editor__monaco @(useMonaco ? string.Empty : "df-hidden")" @ref="hostEl"></div>
+    @if (!useMonaco)
+    {
+        <textarea class="df-textarea df-code-editor__textarea" data-testid="script-textarea"
+                  spellcheck="false" rows="18" value="@Value" @oninput="OnTextareaInput"></textarea>
+    }
+</div>
+
+@code {
+    private ElementReference hostEl;
+    private DotNetObjectReference<ScriptEditor>? selfRef;
+    private bool useMonaco;
+    private readonly string editorId = "scr-" + System.Guid.NewGuid().ToString("N");
+    private bool initialized;
+    private string? appliedLanguage;
+    private string internalValue = string.Empty;
+
+    /// <summary>The current code text.</summary>
+    [Parameter]
+    public string Value { get; set; } = string.Empty;
+
+    /// <summary>Raised when the text changes.</summary>
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>The language id (mapped to a Monaco mode via <see cref="ScriptEditorOptions"/>).</summary>
+    [Parameter]
+    public string Language { get; set; } = "javascript";
+
+    /// <summary>Editor preferences (theme/font/line-numbers/minimap/word-wrap).</summary>
+    [Parameter]
+    public ScriptEditorOptions Options { get; set; } = new();
+
+    /// <summary>Raised once Monaco is live, with this editor's interop id, so callers can register
+    /// completion/hover providers (Phase 3.4.1). Not raised in the textarea-fallback path.</summary>
+    [Parameter]
+    public EventCallback<string> OnEditorReady { get; set; }
+
+    /// <summary>Gets the Monaco interop id for this editor (stable for its lifetime)~ 🆔.</summary>
+    public string EditorId => this.editorId;
+
+    /// <summary>Gets a value indicating whether Monaco is the active edit surface (vs the textarea).</summary>
+    public bool UsingMonaco => this.useMonaco;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || this.initialized)
+        {
+            return;
+        }
+
+        this.initialized = true;
+        this.appliedLanguage = this.Language;
+        this.internalValue = this.Value;
+        this.selfRef = DotNetObjectReference.Create(this);
+        try
+        {
+            var opts = ToJsOptions(this.Options);
+            var ok = await JS.InvokeAsync<bool>(
+                "dotflowMonaco.createEditor", this.hostEl, this.editorId, this.Value, ScriptEditorOptions.MonacoMode(this.Language), opts, this.selfRef);
+            if (ok)
+            {
+                this.useMonaco = true;
+                this.StateHasChanged();
+                if (this.OnEditorReady.HasDelegate)
+                {
+                    await this.OnEditorReady.InvokeAsync(this.editorId);
+                }
+            }
+        }
+        catch
+        {
+            // Monaco unavailable — keep the textarea fallback.
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (this.useMonaco && this.appliedLanguage != this.Language)
+        {
+            this.appliedLanguage = this.Language;
+            try
+            {
+                await JS.InvokeVoidAsync("dotflowMonaco.setLanguage", this.editorId, ScriptEditorOptions.MonacoMode(this.Language));
+            }
+            catch
+            {
+                // ignore — best-effort language switch.
+            }
+        }
+
+        // Push externally-set values (e.g. template replace, library load) into Monaco.
+        if (this.useMonaco && this.Value != this.internalValue)
+        {
+            this.internalValue = this.Value;
+            try
+            {
+                await JS.InvokeVoidAsync("dotflowMonaco.setValue", this.editorId, this.Value);
+            }
+            catch
+            {
+                // ignore — best-effort value sync.
+            }
+        }
+    }
+
+    /// <summary>Applies the current <see cref="Options"/> to the live editor~ ⚙️.</summary>
+    /// <returns>A task.</returns>
+    public async Task ApplyOptionsAsync()
+    {
+        if (this.useMonaco)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("dotflowMonaco.setOptions", this.editorId, ToJsOptions(this.Options));
+            }
+            catch
+            {
+                // ignore — best-effort option apply.
+            }
+        }
+    }
+
+    /// <summary>Inserts text at the cursor (Monaco) or appends to the value (textarea fallback)~ ✍️.</summary>
+    /// <param name="text">The snippet to insert.</param>
+    /// <returns>A task.</returns>
+    public async Task InsertTextAsync(string text)
+    {
+        if (this.useMonaco)
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>("dotflowMonaco.insertText", this.editorId, text);
+                return;
+            }
+            catch
+            {
+                // fall through to value append.
+            }
+        }
+
+        this.Value = string.IsNullOrEmpty(this.Value) ? text : this.Value + text;
+        await this.ValueChanged.InvokeAsync(this.Value);
+    }
+
+    /// <summary>Invoked by the Monaco JS wrapper on content change~ 📜.</summary>
+    /// <param name="value">The new value.</param>
+    /// <returns>A task.</returns>
+    [JSInvokable]
+    public Task OnMonacoChanged(string value)
+    {
+        this.Value = value;
+        this.internalValue = value;
+        return this.ValueChanged.InvokeAsync(value);
+    }
+
+    private Task OnTextareaInput(ChangeEventArgs e)
+    {
+        this.Value = e.Value?.ToString() ?? string.Empty;
+        return this.ValueChanged.InvokeAsync(this.Value);
+    }
+
+    private static object ToJsOptions(ScriptEditorOptions o) => new
+    {
+        theme = o.Theme,
+        fontSize = o.FontSize,
+        lineNumbers = o.LineNumbers,
+        minimap = o.Minimap,
+        wordWrap = o.WordWrap,
+    };
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (this.useMonaco)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("dotflowMonaco.dispose", this.editorId);
+            }
+            catch
+            {
+                // ignore disposal failures~
+            }
+        }
+
+        this.selfRef?.Dispose();
+    }
+}
