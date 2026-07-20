@@ -50,6 +50,8 @@
         <button class="df-btn" data-testid="zoom-reset" @onclick="ResetZoom" @onclick:stopPropagation="true">@((int)(T.Zoom * 100))%</button>
         <button class="df-btn" data-testid="fit" @onclick="FitAsync" @onclick:stopPropagation="true">⤢ Fit</button>
     </div>
+
+    <Minimap Document="Document" Transform="Transform" ViewportWidth="lastViewW" ViewportHeight="lastViewH" OnNavigate="NavigateTo" />
 </div>
 
 @code {
@@ -59,6 +61,8 @@
     private ElementReference viewportEl;
     private bool panning;
     private double panStartClientX, panStartClientY, panOriginX, panOriginY;
+    private double lastViewW = 1200;
+    private double lastViewH = 800;
 
     private bool movingNodes;
     private bool moveExceededThreshold;
@@ -146,6 +150,8 @@
             var size = await JS.InvokeAsync<Size>("dotflowCanvas.measure", this.viewportEl);
             if (size.Width > 1 && size.Height > 1)
             {
+                this.lastViewW = size.Width;
+                this.lastViewH = size.Height;
                 return (size.Width, size.Height);
             }
         }
@@ -348,6 +354,14 @@
     }
 
     private Task OnViewportContextMenu(MouseEventArgs e) => this.OnCanvasContextMenu.InvokeAsync(e);
+
+    private Task NavigateTo(Point canvasPoint)
+    {
+        // Center the clicked canvas point in the viewport (minimap navigation).
+        var panX = (this.lastViewW / 2) - (canvasPoint.X * this.Transform.Zoom);
+        var panY = (this.lastViewH / 2) - (canvasPoint.Y * this.Transform.Zoom);
+        return this.SetTransform(this.Transform with { PanX = panX, PanY = panY });
+    }
 
     // ─── Connection drawing (3.3.b.2) ────────────────────────────────────────────
 

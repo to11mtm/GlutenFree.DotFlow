@@ -90,7 +90,7 @@ Validation failures use `422 Unprocessable Entity` with a `errors` map.
 | `GET /workflows`                      | List (filter `?name=`, `?tag=`, paginated)    |
 | `GET /workflows/{id}`                 | Get a definition                              |
 | `POST /workflows`                     | Create (server assigns id; `422` on invalid)  |
-| `POST /workflows/validate`            | Dry-run validate a definition (no persist) → `{ valid, issues[] }` |
+| `POST /workflows/validate`            | Dry-run validate a definition (no persist) → `{ valid, issues[] }`. Consumed by the [visual designer](designer.md)'s save gate. |
 | `PUT /workflows/{id}`                 | Update (optimistic version guard → `409`)     |
 | `DELETE /workflows/{id}`              | Soft-delete; `?purge=true` hard-deletes       |
 | `POST /workflows/{id}/restore`        | Restore a soft-deleted workflow               |

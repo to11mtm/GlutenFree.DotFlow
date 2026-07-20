@@ -513,7 +513,7 @@ Phase 3 adds the most user-facing features:
 
 ---
 
-### 3.3 UI - Visual Workflow Designer (Week 18-19)
+### 3.3 UI - Visual Workflow Designer (Week 18-19) — COMPLETE ✅
 
 > **📋 Detailed sliced plan available:** [Phase3-3-WorkflowDesigner.md](Phase3-3-WorkflowDesigner.md) (master) with three implementation breakouts — [3.3.a Foundation](Phase3-3a-DesignerFoundation.md) (app refit, API client layer, workflow list, read-only canvas), [3.3.b Editing](Phase3-3b-DesignerEditing.md) (palette drag-and-drop, connections, schema-driven properties panel with **Monaco code editors**, undo/redo, two-stage save validation), [3.3.c Runtime](Phase3-3c-DesignerRuntime.md) (execute + live 3.2-hub overlay, execution history review, lightweight minimap, docs/polish). **Framework decision (user): Blazor WebAssembly for MVP** on the existing in-tree `Workflow.UI`/`Workflow.UI.Client` skeleton, with a hard "contracts-only + framework-free state services" boundary keeping a **React+TypeScript port additive** (→ 3.3.P7). Custom SVG/HTML canvas (no diagram library); the properties panel is schema-driven from `PropertyEditorType`; the **only new API code is `POST /api/v1/workflows/validate`** (wrapping the existing `ModuleAwareWorkflowValidator`) — everything else consumes the shipped 2.7 REST + 3.2 hub verbatim; `NodeDefinition.Position` already persists layout. ASCII mockups S1–S4 in the master plan. The sliced docs reconcile this checklist against Phases 2.7–3.2 and supersede it. **Timeline: Weeks 27-30.** Q1–Q7 resolved ✅ (Q3 → Monaco in MVP; Q5 → server validate endpoint in MVP; Q6 → lightweight minimap compromise).
 

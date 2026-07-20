@@ -1,4 +1,4 @@
-# Phase 3.3: Visual Workflow Designer (Weeks 27-30) 🎨
+﻿# Phase 3.3: Visual Workflow Designer (Weeks 27-30) 🎨
 
 Made with 💖 by Ami-Chan! UwU ✨
 
@@ -15,6 +15,8 @@ Made with 💖 by Ami-Chan! UwU ✨
 ---
 
 ## Overview
+
+> **Progress (2026-07-19):** Phase 3.3 is **COMPLETE ✅**. All 13 slices (3.3.a.0–a.3, b.0–b.4, c.0–c.3) plus the D14 validate endpoint are implemented, tested, and documented. New `Workflow.UI.Client` designer (Blazor WASM): typed API + SignalR clients over plain wire-DTO mirrors, framework-free state core (document/geometry/validator/commands/selection/clipboard/run-state), custom SVG/HTML canvas (pan/zoom/fit/minimap), palette drag-to-create, port-to-port connections with cycle rejection, schema-driven properties panel with lazy Monaco (+textarea fallback), command-pattern undo/redo, two-stage save validation, live run overlay via the 3.2 hub (+polling fallback), and execution history review. **142 UI tests + validate-endpoint API tests green; full solution builds clean.** Docs: `docs/designer.md` + `docs/designer-architecture.md` (incl. the React-port checklist). The one backend addition is `POST /api/v1/workflows/validate`; the React+TS port (3.3.P7) is kept additive by the D2 contracts-only boundary.
 
 Phase 3.3 delivers the **browser-based visual workflow designer** — the first real UI for
 GlutenFree.DotFlow. Users browse workflows, drag modules from a palette onto a canvas,
@@ -441,20 +443,20 @@ Pin/unpin module versions per node once `NodeDefinition.ModuleVersion` is promot
 
 ## Success Criteria ✅
 
-- [ ] Browse, search, open, create, and delete workflows from the browser (list page, S1)
-- [ ] Open a workflow → nodes + connections render at their persisted positions; pan/zoom/fit work smoothly (S2)
-- [ ] Drag a module from the palette onto the canvas → a configured node is created with a unique id
-- [ ] Drag port-to-port → a valid connection is created; cycles/self/duplicate connections are rejected with visible feedback (S4)
-- [ ] Properties panel renders the right editor for every `PropertyEditorType`, validates per schema rules, and writes back to the document (D6); `Code`/`Expression`/`Json` properties get the lazy-loaded Monaco editor with textarea fallback (D13)
-- [ ] Undo/redo works across all mutation types with a 50-entry history; dirty indicator + unsaved-changes warning behave (D7)
-- [ ] Save round-trips through `PUT/POST /api/v1/workflows` — reload reproduces the identical canvas (D5); the save pipeline runs client structural checks **and** `POST /api/v1/workflows/validate` (D14) with detailed, node-linked error messages
-- [ ] ▶ Run starts an execution and the canvas lights up live via the 3.2 hub: pending→running→completed/failed per node + progress bar (S3, D8)
-- [ ] Past executions are reviewable in the designer: per-workflow history list, final node states painted on the canvas, outputs/errors inspectable, re-run (S5, 3.3.c.2)
-- [ ] A lightweight minimap shows node bounds + viewport frame with click-to-navigate (Q6 compromise)
-- [ ] The designer works against an auth-required API using a pasted JWT/API key (D9)
-- [ ] **API/engine changes limited to the single D14 validate endpoint** (wrapping the existing validator) + UI hosting; the client touches only public REST + hub contracts (D2)
-- [ ] `docs/designer.md` (user guide) + `docs/designer-architecture.md` (incl. React port checklist) exist
-- [ ] State services ≥ 80% covered by xUnit specs; all components have bUnit render tests; full suite green
+- [x] Browse, search, open, create, and delete workflows from the browser (list page, S1)
+- [x] Open a workflow → nodes + connections render at their persisted positions; pan/zoom/fit work smoothly (S2)
+- [x] Drag a module from the palette onto the canvas → a configured node is created with a unique id
+- [x] Drag port-to-port → a valid connection is created; cycles/self/duplicate connections are rejected with visible feedback (S4)
+- [x] Properties panel renders the right editor for every `PropertyEditorType`, validates per schema rules, and writes back to the document (D6); `Code`/`Expression`/`Json` properties get the lazy-loaded Monaco editor with textarea fallback (D13)
+- [x] Undo/redo works across all mutation types with a 50-entry history; dirty indicator + unsaved-changes warning behave (D7)
+- [x] Save round-trips through `PUT/POST /api/v1/workflows` — reload reproduces the identical canvas (D5); the save pipeline runs client structural checks **and** `POST /api/v1/workflows/validate` (D14) with detailed, node-linked error messages
+- [x] ▶ Run starts an execution and the canvas lights up live via the 3.2 hub: pending→running→completed/failed per node + progress bar (S3, D8)
+- [x] Past executions are reviewable in the designer: per-workflow history list, final node states painted on the canvas, outputs/errors inspectable, re-run (S5, 3.3.c.2)
+- [x] A lightweight minimap shows node bounds + viewport frame with click-to-navigate (Q6 compromise)
+- [x] The designer works against an auth-required API using a pasted JWT/API key (D9)
+- [x] **API/engine changes limited to the single D14 validate endpoint** (wrapping the existing validator) + UI hosting; the client touches only public REST + hub contracts (D2)
+- [x] `docs/designer.md` (user guide) + `docs/designer-architecture.md` (incl. React port checklist) exist
+- [x] State services ≥ 80% covered by xUnit specs; all components have bUnit render tests; full suite green
 
 ---
 

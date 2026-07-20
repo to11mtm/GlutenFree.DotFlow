@@ -31,6 +31,8 @@ public sealed class DesignerPageTests : TestContext
         this.Services.AddSingleton(new AuthState());
         this.Services.AddSingleton(new Workflow.UI.Client.Services.PaletteDragState());
         this.Services.AddSingleton(new Workflow.UI.Client.Designer.State.DesignerClipboard());
+        this.Services.AddSingleton(new ApiClientOptions { BaseUrl = "http://localhost" });
+        this.Services.AddSingleton(sp => new RealTimeClient(sp.GetRequiredService<ApiClientOptions>(), sp.GetRequiredService<AuthState>()));
     }
 
     private static string Json(object o) => JsonSerializer.Serialize(o, ApiHttp.Json);

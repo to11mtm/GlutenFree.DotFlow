@@ -1,0 +1,98 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Designer.State
+
+<div class="df-run">
+    <div class="df-run__header">
+        <span class="df-run__state df-run__state--@Run.Overall.ToLowerInvariant()">@Run.Overall</span>
+        @if (Reconnecting)
+        {
+            <span class="df-run__reconnect" data-testid="reconnecting">🔁 reconnecting…</span>
+        }
+        <span class="df-run__exec">@Run.ExecutionId.ToString()[..8]…</span>
+    </div>
+
+    <div class="df-run__progress">
+        <div class="df-run__bar" style="width:@(Run.Percentage)%;"></div>
+    </div>
+    <div class="df-run__progress-label">@Run.Percentage% (@Run.CompletedNodes/@Run.TotalNodes)</div>
+
+    <div class="df-row" style="margin: var(--df-space-3) 0;">
+        @if (!Run.IsTerminal)
+        {
+            <button class="df-btn df-btn--danger" data-testid="run-cancel" @onclick="() => OnCancel.InvokeAsync()">⏹ Cancel</button>
+        }
+        else
+        {
+            <button class="df-btn" data-testid="run-rerun" @onclick="() => OnRerun.InvokeAsync()">↻ Re-run</button>
+        }
+        <button class="df-btn" data-testid="run-close" @onclick="() => OnClose.InvokeAsync()">✖ Close</button>
+    </div>
+
+    @if (Run.Error is not null)
+    {
+        <div class="df-run__error">@Run.Error</div>
+    }
+
+    <h4>Node status</h4>
+    <div class="df-run__nodes">
+        @foreach (var node in Document.Nodes)
+        {
+            var status = Run.Nodes.TryGetValue(node.Id, out var s) ? s : new NodeRunStatus(NodeRunState.Pending);
+            <div class="df-run__node" data-testid="runnode-@node.Id" @onclick="() => OnJumpTo.InvokeAsync(node.Id)">
+                <span>@IconFor(status.State)</span>
+                <span class="df-run__node-name">@node.Name</span>
+                @if (status.DurationMs is not null)
+                {
+                    <span class="df-run__node-dur">@($"{status.DurationMs:F0}ms")</span>
+                }
+            </div>
+        }
+    </div>
+
+    <h4>Run log</h4>
+    <div class="df-run__log">
+        @foreach (var entry in Run.Log)
+        {
+            <div class="df-run__log-line">@entry.Timestamp.ToString("HH:mm:ss") @entry.Text</div>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>The document (for node names/order).</summary>
+    [Parameter, EditorRequired]
+    public DesignerDocument Document { get; set; } = default!;
+
+    /// <summary>The run state.</summary>
+    [Parameter, EditorRequired]
+    public RunState Run { get; set; } = default!;
+
+    /// <summary>Whether the hub connection is currently reconnecting.</summary>
+    [Parameter]
+    public bool Reconnecting { get; set; }
+
+    /// <summary>Raised on cancel.</summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    /// <summary>Raised on close (exit run mode).</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>Raised on re-run (terminal executions only).</summary>
+    [Parameter]
+    public EventCallback OnRerun { get; set; }
+
+    /// <summary>Raised when a node status entry is clicked (jump to it).</summary>
+    [Parameter]
+    public EventCallback<string> OnJumpTo { get; set; }
+
+    private static string IconFor(NodeRunState state) => state switch
+    {
+        NodeRunState.Running => "🔄",
+        NodeRunState.Completed => "✅",
+        NodeRunState.Failed => "❌",
+        NodeRunState.Skipped => "⏭",
+        _ => "⬜",
+    };
+}

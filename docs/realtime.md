@@ -153,3 +153,5 @@ The MVP is single-instance. Sharing groups/broadcasts across multiple API instan
 a SignalR backplane — **3.2.P1** will evaluate options (Redis backplane, Azure SignalR
 Service, or an event-broker approach) and choose per deployment target. The `IHubContext`
 design keeps a backplane purely additive.
+
+> **Reference client:** the [visual workflow designer](designer.md) consumes this hub for its live execution overlay (Phase 3.3.c).

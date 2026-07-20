@@ -35,6 +35,8 @@ public sealed class SaveFlowTests : TestContext
         this.Services.AddSingleton(new AuthState());
         this.Services.AddSingleton(new PaletteDragState());
         this.Services.AddSingleton(new DesignerClipboard());
+        this.Services.AddSingleton(new ApiClientOptions { BaseUrl = "http://localhost" });
+        this.Services.AddSingleton(sp => new RealTimeClient(sp.GetRequiredService<ApiClientOptions>(), sp.GetRequiredService<AuthState>()));
     }
 
     private static string J(object o) => JsonSerializer.Serialize(o, ApiHttp.Json);
