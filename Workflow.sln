@@ -162,6 +162,25 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Tests.UI", "Workfl
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UI", "UI", "{7B790C14-DA2B-61A2-3ECA-AC71E95411D0}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{44ADFF90-B3F6-4957-B8FA-08229D6CECE8}"
+	ProjectSection(SolutionItems) = preProject
+		docs\advanced-flow-control.md = docs\advanced-flow-control.md
+		docs\database-modules.md = docs\database-modules.md
+		docs\designer.md = docs\designer.md
+		docs\designer-architecture.md = docs\designer-architecture.md
+		docs\execution-monitor.md = docs\execution-monitor.md
+		docs\file-modules.md = docs\file-modules.md
+		docs\http-and-network.md = docs\http-and-network.md
+		docs\module-author-guide.md = docs\module-author-guide.md
+		docs\module-manager.md = docs\module-manager.md
+		docs\realtime.md = docs\realtime.md
+		docs\rest-api.md = docs\rest-api.md
+		docs\scripting.md = docs\scripting.md
+		docs\script-studio.md = docs\script-studio.md
+		docs\transform-modules.md = docs\transform-modules.md
+		docs\README.md = docs\README.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -464,5 +483,6 @@ Global
 		{27D5434B-1962-4AB1-8DAC-68DAD4F998C0} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
 		{C7D924E2-B5A1-420E-B3C3-EE647AD90F8E} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
 		{B1C9ADDD-0456-43A1-BD8B-BB4322D9A8FA} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
+		{44ADFF90-B3F6-4957-B8FA-08229D6CECE8} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
 	EndGlobalSection
 EndGlobal

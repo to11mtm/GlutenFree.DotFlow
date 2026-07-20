@@ -305,7 +305,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// HTTPS redirection is skipped in Development: the Blazor WASM client makes cross-origin
+// calls over http, and a 307 redirect (no CORS headers) breaks the browser's CORS preflight~
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // 📡 Phase 3.2 — CORS middleware (the named policy is applied to the hub endpoint via RequireCors)~
 app.UseCors();
