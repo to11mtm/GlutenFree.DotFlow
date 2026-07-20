@@ -1,0 +1,92 @@
+@namespace Workflow.UI.Client.Designer.Components
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* 📜 Phase 3.3.b.3 (D13) — Monaco-backed code editor with an always-present textarea fallback.
+   In environments where Monaco can't load (tests, restricted networks), the textarea stays. *@
+<div class="df-code-editor">
+    <div class="df-code-editor__monaco @(useMonaco ? string.Empty : "df-hidden")" @ref="hostEl"></div>
+    @if (!useMonaco)
+    {
+        <textarea class="df-textarea df-code-editor__textarea" data-testid="code-textarea"
+                  spellcheck="false" value="@Value" @oninput="OnTextareaInput"></textarea>
+    }
+</div>
+
+@code {
+    private ElementReference hostEl;
+    private DotNetObjectReference<CodeEditor>? selfRef;
+    private bool useMonaco;
+    private readonly string editorId = "mon-" + System.Guid.NewGuid().ToString("N");
+    private bool initialized;
+
+    /// <summary>The current code text.</summary>
+    [Parameter]
+    public string Value { get; set; } = string.Empty;
+
+    /// <summary>Raised when the text changes.</summary>
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>The Monaco language mode (javascript/csharp/lua/json/plaintext).</summary>
+    [Parameter]
+    public string Language { get; set; } = "plaintext";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || this.initialized)
+        {
+            return;
+        }
+
+        this.initialized = true;
+        this.selfRef = DotNetObjectReference.Create(this);
+        try
+        {
+            var ok = await JS.InvokeAsync<bool>("dotflowMonaco.create", this.hostEl, this.editorId, this.Value, this.Language, this.selfRef);
+            if (ok)
+            {
+                this.useMonaco = true;
+                this.StateHasChanged();
+            }
+        }
+        catch
+        {
+            // Monaco unavailable — keep the textarea fallback.
+        }
+    }
+
+    /// <summary>Invoked by the Monaco JS wrapper on content change~ 📜.</summary>
+    /// <param name="value">The new value.</param>
+    /// <returns>A task.</returns>
+    [JSInvokable]
+    public Task OnMonacoChanged(string value)
+    {
+        this.Value = value;
+        return this.ValueChanged.InvokeAsync(value);
+    }
+
+    private Task OnTextareaInput(ChangeEventArgs e)
+    {
+        this.Value = e.Value?.ToString() ?? string.Empty;
+        return this.ValueChanged.InvokeAsync(this.Value);
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (this.useMonaco)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("dotflowMonaco.dispose", this.editorId);
+            }
+            catch
+            {
+                // ignore disposal failures~
+            }
+        }
+
+        this.selfRef?.Dispose();
+    }
+}

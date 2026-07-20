@@ -1,0 +1,124 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using System.Text.Json
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Designer.State
+
+@* ⚙️ Phase 3.3.b.3 — Renders the correct control for a property's EditorType (D6). *@
+<div class="df-field" data-prop="@Property.Name">
+    <label class="df-label">
+        @Property.DisplayName
+        @if (Property.IsRequired)
+        {
+            <span class="df-required">*</span>
+        }
+    </label>
+
+    @switch (Property.EditorType)
+    {
+        case "Boolean":
+            <label><input type="checkbox" checked="@JsonValues.AsBool(Value)" @onchange="OnBoolChange" data-testid="editor-@Property.Name" /> @Property.DisplayName</label>
+            break;
+
+        case "Number":
+            <input class="df-input" type="number" value="@JsonValues.ToText(Value)" @oninput="OnNumberInput" data-testid="editor-@Property.Name" />
+            break;
+
+        case "Dropdown":
+            <select class="df-input" @onchange="OnStringChange" data-testid="editor-@Property.Name">
+                @foreach (var option in AllowedOptions)
+                {
+                    <option value="@option" selected="@(option == JsonValues.ToText(Value))">@option</option>
+                }
+            </select>
+            break;
+
+        case "MultilineText":
+            <textarea class="df-textarea" value="@JsonValues.ToText(Value)" @oninput="OnStringInput" data-testid="editor-@Property.Name"></textarea>
+            break;
+
+        case "Expression":
+            <input class="df-input df-input--mono" value="@JsonValues.ToText(Value)" placeholder="{{ expression }}" @oninput="OnStringInput" data-testid="editor-@Property.Name" />
+            break;
+
+        case "Json":
+            <CodeEditor Value="@JsonText" Language="json" ValueChanged="OnJsonEditorChange" />
+            @if (jsonInvalid)
+            {
+                <div class="df-field-error">⚠ invalid JSON</div>
+            }
+            break;
+
+        case "Code":
+            <CodeEditor Value="@JsonValues.ToText(Value)" Language="@CodeLanguage" ValueChanged="OnStringChangeText" />
+            break;
+
+        default: // Text, FilePath, DirectoryPath, ConnectionString
+            <input class="df-input" value="@JsonValues.ToText(Value)" @oninput="OnStringInput" data-testid="editor-@Property.Name" />
+            break;
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="df-field-error" data-testid="error-@Property.Name">⚠ @Error</div>
+    }
+</div>
+
+@code {
+    private bool jsonInvalid;
+
+    /// <summary>The property schema definition.</summary>
+    [Parameter, EditorRequired]
+    public ModulePropertyDefinitionDto Property { get; set; } = default!;
+
+    /// <summary>The current value.</summary>
+    [Parameter]
+    public JsonElement Value { get; set; }
+
+    /// <summary>Raised when the value changes.</summary>
+    [Parameter]
+    public EventCallback<JsonElement> ValueChanged { get; set; }
+
+    /// <summary>The Monaco language for a <c>Code</c> editor (from a sibling <c>language</c> property).</summary>
+    [Parameter]
+    public string CodeLanguage { get; set; } = "plaintext";
+
+    /// <summary>An inline validation error to show, if any.</summary>
+    [Parameter]
+    public string? Error { get; set; }
+
+    private string JsonText => Value.ValueKind == JsonValueKind.Undefined ? string.Empty : Value.GetRawText();
+
+    private IReadOnlyList<string> AllowedOptions
+    {
+        get
+        {
+            var list = new List<string>();
+            if (Property.AllowedValues is not null)
+            {
+                foreach (var v in Property.AllowedValues)
+                {
+                    list.Add(JsonValues.ToText(v));
+                }
+            }
+
+            return list;
+        }
+    }
+
+    private Task OnStringInput(ChangeEventArgs e) => this.ValueChanged.InvokeAsync(JsonValues.FromString(e.Value?.ToString()));
+
+    private Task OnStringChange(ChangeEventArgs e) => this.ValueChanged.InvokeAsync(JsonValues.FromString(e.Value?.ToString()));
+
+    private Task OnStringChangeText(string value) => this.ValueChanged.InvokeAsync(JsonValues.FromString(value));
+
+    private Task OnNumberInput(ChangeEventArgs e) => this.ValueChanged.InvokeAsync(JsonValues.FromNumber(e.Value?.ToString()));
+
+    private Task OnBoolChange(ChangeEventArgs e) => this.ValueChanged.InvokeAsync(JsonValues.FromBool(e.Value is bool b && b));
+
+    private Task OnJsonEditorChange(string value)
+    {
+        var parsed = JsonValues.TryParseJson(value);
+        this.jsonInvalid = parsed is null;
+        return parsed is null ? Task.CompletedTask : this.ValueChanged.InvokeAsync(parsed.Value);
+    }
+}

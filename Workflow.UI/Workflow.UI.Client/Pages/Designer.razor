@@ -44,6 +44,9 @@ else if (document is not null)
                             OnNodeContextMenu="OnNodeContextMenu"
                             OnCanvasContextMenu="OnCanvasContextMenu" />
             </div>
+            <div class="df-designer__props">
+                <PropertiesPanel Document="document" Selection="selection" Commands="commands" />
+            </div>
         </div>
         <StatusBar Document="document" Issues="issues" ExtraInfo="@statusInfo" />
     </div>

@@ -129,8 +129,8 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 
 ### Tasks
 
-- [ ] **`PropertiesPanel` component** — shows on single node selection (multi-select → "N nodes selected" + shared actions only); header: node name (inline-editable → `RenameNodeCommand`), module id, pinned `Metadata["moduleVersion"]` read-only chip when present (Q7)
-- [ ] **Editor matrix (`PropertyEditors/*.razor`, one per `PropertyEditorType`)** —
+- [x] **`PropertiesPanel` component** — shows on single node selection (multi-select → "N nodes selected" + shared actions only); header: node name (inline-editable → `RenameNodeCommand`), module id, pinned `Metadata["moduleVersion"]` read-only chip when present (Q7)
+- [x] **Editor matrix (`PropertyEditors/*.razor`, one per `PropertyEditorType`)** —
   - `Text`/`ConnectionString`/`FilePath`/`DirectoryPath` → text input *(paths get no browser file-picker — they're server paths; plain text + hint)*
   - `MultilineText` → textarea · `Number` → numeric input (min/max from rules) · `Boolean` → checkbox
   - `Dropdown` → select over `AllowedValues`
@@ -138,21 +138,21 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
   - `Code` → **Monaco editor via `CodeEditor.razor` (D13)** — lazy-loaded JS interop (assets fetched on first open), language mode from a sibling `language` property when present (`javascript`/`csharp`/`lua`), mono theme from tokens; **plain-textarea fallback** renders automatically if Monaco fails to load; optional **[🧪 Test]** button for `builtin.script` nodes calling `POST /api/v1/scripts/test` with the current code/language and showing result/logs in a flyout
   - `Json` → **Monaco with `json` language mode (D13)** + parse-on-blur validation (⚠ on invalid JSON); same fallback rules
   - *(`Expression` stays a plain mono input — single-line expressions don't need Monaco)*
-- [ ] **Value plumbing** — editors read/write `JsonElement` values via a small `JsonValueEditor` helper (string/number/bool/object round-trip preserving JSON types — a `Number` property must not become a JSON string)
-- [ ] **Validation (schema rules → client checks)** — `Required` (non-empty), `Min`/`Max`, `MinLength`/`MaxLength`, `Regex`, `Enum`; inline ⚠ messages under the field (S2); panel-level summary; invalid values still *editable* but flagged (save gate handles blocking, b.4)
-- [ ] **Apply semantics** — edits buffer locally; **[Apply]** (or field blur — pick one, document it) → one `EditNodePropertiesCommand` with before/after property bags; Esc reverts the buffer
-- [ ] **Workflow-level pane** — when nothing is selected the panel shows workflow meta: name, description, tags (→ `EditWorkflowMetaCommand`) and the **variables editor** (name/type/default rows → `EditVariablesCommand`)
+- [x] **Value plumbing** — editors read/write `JsonElement` values via a small `JsonValueEditor` helper (string/number/bool/object round-trip preserving JSON types — a `Number` property must not become a JSON string)
+- [x] **Validation (schema rules → client checks)** — `Required` (non-empty), `Min`/`Max`, `MinLength`/`MaxLength`, `Regex`, `Enum`; inline ⚠ messages under the field (S2); panel-level summary; invalid values still *editable* but flagged (save gate handles blocking, b.4)
+- [x] **Apply semantics** — edits buffer locally; **[Apply]** (or field blur — pick one, document it) → one `EditNodePropertiesCommand` with before/after property bags; Esc reverts the buffer
+- [x] **Workflow-level pane** — when nothing is selected the panel shows workflow meta: name, description, tags (→ `EditWorkflowMetaCommand`) and the **variables editor** (name/type/default rows → `EditVariablesCommand`)
 
 ### Tests (target ~14): → `Workflow.Tests.UI/Components/PropertiesPanelTests.cs` + `State/EditCommandsTests.cs`
 
-- [ ] `Panel_RendersEditor_PerEditorType` *(theory across all 11 editor types)*
-- [ ] `Dropdown_UsesAllowedValues` · `Number_RespectsMinMax` · `Json_InvalidShowsWarning`
-- [ ] `Required_EmptyShowsError` · `Regex_Violation_ShowsError`
-- [ ] `Apply_ProducesSingleEditCommand` · `EditCommand_UndoRestoresBefore`
-- [ ] `Esc_RevertsBuffer_NoCommand` · `Rename_ViaHeader_UsesRenameCommand`
-- [ ] `NumberValue_StaysJsonNumber_NotString` *(JsonElement typing)* · `MultiSelect_ShowsSummaryOnly`
-- [ ] `NoSelection_ShowsWorkflowMeta` · `Variables_EditRoundTrip`
-- [ ] `CodeEditor_MonacoInterop_InitializedWithLanguage` *(bUnit + JS interop fake)* · `CodeEditor_MonacoLoadFailure_FallsBackToTextarea`
+- [x] `Panel_RendersEditor_PerEditorType` *(theory across all 11 editor types)*
+- [x] `Dropdown_UsesAllowedValues` · `Number_RespectsMinMax` · `Json_InvalidShowsWarning`
+- [x] `Required_EmptyShowsError` · `Regex_Violation_ShowsError`
+- [x] `Apply_ProducesSingleEditCommand` · `EditCommand_UndoRestoresBefore`
+- [x] `Esc_RevertsBuffer_NoCommand` · `Rename_ViaHeader_UsesRenameCommand`
+- [x] `NumberValue_StaysJsonNumber_NotString` *(JsonElement typing)* · `MultiSelect_ShowsSummaryOnly`
+- [x] `NoSelection_ShowsWorkflowMeta` · `Variables_EditRoundTrip`
+- [x] `CodeEditor_MonacoInterop_InitializedWithLanguage` *(bUnit + JS interop fake)* · `CodeEditor_MonacoLoadFailure_FallsBackToTextarea`
 
 ---
 

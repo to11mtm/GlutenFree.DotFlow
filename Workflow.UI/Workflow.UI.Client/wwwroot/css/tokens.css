@@ -175,3 +175,15 @@ a.df-link:hover { text-decoration: underline; }
 
 .df-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 950; }
 .df-modal { background: var(--df-surface); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); min-width: 320px; }
+
+/* 🧾 Properties panel */
+.df-designer__props { width: 300px; border-left: 1px solid var(--df-border); overflow-y: auto; background: var(--df-surface); padding: var(--df-space-3); }
+.df-props__header { margin-bottom: var(--df-space-4); }
+.df-props__module { color: var(--df-text-dim); font-size: 0.75rem; margin-top: var(--df-space-1); }
+.df-props__version { display: inline-block; margin-top: var(--df-space-1); font-size: 0.7rem; color: var(--df-text-dim); }
+.df-props__multi { color: var(--df-text-dim); padding: var(--df-space-4); }
+.df-required { color: var(--df-state-failed); }
+.df-field-error { color: var(--df-state-failed); font-size: 0.75rem; margin-top: var(--df-space-1); }
+.df-input--mono { font-family: var(--df-mono); }
+.df-code-editor__monaco { height: 200px; border: 1px solid var(--df-border); border-radius: var(--df-radius); }
+.df-hidden { display: none; }
