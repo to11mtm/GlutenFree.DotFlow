@@ -1,6 +1,5 @@
 @namespace Workflow.UI.Client.Designer.Components
 @using System.Globalization
-@using System.Text
 @using Workflow.UI.Client.Designer.State
 
 <svg class="df-edges" style="width:@(Extent.W.ToString(Inv))px; height:@(Extent.H.ToString(Inv))px;">
@@ -8,8 +7,32 @@
         <marker id="df-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
             <path d="M0,0 L8,4 L0,8 Z" fill="var(--df-border)"></path>
         </marker>
+        <marker id="df-arrow-sel" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="var(--df-accent)"></path>
+        </marker>
     </defs>
-    @((MarkupString)EdgesMarkup)
+    @foreach (var e in Edges)
+    {
+        var selected = Selection is not null && Selection.IsConnectionSelected(e.Key);
+        <g class="df-edge-group">
+            @if (Selection is not null)
+            {
+                <path class="df-edge-hit" d="@e.Path"
+                      data-testid="edge-hit"
+                      data-edge-key="@e.Key"
+                      @onpointerdown="() => Select(e.Key)" @onpointerdown:stopPropagation="true"
+                      @oncontextmenu="args => OnContextMenu(e.Key, args)" @oncontextmenu:stopPropagation="true" @oncontextmenu:preventDefault="true" />
+            }
+            <path class="df-edge @(selected ? "df-edge--selected" : string.Empty)" d="@e.Path"
+                  fill="none" stroke="@(selected ? "var(--df-accent)" : "var(--df-border)")"
+                  stroke-width="@(selected ? "3" : "2")"
+                  marker-end="@(selected ? "url(#df-arrow-sel)" : "url(#df-arrow)")" />
+            @if (!string.IsNullOrWhiteSpace(e.Condition))
+            {
+                @((MarkupString)LabelMarkup(e))
+            }
+        </g>
+    }
 </svg>
 
 @code {
@@ -18,6 +41,26 @@
     /// <summary>The document whose connections to draw.</summary>
     [Parameter, EditorRequired]
     public DesignerDocument Document { get; set; } = default!;
+
+    /// <summary>The current selection (null in read-only run mode → edges are not clickable).</summary>
+    [Parameter]
+    public SelectionState? Selection { get; set; }
+
+    /// <summary>Raised on right-click of an edge (connection key + args).</summary>
+    [Parameter]
+    public EventCallback<(string Key, Microsoft.AspNetCore.Components.Web.MouseEventArgs Args)> OnConnectionContextMenu { get; set; }
+
+    private void Select(string key) => this.Selection?.SelectConnection(key);
+
+    private static string LabelMarkup(EdgeRender e)
+        => System.FormattableString.Invariant(
+            $"<text class=\"df-edge__label\" x=\"{e.LabelX}\" y=\"{e.LabelY}\" fill=\"var(--df-text-dim)\">{System.Net.WebUtility.HtmlEncode(e.Condition)}</text>");
+
+    private Task OnContextMenu(string key, Microsoft.AspNetCore.Components.Web.MouseEventArgs args)
+    {
+        this.Selection?.SelectConnection(key);
+        return this.OnConnectionContextMenu.InvokeAsync((key, args));
+    }
 
     private (double W, double H) Extent
     {
@@ -35,11 +78,10 @@
         }
     }
 
-    private string EdgesMarkup
+    private IEnumerable<EdgeRender> Edges
     {
         get
         {
-            var sb = new StringBuilder();
             foreach (var c in Document.Connections)
             {
                 var source = Document.FindNode(c.SourceNodeId);
@@ -51,18 +93,16 @@
 
                 var s = NodePorts.Anchor(source, c.SourcePortName, isOutput: true);
                 var t = NodePorts.Anchor(target, c.TargetPortName, isOutput: false);
-                var path = CanvasGeometry.BezierPath(s, t);
-                sb.Append(CultureInfo.InvariantCulture, $"<path class=\"df-edge\" d=\"{path}\" fill=\"none\" stroke=\"var(--df-border)\" stroke-width=\"2\" marker-end=\"url(#df-arrow)\" />");
-
-                if (!string.IsNullOrWhiteSpace(c.Condition))
-                {
-                    var lx = ((s.X + t.X) / 2).ToString(Inv);
-                    var ly = (((s.Y + t.Y) / 2) - 4).ToString(Inv);
-                    sb.Append(CultureInfo.InvariantCulture, $"<text class=\"df-edge__label\" x=\"{lx}\" y=\"{ly}\" fill=\"var(--df-text-dim)\">{System.Net.WebUtility.HtmlEncode(c.Condition)}</text>");
-                }
+                yield return new EdgeRender(
+                    c.Key,
+                    CanvasGeometry.BezierPath(s, t),
+                    string.IsNullOrWhiteSpace(c.Condition) ? null : c.Condition,
+                    (s.X + t.X) / 2,
+                    ((s.Y + t.Y) / 2) - 4);
             }
-
-            return sb.ToString();
         }
     }
+
+    private readonly record struct EdgeRender(string Key, string Path, string? Condition, double LabelX, double LabelY);
 }
+

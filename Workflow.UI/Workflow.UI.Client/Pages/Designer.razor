@@ -65,6 +65,7 @@ else if (document is not null)
                                 Selection="selection" Commands="commands"
                                 OnDropModule="OnDropModule"
                                 OnNodeContextMenu="OnNodeContextMenu"
+                                OnConnectionContextMenu="OnConnectionContextMenu"
                                 OnCanvasContextMenu="OnCanvasContextMenu" />
                 </div>
                 <div class="df-designer__props">
@@ -304,6 +305,16 @@ else if (document is not null)
         this.ShowMenu(e.Args);
     }
 
+    private void OnConnectionContextMenu((string Key, MouseEventArgs Args) e)
+    {
+        this.selection.SelectConnection(e.Key);
+        this.menuItems = new List<ContextMenu.MenuItem>
+        {
+            new("delete", "Delete connection", () => { this.DeleteSelected(); return Task.CompletedTask; }, Danger: true),
+        };
+        this.ShowMenu(e.Args);
+    }
+
     private void OnCanvasContextMenu(MouseEventArgs e)
     {
         this.menuItems = new List<ContextMenu.MenuItem>
@@ -326,13 +337,37 @@ else if (document is not null)
 
     private void DeleteSelected()
     {
-        if (this.commands is null || this.selection.Nodes.Count == 0)
+        if (this.commands is null || this.document is null)
         {
             return;
         }
 
-        this.commands.Execute(new RemoveNodesCommand(this.selection.Nodes.ToList()));
-        this.selection.Prune(this.document!);
+        if (this.selection.Nodes.Count == 0 && this.selection.Connections.Count == 0)
+        {
+            return;
+        }
+
+        var children = new List<IDesignerCommand>();
+        if (this.selection.Nodes.Count > 0)
+        {
+            children.Add(new RemoveNodesCommand(this.selection.Nodes.ToList()));
+        }
+
+        if (this.selection.Connections.Count > 0)
+        {
+            children.Add(new RemoveConnectionsCommand(this.selection.Connections.ToList()));
+        }
+
+        if (children.Count == 1)
+        {
+            this.commands.Execute(children[0]);
+        }
+        else
+        {
+            this.commands.Execute(new CompositeCommand("Delete selection", children));
+        }
+
+        this.selection.Prune(this.document);
     }
 
     private void Duplicate(DesignerNode node)

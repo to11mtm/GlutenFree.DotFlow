@@ -18,7 +18,7 @@
      style="cursor:@(panning ? "grabbing" : "grab");">
     <div class="df-canvas-content"
          style="transform: translate(@(T.PanX.ToString(Inv))px, @(T.PanY.ToString(Inv))px) scale(@(T.Zoom.ToString(Inv)));">
-        <EdgeLayer Document="Document" />
+        <EdgeLayer Document="Document" Selection="Selection" OnConnectionContextMenu="OnConnectionContextMenuInternal" />
         @foreach (var node in Document.Nodes)
         {
             <NodeView @key="node.Id" Node="node"
@@ -115,6 +115,13 @@
     /// <summary>Raised on canvas-background right-click (context menu).</summary>
     [Parameter]
     public EventCallback<MouseEventArgs> OnCanvasContextMenu { get; set; }
+
+    /// <summary>Raised on an edge right-click (connection key + args).</summary>
+    [Parameter]
+    public EventCallback<(string Key, MouseEventArgs Args)> OnConnectionContextMenu { get; set; }
+
+    private Task OnConnectionContextMenuInternal((string Key, MouseEventArgs Args) e)
+        => this.OnConnectionContextMenu.InvokeAsync(e);
 
     /// <summary>Raised on output-port pointer-down (connection drag in 3.3.b.2).</summary>
     [Parameter]
