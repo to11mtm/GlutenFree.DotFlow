@@ -114,35 +114,35 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 ### Tasks
 
-- [ ] **`CanvasView` component (D3)** — structure: outer viewport `div` (captures pointer + wheel events) → inner transform `div` (`transform: translate(panX,panY) scale(zoom)`) containing **(1)** `EdgeLayer` (single absolutely-positioned SVG covering content bounds) and **(2)** absolutely-positioned `NodeView`s; renders from `DesignerDocument` + re-renders on `Changed`
-- [ ] **`NodeView` component (S4)** — header (module icon by category, node name, dimmed module id), port rows from the schema (labels + `●` anchors), state-classes hook (used by 3.3.c overlay), fixed width / port-count-based height matching `CanvasGeometry` bounds; "missing module" fallback visual (⚠ unknown `moduleId`)
-- [ ] **`EdgeLayer` component** — one SVG `<path>` per connection using the geometry bezier builder; optional condition label at the midpoint; `marker-end` arrowhead def
-- [ ] **Pan** — pointer-down on canvas background (not a node) + drag → pan updates (uses `setPointerCapture`); cursor feedback (`grab`/`grabbing`); touch drag works via pointer events
-- [ ] **Zoom** — wheel (with `ctrl` for fine steps) zooms **about the cursor** via `CanvasGeometry.NewPanForZoom`; pinch zoom deferred to polish (c.2) if pointer-event pinch proves fiddly
-- [ ] **Zoom controls UI (S2)** — `[＋] [－] [100%▾ (25/50/75/100/150/200)] [⤢ Fit]` cluster; Fit uses `FitToContent`
-- [ ] **Designer page load path** — `/designer/{id}` → parallel `WorkflowsClient.Get` + `ModulesClient.List` → build `DesignerDocument` (schemas resolved) → initial Fit; load-error state with retry
-- [ ] **Status bar (S2 bottom)** — validation summary from `GraphValidator` (read-only ✓/⚠), node/connection counts, API status dot
-- [ ] **Perf guard** — node views keyed by id (`@key`); pan/zoom mutate only the transform style (no per-node re-render); target: 100-node document pans smoothly
+- [x] **`CanvasView` component (D3)** — structure: outer viewport `div` (captures pointer + wheel events) → inner transform `div` (`transform: translate(panX,panY) scale(zoom)`) containing **(1)** `EdgeLayer` (single absolutely-positioned SVG covering content bounds) and **(2)** absolutely-positioned `NodeView`s; renders from `DesignerDocument` + re-renders on `Changed`
+- [x] **`NodeView` component (S4)** — header (module icon by category, node name, dimmed module id), port rows from the schema (labels + `●` anchors), state-classes hook (used by 3.3.c overlay), fixed width / port-count-based height matching `CanvasGeometry` bounds; "missing module" fallback visual (⚠ unknown `moduleId`)
+- [x] **`EdgeLayer` component** — one SVG `<path>` per connection using the geometry bezier builder; optional condition label at the midpoint; `marker-end` arrowhead def
+- [x] **Pan** — pointer-down on canvas background (not a node) + drag → pan updates (uses `setPointerCapture`); cursor feedback (`grab`/`grabbing`); touch drag works via pointer events
+- [x] **Zoom** — wheel (with `ctrl` for fine steps) zooms **about the cursor** via `CanvasGeometry.NewPanForZoom`; pinch zoom deferred to polish (c.2) if pointer-event pinch proves fiddly
+- [x] **Zoom controls UI (S2)** — `[＋] [－] [100%▾ (25/50/75/100/150/200)] [⤢ Fit]` cluster; Fit uses `FitToContent`
+- [x] **Designer page load path** — `/designer/{id}` → parallel `WorkflowsClient.Get` + `ModulesClient.List` → build `DesignerDocument` (schemas resolved) → initial Fit; load-error state with retry
+- [x] **Status bar (S2 bottom)** — validation summary from `GraphValidator` (read-only ✓/⚠), node/connection counts, API status dot
+- [x] **Perf guard** — node views keyed by id (`@key`); pan/zoom mutate only the transform style (no per-node re-render); target: 100-node document pans smoothly
 
 ### Tests (target ~12): → `Workflow.Tests.UI/Components/CanvasReadOnlyTests.cs` *(bUnit)*
 
-- [ ] `Canvas_RendersNode_PerDocumentNode` · `Canvas_RendersEdge_PerConnection`
-- [ ] `Node_ShowsName_ModuleId_AndPorts` · `Node_UnknownModule_ShowsFallback`
-- [ ] `Edge_PathEndpoints_MatchPortAnchors` · `Edge_ConditionLabel_RendersWhenPresent`
-- [ ] `Pan_Drag_UpdatesTransform` · `Wheel_ZoomsAboutCursor` *(transform assertions vs geometry expectations)*
-- [ ] `ZoomControls_PlusMinusReset_Work` · `FitButton_AppliesFitTransform`
-- [ ] `DesignerPage_LoadsAndRenders_FromClients` *(fake handlers)* · `DesignerPage_LoadError_ShowsRetry`
+- [x] `Canvas_RendersNode_PerDocumentNode` · `Canvas_RendersEdge_PerConnection`
+- [x] `Node_ShowsName_ModuleId_AndPorts` · `Node_UnknownModule_ShowsFallback`
+- [x] `Edge_PathEndpoints_MatchPortAnchors` · `Edge_ConditionLabel_RendersWhenPresent`
+- [x] `Pan_Drag_UpdatesTransform` · `Wheel_ZoomsAboutCursor` *(transform assertions vs geometry expectations)*
+- [x] `ZoomControls_PlusMinusReset_Work` · `FitButton_AppliesFitTransform`
+- [x] `DesignerPage_LoadsAndRenders_FromClients` *(fake handlers)* · `DesignerPage_LoadError_ShowsRetry`
 
 ---
 
 ## Exit Criteria for 3.3.a ✅
 
-- [ ] `Workflow.UI` + `Workflow.UI.Client` + `Workflow.Tests.UI` build in `Workflow.sln`; full test suite green
-- [ ] With the API running (auth off), the list page shows real workflows; opening one renders its true graph at persisted positions
-- [ ] With auth ON, pasting a JWT/API key in Settings makes list + open work; without a token the UI shows clean auth errors (no crashes)
-- [ ] Pan / wheel-zoom-about-cursor / fit behave correctly (geometry specs green; manual feel-check)
-- [ ] `GraphValidator` reports real issues on a deliberately-broken definition (status bar ⚠)
-- [ ] No editing affordances shipped (read-only by design, D11)
+- [x] `Workflow.UI` + `Workflow.UI.Client` + `Workflow.Tests.UI` build in `Workflow.sln`; full test suite green
+- [x] With the API running (auth off), the list page shows real workflows; opening one renders its true graph at persisted positions
+- [x] With auth ON, pasting a JWT/API key in Settings makes list + open work; without a token the UI shows clean auth errors (no crashes)
+- [x] Pan / wheel-zoom-about-cursor / fit behave correctly (geometry specs green; manual feel-check)
+- [x] `GraphValidator` reports real issues on a deliberately-broken definition (status bar ⚠)
+- [x] No editing affordances shipped (read-only by design, D11)
 
 ---
 

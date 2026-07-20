@@ -1,0 +1,108 @@
+@page "/designer/{Id}"
+@namespace Workflow.UI.Client.Pages
+@rendermode InteractiveWebAssembly
+@using Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Designer.State
+@inject Workflow.UI.Client.Api.WorkflowsClient Workflows
+@inject Workflow.UI.Client.Api.ModulesClient Modules
+@inject Workflow.UI.Client.Services.ToastService Toasts
+
+<PageTitle>Designer · DotFlow</PageTitle>
+
+<TopBar Subtitle="@(document?.Name)"></TopBar>
+<ToastHost />
+
+@if (loading)
+{
+    <div class="df-empty">Loading workflow…</div>
+}
+else if (loadError is not null)
+{
+    <div class="df-empty">
+        @loadError <button class="df-btn" @onclick="Load">Retry</button>
+    </div>
+}
+else if (document is not null)
+{
+    <div class="df-designer">
+        <div class="df-designer__canvas">
+            <CanvasView @ref="canvas" Document="document" />
+        </div>
+        <StatusBar Document="document" Issues="issues" ExtraInfo="@(readOnlyNote)" />
+    </div>
+}
+
+@code {
+    private CanvasView? canvas;
+    private DesignerDocument? document;
+    private IReadOnlyList<GraphIssue> issues = System.Array.Empty<GraphIssue>();
+    private bool loading = true;
+    private string? loadError;
+    private readonly string readOnlyNote = "read-only";
+
+    /// <summary>The workflow id from the route (or <c>new</c>).</summary>
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    protected override Task OnParametersSetAsync() => this.Load();
+
+    private async Task Load()
+    {
+        this.loading = true;
+        this.loadError = null;
+        try
+        {
+            var modules = await Modules.ListAsync();
+            var knownIds = new HashSet<string>();
+            foreach (var m in modules)
+            {
+                knownIds.Add(m.Id);
+            }
+
+            if (string.Equals(this.Id, "new", System.StringComparison.OrdinalIgnoreCase))
+            {
+                this.document = DesignerDocument.NewBlank("Untitled workflow");
+            }
+            else if (System.Guid.TryParse(this.Id, out var guid))
+            {
+                var dto = await Workflows.GetAsync(guid);
+
+                // Pre-fetch schemas for every module used, so document build can resolve synchronously.
+                var schemas = new Dictionary<string, ModuleSchemaDto?>(System.StringComparer.Ordinal);
+                foreach (var node in dto.Nodes)
+                {
+                    if (!schemas.ContainsKey(node.ModuleId))
+                    {
+                        var details = await Modules.GetAsync(node.ModuleId);
+                        schemas[node.ModuleId] = details?.Schema;
+                    }
+                }
+
+                this.document = DesignerDocument.FromDto(dto, mid => schemas.TryGetValue(mid, out var s) ? s : null);
+            }
+            else
+            {
+                this.loadError = $"Invalid workflow id '{this.Id}'.";
+                return;
+            }
+
+            this.issues = GraphValidator.Validate(this.document, knownIds);
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+        }
+        finally
+        {
+            this.loading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && this.canvas is not null && this.document is not null)
+        {
+            await this.canvas.FitAsync();
+        }
+    }
+}
