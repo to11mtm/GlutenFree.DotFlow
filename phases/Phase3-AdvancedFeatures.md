@@ -925,6 +925,8 @@ Option B: React 🎯
 
 ### 3.6 UI - Module Manager (Week 21)
 
+> **📋 Detailed sliced plan available:** [Phase3-6-ModuleManager.md](Phase3-6-ModuleManager.md) — a dedicated **"The Foundry"** area (`/modules` in `Workflow.UI.Client`) to browse modules, read generated documentation, **upload** `.wfmod` packages, **enable/disable** modules + versions, and **uninstall** them. **Almost pure reuse**: the **read API (2.7.3)** — `GET /modules` (category/search/group) + `GET /modules/{id}` (schema/versions/enabled/deps) — *and* the **write API (2.8.5)** — `POST /modules/upload` (multipart, admin, validation), `POST /modules/{id}/enable\|disable`, `DELETE /modules/{id}` (guarded) — **all already exist**, as does `ModulesClient` + the designer's `ModulePalette`. The gaps are **client-only**: four `ModulesClient` management methods, a full manager page, an upload flow, and toggle/version/uninstall UI. **Zero new backend for the MVP.** One honest limitation: `IWorkflowModule` has **no README/examples/changelog**, so the "documentation viewer" is **generated** from Description + schema (first-class docs → 3.6.P1). Five slices: client methods + shell/browse (3.6.0), generated docs drawer (3.6.1), upload + drag-drop + validation (3.6.2), enable/disable + versions + uninstall (3.6.3), designer bridge + docs (3.6.4). Mockups S1/S2 included. Admin/write-gated actions **degrade gracefully**. The D2 contracts-only + framework-free boundary keeps the React+TS port additive. **Timeline: Week 33.** Q1–Q6 proposed 🤔.
+
 **Tasks:**
 - [ ] **Implement module browsing** 📦
   - [ ] Grid/list view of modules
