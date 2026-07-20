@@ -141,6 +141,8 @@ a.df-link:hover { text-decoration: underline; }
 .df-port--out .df-port__dot { cursor: crosshair; }
 .df-port--compatible .df-port__dot { background: var(--df-state-completed); }
 
+.df-connect-ghost { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; overflow: visible; }
+
 .df-zoom-controls { position: absolute; bottom: var(--df-space-4); right: var(--df-space-4); display: flex; gap: var(--df-space-1); }
 
 .df-statusbar { display: flex; gap: var(--df-space-2); align-items: center; padding: var(--df-space-2) var(--df-space-4);

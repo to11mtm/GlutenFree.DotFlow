@@ -24,11 +24,20 @@
             <NodeView @key="node.Id" Node="node"
                       StateClass="@StateClassFor(node.Id)"
                       Selected="@IsSelected(node.Id)"
+                      InputCompatible="@(connecting ? (p => IsCompatibleInput(node, p)) : null)"
                       OnNodePointerDown="e => OnNodePointerDownInternal(node, e)"
                       OnNodeContextMenu="e => OnNodeContextMenu.InvokeAsync((node, e))"
-                      OnOutputPortPointerDown="p => OnOutputPortPointerDown.InvokeAsync((node, p))" />
+                      OnOutputPortPointerDown="p => OnOutputPortPointerDownInternal(node, p)"
+                      OnInputPortPointerUp="p => OnInputPortPointerUpInternal(node, p)" />
         }
     </div>
+
+    @if (connecting)
+    {
+        <svg class="df-connect-ghost">
+            <path d="@ghostPath" fill="none" stroke="var(--df-accent)" stroke-width="2" stroke-dasharray="6 4" />
+        </svg>
+    }
 
     @if (rubberBand is not null)
     {
@@ -59,6 +68,13 @@
     private bool rubberBanding;
     private double rubberStartX, rubberStartY;
     private Rect? rubberBand;
+
+    // Connection drawing.
+    private bool connecting;
+    private DesignerNode? connectSource;
+    private string connectSourcePort = string.Empty;
+    private double connectCursorX, connectCursorY;
+    private string ghostPath = string.Empty;
 
     /// <summary>The document to render.</summary>
     [Parameter, EditorRequired]
@@ -208,6 +224,15 @@
 
     private async Task OnViewportPointerMove(PointerEventArgs e)
     {
+        if (this.connecting)
+        {
+            this.connectCursorX = e.OffsetX;
+            this.connectCursorY = e.OffsetY;
+            this.UpdateGhost();
+            this.StateHasChanged();
+            return;
+        }
+
         if (this.movingNodes)
         {
             var dx = (e.ClientX - this.moveStartClientX) / this.Transform.Zoom;
@@ -258,6 +283,13 @@
 
     private void OnViewportPointerUp(PointerEventArgs e)
     {
+        if (this.connecting)
+        {
+            // Released over the background (not an input port) → cancel.
+            this.CancelConnecting();
+            return;
+        }
+
         if (this.movingNodes)
         {
             var wasDrag = this.moveExceededThreshold;
@@ -316,6 +348,93 @@
     }
 
     private Task OnViewportContextMenu(MouseEventArgs e) => this.OnCanvasContextMenu.InvokeAsync(e);
+
+    // ─── Connection drawing (3.3.b.2) ────────────────────────────────────────────
+
+    private void OnOutputPortPointerDownInternal(DesignerNode node, string port)
+    {
+        if (this.Commands is not null)
+        {
+            this.connecting = true;
+            this.connectSource = node;
+            this.connectSourcePort = port;
+            var srcCanvas = NodePorts.Anchor(node, port, isOutput: true);
+            var srcScreen = CanvasGeometry.CanvasToScreen(srcCanvas, this.Transform);
+            this.connectCursorX = srcScreen.X;
+            this.connectCursorY = srcScreen.Y;
+            this.UpdateGhost();
+        }
+
+        _ = this.OnOutputPortPointerDown.InvokeAsync((node, port));
+    }
+
+    private void OnInputPortPointerUpInternal(DesignerNode targetNode, string inputPort)
+    {
+        if (!this.connecting || this.connectSource is null || this.Commands is null)
+        {
+            return;
+        }
+
+        if (this.IsCompatibleInput(targetNode, inputPort))
+        {
+            this.Commands.Execute(new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = this.connectSource.Id,
+                SourcePortName = this.connectSourcePort,
+                TargetNodeId = targetNode.Id,
+                TargetPortName = inputPort,
+            }));
+        }
+
+        this.CancelConnecting();
+    }
+
+    private bool IsCompatibleInput(DesignerNode targetNode, string inputPort)
+    {
+        if (!this.connecting || this.connectSource is null)
+        {
+            return false;
+        }
+
+        if (targetNode.Id == this.connectSource.Id)
+        {
+            return false;
+        }
+
+        // No duplicate edge.
+        var candidateKey = $"{this.connectSource.Id}.{this.connectSourcePort}→{targetNode.Id}.{inputPort}";
+        foreach (var c in this.Document.Connections)
+        {
+            if (c.Key == candidateKey)
+            {
+                return false;
+            }
+        }
+
+        // No cycle.
+        return !GraphValidator.WouldCreateCycle(this.Document, this.connectSource.Id, targetNode.Id);
+    }
+
+    private void CancelConnecting()
+    {
+        this.connecting = false;
+        this.connectSource = null;
+        this.connectSourcePort = string.Empty;
+        this.ghostPath = string.Empty;
+        this.StateHasChanged();
+    }
+
+    private void UpdateGhost()
+    {
+        if (this.connectSource is null)
+        {
+            return;
+        }
+
+        var srcCanvas = NodePorts.Anchor(this.connectSource, this.connectSourcePort, isOutput: true);
+        var srcScreen = CanvasGeometry.CanvasToScreen(srcCanvas, this.Transform);
+        this.ghostPath = CanvasGeometry.BezierPath(srcScreen, new Point(this.connectCursorX, this.connectCursorY));
+    }
 
     private async Task OnDrop(DragEventArgs e)
     {

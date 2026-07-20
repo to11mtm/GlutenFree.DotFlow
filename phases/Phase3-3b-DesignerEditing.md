@@ -102,20 +102,20 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 
 ### Tasks
 
-- [ ] **Drag initiation** — pointer-down on an **output** port anchor starts connection mode (does not move the node); ghost bezier from the source anchor to the cursor, re-rendered on pointer-move
-- [ ] **Target highlighting** — while dragging, all **compatible input ports** get a highlight class; compatibility = target is an input port on a different node AND adding the edge passes live checks
-- [ ] **Live validation (uses `GraphValidator` pieces)** — reject: self-connection, duplicate (same source port → same target port), **cycle creation** (validator's DFS on document + candidate edge); incompatible hover shows ⛔ cursor/tint
-- [ ] **Drop** — within snap radius (~12px) of a valid input anchor → snap + `Execute(new AddConnectionCommand(...))` (default `Condition=null`, `Priority=0`); drop anywhere else → cancel, ghost disappears
-- [ ] **Reverse drag (nice-to-have)** — drag from an *input* port to an output port creates the same edge (direction normalized); skip if it complicates the state machine — note the decision
-- [ ] **Condition affordance** — connections with a `Condition` render the label chip (from 3.3.a `EdgeLayer`); the b.1 context-menu dialog edits it; condition text is free-form (the engine evaluates it — no client parsing beyond non-empty trim)
+- [x] **Drag initiation** — pointer-down on an **output** port anchor starts connection mode (does not move the node); ghost bezier from the source anchor to the cursor, re-rendered on pointer-move
+- [x] **Target highlighting** — while dragging, all **compatible input ports** get a highlight class; compatibility = target is an input port on a different node AND adding the edge passes live checks
+- [x] **Live validation (uses `GraphValidator` pieces)** — reject: self-connection, duplicate (same source port → same target port), **cycle creation** (validator's DFS on document + candidate edge); incompatible hover shows ⛔ cursor/tint
+- [x] **Drop** — within snap radius (~12px) of a valid input anchor → snap + `Execute(new AddConnectionCommand(...))` (default `Condition=null`, `Priority=0`); drop anywhere else → cancel, ghost disappears
+- [x] **Reverse drag (nice-to-have)** — drag from an *input* port to an output port creates the same edge (direction normalized); skip if it complicates the state machine — note the decision
+- [x] **Condition affordance** — connections with a `Condition` render the label chip (from 3.3.a `EdgeLayer`); the b.1 context-menu dialog edits it; condition text is free-form (the engine evaluates it — no client parsing beyond non-empty trim)
 
 ### Tests (target ~9): → `Workflow.Tests.UI/State/ConnectionRulesTests.cs` + `Components/ConnectDragTests.cs`
 
-- [ ] `Connect_ValidPorts_CreatesConnection` · `AddConnectionCommand_UndoRemovesIt`
-- [ ] `Connect_SelfNode_Rejected` · `Connect_Duplicate_Rejected` · `Connect_WouldCreateCycle_Rejected`
-- [ ] `Connect_DiamondShape_Allowed` *(regression: diamonds aren't cycles)*
-- [ ] `DragGhost_FollowsCursor` *(bUnit: ghost path updates on move)* · `ValidTargets_HighlightDuringDrag`
-- [ ] `Drop_OutsideSnapRadius_Cancels`
+- [x] `Connect_ValidPorts_CreatesConnection` · `AddConnectionCommand_UndoRemovesIt`
+- [x] `Connect_SelfNode_Rejected` · `Connect_Duplicate_Rejected` · `Connect_WouldCreateCycle_Rejected`
+- [x] `Connect_DiamondShape_Allowed` *(regression: diamonds aren't cycles)*
+- [x] `DragGhost_FollowsCursor` *(bUnit: ghost path updates on move)* · `ValidTargets_HighlightDuringDrag`
+- [x] `Drop_OutsideSnapRadius_Cancels`
 
 ---
 
