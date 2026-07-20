@@ -155,6 +155,46 @@ public sealed class WorkflowEndpointsTests : IClassFixture<WorkflowEndpointsTest
         (await client.DeleteAsync($"/api/v1/workflows/{Guid.NewGuid()}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task Validate_ValidWorkflow_ReturnsValid()
+    {
+        var client = this.factory.CreateClient();
+        var resp = await client.PostAsync("/api/v1/workflows/validate", AsJson(MinimalWorkflow("valid-" + Guid.NewGuid().ToString("N"))));
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("valid").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Validate_UnknownModule_ReturnsIssues_WithoutPersisting()
+    {
+        var client = this.factory.CreateClient();
+        var broken = MinimalWorkflow("broken") with
+        {
+            Nodes = Arr.create(new NodeDefinition("n1", "builtin.does.not.exist", "N1", HashMap<string, JsonElement>.Empty)),
+        };
+
+        var resp = await client.PostAsync("/api/v1/workflows/validate", AsJson(broken));
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("valid").GetBoolean().Should().BeFalse();
+        body.GetProperty("issues").GetArrayLength().Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task Validate_DoesNotCreateWorkflow()
+    {
+        var client = this.factory.CreateClient();
+        var name = "novalpersist-" + Guid.NewGuid().ToString("N");
+        await client.PostAsync("/api/v1/workflows/validate", AsJson(MinimalWorkflow(name)));
+
+        // The validate call must not have persisted anything.
+        var list = await client.GetFromJsonAsync<JsonElement>($"/api/v1/workflows?name={name}");
+        list.GetProperty("totalCount").GetInt32().Should().Be(0);
+    }
+
     /// <summary>
     /// A <see cref="WebApplicationFactory{TProgram}"/> configured with an in-memory SQLite provider~ 🗄️.
     /// </summary>

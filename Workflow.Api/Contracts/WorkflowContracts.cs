@@ -62,3 +62,16 @@ public record PageDto<T>(
     int Page,
     int PageSize,
     int TotalPages);
+
+/// <summary>
+/// ✅ Phase 3.3 (D14) — Result of the dry-run workflow validate endpoint~ ✨.
+/// </summary>
+/// <param name="Valid">Whether the workflow passed validation.</param>
+/// <param name="Issues">The issues found (empty when valid).</param>
+public record WorkflowValidationResultDto(bool Valid, IReadOnlyList<WorkflowValidationIssueDto> Issues);
+
+/// <summary>✅ Phase 3.3 (D14) — A single validation issue~ ✨.</summary>
+/// <param name="Severity"><c>error</c> or <c>warning</c>.</param>
+/// <param name="Message">Human-readable message.</param>
+/// <param name="NodeId">The offending node id, when applicable.</param>
+public record WorkflowValidationIssueDto(string Severity, string Message, string? NodeId);

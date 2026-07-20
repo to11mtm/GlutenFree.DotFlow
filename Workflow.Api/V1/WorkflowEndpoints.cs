@@ -34,6 +34,7 @@ public static class WorkflowEndpoints
         group.MapGet("/", ListHandler).WithName("ListWorkflows").RequireAuthorization(AuthConstants.WorkflowReadPolicy);
         group.MapGet("/{id:guid}", GetHandler).WithName("GetWorkflow").RequireAuthorization(AuthConstants.WorkflowReadPolicy);
         group.MapPost("/", CreateHandler).WithName("CreateWorkflow").RequireAuthorization(AuthConstants.WorkflowWritePolicy);
+        group.MapPost("/validate", ValidateHandler).WithName("ValidateWorkflow").RequireAuthorization(AuthConstants.WorkflowReadPolicy);
         group.MapPut("/{id:guid}", UpdateHandler).WithName("UpdateWorkflow").RequireAuthorization(AuthConstants.WorkflowWritePolicy);
         group.MapDelete("/{id:guid}", DeleteHandler).WithName("DeleteWorkflow").RequireAuthorization(AuthConstants.AdminPolicy);
         group.MapPost("/{id:guid}/restore", RestoreHandler).WithName("RestoreWorkflow").RequireAuthorization(AuthConstants.WorkflowWritePolicy);
@@ -83,6 +84,26 @@ public static class WorkflowEndpoints
         return definition is null
             ? ApiResults.NotFoundProblem($"Workflow '{id}' was not found.")
             : Results.Ok(definition);
+    }
+
+    private static IResult ValidateHandler(
+        WorkflowDefinition definition,
+        ModuleAwareWorkflowValidator validator)
+    {
+        // 🧮 Phase 3.3 D14 — dry-run validation for the designer's save gate. No persistence.
+        var result = validator.Validate(definition);
+        var issues = new List<WorkflowValidationIssueDto>();
+        foreach (var e in result.Errors)
+        {
+            issues.Add(new WorkflowValidationIssueDto("error", e.Message, e.NodeId));
+        }
+
+        foreach (var w in result.Warnings)
+        {
+            issues.Add(new WorkflowValidationIssueDto("warning", w.Message, w.NodeId));
+        }
+
+        return Results.Ok(new WorkflowValidationResultDto(result.IsValid, issues));
     }
 
     private static async Task<IResult> CreateHandler(

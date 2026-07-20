@@ -1,15 +1,23 @@
 @page "/designer/{Id}"
 @namespace Workflow.UI.Client.Pages
 @rendermode InteractiveWebAssembly
+@using System.Text.Json
 @using Workflow.UI.Client.Designer.Components
 @using Workflow.UI.Client.Designer.State
+@using Workflow.UI.Client.Designer.State.Commands
+@implements IDisposable
 @inject Workflow.UI.Client.Api.WorkflowsClient Workflows
 @inject Workflow.UI.Client.Api.ModulesClient Modules
 @inject Workflow.UI.Client.Services.ToastService Toasts
 
 <PageTitle>Designer · DotFlow</PageTitle>
 
-<TopBar Subtitle="@(document?.Name)"></TopBar>
+<TopBar Subtitle="@(document?.Name)">
+    @if (commands is not null)
+    {
+        <span class="df-topbar__dirty">@(commands.IsDirty ? "●unsaved" : "")</span>
+    }
+</TopBar>
 <ToastHost />
 
 @if (loading)
@@ -25,20 +33,28 @@ else if (loadError is not null)
 else if (document is not null)
 {
     <div class="df-designer">
-        <div class="df-designer__canvas">
-            <CanvasView @ref="canvas" Document="document" />
+        <div class="df-designer__body">
+            <div class="df-designer__palette">
+                <ModulePalette />
+            </div>
+            <div class="df-designer__canvas">
+                <CanvasView @ref="canvas" Document="document" OnDropModule="OnDropModule" />
+            </div>
         </div>
-        <StatusBar Document="document" Issues="issues" ExtraInfo="@(readOnlyNote)" />
+        <StatusBar Document="document" Issues="issues" ExtraInfo="@statusInfo" />
     </div>
 }
 
 @code {
     private CanvasView? canvas;
     private DesignerDocument? document;
+    private CommandStack? commands;
+    private readonly HashSet<string> knownModuleIds = new();
+    private readonly Dictionary<string, ModuleSchemaDto?> schemaCache = new(System.StringComparer.Ordinal);
     private IReadOnlyList<GraphIssue> issues = System.Array.Empty<GraphIssue>();
     private bool loading = true;
     private string? loadError;
-    private readonly string readOnlyNote = "read-only";
+    private readonly string statusInfo = "editing";
 
     /// <summary>The workflow id from the route (or <c>new</c>).</summary>
     [Parameter]
@@ -53,10 +69,10 @@ else if (document is not null)
         try
         {
             var modules = await Modules.ListAsync();
-            var knownIds = new HashSet<string>();
+            this.knownModuleIds.Clear();
             foreach (var m in modules)
             {
-                knownIds.Add(m.Id);
+                this.knownModuleIds.Add(m.Id);
             }
 
             if (string.Equals(this.Id, "new", System.StringComparison.OrdinalIgnoreCase))
@@ -66,19 +82,12 @@ else if (document is not null)
             else if (System.Guid.TryParse(this.Id, out var guid))
             {
                 var dto = await Workflows.GetAsync(guid);
-
-                // Pre-fetch schemas for every module used, so document build can resolve synchronously.
-                var schemas = new Dictionary<string, ModuleSchemaDto?>(System.StringComparer.Ordinal);
                 foreach (var node in dto.Nodes)
                 {
-                    if (!schemas.ContainsKey(node.ModuleId))
-                    {
-                        var details = await Modules.GetAsync(node.ModuleId);
-                        schemas[node.ModuleId] = details?.Schema;
-                    }
+                    await this.EnsureSchema(node.ModuleId);
                 }
 
-                this.document = DesignerDocument.FromDto(dto, mid => schemas.TryGetValue(mid, out var s) ? s : null);
+                this.document = DesignerDocument.FromDto(dto, mid => this.schemaCache.TryGetValue(mid, out var s) ? s : null);
             }
             else
             {
@@ -86,7 +95,9 @@ else if (document is not null)
                 return;
             }
 
-            this.issues = GraphValidator.Validate(this.document, knownIds);
+            this.commands = new CommandStack(this.document);
+            this.commands.Changed += this.OnDocumentChanged;
+            this.Revalidate();
         }
         catch (Workflow.UI.Client.Api.ApiException ex)
         {
@@ -98,11 +109,89 @@ else if (document is not null)
         }
     }
 
+    private async Task<ModuleSchemaDto?> EnsureSchema(string moduleId)
+    {
+        if (this.schemaCache.TryGetValue(moduleId, out var cached))
+        {
+            return cached;
+        }
+
+        var details = await Modules.GetAsync(moduleId);
+        this.schemaCache[moduleId] = details?.Schema;
+        return details?.Schema;
+    }
+
+    private async Task OnDropModule((string ModuleId, Point CanvasPoint) drop)
+    {
+        if (this.document is null || this.commands is null)
+        {
+            return;
+        }
+
+        var schema = await this.EnsureSchema(drop.ModuleId);
+        var existing = new HashSet<string>();
+        foreach (var n in this.document.Nodes)
+        {
+            existing.Add(n.Id);
+        }
+
+        var node = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate(drop.ModuleId, existing),
+            ModuleId = drop.ModuleId,
+            Name = DisplayNameFor(drop.ModuleId),
+            X = drop.CanvasPoint.X,
+            Y = drop.CanvasPoint.Y,
+            Schema = schema,
+        };
+
+        if (schema is not null)
+        {
+            foreach (var prop in schema.Properties)
+            {
+                if (prop.DefaultValue is JsonElement def)
+                {
+                    node.Properties[prop.Name] = def;
+                }
+            }
+        }
+
+        this.commands.Execute(new AddNodeCommand(node));
+    }
+
+    private static string DisplayNameFor(string moduleId)
+    {
+        var lastDot = moduleId.LastIndexOf('.');
+        return lastDot >= 0 && lastDot < moduleId.Length - 1 ? moduleId[(lastDot + 1)..] : moduleId;
+    }
+
+    private void OnDocumentChanged()
+    {
+        this.Revalidate();
+        this.InvokeAsync(this.StateHasChanged);
+    }
+
+    private void Revalidate()
+    {
+        if (this.document is not null)
+        {
+            this.issues = GraphValidator.Validate(this.document, this.knownModuleIds);
+        }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender && this.canvas is not null && this.document is not null)
         {
             await this.canvas.FitAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        if (this.commands is not null)
+        {
+            this.commands.Changed -= this.OnDocumentChanged;
         }
     }
 }

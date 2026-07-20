@@ -40,6 +40,7 @@ builder.Services.AddScoped(sp =>
 // 🔔 App services: toasts + localStorage~
 builder.Services.AddScoped<Workflow.UI.Client.Services.ToastService>();
 builder.Services.AddScoped<Workflow.UI.Client.Services.ILocalStorage, Workflow.UI.Client.Services.BrowserLocalStorage>();
+builder.Services.AddScoped<Workflow.UI.Client.Services.PaletteDragState>();
 
 // 📡 Real-time hub client (SignalR)~
 builder.Services.AddScoped(sp => new RealTimeClient(

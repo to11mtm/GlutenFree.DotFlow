@@ -29,6 +29,7 @@ public sealed class DesignerPageTests : TestContext
         this.JSInterop.Mode = JSRuntimeMode.Loose;
         this.Services.AddSingleton(new ToastService());
         this.Services.AddSingleton(new AuthState());
+        this.Services.AddSingleton(new Workflow.UI.Client.Services.PaletteDragState());
     }
 
     private static string Json(object o) => JsonSerializer.Serialize(o, ApiHttp.Json);

@@ -1,0 +1,100 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Services
+@inject ModulesClient Modules
+@inject PaletteDragState DragState
+
+<div class="df-palette">
+    <div class="df-palette__search">
+        <input class="df-input" placeholder="🔍 filter…" @bind="filter" @bind:event="oninput" />
+    </div>
+
+    @if (loading)
+    {
+        <div class="df-empty">Loading modules…</div>
+    }
+    else if (Filtered.Count == 0)
+    {
+        <div class="df-empty">No modules match.</div>
+    }
+    else
+    {
+        @foreach (var group in Filtered)
+        {
+            <div class="df-palette__group">
+                <div class="df-palette__group-title">@group.Key</div>
+                @foreach (var m in group.Value)
+                {
+                    <div class="df-palette__item" draggable="true"
+                         data-module-id="@m.Id"
+                         @ondragstart="() => DragState.Begin(m.Id)"
+                         @ondragend="() => DragState.End()"
+                         @onclick="() => Selected = m"
+                         title="@m.Description">
+                        <span class="df-palette__icon">@m.Icon</span>
+                        <span class="df-palette__name">@m.DisplayName</span>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @if (Selected is not null)
+    {
+        <div class="df-palette__details">
+            <div class="df-palette__details-title">@Selected.DisplayName</div>
+            <div class="df-palette__details-id">@Selected.Id</div>
+            <p>@Selected.Description</p>
+            <button class="df-btn" @onclick="() => Selected = null">Close</button>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<ModuleSummaryDto> modules = new();
+    private string filter = string.Empty;
+    private bool loading = true;
+
+    /// <summary>The module whose details flyout is open (click, not drag).</summary>
+    public ModuleSummaryDto? Selected { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var list = await Modules.ListAsync();
+            this.modules.AddRange(list);
+        }
+        catch (ApiException)
+        {
+            // Palette simply stays empty when modules can't load; the status bar surfaces API state.
+        }
+        finally
+        {
+            this.loading = false;
+        }
+    }
+
+    private List<KeyValuePair<string, List<ModuleSummaryDto>>> Filtered
+    {
+        get
+        {
+            IEnumerable<ModuleSummaryDto> query = this.modules;
+            if (!string.IsNullOrWhiteSpace(this.filter))
+            {
+                var f = this.filter.Trim();
+                query = query.Where(m =>
+                    m.Id.Contains(f, System.StringComparison.OrdinalIgnoreCase) ||
+                    m.DisplayName.Contains(f, System.StringComparison.OrdinalIgnoreCase) ||
+                    m.Description.Contains(f, System.StringComparison.OrdinalIgnoreCase));
+            }
+
+            return query
+                .GroupBy(m => string.IsNullOrWhiteSpace(m.Category) ? "Other" : m.Category)
+                .OrderBy(g => g.Key)
+                .Select(g => new KeyValuePair<string, List<ModuleSummaryDto>>(g.Key, g.OrderBy(m => m.DisplayName).ToList()))
+                .ToList();
+        }
+    }
+}
