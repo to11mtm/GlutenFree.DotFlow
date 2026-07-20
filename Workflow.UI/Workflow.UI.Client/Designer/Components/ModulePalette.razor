@@ -4,11 +4,14 @@
 @using Workflow.UI.Client.Services
 @inject ModulesClient Modules
 @inject PaletteDragState DragState
+@inject NavigationManager Nav
 
 <div class="df-palette">
     <div class="df-palette__search">
         <input class="df-input" placeholder="🔍 filter…" @bind="filter" @bind:event="oninput" />
     </div>
+    <button class="df-btn df-btn--link df-btn--small" data-testid="palette-manage"
+            @onclick="@(() => Nav.NavigateTo("/modules"))">📦 Manage modules →</button>
 
     @if (loading)
     {

@@ -1,0 +1,28 @@
+@namespace Workflow.UI.Client.Modules.Components
+@using Workflow.UI.Client.Api.Dtos
+
+@* 📦 Phase 3.6.0 — A module card in the manager grid; opens the docs drawer on click. *@
+<button type="button" class="df-modcard @(Module.Enabled ? "" : "df-modcard--disabled")"
+        data-testid="modcard-@Module.Id" @onclick="() => OnOpen.InvokeAsync(Module)">
+    <div class="df-modcard__head">
+        <span class="df-modcard__icon">@Module.Icon</span>
+        <span class="df-modcard__name">@Module.DisplayName</span>
+    </div>
+    <div class="df-modcard__id">@Module.Id</div>
+    <div class="df-modcard__meta">
+        <span class="df-modcard__ver">v@(Module.Version ?? "?")</span>
+        <span class="df-modcard__state @(Module.Enabled ? "df-modcard__state--on" : "df-modcard__state--off")">
+            @(Module.Enabled ? "🟢 enabled" : "⚪ disabled")
+        </span>
+    </div>
+</button>
+
+@code {
+    /// <summary>The module summary to render.</summary>
+    [Parameter, EditorRequired]
+    public ModuleSummaryDto Module { get; set; } = default!;
+
+    /// <summary>Raised when the card is clicked.</summary>
+    [Parameter]
+    public EventCallback<ModuleSummaryDto> OnOpen { get; set; }
+}

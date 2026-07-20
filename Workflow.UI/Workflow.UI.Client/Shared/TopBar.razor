@@ -15,6 +15,7 @@
           title="@(Auth.HasCredential ? "Authenticated" : "No credential")"></span>
     <button class="df-btn" data-testid="nav-scripts" @onclick="@(() => Nav.NavigateTo("/scripts"))">💻 Scripts</button>
     <button class="df-btn" data-testid="nav-monitor" @onclick="@(() => Nav.NavigateTo("/monitor"))">📡 Monitor</button>
+    <button class="df-btn" data-testid="nav-modules" @onclick="@(() => Nav.NavigateTo("/modules"))">📦 Modules</button>
     <button class="df-btn" @onclick="@(() => Nav.NavigateTo("/settings"))">⚙ Settings</button>
 </div>
 

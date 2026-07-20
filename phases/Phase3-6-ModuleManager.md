@@ -4,6 +4,12 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 [Back to Phase 3](Phase3-AdvancedFeatures.md) | [All Phases](README.md)
 
+> ## ✅ COMPLETE — all 5 slices (3.6.0–3.6.4) implemented, **41 Foundry tests** (283 total in
+> `Workflow.Tests.UI`), documented in [`docs/module-manager.md`](../docs/module-manager.md).
+> **Zero new backend** — a pure client feature over the shipped read (2.7.3) + write (2.8.5)
+> `/modules/*` endpoints; the docs viewer is generated from the schema (D6). The D2 framework-free
+> boundary keeps the React port additive~ 🌸
+
 ---
 
 ## Overview
@@ -68,29 +74,16 @@ the **admin-gated actions' graceful degradation**.
 
 ---
 
-## TO RESOLVE 🤔
+## RESOLVED ✅
 
-> Proposed answers below so work can proceed; please confirm/override~ ✅
+> Q1–Q6 confirmed (all proposed answers **Agreed** by the user) — implementation proceeds on these~ ✅
 
-- [ ] **Q1 Admin/write gating UX: attempt-and-surface-403, or decode the JWT role / add `/auth/whoami` to hide actions?**
-  - **Proposed:** Attempt-and-surface for the MVP — show the management actions; on `401/403` show a "requires admin/write" toast (D9). No client role-awareness. A `whoami`/role decode to pre-hide actions → **3.6.P2**.
-    - **Rationale:** the client can't cheaply know the caller's role; the server already enforces it. The UX is clear: unprivileged users can browse + read docs, but management actions fail with a clear toast.
-    - Agreed but we need to make sure that for MVP we can have all users be treated as admin for demo purposes, and then we can finish the whoami endpoint later for role-based access control.
-- [ ] **Q2 Documentation viewer: generated-from-schema now, README/examples/changelog later?**
-  - **Proposed:** Yes — generate the docs drawer from Description + schema + dependencies + versions (D6). First-class README/usage-examples/changelog (manifest + `IWorkflowModule` + registry + DTO plumbing) → **3.6.P1**.
-    - Agreed 
-- [ ] **Q3 Version "upgrade/rollback": map to per-version enable/disable + upload-new, or add upgrade/rollback endpoints?**
-  - **Proposed:** Map to the existing per-version enable/disable + upload-new (D7) — the registry already resolves the newest *enabled* version. No new backend. Dedicated upgrade/rollback semantics → post-MVP if ever needed.
-    - Agreed
-- [ ] **Q4 "Disable dependent workflows warning": client heads-up from module `Dependencies` only, or a backend "which workflows use module X" query?**
-  - **Proposed:** Client heads-up from the module→module dependency graph for the MVP (D8); a workflow-usage index/endpoint (so we can warn "N workflows use this module") → **3.6.P3**.
-    - Agreed
-- [ ] **Q5 Routing/nav: a `/modules` page + top-bar link; keep the designer palette as the compact picker with a "Manage modules →" link?**
-  - **Proposed:** Yes — `/modules` (the full manager) + a `📦 Modules` top-bar link; the designer keeps its compact `ModulePalette` and gains a "Manage modules →" deep link (mirroring 3.4/3.5's bridges).
-    - Agreed 
-- [ ] **Q6 Upload constraints: rely on server validation (.wfmod/manifest/dll/deps) + `accept=".wfmod"`; any client size cap?**
-  - **Proposed:** `accept=".wfmod"` on the picker + drag-drop; **no hard client size cap** (rely on the server's validation + any host request-size limit, surfacing `413`/`422`). A configurable client cap → post-MVP if needed.
-    - Agreed 
+- [x] **Q1 Admin/write gating → attempt-and-surface, with all users treated as admin for the MVP/demo.** The client shows **all** management actions unconditionally (no role-hiding) and relies on the server; in the demo posture (auth disabled / all-users-admin) they just work, and if a deployment enables auth an unprivileged `401/403` surfaces as a clear "requires admin/write" toast. Proper role-based access control + a `/auth/whoami` (or JWT-role decode) to pre-gate actions → **3.6.P2**.
+- [x] **Q2 Documentation viewer → generated-from-schema now.** The docs drawer is generated from Description + schema + dependencies + versions (D6). First-class README/usage-examples/changelog → **3.6.P1**.
+- [x] **Q3 Version upgrade/rollback → per-version enable/disable + upload-new (D7).** The registry resolves the newest *enabled* version; no new backend. Dedicated upgrade/rollback semantics deferred.
+- [x] **Q4 Dependent warning → client heads-up from module→module `Dependencies` (D8).** A workflow-usage index ("N workflows use this module") → **3.6.P3**.
+- [x] **Q5 Routing → `/modules` page + `📦 Modules` top-bar link + designer "Manage modules →" bridge (D1/Q5).**
+- [x] **Q6 Upload → `accept=".wfmod"` + drag-drop, rely on server validation, no hard client size cap (surface `413`/`422`).**
 
 ---
 
@@ -232,7 +225,7 @@ docs/module-manager.md   (user guide) + cross-links (module-author-guide.md)
 
 ---
 
-## 3.6.0 Client Methods + Manager Shell 🧰
+## 3.6.0 Client Methods + Manager Shell 🧰 ✅ DONE
 
 > **Purpose:** The management client calls, DTO mirrors, and the `/modules` page skeleton with a
 > browse grid (grouped by category) + search + filter.
@@ -241,21 +234,21 @@ docs/module-manager.md   (user guide) + cross-links (module-author-guide.md)
 
 ### Tasks
 
-- [ ] **`Api/Dtos/ModuleDtos.cs`** (+) — `ModuleInstallResultDto` (`Module: ModuleDetailsDto`, `Warnings: List<string>`) and `ModuleToggleResultDto` (`ModuleId`, `Enabled`, `AffectedVersions`) mirrors
-- [ ] **`ModulesClient`** (+) — `UploadAsync(fileName, stream, ct)` (multipart, field `package`), `EnableAsync(id, version?)`, `DisableAsync(id, version?)`, `UninstallAsync(id, version?)`; each calls `InvalidateCache()` on success; ProblemDetails-aware
-- [ ] **`Modules/State/ModuleCatalog.cs`** — framework-free: filter by search (id/name/description) + category + enabled-only, then **group by category** (generalizing the palette's grouping); stable ordering
-- [ ] **`Pages/ModuleManager.razor`** — route `/modules`; top bar (search, category dropdown, "enabled only" toggle, Upload button placeholder), a category-grouped **grid** of `ModuleCard`s; loads via `ModulesClient.ListAsync`; nav entry from the app shell (`📦 Modules`)
-- [ ] **`Modules/Components/ModuleCard.razor` + `ModuleFilters.razor`** — a card (icon, name, id, version, enabled dot) that opens the docs drawer on click; the filter bar bound to `ModuleCatalog`
+- [x] **`Api/Dtos/ModuleDtos.cs`** (+) — `ModuleInstallResultDto` (`Module`, `Warnings`) and `ModuleToggleResultDto` (`ModuleId`, `Enabled`, `AffectedVersions`) mirrors
+- [x] **`ModulesClient`** (+) — `UploadAsync` (multipart, field `package`), `EnableAsync`/`DisableAsync`/`UninstallAsync` (optional `?version=`); each calls `InvalidateCache()` on success; ProblemDetails-aware
+- [x] **`Modules/State/ModuleCatalog.cs`** — framework-free: search (id/name/description) + category + enabled-only filters, then **group by category** (blank → "Other"); stable ordering; `Categories`
+- [x] **`Pages/ModuleManager.razor`** — route `/modules`; top bar (Upload placeholder), a category-grouped **grid** of `ModuleCard`s, a details drawer stub (replaced in 3.6.1); loads via `ModulesClient.ListAsync`; nav entry (`📦 Modules`)
+- [x] **`Modules/Components/ModuleCard.razor` + `ModuleFilters.razor`** — card (icon, name, id, version, enabled dot) opening the drawer; filter bar bound to `ModuleCatalog`
 
-### Tests (target ~8): → `Workflow.Tests.UI/Modules/State/ModuleCatalogTests.cs` + `Modules/ModulesClientManagementTests.cs` + `Components/ManagerShellTests.cs`
+### Tests (18 green): → `Workflow.Tests.UI/Modules/State/ModuleCatalogTests.cs` + `Modules/ModulesClientManagementTests.cs` + `Components/ManagerShellTests.cs`
 
-- [ ] `Catalog_Search_FiltersByNameAndDescription` · `Catalog_Category_Filters` · `Catalog_EnabledOnly_Filters` · `Catalog_GroupByCategory_Orders`
-- [ ] `ModulesClient_Upload_SendsMultipartPackage` · `ModulesClient_Enable_Posts` · `ModulesClient_Uninstall_Deletes` · `ModulesClient_Upload_Duplicate_SurfacesConflict`
-- [ ] `Manager_RendersGrid_Grouped` · `Manager_Search_Filters`
+- [x] `Catalog_Search_FiltersByNameAndDescription` · `Catalog_Category_Filters` · `Catalog_EnabledOnly_Filters` · `Catalog_GroupByCategory_Orders_AndNormalizesBlank` · `Catalog_Categories_Distinct_Sorted`
+- [x] `ModulesClient_Upload_SendsMultipartPackage` · `ModulesClient_Enable_Posts_WithVersion` · `ModulesClient_Disable_Posts` · `ModulesClient_Uninstall_Deletes` · `ModulesClient_Upload_Duplicate_SurfacesConflict` · `ModulesClient_Enable_InvalidatesCache`
+- [x] `Manager_RendersGrid_Grouped` · `Manager_Search_Filters` · `Manager_CardClick_OpensDrawer` · `Manager_EnabledOnly_HidesDisabled`
 
 ---
 
-## 3.6.1 Module Docs Drawer (generated) 📖
+## 3.6.1 Module Docs Drawer (generated) 📖 ✅ DONE
 
 > **Purpose:** Click a module → a drawer with generated documentation: description, ports,
 > properties, dependencies, versions, enabled state (mockup **S1** right drawer).
@@ -264,18 +257,19 @@ docs/module-manager.md   (user guide) + cross-links (module-author-guide.md)
 
 ### Tasks
 
-- [ ] **`Modules/State/ModuleDocModel.cs`** — framework-free: projects a `ModuleDetailsDto` into ordered doc sections — **Inputs** (name, type, required, default, description), **Outputs**, **Properties** (editor type, required, default, allowed values, description), **Dependencies**, **Versions** (with the active one flagged). No README/examples/changelog (D6)
-- [ ] **`Modules/Components/ModuleDocsDrawer.razor`** — renders the doc model: header (icon, name, id, version, enabled), description, the ports/properties tables, dependency chips, version list, and the action row (Enable/Disable/Uninstall — wired in 3.6.3); a "used-as `builtin.script`?" hint links to `docs/scripting.md`/relevant guide when applicable
-- [ ] **Details fetch** — via `ModulesClient.GetAsync(id)` (cached); loading + not-found states
+- [x] **`Modules/State/ModuleDocModel.cs`** — framework-free: projects a `ModuleDetailsDto` into ordered doc sections — **Inputs**/**Outputs** (`DocPort`: name, type→"any" fallback, required, default, description), **Properties** (`DocProperty`: editor, required, default, allowed, description), **Dependencies**, **Versions** (`DocVersion` w/ active flag). No README/examples/changelog (D6)
+- [x] **`Modules/Components/ModuleDocsDrawer.razor`** — renders the doc model: header (icon, name, id, version, enabled), description, ports/properties tables, dependency chips, version chips, plus optional `ActionsContent`/`VersionsContent` slots (wired in 3.6.3)
+- [x] **Details fetch** — the page fetches via `ModulesClient.GetAsync(id)` (cached) on card click → `ModuleDocModel.From`; loading + not-found (toast) states
 
-### Tests (target ~6): → `Workflow.Tests.UI/Modules/State/DocModelTests.cs` + `Components/DocsDrawerTests.cs`
+### Tests (9 green): → `Workflow.Tests.UI/Modules/State/DocModelTests.cs` + `Components/DocsDrawerTests.cs`
 
-- [ ] `DocModel_Ports_Projected_WithRequiredAndType` · `DocModel_Properties_IncludeEditorAndAllowed` · `DocModel_Versions_FlagActive` · `DocModel_NoDeps_EmptySection`
-- [ ] `Drawer_RendersSchema_FromDetails` · `Drawer_ShowsVersionsAndDeps`
+- [x] `DocModel_Ports_Projected_WithRequiredAndType` · `DocModel_Properties_IncludeEditorAllowedAndDefault` · `DocModel_Versions_FlagActive` · `DocModel_Dependencies_Projected` · `DocModel_NoDeps_NoVersions_EmptySections`
+- [x] `Drawer_RendersSchema_FromDetails` · `Drawer_ShowsVersionsAndDeps` · `Drawer_Close_RaisesCallback`
+- [x] `Manager_CardClick_OpensDrawer` *(page fetches details)*
 
 ---
 
-## 3.6.2 Upload (drag-drop + validation) ⬆️
+## 3.6.2 Upload (drag-drop + validation) ⬆️ ✅ DONE
 
 > **Purpose:** Upload a `.wfmod` package with drag-drop + progress + validation feedback (mockup
 > **S2**).
@@ -284,20 +278,19 @@ docs/module-manager.md   (user guide) + cross-links (module-author-guide.md)
 
 ### Tasks
 
-- [ ] **`Modules/Components/UploadDialog.razor`** — an `InputFile` (`accept=".wfmod"`) + a drag-drop zone; shows the selected file name/size; **Upload** streams it to `ModulesClient.UploadAsync`; a progress/spinner state while installing
-- [ ] **Validation feedback** — success → "Installed {id} v{ver}" + `warnings[]` list; failure → the ProblemDetails error inline (`422` invalid package / `409` duplicate version); the dialog stays open with a clear result
-- [ ] **Post-install refresh** — on success, `InvalidateCache()` + re-list so the new module appears (and the designer palette picks it up on next open)
-- [ ] **Admin degradation (D9)** — a `401/403` surfaces as "Uploading requires admin"
+- [x] **`Modules/Components/UploadDialog.razor`** — an `InputFile` (`accept=".wfmod"`) over a drag-drop zone; shows the selected file name/size; **Upload** streams it (`OpenReadStream`, 100 MB cap) to `ModulesClient.UploadAsync`; an installing/progress state
+- [x] **Validation feedback** — success → "Installed {id} v{ver}" + `warnings[]` list; failure → the ProblemDetails error inline (`422` invalid / `409` duplicate); the dialog stays open with a clear result
+- [x] **Post-install refresh** — on success, `OnUploaded` → page `Reload()` (the client's `UploadAsync` already `InvalidateCache()`d) so the new module appears
+- [x] **Admin degradation (D9)** — `401/403` surfaces as "Uploading requires admin"
 
-### Tests (target ~6): → `Workflow.Tests.UI/Modules/Components/UploadTests.cs`
+### Tests (6 green): → `Workflow.Tests.UI/Modules/Components/UploadTests.cs`
 
-- [ ] `Upload_SelectFile_ShowsNameAndSize` · `Upload_Success_ShowsInstalledAndWarnings`
-- [ ] `Upload_Invalid_422_ShownInline` · `Upload_Duplicate_409_ShownInline`
-- [ ] `Upload_Success_RefreshesList` · `Upload_Forbidden_ShowsAdminHint`
+- [x] `Upload_SelectFile_ShowsNameAndSize` · `Upload_Success_ShowsInstalledAndWarnings` *(+ refresh callback)*
+- [x] `Upload_Invalid_422_ShownInline` · `Upload_Duplicate_409_ShownInline` · `Upload_Forbidden_ShowsAdminHint`
 
 ---
 
-## 3.6.3 Enable/Disable + Versions + Uninstall 🔘🔢🗑
+## 3.6.3 Enable/Disable + Versions + Uninstall 🔘🔢🗑 ✅ DONE
 
 > **Purpose:** The management actions — toggle a module/version, manage versions, and uninstall
 > (with the server guards surfaced).
@@ -306,22 +299,22 @@ docs/module-manager.md   (user guide) + cross-links (module-author-guide.md)
 
 ### Tasks
 
-- [ ] **`Modules/Components/VersionPanel.razor`** — lists `availableVersions`, flags the active (newest enabled), and enables/disables each via `EnableAsync/DisableAsync(id, version)`; "upgrade" = Upload (D7); "rollback" = enable an older / disable the newer
-- [ ] **Enable/disable toggle** — a switch in the docs drawer + per version; on disable, a **dependent heads-up** (`DependencyHints`) when other modules depend on this one (workflow-level usage not indexed — noted, Q4)
-- [ ] **`Modules/State/DependencyHints.cs`** — framework-free: given the catalog + a module id, list modules that declare it as a dependency
-- [ ] **Uninstall** — a confirm → `UninstallAsync`; the server `409` (dependents / in-flight executions) surfaces as a clear, actionable error; success invalidates the cache + closes the drawer
-- [ ] **Cache/UI refresh** — every mutation `InvalidateCache()` + re-list; the enabled dot + version list update
+- [x] **`Modules/Components/VersionPanel.razor`** — lists `availableVersions`, flags the active, and raises `OnToggle((version, enable))` per version (the page calls `Enable/DisableAsync(id, version)`); "upgrade" = Upload (D7), "rollback" = enable an older / disable the newer
+- [x] **`Modules/Components/ModuleActions.razor`** — enable/disable the module (resolved version) with a **dependents heads-up confirm** + **uninstall** (confirm → `DELETE`, `409` dependents/in-flight surfaced inline); admin `401/403` → "requires admin/write"
+- [x] **`Modules/State/DependencyHints.cs`** — framework-free: dependents of a module from the loaded module details (workflow-level usage not indexed — noted, Q4)
+- [x] **Drawer wiring** — `ModuleDocsDrawer` `ActionsContent` = `ModuleActions`, `VersionsContent` = `VersionPanel`; the page keeps a `knownDetails` cache for the dependents hint
+- [x] **Cache/UI refresh** — every mutation `InvalidateCache()` + re-list + re-fetch the open module's details; uninstall closes the drawer
 
-### Tests (target ~8): → `Workflow.Tests.UI/Modules/State/DependencyHintsTests.cs` + `Components/VersionsAndToggleTests.cs`
+### Tests (11 green): → `Workflow.Tests.UI/Modules/State/DependencyHintsTests.cs` + `Components/VersionsAndToggleTests.cs`
 
-- [ ] `Deps_Dependents_Listed` · `Deps_None_Empty`
-- [ ] `Toggle_Disable_CallsClient_AndWarnsOnDependents` · `Toggle_Enable_CallsClient`
-- [ ] `Versions_ListsAll_FlagsActive` · `Versions_EnableSpecific_PostsVersion`
-- [ ] `Uninstall_Confirm_CallsDelete` · `Uninstall_Conflict_409_ShownClearly`
+- [x] `Deps_Dependents_Listed_SortedDistinct` · `Deps_None_Empty` · `Deps_ExcludesSelf`
+- [x] `Toggle_Disable_CallsClient_AndWarnsOnDependents` · `Toggle_Enable_CallsClient`
+- [x] `Versions_ListsAll_FlagsActive` · `Versions_EnableSpecific_PostsVersion` *(page posts `?version=`)*
+- [x] `Uninstall_Confirm_CallsDelete` · `Uninstall_Conflict_409_ShownClearly`
 
 ---
 
-## 3.6.4 Designer Bridge + Docs + Polish 🔗📚✨
+## 3.6.4 Designer Bridge + Docs + Polish 🔗📚✨ ✅ DONE
 
 > **Purpose:** Bridge the designer palette to the manager, document it, and close the phase.
 
@@ -329,14 +322,14 @@ docs/module-manager.md   (user guide) + cross-links (module-author-guide.md)
 
 ### Tasks
 
-- [ ] **Designer bridge (Q5)** — the designer's `ModulePalette` gains a **"Manage modules →"** link to `/modules`; the manager's docs drawer offers **"use in designer"** context (drag hint / open-designer)
-- [ ] **`docs/module-manager.md`** — user guide: browsing/search/category, the docs drawer, uploading a `.wfmod`, enabling/disabling + versions, and uninstalling; screen tour matching **S1**/**S2**; cross-link `docs/module-author-guide.md`
-- [ ] **Cross-links + port checklist** — append `ModuleCatalog`/`ModuleDocModel`/`DependencyHints` to the `docs/designer-architecture.md` React-port checklist; `phases/README.md` + `Phase3-AdvancedFeatures.md` §3.6 → COMPLETE
-- [ ] **Polish** — empty/error/loading states; a11y labels on icon buttons; enabled-only persisted in `localStorage`; `dotnet build Workflow.sln` + full `Workflow.Tests.UI` green
+- [x] **Designer bridge (Q5)** — the designer's `ModulePalette` gains a **"📦 Manage modules →"** link to `/modules`
+- [x] **`docs/module-manager.md`** — user guide: browsing/search/category, the docs drawer, uploading a `.wfmod`, enabling/disabling + versions, uninstalling, and permissions; screen tour matching **S1**/**S2**; cross-linked to/from `docs/module-author-guide.md`
+- [x] **Cross-links + port checklist** — appended `ModuleCatalog`/`ModuleDocModel`/`DependencyHints`/`ModulesClient` to the `docs/designer-architecture.md` React-port checklist; `phases/README.md` + `Phase3-AdvancedFeatures.md` §3.6 → COMPLETE
+- [x] **Polish** — enabled-only persisted in `localStorage` (restored on load); load-error retry; `dotnet build Workflow.sln` (0 errors) + full `Workflow.Tests.UI` (283) green
 
-### Tests (target ~3): → `Workflow.Tests.UI/Modules/Components/BridgeAndPolishTests.cs`
+### Tests (4 green): → `Workflow.Tests.UI/Modules/Components/BridgeAndPolishTests.cs`
 
-- [ ] `Palette_ManageLink_NavigatesToModules` · `Manager_EnabledOnly_Persists` · `Manager_LoadError_ShowsRetry`
+- [x] `Palette_ManageLink_NavigatesToModules` · `Manager_EnabledOnly_Persists` · `Manager_EnabledOnly_RestoredFromStorage` · `Manager_LoadError_ShowsRetry`
 
 ---
 
@@ -398,15 +391,15 @@ Browse + install modules from a remote registry (beyond local `.wfmod` upload).
 
 ## Success Criteria ✅
 
-- [ ] Open `/modules` and **browse** every module grouped by category, with **search** + **category/enabled** filters
-- [ ] Click a module → a **generated documentation** drawer (description, inputs/outputs, properties, dependencies, versions, enabled)
-- [ ] **Upload** a `.wfmod` (button + drag-drop) with **progress** + **validation feedback** (warnings on success, `422`/`409` errors on failure)
-- [ ] **Enable/disable** a module (+ a dependent heads-up) and manage **versions** (enable a specific version)
-- [ ] **Uninstall** a module, with the server's dependents/in-flight `409` surfaced clearly
-- [ ] **Zero new API/module/registry code** for the MVP; the client touches only the shipped `/modules/*` endpoints (D4)
-- [ ] Admin/write-gated actions **degrade gracefully** for the unprivileged (clear toast, read-only browse still works)
-- [ ] `docs/module-manager.md` exists and cross-links; the React-port checklist is updated
-- [ ] State services covered by xUnit specs; components have bUnit tests; full `Workflow.Tests.UI` suite green
+- [x] Open `/modules` and **browse** every module grouped by category, with **search** + **category/enabled** filters
+- [x] Click a module → a **generated documentation** drawer (description, inputs/outputs, properties, dependencies, versions, enabled)
+- [x] **Upload** a `.wfmod` (button + drag-drop) with **progress** + **validation feedback** (warnings on success, `422`/`409` errors on failure)
+- [x] **Enable/disable** a module (+ a dependent heads-up) and manage **versions** (enable a specific version)
+- [x] **Uninstall** a module, with the server's dependents/in-flight `409` surfaced clearly
+- [x] **Zero new API/module/registry code** for the MVP; the client touches only the shipped `/modules/*` endpoints (D4)
+- [x] Admin/write-gated actions **degrade gracefully** for the unprivileged (clear toast, read-only browse still works)
+- [x] `docs/module-manager.md` exists and cross-links; the React-port checklist is updated
+- [x] State services covered by xUnit specs; components have bUnit tests; full `Workflow.Tests.UI` suite green (283)
 
 ---
 

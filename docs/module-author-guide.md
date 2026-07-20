@@ -4,6 +4,9 @@
 
 This guide covers everything you need to know to create, package, and ship a custom workflow module that can be dynamically loaded by DotFlow at runtime~ 🎀
 
+> 📦 Once packaged, install + manage your module through the **[Module Manager](module-manager.md)**
+> (`/modules`) — upload the `.wfmod`, browse its generated docs, and enable/disable/uninstall it.
+
 ---
 
 ## 🌸 Quick Start

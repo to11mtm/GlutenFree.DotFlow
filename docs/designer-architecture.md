@@ -112,6 +112,22 @@ xUnit specs — all portable:
 3.5's **only backend addition** is two read-only endpoints (`/executions/{id}/detail` + `/nodes`) —
 a React port consumes them unchanged.
 
+## Module Manager state services (Phase 3.6)
+
+The Module Manager (`/modules`, see [`module-manager.md`](module-manager.md)) is a client feature
+over the shipped `/modules/*` endpoints (read 2.7.3 + write 2.8.5) — **zero new backend**. Its
+framework-free services with xUnit specs port cleanly:
+
+| Service | Responsibility | Spec |
+|---------|----------------|------|
+| `ModuleCatalog` | search + category + enabled-only filter + category grouping | `ModuleCatalogTests` |
+| `ModuleDocModel` | details DTO → generated documentation (ports/properties/deps/versions) | `DocModelTests` |
+| `DependencyHints` | module→module dependents for the disable heads-up | `DependencyHintsTests` |
+| `ModulesClient` (+upload/enable/disable/uninstall) | typed `/modules/*` REST (multipart upload) | `ModulesClientManagementTests` |
+
+The only browser-API surface is the `InputFile`/drag-drop upload in `UploadDialog` (swap for a React
+file input + `FormData`).
+
 ## Performance notes
 
 - Node views are keyed by id (`@key`); pan/zoom mutate only the transform style, so panning
