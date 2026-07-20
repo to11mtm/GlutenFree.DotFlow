@@ -873,6 +873,8 @@ Option B: React 🎯
 
 ### 3.5 UI - Execution Monitor (Week 21)
 
+> **📋 Detailed sliced plan available:** [Phase3-5-ExecutionMonitor.md](Phase3-5-ExecutionMonitor.md) — a dedicated **"Mission Control"** area (`/monitor` + `/monitor/{executionId}` in `Workflow.UI.Client`) to watch running workflows live, browse history, drill into node-by-node progress/timings/IO/logs, and **replay** a finished run. **Mostly reuse**: the 3.2 hub already broadcasts every event to an admin-gated `SubscribeToAll` firehose (**no hub changes**), and 3.3.c's `RunState` + `RunOverlay` (live node viz) + `ExecutionHistory` already exist — 3.5 **generalizes them out of `Designer/`** so both share them. The **only backend work** was **two small read-only endpoints** — `GET /executions/{id}/detail` and `GET /executions/{id}/nodes` — exposing the `ExecutionRecord`/`NodeExecutionRecord` data (inputs/outputs/timings/error/loop) the engine **already persists**; **no engine/persistence/hub changes**. Six slices: endpoints + client methods (3.5.0), the `RunState`/`RunOverlay` refactor (3.5.1), the live dashboard w/ event-merge + polling fallback (3.5.2), the execution detail + node inspector (3.5.3), log viewer + filters/sort (3.5.4), and replay timeline + docs (3.5.5). Mockups S1/S2 included. The D2 contracts-only + framework-free boundary keeps the React+TS port additive. Week 32; Q1–Q6 resolved ✅. **✅ COMPLETE — all 6 slices implemented, ~63 monitor tests (242 total UI + 4 endpoint), documented ([`docs/execution-monitor.md`](../docs/execution-monitor.md)).**
+
 **Tasks:**
 - [ ] **Implement execution list view** 📋
   - [ ] Table/grid component

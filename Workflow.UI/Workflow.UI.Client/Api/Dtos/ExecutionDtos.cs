@@ -53,3 +53,49 @@ public sealed record ExecutionDto(
     DateTimeOffset StartedAt,
     DateTimeOffset? CompletedAt,
     string? TriggeredBy);
+
+/// <summary>📊 Phase 3.5.0 — Persisted execution detail (mirrors <c>ExecutionDetailDto</c>)~ ✨.</summary>
+/// <param name="ExecutionId">The execution id.</param>
+/// <param name="WorkflowId">The owning workflow id.</param>
+/// <param name="State">State string.</param>
+/// <param name="StartedAt">Started timestamp.</param>
+/// <param name="CompletedAt">Completed timestamp (if terminal).</param>
+/// <param name="DurationMs">Total duration in ms (if terminal).</param>
+/// <param name="Inputs">The execution inputs.</param>
+/// <param name="Outputs">The execution outputs (if complete).</param>
+/// <param name="Error">The error (if failed).</param>
+/// <param name="TriggeredBy">Caller id / trigger source.</param>
+public sealed record ExecutionDetailDto(
+    Guid ExecutionId,
+    Guid WorkflowId,
+    string State,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    double? DurationMs,
+    Dictionary<string, JsonElement>? Inputs,
+    Dictionary<string, JsonElement>? Outputs,
+    string? Error,
+    string? TriggeredBy);
+
+/// <summary>🌸 Phase 3.5.0 — Persisted node-execution record (mirrors <c>NodeExecutionRecordDto</c>)~ ✨.</summary>
+/// <param name="NodeId">The node id.</param>
+/// <param name="State">The node state string.</param>
+/// <param name="StartedAt">Started timestamp.</param>
+/// <param name="CompletedAt">Completed timestamp (if terminal).</param>
+/// <param name="DurationMs">Node duration in ms.</param>
+/// <param name="Inputs">The node inputs.</param>
+/// <param name="Outputs">The node outputs.</param>
+/// <param name="Error">The error (if failed).</param>
+/// <param name="LoopId">The loop scope id, if any.</param>
+/// <param name="LoopIteration">The 1-based loop iteration, if any.</param>
+public sealed record NodeExecutionRecordDto(
+    string NodeId,
+    string State,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    double DurationMs,
+    Dictionary<string, JsonElement>? Inputs,
+    Dictionary<string, JsonElement>? Outputs,
+    string? Error,
+    string? LoopId,
+    int? LoopIteration);

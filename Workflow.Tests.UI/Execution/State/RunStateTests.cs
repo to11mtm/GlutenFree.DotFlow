@@ -2,11 +2,11 @@
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.Tests.UI.State;
+namespace Workflow.Tests.UI.Execution.State;
 
 using System.Collections.Generic;
 using FluentAssertions;
-using Workflow.UI.Client.Designer.State;
+using Workflow.UI.Client.Execution.State;
 using Xunit;
 
 /// <summary>

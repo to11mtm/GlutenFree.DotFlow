@@ -1,0 +1,88 @@
+@namespace Workflow.UI.Client.Execution.Components
+@inject IJSRuntime JS
+@using Workflow.UI.Client.Execution.State
+
+@* 📜 Phase 3.5.4 — The event-derived run-log viewer: level filter + search + copy/download (D7). *@
+<div class="df-logviewer" data-testid="log-viewer">
+    <div class="df-logviewer__bar">
+        <select class="df-input df-input--tiny" data-testid="log-level" @bind="level">
+            <option value="All">All</option>
+            <option value="Debug">Debug</option>
+            <option value="Info">Info</option>
+            <option value="Warning">Warning</option>
+            <option value="Error">Error</option>
+        </select>
+        <input class="df-input df-input--tiny" data-testid="log-search" placeholder="🔍 logs" @bind="search" @bind:event="oninput" />
+        <button class="df-btn df-btn--small" data-testid="log-copy" @onclick="Copy">copy</button>
+        <button class="df-btn df-btn--small" data-testid="log-download" @onclick="Download">download .txt</button>
+    </div>
+    <div class="df-logviewer__body">
+        @if (Filtered.Count == 0)
+        {
+            <div class="df-empty" data-testid="log-empty">No log lines@(Entries.Count > 0 ? " match the filter" : " yet").</div>
+        }
+        @foreach (var entry in Filtered)
+        {
+            <div class="df-logviewer__line df-logviewer__line--@RunLogClassifier.LevelOf(entry.Text).ToLowerInvariant()" data-testid="log-line">
+                <span class="df-logviewer__ts">@entry.Timestamp.ToString("HH:mm:ss")</span>
+                <span class="df-logviewer__lvl">@RunLogClassifier.LevelOf(entry.Text)</span>
+                @entry.Text
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string level = "All";
+    private string search = string.Empty;
+
+    /// <summary>The run-log entries to render.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<RunLogEntry> Entries { get; set; } = System.Array.Empty<RunLogEntry>();
+
+    private IReadOnlyList<RunLogEntry> Filtered
+    {
+        get
+        {
+            IEnumerable<RunLogEntry> q = this.Entries;
+            if (!string.Equals(this.level, "All", System.StringComparison.OrdinalIgnoreCase))
+            {
+                q = q.Where(e => string.Equals(RunLogClassifier.LevelOf(e.Text), this.level, System.StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(this.search))
+            {
+                q = q.Where(e => e.Text.Contains(this.search, System.StringComparison.OrdinalIgnoreCase));
+            }
+
+            return q.ToList();
+        }
+    }
+
+    private string PlainText()
+        => string.Join("\n", this.Filtered.Select(e => $"{e.Timestamp:HH:mm:ss} [{RunLogClassifier.LevelOf(e.Text)}] {e.Text}"));
+
+    private async Task Copy()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", this.PlainText());
+        }
+        catch
+        {
+            // clipboard unavailable — best effort.
+        }
+    }
+
+    private async Task Download()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dotflowDownload", "run-log.txt", this.PlainText());
+        }
+        catch
+        {
+            // download helper unavailable — best effort.
+        }
+    }
+}

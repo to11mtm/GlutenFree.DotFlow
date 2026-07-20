@@ -10,6 +10,8 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Workflow.UI.Client.Designer.Components;
 using Workflow.UI.Client.Designer.State;
+using Workflow.UI.Client.Execution.Components;
+using Workflow.UI.Client.Execution.State;
 using Xunit;
 
 /// <summary>

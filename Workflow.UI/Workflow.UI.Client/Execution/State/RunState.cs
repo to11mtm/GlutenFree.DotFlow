@@ -2,12 +2,13 @@
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.UI.Client.Designer.State;
+namespace Workflow.UI.Client.Execution.State;
 
 using System;
 using System.Collections.Generic;
 
-/// <summary>🏃 Phase 3.3.c — Per-node run state for the execution overlay~ ✨.</summary>
+/// <summary>🏃 Phase 3.3.c / 3.5.1 — Per-node run state for the execution overlay (shared by the
+/// designer and the monitor)~ ✨.</summary>
 public enum NodeRunState
 {
     /// <summary>Not started.</summary>
@@ -38,8 +39,10 @@ public sealed record NodeRunStatus(NodeRunState State, double? DurationMs = null
 public sealed record RunLogEntry(DateTimeOffset Timestamp, string Text);
 
 /// <summary>
-/// 🏃 Phase 3.3.c — Framework-free live/historical execution state for the run overlay. Fed by the
-/// SignalR hub (c.1) or a status snapshot (c.2); the canvas paints from <see cref="CssClassFor"/>~ ✨.
+/// 🏃 Phase 3.3.c / 3.5.1 — Framework-free live/historical execution state for the run overlay + the
+/// monitor's detail view. Fed by the SignalR hub (3.3.c.1 / 3.5) or a status snapshot (3.3.c.2 / 3.5);
+/// views paint from <see cref="CssClassFor"/>. Generalized out of <c>Designer/State</c> so the
+/// designer and the execution monitor share one model (3.5.1 D3)~ ✨.
 /// </summary>
 public sealed class RunState
 {

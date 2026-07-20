@@ -95,6 +95,23 @@ port mechanically:
 The only JS-interop surface is the shared `monaco-interop.js` (editor + completion/hover provider
 registration) — swap for `@monaco-editor/react` in a port.
 
+## Execution Monitor state services (Phase 3.5)
+
+The Execution Monitor (`/monitor`, see [`execution-monitor.md`](execution-monitor.md)) reuses the
+shared `RunState` (moved to `Execution/State` in 3.5.1) and adds these framework-free services with
+xUnit specs — all portable:
+
+| Service | Responsibility | Spec |
+|---------|----------------|------|
+| `MonitorState` + `MonitorRow` | live dashboard rows + REST-seed + hub event merge | `MonitorStateTests` |
+| `ExecutionFilterModel` + `RunLogClassifier` | status/date→server + duration/sort client-side + log-level classification | `FilterModelTests` |
+| `ReplayCursor` | read-only step/scrub over ordered node records | `ReplayCursorTests` |
+| `RunState` (shared, moved) | live/historical node run state + run log | `RunStateTests` |
+| `ExecutionsClient` (+detail/nodes) · `RealTimeClient` (+SubscribeToAll) | typed REST + hub firehose | `ExecutionsClientMonitorTests` |
+
+3.5's **only backend addition** is two read-only endpoints (`/executions/{id}/detail` + `/nodes`) —
+a React port consumes them unchanged.
+
 ## Performance notes
 
 - Node views are keyed by id (`@key`); pan/zoom mutate only the transform style, so panning

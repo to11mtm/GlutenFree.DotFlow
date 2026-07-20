@@ -2,6 +2,7 @@
 @using Workflow.UI.Client.Api
 @using Workflow.UI.Client.Api.Dtos
 @inject ExecutionsClient Executions
+@inject NavigationManager Nav
 
 <div class="df-history">
     <div class="df-history__title">🕘 Executions</div>
@@ -24,6 +25,8 @@
                 <span class="df-history__id">@e.ExecutionId.ToString()[..8]…</span>
                 <span class="df-history__time">@e.StartedAt.ToString("HH:mm")</span>
                 <span class="df-history__dur">@Duration(e)</span>
+                <button class="df-btn df-btn--small" data-testid="open-in-monitor" title="Open in Monitor"
+                        @onclick:stopPropagation="true" @onclick="() => OpenInMonitor(e.ExecutionId)">📡</button>
             </div>
         }
     }
@@ -70,6 +73,8 @@
         "Running" => "🔄",
         _ => "⬜",
     };
+
+    private void OpenInMonitor(System.Guid executionId) => this.Nav.NavigateTo($"/monitor/{executionId}");
 
     private static string Duration(ExecutionDto e)
         => e.CompletedAt is { } done ? $"{(done - e.StartedAt).TotalSeconds:F1}s" : "…";

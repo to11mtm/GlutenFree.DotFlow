@@ -1,0 +1,125 @@
+@namespace Workflow.UI.Client.Execution.Components
+@using System.Text.Json
+@using Workflow.UI.Client.Api.Dtos
+
+@* 🔎 Phase 3.5.3 — The node list + a selected node's inputs/outputs/error (from persisted records or
+   synthesized from live run state). *@
+<div class="df-nodeinspect">
+    <div class="df-nodeinspect__list" data-testid="node-list">
+        @if (Nodes.Count == 0)
+        {
+            <div class="df-empty" data-testid="nodes-empty">No node records.</div>
+        }
+        @foreach (var node in Nodes)
+        {
+            <button type="button" class="df-nodeinspect__node @(node.NodeId == selected ? "df-nodeinspect__node--active" : "")"
+                    data-testid="node-@node.NodeId" @onclick="() => Select(node.NodeId)">
+                <span>@IconFor(node.State)</span>
+                <span class="df-nodeinspect__name">@node.NodeId</span>
+                @if (node.LoopIteration is { } it)
+                {
+                    <span class="df-nodeinspect__loop">#@it</span>
+                }
+                <span class="df-nodeinspect__dur">@Duration(node)</span>
+            </button>
+        }
+    </div>
+
+    @if (Current is { } sel)
+    {
+        <div class="df-nodeinspect__detail" data-testid="node-detail">
+            <div class="df-nodeinspect__head">
+                <strong>@sel.NodeId</strong> · @IconFor(sel.State) @sel.State · @Duration(sel)
+                @if (sel.LoopId is not null)
+                {
+                    <span class="df-nodeinspect__loop">loop @sel.LoopId #@sel.LoopIteration</span>
+                }
+            </div>
+            <div class="df-nodeinspect__io">
+                <div>
+                    <div class="df-nodeinspect__label">inputs</div>
+                    <pre class="df-nodeinspect__json" data-testid="node-inputs">@Pretty(sel.Inputs)</pre>
+                </div>
+                <div>
+                    <div class="df-nodeinspect__label">outputs</div>
+                    <pre class="df-nodeinspect__json" data-testid="node-outputs">@Pretty(sel.Outputs)</pre>
+                </div>
+            </div>
+            @if (sel.Error is not null)
+            {
+                <div class="df-nodeinspect__error" data-testid="node-error">
+                    <div class="df-nodeinspect__label">error</div>
+                    @sel.Error
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string? selected;
+
+    /// <summary>The node records to render.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<NodeExecutionRecordDto> Nodes { get; set; } = System.Array.Empty<NodeExecutionRecordDto>();
+
+    /// <summary>Raised when a node is selected (for the parent, e.g. replay sync).</summary>
+    [Parameter]
+    public EventCallback<string> OnSelect { get; set; }
+
+    private NodeExecutionRecordDto? Current
+    {
+        get
+        {
+            if (this.Nodes.Count == 0)
+            {
+                return null;
+            }
+
+            return this.Nodes.FirstOrDefault(n => n.NodeId == this.selected) ?? this.Nodes[0];
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (this.selected is null || this.Nodes.All(n => n.NodeId != this.selected))
+        {
+            this.selected = this.Nodes.Count > 0 ? this.Nodes[0].NodeId : null;
+        }
+    }
+
+    private Task Select(string nodeId)
+    {
+        this.selected = nodeId;
+        return this.OnSelect.HasDelegate ? this.OnSelect.InvokeAsync(nodeId) : Task.CompletedTask;
+    }
+
+    private static string Duration(NodeExecutionRecordDto n)
+        => n.DurationMs > 0 ? (n.DurationMs >= 1000 ? $"{n.DurationMs / 1000:F1}s" : $"{n.DurationMs:F0}ms") : "—";
+
+    private static string Pretty(Dictionary<string, JsonElement>? map)
+    {
+        if (map is null || map.Count == 0)
+        {
+            return "(none)";
+        }
+
+        try
+        {
+            return JsonSerializer.Serialize(map, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException)
+        {
+            return "(unserializable)";
+        }
+    }
+
+    private static string IconFor(string state) => state switch
+    {
+        "Completed" => "✅",
+        "Failed" => "❌",
+        "Running" => "🔄",
+        "Skipped" => "⏭",
+        _ => "⬜",
+    };
+}

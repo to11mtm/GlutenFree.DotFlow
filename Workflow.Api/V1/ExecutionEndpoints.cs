@@ -41,6 +41,8 @@ public static class ExecutionEndpoints
 
         var executions = v1.MapGroup("/executions").WithTags("Executions");
         executions.MapGet("/{executionId:guid}", StatusHandler).WithName("GetExecution").RequireAuthorization(AuthConstants.WorkflowReadPolicy);
+        executions.MapGet("/{executionId:guid}/detail", DetailHandler).WithName("GetExecutionDetail").RequireAuthorization(AuthConstants.WorkflowReadPolicy);
+        executions.MapGet("/{executionId:guid}/nodes", NodesHandler).WithName("GetExecutionNodes").RequireAuthorization(AuthConstants.WorkflowReadPolicy);
         executions.MapPost("/{executionId:guid}/cancel", CancelHandler).WithName("CancelExecution").RequireAuthorization(AuthConstants.WorkflowExecutePolicy);
         executions.MapGet("/", ListHandler).WithName("ListExecutions").RequireAuthorization(AuthConstants.WorkflowReadPolicy);
 
@@ -151,6 +153,37 @@ public static class ExecutionEndpoints
         return status is null
             ? ApiResults.NotFoundProblem($"Execution '{executionId}' was not found.")
             : Results.Ok(ExecutionStatusDto.From(status));
+    }
+
+    private static async Task<IResult> DetailHandler(HttpContext http, Guid executionId, CancellationToken ct)
+    {
+        var history = http.RequestServices.GetService<IExecutionHistoryRepository>();
+        if (history is null)
+        {
+            return ApiResults.ServiceUnavailableProblem("No persistence provider is configured.");
+        }
+
+        var record = await history.GetExecutionAsync(executionId, ct).ConfigureAwait(false);
+        return record is null
+            ? ApiResults.NotFoundProblem($"Execution '{executionId}' was not found.")
+            : Results.Ok(ExecutionDetailDto.From(record));
+    }
+
+    private static async Task<IResult> NodesHandler(HttpContext http, Guid executionId, CancellationToken ct)
+    {
+        var history = http.RequestServices.GetService<IExecutionHistoryRepository>();
+        if (history is null)
+        {
+            return ApiResults.ServiceUnavailableProblem("No persistence provider is configured.");
+        }
+
+        var records = await history.GetNodeExecutionsAsync(executionId, ct).ConfigureAwait(false);
+        var dto = records
+            .OrderBy(r => r.StartedAt)
+            .Select(NodeExecutionRecordDto.From)
+            .ToList();
+
+        return Results.Ok(dto);
     }
 
     private static async Task<IResult> CancelHandler(HttpContext http, Guid executionId, CancellationToken ct)

@@ -64,15 +64,65 @@ public sealed class ExecutionsClient
     public Task CancelAsync(Guid executionId, CancellationToken ct = default)
         => ApiHttp.SendNoContentAsync(this.http, new HttpRequestMessage(HttpMethod.Post, $"api/v1/executions/{executionId}/cancel"), ct);
 
-    /// <summary>Lists executions for a workflow (paged)~ 🕘.</summary>
+    /// <summary>Lists executions for a workflow (paged, optional status/date filters)~ 🕘.</summary>
     /// <param name="workflowId">The workflow id.</param>
     /// <param name="page">1-based page.</param>
     /// <param name="pageSize">Page size.</param>
+    /// <param name="status">Optional state filter (e.g. <c>Running</c>/<c>Completed</c>/<c>Failed</c>).</param>
+    /// <param name="from">Optional started-after filter.</param>
+    /// <param name="to">Optional started-before filter.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The page of execution rows.</returns>
-    public Task<PageDto<ExecutionDto>> ListAsync(Guid workflowId, int page = 1, int pageSize = 20, CancellationToken ct = default)
-        => ApiHttp.SendAsync<PageDto<ExecutionDto>>(
-            this.http,
-            new HttpRequestMessage(HttpMethod.Get, $"api/v1/executions?workflowId={workflowId}&page={page}&pageSize={pageSize}"),
-            ct);
+    public Task<PageDto<ExecutionDto>> ListAsync(
+        Guid workflowId,
+        int page = 1,
+        int pageSize = 20,
+        string? status = null,
+        DateTimeOffset? from = null,
+        DateTimeOffset? to = null,
+        CancellationToken ct = default)
+    {
+        var url = $"api/v1/executions?workflowId={workflowId}&page={page}&pageSize={pageSize}";
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            url += $"&status={Uri.EscapeDataString(status)}";
+        }
+
+        if (from is { } f)
+        {
+            url += $"&from={Uri.EscapeDataString(f.ToString("O"))}";
+        }
+
+        if (to is { } t)
+        {
+            url += $"&to={Uri.EscapeDataString(t.ToString("O"))}";
+        }
+
+        return ApiHttp.SendAsync<PageDto<ExecutionDto>>(this.http, new HttpRequestMessage(HttpMethod.Get, url), ct);
+    }
+
+    /// <summary>Gets the persisted execution detail (renders even after the run leaves memory)~ 📊.</summary>
+    /// <param name="executionId">The execution id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The detail, or null if unknown.</returns>
+    public async Task<ExecutionDetailDto?> GetDetailAsync(Guid executionId, CancellationToken ct = default)
+    {
+        try
+        {
+            return await ApiHttp.SendAsync<ExecutionDetailDto>(
+                this.http, new HttpRequestMessage(HttpMethod.Get, $"api/v1/executions/{executionId}/detail"), ct).ConfigureAwait(false);
+        }
+        catch (ApiException ex) when (ex.Error.StatusCode == 404)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Gets the persisted node-execution records for an execution (ordered by start)~ 🌸.</summary>
+    /// <param name="executionId">The execution id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The node records (empty when none).</returns>
+    public Task<List<NodeExecutionRecordDto>> GetNodesAsync(Guid executionId, CancellationToken ct = default)
+        => ApiHttp.SendAsync<List<NodeExecutionRecordDto>>(
+            this.http, new HttpRequestMessage(HttpMethod.Get, $"api/v1/executions/{executionId}/nodes"), ct);
 }

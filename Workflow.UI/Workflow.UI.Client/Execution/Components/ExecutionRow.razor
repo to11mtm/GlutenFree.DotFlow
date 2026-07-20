@@ -1,0 +1,64 @@
+@namespace Workflow.UI.Client.Execution.Components
+@using Workflow.UI.Client.Execution.State
+
+@* 🖥️ Phase 3.5.2 — A single execution row (live or terminal) in the monitor dashboard. *@
+<div class="df-execrow" data-testid="execrow-@Row.ExecutionId">
+    <span class="df-execrow__state df-execrow__state--@Row.State.ToLowerInvariant()">@IconFor(Row.State)</span>
+    <span class="df-execrow__wf">@(Row.WorkflowId?.ToString()[..8] ?? "—")</span>
+    @if (Row.IsRunning)
+    {
+        <span class="df-execrow__progress">
+            <span class="df-execrow__bar" style="width:@(Row.Progress)%;"></span>
+        </span>
+        <span class="df-execrow__node">@(Row.CurrentNode ?? "…")</span>
+    }
+    else
+    {
+        <span class="df-execrow__dur">@Duration()</span>
+        @if (Row.Error is not null)
+        {
+            <span class="df-execrow__err" title="@Row.Error">error</span>
+        }
+    }
+    <span class="df-execrow__id">@Row.ExecutionId.ToString()[..8]…</span>
+    <span class="df-execrow__actions">
+        <button class="df-btn df-btn--small" data-testid="row-open" @onclick="() => OnOpen.InvokeAsync(Row.ExecutionId)">open →</button>
+        @if (Row.IsRunning)
+        {
+            <button class="df-btn df-btn--danger df-btn--small" data-testid="row-cancel" @onclick="() => OnCancel.InvokeAsync(Row.ExecutionId)">cancel</button>
+        }
+    </span>
+</div>
+
+@code {
+    /// <summary>The row to render.</summary>
+    [Parameter, EditorRequired]
+    public MonitorRow Row { get; set; } = default!;
+
+    /// <summary>Raised when the row's open button is clicked.</summary>
+    [Parameter]
+    public EventCallback<System.Guid> OnOpen { get; set; }
+
+    /// <summary>Raised when the row's cancel button is clicked.</summary>
+    [Parameter]
+    public EventCallback<System.Guid> OnCancel { get; set; }
+
+    private string Duration()
+    {
+        if (Row.DurationMs is { } ms)
+        {
+            return ms >= 1000 ? $"{ms / 1000:F1}s" : $"{ms:F0}ms";
+        }
+
+        return Row.CompletedAt is { } done ? $"{(done - Row.StartedAt).TotalSeconds:F1}s" : "—";
+    }
+
+    private static string IconFor(string state) => state switch
+    {
+        "Completed" => "✅",
+        "Failed" => "❌",
+        "Cancelled" => "🛑",
+        "Running" => "⏱",
+        _ => "⬜",
+    };
+}
