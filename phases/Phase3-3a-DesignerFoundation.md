@@ -57,20 +57,20 @@ Made with 💖 by Ami-Chan! UwU ✨
 
 ### Tasks
 
-- [ ] **Layout + tokens** — `MainLayout` with top bar (product name, settings, auth status dot); `wwwroot/css/tokens.css` (colors incl. node-state palette: pending/running/completed/failed/skipped, spacing, type scale, dark-friendly defaults); scoped CSS per component (D4)
-- [ ] **Routing** — `/` → WorkflowList · `/designer/{id:guid}` → Designer · `/designer/new` → Designer (blank) · `/settings` → Settings
-- [ ] **Settings/auth pane (D9)** — API base URL display, token textarea (JWT) or API-key input, "remember on this device" toggle (`localStorage`), connection test button (`GET /api/v1/status` → 🟢/🔴 + version)
-- [ ] **WorkflowList page (S1)** — paged table from `WorkflowsClient.ListAsync`: name/version/node count/updated; search box (server `?search=` if supported, else client filter); actions: **Open** (navigate), **▶ Run** (fire + toast with execution id), **🗑 Delete** (confirm dialog → DELETE; admin-policy failures surface the 403 ProblemDetails cleanly)
-- [ ] **[＋ New Workflow]** — name prompt dialog → navigate to `/designer/new` with the name staged (POST happens on first save, 3.3.b.4)
-- [ ] **Error + toast surface** — a lightweight `Toasts` service + component (info/success/error), used by every page; API failures render title + detail
-- [ ] **Loading/empty states** — skeleton rows while loading; friendly empty-state ("No workflows yet — create one!")
+- [x] **Layout + tokens** — `MainLayout` with top bar (product name, settings, auth status dot); `wwwroot/css/tokens.css` (colors incl. node-state palette: pending/running/completed/failed/skipped, spacing, type scale, dark-friendly defaults); scoped CSS per component (D4)
+- [x] **Routing** — `/` → WorkflowList · `/designer/{id:guid}` → Designer · `/designer/new` → Designer (blank) · `/settings` → Settings
+- [x] **Settings/auth pane (D9)** — API base URL display, token textarea (JWT) or API-key input, "remember on this device" toggle (`localStorage`), connection test button (`GET /api/v1/status` → 🟢/🔴 + version)
+- [x] **WorkflowList page (S1)** — paged table from `WorkflowsClient.ListAsync`: name/version/node count/updated; search box (server `?search=` if supported, else client filter); actions: **Open** (navigate), **▶ Run** (fire + toast with execution id), **🗑 Delete** (confirm dialog → DELETE; admin-policy failures surface the 403 ProblemDetails cleanly)
+- [x] **[＋ New Workflow]** — name prompt dialog → navigate to `/designer/new` with the name staged (POST happens on first save, 3.3.b.4)
+- [x] **Error + toast surface** — a lightweight `Toasts` service + component (info/success/error), used by every page; API failures render title + detail
+- [x] **Loading/empty states** — skeleton rows while loading; friendly empty-state ("No workflows yet — create one!")
 
 ### Tests (target ~8): → `Workflow.Tests.UI/Components/ShellAndListTests.cs` *(bUnit)*
 
-- [ ] `Layout_Renders_TopBarAndOutlet` · `Settings_TestConnection_ShowsStatus`
-- [ ] `AuthPane_SavesToken_HandlerUsesIt` · `WorkflowList_RendersRows_FromClient`
-- [ ] `WorkflowList_Search_Filters` · `WorkflowList_Delete_ConfirmsThenCalls`
-- [ ] `WorkflowList_Run_ShowsExecutionToast` · `WorkflowList_Empty_ShowsEmptyState`
+- [x] `Layout_Renders_TopBarAndOutlet` · `Settings_TestConnection_ShowsStatus`
+- [x] `AuthPane_SavesToken_HandlerUsesIt` · `WorkflowList_RendersRows_FromClient`
+- [x] `WorkflowList_Search_Filters` · `WorkflowList_Delete_ConfirmsThenCalls`
+- [x] `WorkflowList_Run_ShowsExecutionToast` · `WorkflowList_Empty_ShowsEmptyState`
 
 ---
 

@@ -1,0 +1,124 @@
+@page "/settings"
+@namespace Workflow.UI.Client.Pages
+@rendermode InteractiveWebAssembly
+@inject Workflow.UI.Client.Api.AuthState Auth
+@inject Workflow.UI.Client.Api.SystemClient System
+@inject Workflow.UI.Client.Api.ApiClientOptions ApiOptions
+@inject Workflow.UI.Client.Services.ILocalStorage Storage
+@inject Workflow.UI.Client.Services.ToastService Toasts
+
+<PageTitle>Settings · DotFlow</PageTitle>
+
+<TopBar />
+<ToastHost />
+
+<div class="df-page" style="max-width: 640px;">
+    <h1>Settings</h1>
+
+    <div class="df-card df-field">
+        <div class="df-label">API base URL</div>
+        <div>@ApiOptions.BaseUrl</div>
+    </div>
+
+    <div class="df-card df-field">
+        <div class="df-field">
+            <label class="df-label" for="token">JWT bearer token</label>
+            <textarea id="token" class="df-textarea" @bind="token" placeholder="paste a JWT…"></textarea>
+        </div>
+        <div class="df-field">
+            <label class="df-label" for="apikey">…or API key</label>
+            <input id="apikey" class="df-input" @bind="apiKey" placeholder="X-API-Key value" />
+        </div>
+        <div class="df-row">
+            <label><input type="checkbox" @bind="remember" /> Remember on this device</label>
+        </div>
+        <div class="df-row" style="margin-top: var(--df-space-3);">
+            <button class="df-btn df-btn--primary" @onclick="Save">Save credential</button>
+            <button class="df-btn" @onclick="Clear">Clear</button>
+            <button class="df-btn" @onclick="TestConnection">Test connection</button>
+        </div>
+        @if (status is not null)
+        {
+            <div class="df-row" style="margin-top: var(--df-space-3);">
+                <span class="df-status-dot @(statusOk ? "df-status-dot--ok" : "df-status-dot--bad")"></span>
+                <span>@status</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private const string TokenKey = "dotflow.token";
+    private const string ApiKeyKey = "dotflow.apikey";
+
+    private string token = string.Empty;
+    private string apiKey = string.Empty;
+    private bool remember = true;
+    private string? status;
+    private bool statusOk;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var savedToken = await Storage.GetAsync(TokenKey);
+        var savedKey = await Storage.GetAsync(ApiKeyKey);
+        if (!string.IsNullOrWhiteSpace(savedToken))
+        {
+            this.token = savedToken;
+            Auth.SetToken(savedToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(savedKey))
+        {
+            this.apiKey = savedKey;
+            Auth.SetApiKey(savedKey);
+        }
+    }
+
+    private async Task Save()
+    {
+        if (!string.IsNullOrWhiteSpace(this.token))
+        {
+            Auth.SetToken(this.token);
+            if (this.remember)
+            {
+                await Storage.SetAsync(TokenKey, this.token.Trim());
+                await Storage.RemoveAsync(ApiKeyKey);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(this.apiKey))
+        {
+            Auth.SetApiKey(this.apiKey);
+            if (this.remember)
+            {
+                await Storage.SetAsync(ApiKeyKey, this.apiKey.Trim());
+                await Storage.RemoveAsync(TokenKey);
+            }
+        }
+
+        Toasts.Success("Credential saved");
+    }
+
+    private async Task Clear()
+    {
+        Auth.Clear();
+        this.token = string.Empty;
+        this.apiKey = string.Empty;
+        await Storage.RemoveAsync(TokenKey);
+        await Storage.RemoveAsync(ApiKeyKey);
+        Toasts.Info("Credential cleared");
+    }
+
+    private async Task TestConnection()
+    {
+        try
+        {
+            var version = await System.PingAsync();
+            this.statusOk = true;
+            this.status = $"Connected · API v{version}";
+        }
+        catch (ApiException ex)
+        {
+            this.statusOk = false;
+            this.status = ex.Error.Summarize();
+        }
+    }
+}
