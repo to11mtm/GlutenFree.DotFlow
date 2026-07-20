@@ -27,11 +27,13 @@ window.dotflowCanvas = {
         }
     }, false);
 
-    // Signal that dropping is allowed while hovering the canvas (copy cursor).
+    // A drop is only allowed if `dragover` calls preventDefault(). Do it natively so it works
+    // regardless of Blazor's @ondragover:preventDefault directive, and show the copy cursor.
     document.addEventListener('dragover', function (e) {
         const canvas = e.target && e.target.closest ? e.target.closest('.df-canvas-viewport') : null;
-        if (canvas && e.dataTransfer) {
-            e.dataTransfer.dropEffect = 'copy';
+        if (canvas) {
+            e.preventDefault();
+            if (e.dataTransfer) { e.dataTransfer.dropEffect = 'copy'; }
         }
     }, false);
 })();
