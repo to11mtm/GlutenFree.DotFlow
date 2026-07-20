@@ -162,3 +162,14 @@ a.df-link:hover { text-decoration: underline; }
 .df-palette__icon { font-size: 1.1rem; }
 .df-palette__details { margin: var(--df-space-3); padding: var(--df-space-3); background: var(--df-surface-2); border-radius: var(--df-radius); }
 .df-palette__details-id { color: var(--df-text-dim); font-size: 0.75rem; margin-bottom: var(--df-space-2); }
+
+/* 🎯 Selection / context menu / modal */
+.df-rubberband { position: absolute; border: 1px dashed var(--df-accent); background: rgba(79,156,249,0.12); pointer-events: none; }
+.df-ctxmenu-backdrop { position: fixed; inset: 0; z-index: 900; }
+.df-ctxmenu { position: fixed; z-index: 901; background: var(--df-surface-2); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-1); min-width: 160px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.df-ctxmenu__item { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--df-text); padding: var(--df-space-2) var(--df-space-3); cursor: pointer; border-radius: var(--df-radius); font: inherit; }
+.df-ctxmenu__item:hover { background: var(--df-accent-weak); }
+.df-ctxmenu__item--danger { color: var(--df-state-failed); }
+
+.df-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 950; }
+.df-modal { background: var(--df-surface); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); min-width: 320px; }

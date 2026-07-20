@@ -1,0 +1,53 @@
+@namespace Workflow.UI.Client.Designer.Components
+
+@if (Visible)
+{
+    <div class="df-ctxmenu-backdrop" @onclick="Close" @oncontextmenu="Close" @oncontextmenu:preventDefault="true"></div>
+    <div class="df-ctxmenu" style="left:@(X)px; top:@(Y)px;">
+        @foreach (var item in Items)
+        {
+            <button class="df-ctxmenu__item @(item.Danger ? "df-ctxmenu__item--danger" : "")"
+                    data-testid="ctx-@item.Key"
+                    @onclick="() => Invoke(item)">
+                @item.Label
+            </button>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>A context-menu entry.</summary>
+    /// <param name="Key">Stable key (for test selectors).</param>
+    /// <param name="Label">Display label.</param>
+    /// <param name="Action">The action to run.</param>
+    /// <param name="Danger">Whether to style as destructive.</param>
+    public sealed record MenuItem(string Key, string Label, Func<Task> Action, bool Danger = false);
+
+    /// <summary>Whether the menu is visible.</summary>
+    [Parameter]
+    public bool Visible { get; set; }
+
+    /// <summary>The X position (screen px).</summary>
+    [Parameter]
+    public double X { get; set; }
+
+    /// <summary>The Y position (screen px).</summary>
+    [Parameter]
+    public double Y { get; set; }
+
+    /// <summary>The menu items.</summary>
+    [Parameter]
+    public IReadOnlyList<MenuItem> Items { get; set; } = System.Array.Empty<MenuItem>();
+
+    /// <summary>Raised when the menu should close.</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task Invoke(MenuItem item)
+    {
+        await item.Action();
+        await OnClose.InvokeAsync();
+    }
+}

@@ -1,6 +1,7 @@
 @namespace Workflow.UI.Client.Designer.Components
 @using System.Globalization
 @using Workflow.UI.Client.Designer.State
+@using Workflow.UI.Client.Designer.State.Commands
 @using Workflow.UI.Client.Services
 @inject IJSRuntime JS
 @inject PaletteDragState DragState
@@ -11,6 +12,7 @@
      @onpointerup="OnViewportPointerUp"
      @onpointerleave="OnViewportPointerUp"
      @onwheel="OnWheel" @onwheel:preventDefault="true"
+     @oncontextmenu="OnViewportContextMenu" @oncontextmenu:preventDefault="true"
      @ondragover:preventDefault="true"
      @ondrop="OnDrop"
      style="cursor:@(panning ? "grabbing" : "grab");">
@@ -22,10 +24,16 @@
             <NodeView @key="node.Id" Node="node"
                       StateClass="@StateClassFor(node.Id)"
                       Selected="@IsSelected(node.Id)"
-                      OnNodePointerDown="e => OnNodePointerDown.InvokeAsync((node, e))"
+                      OnNodePointerDown="e => OnNodePointerDownInternal(node, e)"
+                      OnNodeContextMenu="e => OnNodeContextMenu.InvokeAsync((node, e))"
                       OnOutputPortPointerDown="p => OnOutputPortPointerDown.InvokeAsync((node, p))" />
         }
     </div>
+
+    @if (rubberBand is not null)
+    {
+        <div class="df-rubberband" style="left:@(rubberBand.Value.X.ToString(Inv))px; top:@(rubberBand.Value.Y.ToString(Inv))px; width:@(rubberBand.Value.Width.ToString(Inv))px; height:@(rubberBand.Value.Height.ToString(Inv))px;"></div>
+    }
 
     <div class="df-zoom-controls">
         <button class="df-btn" data-testid="zoom-in" @onclick="ZoomIn" @onclick:stopPropagation="true">＋</button>
@@ -37,10 +45,20 @@
 
 @code {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private const double MoveThreshold = 3;
 
     private ElementReference viewportEl;
     private bool panning;
     private double panStartClientX, panStartClientY, panOriginX, panOriginY;
+
+    private bool movingNodes;
+    private bool moveExceededThreshold;
+    private double moveStartClientX, moveStartClientY;
+    private Dictionary<string, (double X, double Y)> moveBefore = new();
+
+    private bool rubberBanding;
+    private double rubberStartX, rubberStartY;
+    private Rect? rubberBand;
 
     /// <summary>The document to render.</summary>
     [Parameter, EditorRequired]
@@ -54,17 +72,29 @@
     [Parameter]
     public EventCallback<CanvasTransform> TransformChanged { get; set; }
 
+    /// <summary>Selection state (when editing is enabled).</summary>
+    [Parameter]
+    public SelectionState? Selection { get; set; }
+
+    /// <summary>Command stack (node moves push a <see cref="MoveNodesCommand"/>).</summary>
+    [Parameter]
+    public CommandStack? Commands { get; set; }
+
     /// <summary>Resolves an extra CSS state class for a node (run overlay).</summary>
     [Parameter]
     public Func<string, string>? NodeStateClass { get; set; }
 
-    /// <summary>Returns whether a node id is selected (editing slices).</summary>
-    [Parameter]
-    public Func<string, bool>? NodeSelected { get; set; }
-
-    /// <summary>Raised on node pointer-down (selection/move in editing slices).</summary>
+    /// <summary>Raised on node pointer-down (after internal selection handling).</summary>
     [Parameter]
     public EventCallback<(DesignerNode Node, PointerEventArgs Args)> OnNodePointerDown { get; set; }
+
+    /// <summary>Raised on node right-click (context menu).</summary>
+    [Parameter]
+    public EventCallback<(DesignerNode Node, MouseEventArgs Args)> OnNodeContextMenu { get; set; }
+
+    /// <summary>Raised on canvas-background right-click (context menu).</summary>
+    [Parameter]
+    public EventCallback<MouseEventArgs> OnCanvasContextMenu { get; set; }
 
     /// <summary>Raised on output-port pointer-down (connection drag in 3.3.b.2).</summary>
     [Parameter]
@@ -78,7 +108,7 @@
 
     private string StateClassFor(string nodeId) => this.NodeStateClass?.Invoke(nodeId) ?? string.Empty;
 
-    private bool IsSelected(string nodeId) => this.NodeSelected?.Invoke(nodeId) ?? false;
+    private bool IsSelected(string nodeId) => this.Selection?.IsNodeSelected(nodeId) ?? false;
 
     /// <summary>Fits all nodes into the viewport~ ⤢.</summary>
     public async Task FitAsync()
@@ -111,8 +141,63 @@
         return (1200, 800);
     }
 
+    private Task OnNodePointerDownInternal(DesignerNode node, PointerEventArgs e)
+    {
+        if (this.Selection is not null)
+        {
+            if (e.CtrlKey || e.MetaKey)
+            {
+                this.Selection.ToggleNode(node.Id);
+            }
+            else if (!this.Selection.IsNodeSelected(node.Id))
+            {
+                this.Selection.SelectNode(node.Id);
+            }
+
+            if (this.Commands is not null && this.Selection.IsNodeSelected(node.Id))
+            {
+                this.movingNodes = true;
+                this.moveExceededThreshold = false;
+                this.moveStartClientX = e.ClientX;
+                this.moveStartClientY = e.ClientY;
+                this.moveBefore = this.SnapshotSelected();
+            }
+        }
+
+        return this.OnNodePointerDown.InvokeAsync((node, e));
+    }
+
+    private Dictionary<string, (double X, double Y)> SnapshotSelected()
+    {
+        var snap = new Dictionary<string, (double X, double Y)>();
+        if (this.Selection is null)
+        {
+            return snap;
+        }
+
+        foreach (var id in this.Selection.Nodes)
+        {
+            var n = this.Document.FindNode(id);
+            if (n is not null)
+            {
+                snap[id] = (n.X, n.Y);
+            }
+        }
+
+        return snap;
+    }
+
     private Task OnViewportPointerDown(PointerEventArgs e)
     {
+        if (this.Selection is not null && e.ShiftKey)
+        {
+            this.rubberBanding = true;
+            this.rubberStartX = e.OffsetX;
+            this.rubberStartY = e.OffsetY;
+            this.rubberBand = new Rect(e.OffsetX, e.OffsetY, 0, 0);
+            return Task.CompletedTask;
+        }
+
         this.panning = true;
         this.panStartClientX = e.ClientX;
         this.panStartClientY = e.ClientY;
@@ -123,17 +208,114 @@
 
     private async Task OnViewportPointerMove(PointerEventArgs e)
     {
-        if (!this.panning)
+        if (this.movingNodes)
+        {
+            var dx = (e.ClientX - this.moveStartClientX) / this.Transform.Zoom;
+            var dy = (e.ClientY - this.moveStartClientY) / this.Transform.Zoom;
+            if (!this.moveExceededThreshold &&
+                (System.Math.Abs(e.ClientX - this.moveStartClientX) > MoveThreshold ||
+                 System.Math.Abs(e.ClientY - this.moveStartClientY) > MoveThreshold))
+            {
+                this.moveExceededThreshold = true;
+            }
+
+            if (this.moveExceededThreshold)
+            {
+                foreach (var (id, before) in this.moveBefore)
+                {
+                    var n = this.Document.FindNode(id);
+                    if (n is not null)
+                    {
+                        n.X = before.X + dx;
+                        n.Y = before.Y + dy;
+                    }
+                }
+
+                this.StateHasChanged();
+            }
+
+            return;
+        }
+
+        if (this.rubberBanding)
+        {
+            var x = System.Math.Min(this.rubberStartX, e.OffsetX);
+            var y = System.Math.Min(this.rubberStartY, e.OffsetY);
+            var w = System.Math.Abs(e.OffsetX - this.rubberStartX);
+            var h = System.Math.Abs(e.OffsetY - this.rubberStartY);
+            this.rubberBand = new Rect(x, y, w, h);
+            this.StateHasChanged();
+            return;
+        }
+
+        if (this.panning)
+        {
+            var panX = this.panOriginX + (e.ClientX - this.panStartClientX);
+            var panY = this.panOriginY + (e.ClientY - this.panStartClientY);
+            await this.SetTransform(this.Transform with { PanX = panX, PanY = panY });
+        }
+    }
+
+    private void OnViewportPointerUp(PointerEventArgs e)
+    {
+        if (this.movingNodes)
+        {
+            var wasDrag = this.moveExceededThreshold;
+            this.movingNodes = false;
+            this.moveExceededThreshold = false;
+
+            if (wasDrag && this.Commands is not null)
+            {
+                var after = this.SnapshotSelected();
+                this.Commands.Execute(new MoveNodesCommand(this.moveBefore, after));
+            }
+
+            return;
+        }
+
+        if (this.rubberBanding)
+        {
+            this.rubberBanding = false;
+            this.CommitRubberBand();
+            this.rubberBand = null;
+            return;
+        }
+
+        if (this.panning && this.Selection is not null &&
+            System.Math.Abs(e.ClientX - this.panStartClientX) < MoveThreshold &&
+            System.Math.Abs(e.ClientY - this.panStartClientY) < MoveThreshold)
+        {
+            this.Selection.Clear();
+        }
+
+        this.panning = false;
+    }
+
+    private void CommitRubberBand()
+    {
+        if (this.Selection is null || this.rubberBand is null)
         {
             return;
         }
 
-        var panX = this.panOriginX + (e.ClientX - this.panStartClientX);
-        var panY = this.panOriginY + (e.ClientY - this.panStartClientY);
-        await this.SetTransform(this.Transform with { PanX = panX, PanY = panY });
+        var topLeft = CanvasGeometry.ScreenToCanvas(new Point(this.rubberBand.Value.X, this.rubberBand.Value.Y), this.Transform);
+        var botRight = CanvasGeometry.ScreenToCanvas(new Point(this.rubberBand.Value.Right, this.rubberBand.Value.Bottom), this.Transform);
+
+        var hits = new List<string>();
+        foreach (var n in this.Document.Nodes)
+        {
+            var b = CanvasGeometry.NodeBounds(n.X, n.Y, NodePorts.Inputs(n).Count, NodePorts.Outputs(n).Count);
+            var intersects = b.X < botRight.X && b.Right > topLeft.X && b.Y < botRight.Y && b.Bottom > topLeft.Y;
+            if (intersects)
+            {
+                hits.Add(n.Id);
+            }
+        }
+
+        this.Selection.SetNodes(hits);
     }
 
-    private void OnViewportPointerUp(PointerEventArgs e) => this.panning = false;
+    private Task OnViewportContextMenu(MouseEventArgs e) => this.OnCanvasContextMenu.InvokeAsync(e);
 
     private async Task OnDrop(DragEventArgs e)
     {

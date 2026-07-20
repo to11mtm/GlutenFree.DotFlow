@@ -1,4 +1,4 @@
-# Phase 3.3.b: Designer Editing (Weeks 28-29) ✏️
+﻿# Phase 3.3.b: Designer Editing (Weeks 28-29) ✏️
 
 Made with 💖 by Ami-Chan! UwU ✨
 
@@ -49,18 +49,18 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 
 ### Tasks
 
-- [ ] **`ModulePalette` component** — groups from module category metadata (fallback: id prefix — `builtin.http.*` → "HTTP"); collapsible sections; each entry: icon, display name, one-line description tooltip; data from the cached `ModulesClient.ListAsync`
-- [ ] **Search/filter** — text box filters across id/name/description; highlights matches; empty-result state
-- [ ] **Module details flyout** — click (not drag) opens a details pane: description, input/output ports, property list with types — straight from `ModuleSchemaDto`
-- [ ] **Drag-to-create** — HTML5 drag (or pointer-based fallback) from palette entry; ghost preview follows cursor; drop on canvas → `ScreenToCanvas` position → `Execute(new AddNodeCommand(...))` with unique id (`MakeNodeId`), schema-resolved node, **schema defaults pre-filled** into `Properties` (from `PropertyDefinition.DefaultValue`)
-- [ ] **Drop rejection** — drop outside the canvas does nothing; drop while read-only/run-mode disabled
+- [x] **`ModulePalette` component** — groups from module category metadata (fallback: id prefix — `builtin.http.*` → "HTTP"); collapsible sections; each entry: icon, display name, one-line description tooltip; data from the cached `ModulesClient.ListAsync`
+- [x] **Search/filter** — text box filters across id/name/description; highlights matches; empty-result state
+- [x] **Module details flyout** — click (not drag) opens a details pane: description, input/output ports, property list with types — straight from `ModuleSchemaDto`
+- [x] **Drag-to-create** — HTML5 drag (or pointer-based fallback) from palette entry; ghost preview follows cursor; drop on canvas → `ScreenToCanvas` position → `Execute(new AddNodeCommand(...))` with unique id (`MakeNodeId`), schema-resolved node, **schema defaults pre-filled** into `Properties` (from `PropertyDefinition.DefaultValue`)
+- [x] **Drop rejection** — drop outside the canvas does nothing; drop while read-only/run-mode disabled
 
 ### Tests (target ~8): → `Workflow.Tests.UI/Components/PaletteTests.cs` *(bUnit)* + `State/AddNodeCommandTests.cs`
 
-- [ ] `Palette_RendersGroups_FromModules` · `Palette_Search_FiltersEntries`
-- [ ] `Palette_Details_ShowsSchema` · `AddNodeCommand_Do_AddsNodeWithDefaults`
-- [ ] `AddNodeCommand_Undo_RemovesNode` · `AddNode_GeneratesUniqueId_AcrossRepeats`
-- [ ] `Drop_TranslatesScreenPosition_ToCanvas` · `Drop_OutsideCanvas_NoCommand`
+- [x] `Palette_RendersGroups_FromModules` · `Palette_Search_FiltersEntries`
+- [x] `Palette_Details_ShowsSchema` · `AddNodeCommand_Do_AddsNodeWithDefaults`
+- [x] `AddNodeCommand_Undo_RemovesNode` · `AddNode_GeneratesUniqueId_AcrossRepeats`
+- [x] `Drop_TranslatesScreenPosition_ToCanvas` · `Drop_OutsideCanvas_NoCommand`
 
 ---
 
@@ -73,22 +73,22 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 
 ### Tasks
 
-- [ ] **`SelectionState` (framework-free)** — selected node ids + connection ids; `Select`, `AddToSelection`, `Toggle`, `Clear`, `SelectAll`; `Changed` event
-- [ ] **Click semantics** — click node → select (clears others); `Ctrl+Click` → toggle-add; click canvas background → clear; click edge → select connection; selection visuals (accent border on nodes, thicker stroke on edges)
-- [ ] **Rubber-band select** — drag on empty canvas with `Shift` (plain background-drag stays pan, from 3.3.a) → selection rectangle; nodes intersecting rect selected on release
-- [ ] **Node drag-move** — pointer-drag on a node header moves **all selected** nodes (delta applied to each); live edge re-render during drag; on release → single `MoveNodesCommand` (before/after positions) so undo restores the whole gesture
-- [ ] **Node context menu (S4 `[⋮]` + right-click)** — Rename (inline edit) · Duplicate (AddNode with copied properties, offset position, fresh id) · Delete · *(runtime "View outputs" arrives in 3.3.c)*
-- [ ] **Connection context menu** — Edit condition… (small dialog → `EditConnectionCommand`) · Delete
-- [ ] **Canvas context menu** — Select all · Paste *(wired in b.4)* · Fit to screen
-- [ ] **`RemoveNodesCommand`** — removes selected nodes **and all attached connections**; undo restores both (order-safe)
+- [x] **`SelectionState` (framework-free)** — selected node ids + connection ids; `Select`, `AddToSelection`, `Toggle`, `Clear`, `SelectAll`; `Changed` event
+- [x] **Click semantics** — click node → select (clears others); `Ctrl+Click` → toggle-add; click canvas background → clear; click edge → select connection; selection visuals (accent border on nodes, thicker stroke on edges)
+- [x] **Rubber-band select** — drag on empty canvas with `Shift` (plain background-drag stays pan, from 3.3.a) → selection rectangle; nodes intersecting rect selected on release
+- [x] **Node drag-move** — pointer-drag on a node header moves **all selected** nodes (delta applied to each); live edge re-render during drag; on release → single `MoveNodesCommand` (before/after positions) so undo restores the whole gesture
+- [x] **Node context menu (S4 `[⋮]` + right-click)** — Rename (inline edit) · Duplicate (AddNode with copied properties, offset position, fresh id) · Delete · *(runtime "View outputs" arrives in 3.3.c)*
+- [x] **Connection context menu** — Edit condition… (small dialog → `EditConnectionCommand`) · Delete
+- [x] **Canvas context menu** — Select all · Paste *(wired in b.4)* · Fit to screen
+- [x] **`RemoveNodesCommand`** — removes selected nodes **and all attached connections**; undo restores both (order-safe)
 
 ### Tests (target ~10): → `Workflow.Tests.UI/State/SelectionAndMoveTests.cs` + `Components/SelectionInteractionTests.cs`
 
-- [ ] `Selection_Click_SelectsSingle` · `Selection_CtrlClick_Toggles` · `Selection_CanvasClick_Clears`
-- [ ] `RubberBand_SelectsIntersectingNodes` · `MoveNodes_DragMovesAllSelected`
-- [ ] `MoveNodesCommand_UndoRestoresPositions` *(one command per gesture)*
-- [ ] `RemoveNodesCommand_RemovesAttachedConnections` · `RemoveNodesCommand_UndoRestoresEverything`
-- [ ] `Duplicate_CreatesOffsetCopy_FreshId` · `ContextMenu_Rename_AppliesViaCommand`
+- [x] `Selection_Click_SelectsSingle` · `Selection_CtrlClick_Toggles` · `Selection_CanvasClick_Clears`
+- [x] `RubberBand_SelectsIntersectingNodes` · `MoveNodes_DragMovesAllSelected`
+- [x] `MoveNodesCommand_UndoRestoresPositions` *(one command per gesture)*
+- [x] `RemoveNodesCommand_RemovesAttachedConnections` · `RemoveNodesCommand_UndoRestoresEverything`
+- [x] `Duplicate_CreatesOffsetCopy_FreshId` · `ContextMenu_Rename_AppliesViaCommand`
 
 ---
 
@@ -169,7 +169,7 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 - [ ] **Toolbar (S2)** — `[💾 Save]` `[↩ Undo]` `[↪ Redo]` with enabled-state binding + hover tooltips showing the command description ("Undo: Move 3 nodes"); dirty dot `●unsaved` next to the workflow name
 - [ ] **Keyboard shortcuts** — global handler on the designer page: `Ctrl+Z` undo · `Ctrl+Y`/`Ctrl+Shift+Z` redo · `Delete` remove selection · `Ctrl+A` select all · `Ctrl+C`/`Ctrl+V` copy/paste · `Ctrl+S` save (preventDefault); **suppressed while focus is in an input/textarea**
 - [ ] **Copy/paste** — clipboard = in-app serialized node set + *internal* connections; paste → AddNode commands with fresh ids + offset positions, internal edges re-created between the new ids; works across undo boundaries
-- [ ] **Validate endpoint (D14 — the one API change in 3.3)** — `POST /api/v1/workflows/validate` in `Workflow.Api/V1/WorkflowEndpoints.cs`: accepts a full `WorkflowDefinition` body, runs the **existing** `ModuleAwareWorkflowValidator` (graph + per-module `ValidateConfiguration`), returns `{ valid, issues: [{ severity, message, nodeId? }] }` without persisting; `WorkflowRead` policy (dry-run); Swagger-tagged `Workflows`; documented in `docs/rest-api.md`; ~4 API tests in `Workflow.Tests/Api/V1/WorkflowEndpointsTests.cs` (valid → `valid:true`; unknown module / bad module config / structural issue → itemized issues)
+- [x] **Validate endpoint (D14 — the one API change in 3.3)** — `POST /api/v1/workflows/validate` in `Workflow.Api/V1/WorkflowEndpoints.cs`: accepts a full `WorkflowDefinition` body, runs the **existing** `ModuleAwareWorkflowValidator` (graph + per-module `ValidateConfiguration`), returns `{ valid, issues: [{ severity, message, nodeId? }] }` without persisting; `WorkflowRead` policy (dry-run); Swagger-tagged `Workflows`; documented in `docs/rest-api.md`; ~4 API tests in `Workflow.Tests/Api/V1/WorkflowEndpointsTests.cs` (valid → `valid:true`; unknown module / bad module config / structural issue → itemized issues)
 - [ ] **Save pipeline (D5/D14/Q5)** — two-stage gate: **(1)** client `GraphValidator.Validate` (instant — errors block with dialog + jump-to-node links); **(2)** `POST /workflows/validate` (authoritative server check — issues render in the same dialog with node links; validate-endpoint-unavailable degrades to stage 1 with a notice); then `ToDto()` → `PUT /api/v1/workflows/{id}` (or `POST` for `/designer/new`, then navigate to the real id); success → `MarkSaved()` + toast; residual server 400/409/422 ProblemDetails rendered in the save dialog
 - [ ] **Save As** — name prompt → `POST` a copy with a fresh id/name → navigate
 - [ ] **Unsaved-changes protection** — `beforeunload` browser warning when dirty; in-app navigation guard (leaving `/designer/*` while dirty → confirm dialog with Save/Discard/Cancel)
@@ -183,7 +183,7 @@ Commands: AddNode · RemoveNodes(nodes + their connections, restored on undo) ·
 - [ ] `Shortcuts_UndoRedoDeleteSelectAll_Work` · `Shortcuts_SuppressedInInputs`
 - [ ] `CopyPaste_ClonesNodesAndInternalEdges_FreshIds`
 - [ ] `Save_ValidatorErrors_BlocksWithDialog` · `Save_CallsPut_MarksSaved`
-- [ ] `Save_CallsServerValidate_BeforePut` · `Save_ServerValidateIssues_BlockWithNodeLinks` · `Save_ValidateUnavailable_DegradesWithNotice`
+- [x] `Save_CallsServerValidate_BeforePut` · `Save_ServerValidateIssues_BlockWithNodeLinks` · `Save_ValidateUnavailable_DegradesWithNotice`
 - [ ] `SaveNew_Posts_ThenNavigates` · `Save_ServerProblem_ShownInDialog`
 - [ ] `NavigateAwayDirty_PromptsSaveDiscardCancel`
 
