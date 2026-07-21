@@ -165,4 +165,63 @@ public sealed class ConnectionSelectionTests : TestContext
         // log-1's input is a valid target → compatible highlight.
         cut.Find("[data-node-id='log-1'] [data-port-in=input]").ClassList.Should().Contain("df-port--compatible");
     }
+
+    [Fact]
+    public void FanInDrag_ShowsDropZones_PerNode()
+    {
+        var doc = TwoNodeDoc();
+        var drag = this.Services.GetRequiredService<Workflow.UI.Client.Services.PaletteDragState>();
+        var cut = this.RenderComponent<CanvasView>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, new SelectionState())
+            .Add(x => x.Commands, new CommandStack(doc)));
+
+        cut.FindAll(".df-dropzone").Should().BeEmpty();
+
+        drag.Begin("builtin.fanin");
+        cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().HaveCount(2));
+
+        drag.End();
+        cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().BeEmpty());
+    }
+
+    [Fact]
+    public void OtherModuleDrag_ShowsNoDropZones()
+    {
+        var doc = TwoNodeDoc();
+        var drag = this.Services.GetRequiredService<Workflow.UI.Client.Services.PaletteDragState>();
+        var cut = this.RenderComponent<CanvasView>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, new SelectionState())
+            .Add(x => x.Commands, new CommandStack(doc)));
+
+        drag.Begin("builtin.log");
+        cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().BeEmpty());
+        drag.End();
+    }
+
+    [Fact]
+    public void FanInDrag_OverOutputSide_ArmsZone()
+    {
+        var doc = TwoNodeDoc(); // http-1 at (100,100), right edge = 300.
+        var drag = this.Services.GetRequiredService<Workflow.UI.Client.Services.PaletteDragState>();
+        var cut = this.RenderComponent<CanvasView>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, new SelectionState())
+            .Add(x => x.Commands, new CommandStack(doc)));
+
+        drag.Begin("builtin.fanin");
+        cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().HaveCount(2));
+
+        // Hover in http-1's output-side zone → armed; then over empty space → disarmed.
+        cut.Find(".df-canvas-viewport").DragOver(new Microsoft.AspNetCore.Components.Web.DragEventArgs { OffsetX = 320, OffsetY = 130 });
+        cut.WaitForAssertion(() =>
+            cut.Find("[data-dropzone-for='http-1']").ClassList.Should().Contain("df-dropzone--armed"));
+        cut.Find("[data-dropzone-for='log-1']").ClassList.Should().NotContain("df-dropzone--armed");
+
+        cut.Find(".df-canvas-viewport").DragOver(new Microsoft.AspNetCore.Components.Web.DragEventArgs { OffsetX = 900, OffsetY = 600 });
+        cut.WaitForAssertion(() =>
+            cut.Find("[data-dropzone-for='http-1']").ClassList.Should().NotContain("df-dropzone--armed"));
+        drag.End();
+    }
 }

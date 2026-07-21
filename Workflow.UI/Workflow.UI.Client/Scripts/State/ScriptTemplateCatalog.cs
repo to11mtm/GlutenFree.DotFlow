@@ -96,6 +96,6 @@ public static class ScriptTemplateCatalog
 
         new ScriptTemplate(
             "csharp-transform", "Transform (C#)", "Filter and project an input collection.", "csharp", "Data",
-            "var orders = (IEnumerable<dynamic>)Input[\"orders\"];\nvar large = orders.Where(o => (double)o.amount > 100).ToList();\nWorkflow.LogInfo($\"kept {large.Count}\");\nreturn new { count = large.Count };"),
+            "// Inputs arrive as plain collections: objects → Dictionary<string, object?>, arrays → List<object?>.\nvar orders = input.TryGetValue(\"orders\", out var raw) && raw is List<object?> list ? list : new List<object?>();\nvar large = orders\n    .OfType<Dictionary<string, object?>>()\n    .Where(o => Convert.ToDouble(o.GetValueOrDefault(\"amount\") ?? 0, CultureInfo.InvariantCulture) > 100)\n    .Select(o => new { id = o.GetValueOrDefault(\"id\"), amount = o.GetValueOrDefault(\"amount\") })\n    .ToList();\nworkflow.LogInfo($\"kept {large.Count} of {orders.Count}\");\nreturn new { count = large.Count, items = large };"),
     };
 }
