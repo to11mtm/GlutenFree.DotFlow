@@ -19,6 +19,11 @@
             }
         </div>
 
+        @if (StructuralHint is not null)
+        {
+            <div class="df-props__hint" data-testid="structural-hint">💡 @StructuralHint</div>
+        }
+
         @if (SelectedNode.Schema is { Properties.Count: > 0 } schema)
         {
             @foreach (var prop in schema.Properties)
@@ -125,6 +130,15 @@
             : null;
 
     private string NodeName(string nodeId) => this.Document.FindNode(nodeId)?.Name ?? nodeId;
+
+    /// <summary>A how-it-works callout for structural (loop / error-boundary) modules (UX-F4/F5)~ 💡.</summary>
+    private string? StructuralHint => this.SelectedNode?.ModuleId switch
+    {
+        "builtin.loop.foreach" => "Loop: nodes connected from the loopBody port run once per item of the input collection. Their terminal output is collected into results; done fires when every iteration finishes.",
+        "builtin.loop.while" => "Loop: nodes connected from the loopBody port run repeatedly while the condition holds. done fires when the loop exits.",
+        "builtin.trycatch" => "Error boundary: nodes connected from try run first; if any fails, the catch branch runs. finally always runs, then done fires.",
+        _ => null,
+    };
 
     protected override void OnParametersSet()
     {

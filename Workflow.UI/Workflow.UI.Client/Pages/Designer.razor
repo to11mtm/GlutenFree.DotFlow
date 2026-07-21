@@ -298,8 +298,8 @@ else if (document is not null)
     }
 
     /// <summary>
-    /// Adds a Fan In (mode=merge) to the right of the node and connects EVERY output port of the
-    /// node into it, as one undoable action~ 🪄.
+    /// Adds a Fan In (mode=named → one object keyed by port name) to the right of the node and
+    /// connects EVERY output port of the node into it, as one undoable action~ 🪄.
     /// </summary>
     private async Task FanInAllOutputs(DesignerNode source)
     {
@@ -319,7 +319,9 @@ else if (document is not null)
             Y = source.Y,
             Schema = schema,
         };
-        fanIn.Properties["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("merge");
+
+        // Distinct ports of one node → 'named' keys the result by port ({ success: …, error: … })~
+        fanIn.Properties["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("named");
 
         var targetPort = schema is { Inputs.Count: > 0 } ? schema.Inputs[0].Name : "branches";
         var children = new List<IDesignerCommand> { new AddNodeCommand(fanIn) };
@@ -336,6 +338,7 @@ else if (document is not null)
 
         this.commands.Execute(new CompositeCommand("Fan in all outputs", children));
         this.selection.SelectNode(fanIn.Id);
+        Toasts.Success($"Merged {NodePorts.Outputs(source).Count} outputs of {source.Name} into one object (named mode)");
     }
 
     // ─── Context menu ────────────────────────────────────────────────────────────
@@ -496,6 +499,7 @@ else if (document is not null)
 
         this.commands.Execute(new CompositeCommand("Merge outputs", children));
         this.selection.SelectNode(fanIn.Id);
+        Toasts.Success($"Merged outputs of {sources.Count} nodes into one object (merge mode)");
     }
 
     private void Copy()

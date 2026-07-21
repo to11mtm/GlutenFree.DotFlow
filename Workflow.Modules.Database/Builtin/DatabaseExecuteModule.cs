@@ -99,7 +99,8 @@ public sealed class DatabaseExecuteModule : IWorkflowModule
                 Description: "Provider key ('postgres'/'sqlite') — required only with connectionString~ 🗂️",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("postgres", "sqlite")),
             new ModulePropertyDefinition(
                 Name: "command",
                 DisplayName: "Command (SQL)",

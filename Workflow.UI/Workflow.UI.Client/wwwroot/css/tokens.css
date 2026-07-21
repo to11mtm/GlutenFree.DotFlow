@@ -199,6 +199,7 @@ a.df-link:hover { text-decoration: underline; }
 .df-props__module { color: var(--df-text-dim); font-size: 0.75rem; margin-top: var(--df-space-1); }
 .df-props__version { display: inline-block; margin-top: var(--df-space-1); font-size: 0.7rem; color: var(--df-text-dim); }
 .df-props__conn { padding: var(--df-space-2) var(--df-space-3); background: var(--df-surface-2); border-radius: var(--df-radius); font-size: 0.85rem; word-break: break-word; }
+.df-props__hint { margin: var(--df-space-2) 0 var(--df-space-3); padding: var(--df-space-2) var(--df-space-3); background: var(--df-accent-weak); border-left: 3px solid var(--df-accent); border-radius: var(--df-radius); font-size: 0.8rem; line-height: 1.4; }
 .df-props__multi { color: var(--df-text-dim); padding: var(--df-space-4); }
 .df-required { color: var(--df-state-failed); }
 .df-field-error { color: var(--df-state-failed); font-size: 0.75rem; margin-top: var(--df-space-1); }

@@ -102,7 +102,8 @@ public sealed class DatabaseBulkInsertModule : IWorkflowModule
                 Description: "Provider key ('postgres'/'sqlite') — required only with connectionString~ 🗂️",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("postgres", "sqlite")),
             new ModulePropertyDefinition(
                 Name: "tableName",
                 DisplayName: "Table Name",

@@ -155,7 +155,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "HTTP method: GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS~ 🏷️",
                 IsRequired: false,
                 DefaultValue: "GET",
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")),
             new ModulePropertyDefinition(
                 Name: "headers",
                 DisplayName: "Headers",
@@ -197,7 +198,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Authentication scheme: none/basic/bearer/apikey/oauth2 (oauth2 ships in 2.3.3)~ 🔐",
                 IsRequired: false,
                 DefaultValue: "none",
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("none", "basic", "bearer", "apikey", "oauth2")),
             new ModulePropertyDefinition(
                 Name: "username",
                 DisplayName: "Username",
@@ -245,7 +247,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Where to put the API key: 'header' (default) or 'query'~ 📍",
                 IsRequired: false,
                 DefaultValue: "header",
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("header", "query")),
 
             // 🔑 Phase 2.3.3 — OAuth2 Client Credentials properties~
             new ModulePropertyDefinition(
@@ -295,7 +298,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Cache scope: 'module' (default — per HttpRequestModule instance) or 'pipeline' (shared across nodes in same WorkflowExecution). Singleton/persisted ship in 2.3.P3~ 💾",
                 IsRequired: false,
                 DefaultValue: "module",
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("module", "pipeline")),
 
             // 🔄 Phase 2.3.4 — Resilience properties (Polly v8 retry / circuit-breaker)~
             new ModulePropertyDefinition(
@@ -313,7 +317,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Backoff curve: linear/exponential/constant (default exponential)~ 📈",
                 IsRequired: false,
                 DefaultValue: "exponential",
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("linear", "exponential", "constant")),
             new ModulePropertyDefinition(
                 Name: "retryDelaySeconds",
                 DisplayName: "Retry Initial Delay (s)",

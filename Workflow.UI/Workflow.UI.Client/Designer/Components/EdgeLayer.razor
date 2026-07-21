@@ -23,9 +23,10 @@
                       @onpointerdown="() => Select(e.Key)" @onpointerdown:stopPropagation="true"
                       @oncontextmenu="args => OnContextMenu(e.Key, args)" @oncontextmenu:stopPropagation="true" @oncontextmenu:preventDefault="true" />
             }
-            <path class="df-edge @(selected ? "df-edge--selected" : string.Empty)" d="@e.Path"
+            <path class="df-edge @(selected ? "df-edge--selected" : string.Empty) @(e.Structural ? "df-edge--structural" : string.Empty)" d="@e.Path"
                   fill="none" stroke="@(selected ? "var(--df-accent)" : "var(--df-border)")"
                   stroke-width="@(selected ? "3" : "2")"
+                  stroke-dasharray="@(e.Structural ? "6 4" : null)"
                   marker-end="@(selected ? "url(#df-arrow-sel)" : "url(#df-arrow)")" />
             @if (!string.IsNullOrWhiteSpace(e.Condition))
             {
@@ -98,11 +99,12 @@
                     CanvasGeometry.BezierPath(s, t),
                     string.IsNullOrWhiteSpace(c.Condition) ? null : c.Condition,
                     (s.X + t.X) / 2,
-                    ((s.Y + t.Y) / 2) - 4);
+                    ((s.Y + t.Y) / 2) - 4,
+                    NodePorts.IsStructuralPort(c.SourcePortName));
             }
         }
     }
 
-    private readonly record struct EdgeRender(string Key, string Path, string? Condition, double LabelX, double LabelY);
+    private readonly record struct EdgeRender(string Key, string Path, string? Condition, double LabelX, double LabelY, bool Structural);
 }
 

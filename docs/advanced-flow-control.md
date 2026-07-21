@@ -277,11 +277,12 @@ The convergence point downstream from a `parallel` or `fanout`. Holds until *all
 
 | Property | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| `mode` | `string` enum | optional | `"Concat"` | One of: `Concat`, `Merge`, `First`, `Last` |
+| `mode` | `string` enum | optional | `"Concat"` | One of: `Concat`, `Merge`, `Named`, `First`, `Last` |
 
 **Modes:**
 - `Concat` — collects payloads into an array in branch-completion order
 - `Merge` — last-writer-wins shallow merge across branches
+- `Named` — one object keyed by each branch's **source port name** — e.g. a node with outputs `foo, bar, baz` fanned in yields `{ "foo": …, "bar": …, "baz": … }`. Port-name collisions (same port from different nodes) fall back to `nodeId.port` keys
 - `First` — only the first branch's payload
 - `Last` — only the last branch's payload
 

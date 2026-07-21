@@ -115,7 +115,8 @@ public sealed class DatabaseTransactionModule : IWorkflowModule
                 Description: "Provider key ('postgres'/'sqlite') — required only with connectionString~ 🗂️",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("postgres", "sqlite")),
             new ModulePropertyDefinition(
                 Name: "operations",
                 DisplayName: "Operations",
@@ -131,7 +132,8 @@ public sealed class DatabaseTransactionModule : IWorkflowModule
                 Description: "ReadUncommitted/ReadCommitted/RepeatableRead/Serializable/Snapshot (default ReadCommitted; clamped per provider)~ 🔒",
                 IsRequired: false,
                 DefaultValue: "ReadCommitted",
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("ReadUncommitted", "ReadCommitted", "RepeatableRead", "Serializable", "Snapshot")),
             new ModulePropertyDefinition(
                 Name: "timeoutSeconds",
                 DisplayName: "Timeout (seconds)",

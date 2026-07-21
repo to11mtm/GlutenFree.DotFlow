@@ -17,6 +17,25 @@ public static class NodePorts
     private static readonly IReadOnlyList<string> DefaultInputs = new[] { "input" };
     private static readonly IReadOnlyList<string> DefaultOutputs = new[] { "output" };
 
+    /// <summary>
+    /// Modules whose output ports are dynamic (empty schema) — the designer surfaces their
+    /// conventional routing ports so bodies can be wired visually (UX-F5.4)~ 🛡️.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> DynamicOutputs =
+        new Dictionary<string, IReadOnlyList<string>>(System.StringComparer.Ordinal)
+        {
+            ["builtin.trycatch"] = new[] { "try", "catch", "finally", "done" },
+        };
+
+    /// <summary>Output ports that enter a structural sub-graph (loop body / error boundary)~ 🔁.</summary>
+    private static readonly IReadOnlyList<string> StructuralPortNames = new[] { "loopBody", "try", "catch", "finally" };
+
+    /// <summary>Returns whether an edge leaving this port enters a structural sub-graph~ 🔁.</summary>
+    /// <param name="sourcePortName">The edge's source port name.</param>
+    /// <returns>True for loop-body / try / catch / finally routes.</returns>
+    public static bool IsStructuralPort(string sourcePortName)
+        => StructuralPortNames.Contains(sourcePortName);
+
     /// <summary>Gets the input port names for a node~ 🔌.</summary>
     /// <param name="node">The node.</param>
     /// <returns>The input port names.</returns>
@@ -27,7 +46,9 @@ public static class NodePorts
     /// <param name="node">The node.</param>
     /// <returns>The output port names.</returns>
     public static IReadOnlyList<string> Outputs(DesignerNode node)
-        => node.Schema is { Outputs: { Count: > 0 } o } ? o.Select(p => p.Name).ToList() : DefaultOutputs;
+        => node.Schema is { Outputs: { Count: > 0 } o } ? o.Select(p => p.Name).ToList()
+            : DynamicOutputs.TryGetValue(node.ModuleId, out var dyn) ? dyn
+            : DefaultOutputs;
 
     /// <summary>Computes the canvas-space anchor point for a node port~ 📍.</summary>
     /// <param name="node">The node.</param>

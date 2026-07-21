@@ -58,6 +58,52 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
   validate endpoint; blocking issues show in a dialog with jump-to-node links. The
   `●unsaved` indicator + a browser warning protect against losing edits.
 
+### Combining outputs (Fan In) 🪄
+
+Three ways to funnel multiple outputs into **one object** on the `result` port:
+
+- **Drop gesture (one node, all ports):** drag **Fan In** from the palette over a node —
+  dashed drop zones appear on every node's output side (green when armed). Drop it and *all*
+  of that node's outputs are wired in with **`named` mode**: a node with `foo/bar/baz`
+  outputs yields `{ "foo": …, "bar": …, "baz": … }`.
+- **Context menu (many nodes):** select 2+ nodes → right-click → **Merge outputs → Fan In**.
+  Wires each node's primary output in with **`merge` mode** (shallow union).
+- **Manual:** drop a Fan In anywhere and connect edges yourself, then pick a `mode` in the
+  Properties panel: `concat` (array), `merge` (union), `named` (keyed by source port),
+  `first` / `last`.
+
+Connect downstream nodes to **`result`** — `count` and `done` are auxiliary
+(branch count / ordering-only activation).
+
+### Loops 🔁
+
+Drop **For Each** (`builtin.loop.foreach`) or **While** (`builtin.loop.while`) onto the
+canvas. The loop **body** is simply the sub-graph you connect from the **`loopBody`**
+output port — those nodes run **once per item** (For Each) or **per iteration** (While).
+Body edges render **dashed** so the loop structure reads differently from the main flow,
+and the Properties panel shows a 💡 callout explaining the convention.
+
+- Connect `loopBody →` your per-item work (chain as many nodes as you like).
+- The body's terminal output is collected into **`results`** (For Each).
+- **`done`** fires after the last iteration — continue the main flow from there.
+- `builtin.break` / `builtin.continue` inside the body control iteration.
+
+Worked example: `HTTP (list) → For Each · loopBody → Transform → …` with
+`For Each · done → next step` — see [Advanced Flow Control](advanced-flow-control.md).
+
+### Error handling (Try/Catch) 🛡️
+
+Drop **Try Catch** (`builtin.trycatch`). The designer exposes its conventional routing
+ports — **`try`**, **`catch`**, **`finally`**, **`done`**:
+
+- `try →` the guarded sub-graph.
+- `catch →` runs only if a try node fails (error details flow in).
+- `finally →` always runs.
+- `done →` continue the main flow.
+
+Like loop bodies, these routes render **dashed**. `rethrow` re-raises the error after
+`finally`; `catchTypes` filters which error types are caught.
+
 ## Running (S3)
 
 **▶ Run** opens an inputs dialog (JSON), starts the execution, and enters **run mode**

@@ -56,7 +56,7 @@ public sealed class DecompressModule : IWorkflowModule
         Properties: Arr.create(
             new ModulePropertyDefinition("archivePath", "Archive Path", typeof(string), "Archive file path~ 📦", true, null, PropertyEditorType.FilePath),
             new ModulePropertyDefinition("outputDirectory", "Output Directory", typeof(string), "Destination directory~ 📂", true, null, PropertyEditorType.DirectoryPath),
-            new ModulePropertyDefinition("format", "Format", typeof(string), "zip, gzip, tar, targz (inferred if omitted)~ 🗜️", false, null, PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition("format", "Format", typeof(string), "zip, gzip, tar, targz (inferred if omitted)~ 🗜️", false, null, PropertyEditorType.Dropdown, Arr.create<object>("zip", "gzip", "tar", "targz")),
             new ModulePropertyDefinition("overwrite", "Overwrite", typeof(bool), "Overwrite existing files~ ♻️", false, false, PropertyEditorType.Boolean)));
 
     /// <inheritdoc />

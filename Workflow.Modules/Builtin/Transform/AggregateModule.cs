@@ -54,7 +54,7 @@ public sealed class AggregateModule : IWorkflowModule
             new PortDefinition("success", "Success", typeof(bool), "Whether aggregation succeeded~ ✅", false)),
         Properties: Arr.create(
             new ModulePropertyDefinition("data", "Data", typeof(object), "Array data when not connected via port~ 📥", false, null, PropertyEditorType.Json),
-            new ModulePropertyDefinition("operation", "Operation", typeof(string), "sum/count/avg/min/max/first/last/distinct/median/mode~ 📊", true, "count", PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition("operation", "Operation", typeof(string), "sum/count/avg/min/max/first/last/distinct/median/mode~ 📊", true, "count", PropertyEditorType.Dropdown, Arr.create<object>("sum", "count", "avg", "min", "max", "first", "last", "distinct", "median", "mode")),
             new ModulePropertyDefinition("property", "Property", typeof(string), "Dot-path to aggregate (required for numeric ops on records)~ 🔢", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("groupBy", "Group By", typeof(string), "Dot-path or expression to group by~ 🗂️", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("language", "Expression Language", typeof(string), "js (default) or csharp~ 🧮", false, "js", PropertyEditorType.Text)));

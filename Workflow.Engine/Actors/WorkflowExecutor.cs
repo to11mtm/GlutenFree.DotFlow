@@ -668,6 +668,10 @@ public class WorkflowExecutor : ReceiveActor
         // Standard modules ignore this key; FanIn aggregates it into 'result' per its mode~
         var incomingBranches = new List<Dictionary<string, object?>>(incomingConnections.Count);
 
+        // UX-F2: parallel per-branch metadata (source node + port), index-aligned with
+        // __incomingBranches__ — lets FanIn's 'named' mode key branches by their source port~ 🏷️
+        var incomingBranchMeta = new List<Dictionary<string, object?>>(incomingConnections.Count);
+
         foreach (var conn in incomingConnections)
         {
             if (_nodeOutputs.TryGetValue(conn.SourceNodeId, out var sourceOutputs))
@@ -699,6 +703,11 @@ public class WorkflowExecutor : ReceiveActor
 
                 // Phase 2.2.3b: also append the per-connection payload snapshot for FanIn~ 🪄
                 incomingBranches.Add(new Dictionary<string, object?>(sourceOutputs));
+                incomingBranchMeta.Add(new Dictionary<string, object?>
+                {
+                    ["sourceNodeId"] = conn.SourceNodeId,
+                    ["sourcePortName"] = conn.SourcePortName,
+                });
             }
             else
             {
@@ -709,11 +718,17 @@ public class WorkflowExecutor : ReceiveActor
 
                 // Predecessor was skipped — record an empty payload to preserve branch positions
                 incomingBranches.Add(new Dictionary<string, object?>());
+                incomingBranchMeta.Add(new Dictionary<string, object?>
+                {
+                    ["sourceNodeId"] = conn.SourceNodeId,
+                    ["sourcePortName"] = conn.SourcePortName,
+                });
             }
         }
 
         // Always expose the ordered branches collection — FanInModule reads this; everyone else ignores it~
         inputs["__incomingBranches__"] = incomingBranches;
+        inputs["__incomingBranchMeta__"] = incomingBranchMeta;
 
         _log.Debug(
             "📦 Node {NodeId} will receive {InputCount} total inputs: [{InputKeys}]",
