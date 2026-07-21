@@ -178,6 +178,12 @@ a.df-link:hover { text-decoration: underline; }
 
 /* 🎯 Selection / context menu / modal */
 .df-rubberband { position: absolute; border: 1px dashed var(--df-accent); background: rgba(79,156,249,0.12); pointer-events: none; }
+
+/* 🪄 Fan-in drop zones (shown while dragging builtin.fanin from the palette) */
+.df-dropzone { position: absolute; display: flex; align-items: center; justify-content: center; border: 2px dashed var(--df-accent); border-radius: var(--df-radius); background: rgba(79,156,249,0.08); pointer-events: none; z-index: 4; transition: border-color 0.1s, background 0.1s; }
+.df-dropzone__label { font-size: 0.7rem; color: var(--df-text-dim); white-space: nowrap; overflow: hidden; }
+.df-dropzone--armed { border-color: var(--df-state-completed); border-style: solid; background: rgba(74,222,128,0.18); box-shadow: 0 0 0 3px rgba(74,222,128,0.2); }
+.df-dropzone--armed .df-dropzone__label { color: var(--df-state-completed); }
 .df-ctxmenu-backdrop { position: fixed; inset: 0; z-index: 900; }
 .df-ctxmenu { position: fixed; z-index: 901; background: var(--df-surface-2); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-1); min-width: 160px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
 .df-ctxmenu__item { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--df-text); padding: var(--df-space-2) var(--df-space-3); cursor: pointer; border-radius: var(--df-radius); font: inherit; }

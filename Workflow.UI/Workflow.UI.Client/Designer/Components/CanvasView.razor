@@ -14,12 +14,24 @@
      @onpointerleave="OnViewportPointerUp"
      @onwheel="OnWheel" @onwheel:preventDefault="true"
      @oncontextmenu="OnViewportContextMenu" @oncontextmenu:preventDefault="true"
-     @ondragover:preventDefault="true"
+     @ondragover="OnDragOver" @ondragover:preventDefault="true"
      @ondrop="OnDrop"
      style="cursor:@(panning ? "grabbing" : "grab");">
     <div class="df-canvas-content"
          style="transform: translate(@(T.PanX.ToString(Inv))px, @(T.PanY.ToString(Inv))px) scale(@(T.Zoom.ToString(Inv)));">
         <EdgeLayer Document="Document" Selection="Selection" OnConnectionContextMenu="OnConnectionContextMenuInternal" />
+        @if (Commands is not null && DragState.DraggingModuleId == DropZones.FanInModuleId)
+        {
+            @foreach (var node in Document.Nodes)
+            {
+                var zone = DropZones.ZoneFor(node);
+                <div class="df-dropzone @(node.Id == dragArmedNodeId ? "df-dropzone--armed" : string.Empty)"
+                     data-dropzone-for="@node.Id"
+                     style="left:@(zone.X.ToString(Inv))px; top:@(zone.Y.ToString(Inv))px; width:@(zone.Width.ToString(Inv))px; height:@(zone.Height.ToString(Inv))px;">
+                    <span class="df-dropzone__label">🪄 all outputs</span>
+                </div>
+            }
+        }
         @foreach (var node in Document.Nodes)
         {
             <NodeView @key="node.Id" Node="node"
@@ -77,6 +89,9 @@
     private double rubberStartX, rubberStartY;
     private Rect? rubberBand;
 
+    // Fan-in drop zones: the node whose zone the drag cursor is currently over.
+    private string? dragArmedNodeId;
+
     // Connection drawing.
     private bool connecting;
     private DesignerNode? connectSource;
@@ -102,6 +117,22 @@
 
     private SelectionState? subscribedSelection;
 
+    protected override void OnInitialized()
+    {
+        // Show/hide the fan-in drop zones as a palette drag begins/ends.
+        this.DragState.Changed += this.OnDragStateChanged;
+    }
+
+    private void OnDragStateChanged()
+    {
+        if (this.DragState.DraggingModuleId is null)
+        {
+            this.dragArmedNodeId = null;
+        }
+
+        this.InvokeAsync(this.StateHasChanged);
+    }
+
     protected override void OnParametersSet()
     {
         // Re-render nodes/edges when the selection changes (endpoint + edge highlights).
@@ -125,6 +156,7 @@
     /// <inheritdoc/>
     public void Dispose()
     {
+        this.DragState.Changed -= this.OnDragStateChanged;
         if (this.subscribedSelection is not null)
         {
             this.subscribedSelection.Changed -= this.OnSelectionChanged;
@@ -523,6 +555,7 @@
 
     private async Task OnDrop(DragEventArgs e)
     {
+        this.dragArmedNodeId = null;
         var moduleId = this.DragState.End();
         if (string.IsNullOrEmpty(moduleId) || !this.OnDropModule.HasDelegate)
         {
@@ -531,6 +564,22 @@
 
         var canvasPoint = CanvasGeometry.ScreenToCanvas(new Point(e.OffsetX, e.OffsetY), this.Transform);
         await this.OnDropModule.InvokeAsync((moduleId, canvasPoint));
+    }
+
+    private void OnDragOver(DragEventArgs e)
+    {
+        if (this.Commands is null || this.DragState.DraggingModuleId != DropZones.FanInModuleId)
+        {
+            return;
+        }
+
+        var canvasPoint = CanvasGeometry.ScreenToCanvas(new Point(e.OffsetX, e.OffsetY), this.Transform);
+        var hit = DropZones.HitTestOutputSide(this.Document, canvasPoint)?.Id;
+        if (hit != this.dragArmedNodeId)
+        {
+            this.dragArmedNodeId = hit;
+            this.StateHasChanged();
+        }
     }
 
     private async Task OnWheel(WheelEventArgs e)

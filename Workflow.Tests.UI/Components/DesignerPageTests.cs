@@ -176,4 +176,76 @@ public sealed class DesignerPageTests : TestContext
             cut.FindAll("path.df-edge").Should().HaveCount(2);
         });
     }
+
+    [Fact]
+    public void DroppingFanIn_OnNodeOutputSide_AutoWiresAllOutputs()
+    {
+        var id = Guid.NewGuid();
+        var workflow = new WorkflowDto(
+            id, "wf", null, "1.0.0",
+            new List<NodeDto>
+            {
+                new("http-1", "builtin.http.request", "HTTP", new Dictionary<string, JsonElement>(), new PositionDto(100, 100)),
+            },
+            new List<ConnectionDto>(), new Dictionary<string, JsonElement>(), null, null, null, null, new List<string>());
+
+        // The source node has two outputs (success + error); the fan-in has a branches input.
+        var httpDetails = new ModuleDetailsDto(
+            "builtin.http.request", "HTTP Request", "HTTP", "d", "🌐", "1.0.0",
+            new ModuleSchemaDto(
+                new List<PortDefinitionDto> { new("input", "Input", "object", null, true, null) },
+                new List<PortDefinitionDto>
+                {
+                    new("success", "Success", "object", null, false, null),
+                    new("error", "Error", "object", null, false, null),
+                },
+                new List<ModulePropertyDefinitionDto>()),
+            new List<string>());
+        var fanInDetails = new ModuleDetailsDto(
+            "builtin.fanin", "Fan In", "Flow", "d", "🪄", "1.0.0",
+            new ModuleSchemaDto(
+                new List<PortDefinitionDto> { new("branches", "Branches", "object", null, false, null) },
+                new List<PortDefinitionDto> { new("result", "Result", "object", null, false, null) },
+                new List<ModulePropertyDefinitionDto>()),
+            new List<string>());
+
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            var body = path switch
+            {
+                "/api/v1/modules" => Json(new List<ModuleSummaryDto>()),
+                "/api/v1/modules/builtin.fanin" => Json(fanInDetails),
+                var p when p.StartsWith("/api/v1/modules/") => Json(httpDetails),
+                var p when p.StartsWith("/api/v1/workflows/") => Json(workflow),
+                _ => "{}",
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, id.ToString()));
+        cut.WaitForAssertion(() => cut.FindAll(".df-node").Should().ContainSingle());
+
+        // Simulate a palette drag of the fan-in dropped just right of http-1 (right edge = 100+200).
+        // The designer auto-fits after load, so convert the canvas point through the live transform.
+        var transform = cut.FindComponent<Workflow.UI.Client.Designer.Components.CanvasView>().Instance.Transform;
+        var screen = Workflow.UI.Client.Designer.State.CanvasGeometry.CanvasToScreen(
+            new Workflow.UI.Client.Designer.State.Point(320, 130), transform);
+        var dragState = this.Services.GetRequiredService<PaletteDragState>();
+        dragState.Begin("builtin.fanin");
+        cut.Find(".df-canvas-viewport").Drop(new Microsoft.AspNetCore.Components.Web.DragEventArgs
+        {
+            OffsetX = screen.X,
+            OffsetY = screen.Y,
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(2);
+            cut.Markup.Should().Contain("builtin.fanin");
+            // Both http outputs (success + error) are wired into the fan-in.
+            cut.FindAll("path.df-edge").Should().HaveCount(2);
+        });
+    }
 }

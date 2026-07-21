@@ -255,6 +255,17 @@ else if (document is not null)
             return;
         }
 
+        // 🪄 Dropping a Fan In onto a node's output side auto-wires ALL of that node's outputs.
+        if (drop.ModuleId == DropZones.FanInModuleId)
+        {
+            var target = DropZones.HitTestOutputSide(this.document, drop.CanvasPoint);
+            if (target is not null)
+            {
+                await this.FanInAllOutputs(target);
+                return;
+            }
+        }
+
         var schema = await this.EnsureSchema(drop.ModuleId);
         var existing = new HashSet<string>();
         foreach (var n in this.document.Nodes)
@@ -284,6 +295,47 @@ else if (document is not null)
         }
 
         this.commands.Execute(new AddNodeCommand(node));
+    }
+
+    /// <summary>
+    /// Adds a Fan In (mode=merge) to the right of the node and connects EVERY output port of the
+    /// node into it, as one undoable action~ 🪄.
+    /// </summary>
+    private async Task FanInAllOutputs(DesignerNode source)
+    {
+        if (this.commands is null || this.document is null)
+        {
+            return;
+        }
+
+        var schema = await this.EnsureSchema("builtin.fanin");
+        var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+        var fanIn = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate("builtin.fanin", existing),
+            ModuleId = "builtin.fanin",
+            Name = "Merge",
+            X = source.X + CanvasGeometry.NodeWidth + 80,
+            Y = source.Y,
+            Schema = schema,
+        };
+        fanIn.Properties["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("merge");
+
+        var targetPort = schema is { Inputs.Count: > 0 } ? schema.Inputs[0].Name : "branches";
+        var children = new List<IDesignerCommand> { new AddNodeCommand(fanIn) };
+        foreach (var port in NodePorts.Outputs(source))
+        {
+            children.Add(new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = source.Id,
+                SourcePortName = port,
+                TargetNodeId = fanIn.Id,
+                TargetPortName = targetPort,
+            }));
+        }
+
+        this.commands.Execute(new CompositeCommand("Fan in all outputs", children));
+        this.selection.SelectNode(fanIn.Id);
     }
 
     // ─── Context menu ────────────────────────────────────────────────────────────
