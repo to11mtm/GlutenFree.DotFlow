@@ -194,6 +194,73 @@ public sealed class ExecutionEndpointsTests : IClassFixture<ExecutionEndpointsTe
         found.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Detail_AfterCompletion_ReturnsProjectedRecord()
+    {
+        var client = this.factory.CreateClient();
+        var wfId = await this.CreateWorkflowAsync(client, "detail-" + Guid.NewGuid().ToString("N"));
+
+        var start = await client.PostAsJsonAsync($"/api/v1/workflows/{wfId}/execute/sync?timeoutSeconds=30", new { inputs = new { greeting = "hi" } });
+        var execId = (await start.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("executionId").GetGuid();
+
+        var resp = await client.GetAsync($"/api/v1/executions/{execId}/detail");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("executionId").GetGuid().Should().Be(execId);
+        body.GetProperty("workflowId").GetGuid().Should().Be(wfId);
+        body.GetProperty("state").GetString().Should().Be("Completed");
+        body.GetProperty("durationMs").GetDouble().Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    [Fact]
+    public async Task Detail_UnknownExecution_Returns404()
+    {
+        var client = this.factory.CreateClient();
+        (await client.GetAsync($"/api/v1/executions/{Guid.NewGuid()}/detail")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Nodes_AfterCompletion_ReturnsNodeRecords()
+    {
+        var client = this.factory.CreateClient();
+        var wfId = await this.CreateWorkflowAsync(client, "nodes-" + Guid.NewGuid().ToString("N"));
+
+        var start = await client.PostAsJsonAsync($"/api/v1/workflows/{wfId}/execute/sync?timeoutSeconds=30", new { inputs = new { } });
+        var execId = (await start.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("executionId").GetGuid();
+
+        var resp = await client.GetAsync($"/api/v1/executions/{execId}/nodes");
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        body.ValueKind.Should().Be(JsonValueKind.Array);
+
+        // The passthrough workflow's single node should have a persisted record.
+        var found = false;
+        foreach (var item in body.EnumerateArray())
+        {
+            item.GetProperty("nodeId").GetString().Should().NotBeNullOrEmpty();
+            item.GetProperty("state").GetString().Should().NotBeNullOrEmpty();
+            if (item.GetProperty("nodeId").GetString() == "n1")
+            {
+                found = true;
+            }
+        }
+
+        found.Should().BeTrue("the passthrough node n1 should be recorded");
+    }
+
+    [Fact]
+    public async Task Nodes_UnknownExecution_ReturnsEmptyArray()
+    {
+        var client = this.factory.CreateClient();
+        var resp = await client.GetAsync($"/api/v1/executions/{Guid.NewGuid()}/nodes");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        body.ValueKind.Should().Be(JsonValueKind.Array);
+        body.GetArrayLength().Should().Be(0);
+    }
+
     /// <summary>
     /// A factory with SQLite persistence (the real actor engine boots as part of the host)~ 🗄️.
     /// </summary>

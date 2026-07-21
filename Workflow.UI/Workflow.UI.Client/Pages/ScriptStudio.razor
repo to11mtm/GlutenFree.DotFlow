@@ -1,0 +1,318 @@
+@page "/scripts"
+@page "/scripts/{LibraryId}"
+@namespace Workflow.UI.Client.Pages
+@rendermode RenderModes.InteractiveWasm
+@implements IAsyncDisposable
+@using Workflow.UI.Client.Scripts.Components
+@using Workflow.UI.Client.Scripts.State
+@using System.Linq
+@inject Workflow.UI.Client.Api.ScriptsClient Scripts
+@inject Workflow.UI.Client.Services.ToastService Toasts
+@inject Workflow.UI.Client.Scripts.State.ScriptStudioHandoff Handoff
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Script Studio · DotFlow</PageTitle>
+
+<TopBar Subtitle="Script Studio">
+    <div class="df-row" style="gap: var(--df-space-2);">
+        <label class="df-field df-field--inline">
+            <span class="df-label">Language</span>
+            <select class="df-input" data-testid="language-select" @bind="SelectedLanguage" @bind:after="OnLanguageChanged">
+                @foreach (var lang in languageOptions)
+                {
+                    <option value="@lang.LanguageId">@lang.DisplayName@(lang.Runnable ? string.Empty : " (edit only)")</option>
+                }
+            </select>
+        </label>
+        <TemplatePicker Language="@SelectedLanguage" CurrentCode="@scriptCode"
+                        OnReplace="ReplaceCode" OnInsertAtCursor="InsertCode" />
+        <LibraryBar @ref="libraryBar" Language="@SelectedLanguage" OnOpen="OpenLibrary" OnDeleted="OnLibraryDeleted" />
+        <button class="df-btn" data-testid="save-btn" @onclick="() => showSaveDialog = true">💾 Save</button>
+        @if (handoffNodeId is not null)
+        {
+            <button class="df-btn df-btn--primary" data-testid="apply-to-node" @onclick="ApplyToNode">✅ Apply to node</button>
+        }
+    </div>
+</TopBar>
+<ToastHost />
+
+<div class="df-studio">
+    <div class="df-studio__body">
+        <aside class="df-studio__aside">
+            <ApiReferencePanel OnInsert="InsertApiCall" />
+        </aside>
+        <div class="df-studio__main">
+            @if (!CanRun)
+            {
+                <div class="df-banner df-banner--info" data-testid="non-runnable-hint">
+                    ⚠️ <strong>@SelectedDisplayName</strong> can be edited and highlighted here, but running it isn't
+                    supported yet — pick a runnable language (JavaScript, C#, Lua) to test. 🐍
+                </div>
+            }
+            <ScriptEditor @ref="editor" @bind-Value="scriptCode" Language="@SelectedLanguage" Options="options" OnEditorReady="RegisterProviders" />
+        </div>
+        <aside class="df-studio__runner">
+            <TestRunnerPanel @ref="runner" Code="@scriptCode" Language="@SelectedLanguage" CanRun="CanRun" />
+        </aside>
+    </div>
+
+    <div class="df-studio__status">
+        @if (loadError is not null)
+        {
+            <span class="df-status-item df-status-item--warn" data-testid="languages-error">@loadError</span>
+        }
+        else
+        {
+            <span class="df-status-item">✓ @SelectedDisplayName</span>
+        }
+        @if (activeLibrary is not null)
+        {
+            <span class="df-status-item" data-testid="active-library">📚 @activeLibrary.Name</span>
+            <span class="df-status-item df-status-item--warn" data-testid="dirty">@(IsDirty ? "●unsaved" : "")</span>
+        }
+        <span class="df-status-spacer"></span>
+        <span class="df-status-item">🟢 API</span>
+    </div>
+</div>
+
+@if (showSaveDialog)
+{
+    <SaveLibraryDialog Code="@scriptCode" Language="@SelectedLanguage" ActiveLibrary="activeLibrary"
+                       OnSaved="OnLibrarySaved" OnCancel="() => showSaveDialog = false" />
+}
+
+@code {
+    private ScriptEditor? editor;
+    private LibraryBar? libraryBar;
+    private TestRunnerPanel? runner;
+    private DotNetObjectReference<ScriptStudio>? keysRef;
+    private readonly List<LanguageOption> languageOptions = new();
+    private ScriptEditorOptions options = new();
+    private string scriptCode = string.Empty;
+    private string? loadError;
+    private ScriptLibraryDto? activeLibrary;
+    private bool showSaveDialog;
+    private string? handoffNodeId;
+    private string? handoffReturnUrl;
+
+    /// <summary>Optional deep-link library id — the studio opens with that library loaded (3.4.4)~ 📚.</summary>
+    [Parameter]
+    public string? LibraryId { get; set; }
+
+    private string SelectedLanguage { get; set; } = "javascript";
+
+    private bool IsDirty => this.activeLibrary is not null && this.scriptCode != this.activeLibrary.Code;
+
+    private bool CanRun => ScriptEditorOptions.IsKnownRunnable(this.SelectedLanguage)
+        || this.languageOptions.Exists(l => l.Runnable && string.Equals(l.LanguageId, this.SelectedLanguage, System.StringComparison.OrdinalIgnoreCase));
+
+    private string SelectedDisplayName
+        => this.languageOptions.Find(l => string.Equals(l.LanguageId, this.SelectedLanguage, System.StringComparison.OrdinalIgnoreCase))?.DisplayName ?? this.SelectedLanguage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var langs = await Scripts.GetLanguagesAsync();
+            foreach (var l in langs)
+            {
+                this.languageOptions.Add(new LanguageOption(l.LanguageId, l.DisplayName, true));
+            }
+        }
+        catch (ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+        }
+
+        // Python is highlight/edit-only until the executor ships (Q2) — offer it even if not registered.
+        if (!this.languageOptions.Exists(l => string.Equals(l.LanguageId, "python", System.StringComparison.OrdinalIgnoreCase)))
+        {
+            this.languageOptions.Add(new LanguageOption("python", "Python", false));
+        }
+
+        if (this.languageOptions.Count > 0 && !this.languageOptions.Exists(l => l.LanguageId == this.SelectedLanguage))
+        {
+            var firstRunnable = this.languageOptions.Find(l => l.Runnable);
+            this.SelectedLanguage = firstRunnable?.LanguageId ?? this.languageOptions[0].LanguageId;
+        }
+
+        // Deep-link: /scripts/{libraryId} opens the studio with that library loaded.
+        if (!string.IsNullOrWhiteSpace(this.LibraryId))
+        {
+            try
+            {
+                var lib = await Scripts.GetLibraryAsync(this.LibraryId!);
+                if (lib is not null)
+                {
+                    this.LoadLibraryIntoEditor(lib);
+                }
+            }
+            catch (ApiException ex)
+            {
+                Toasts.Error(ex.Error.Summarize());
+            }
+        }
+
+        // Handoff: seed from a designer "Edit in Script Studio" request (D9).
+        if (this.Handoff.TakeRequest() is { } request)
+        {
+            this.handoffNodeId = request.NodeId;
+            this.handoffReturnUrl = request.ReturnUrl;
+            this.scriptCode = request.Code;
+            if (ScriptEditorOptions.IsHighlightable(request.Language) || this.languageOptions.Exists(l => l.LanguageId == request.Language))
+            {
+                this.SelectedLanguage = request.Language;
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            this.keysRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("dotflowKeys.register", this.keysRef);
+            }
+            catch
+            {
+                // keys.js unavailable — shortcuts are a progressive enhancement.
+            }
+        }
+    }
+
+    /// <summary>Window-level shortcut handler (registered via keys.js): Ctrl+Enter runs, Ctrl+S saves~ ⌨️.</summary>
+    /// <param name="key">The pressed key.</param>
+    /// <param name="ctrl">Whether Ctrl/Cmd was held.</param>
+    /// <param name="shift">Whether Shift was held.</param>
+    /// <returns>A task.</returns>
+    [JSInvokable]
+    public async Task OnShortcut(string key, bool ctrl, bool shift)
+    {
+        if (!ctrl)
+        {
+            return;
+        }
+
+        if (string.Equals(key, "Enter", System.StringComparison.OrdinalIgnoreCase) && this.runner is not null)
+        {
+            await this.runner.RunExternalAsync();
+        }
+        else if (string.Equals(key, "s", System.StringComparison.OrdinalIgnoreCase))
+        {
+            this.showSaveDialog = true;
+            this.StateHasChanged();
+        }
+    }
+
+    private void ApplyToNode()
+    {
+        if (this.handoffNodeId is not null)
+        {
+            this.Handoff.Fulfill(this.handoffNodeId, this.scriptCode);
+            this.Nav.NavigateTo(this.handoffReturnUrl ?? "/");
+        }
+    }
+
+    private void OnLanguageChanged() => this.StateHasChanged();
+
+    private async Task InsertApiCall(ApiMethodInfo method)
+    {
+        if (this.editor is not null)
+        {
+            await this.editor.InsertTextAsync(method.CallSnippet);
+        }
+    }
+
+    private void ReplaceCode(string templateCode) => this.scriptCode = templateCode;
+
+    private void OpenLibrary(ScriptLibraryDto lib) => this.LoadLibraryIntoEditor(lib);
+
+    private void LoadLibraryIntoEditor(ScriptLibraryDto lib)
+    {
+        this.activeLibrary = lib;
+        this.scriptCode = lib.Code;
+        if (ScriptEditorOptions.IsHighlightable(lib.Language) || this.languageOptions.Exists(l => l.LanguageId == lib.Language))
+        {
+            this.SelectedLanguage = lib.Language;
+        }
+    }
+
+    private async Task OnLibrarySaved(ScriptLibraryDto saved)
+    {
+        this.activeLibrary = saved;
+        this.showSaveDialog = false;
+        Toasts.Success($"Saved library “{saved.Name}”");
+        if (this.libraryBar is not null)
+        {
+            await this.libraryBar.Reload();
+        }
+    }
+
+    private void OnLibraryDeleted(string libraryId)
+    {
+        Toasts.Success("Library deleted");
+        if (this.activeLibrary?.LibraryId == libraryId)
+        {
+            this.activeLibrary = null;
+            this.scriptCode = string.Empty;
+        }
+    }
+
+    private async Task InsertCode(string templateCode)
+    {
+        if (this.editor is not null)
+        {
+            await this.editor.InsertTextAsync(templateCode);
+        }
+    }
+
+    private async Task RegisterProviders(string editorId)
+    {
+        // MVP: live completions/hover target JavaScript (the workflow global is JS). Other languages
+        // still get the reference panel + insert-at-cursor (Q5). Best-effort — no-op without Monaco.
+        var completions = WorkflowApiDescriptor.Methods.Select(m => new
+        {
+            label = m.JsName,
+            insertText = m.Signature,
+            detail = m.TypedSignature,
+            documentation = m.Summary,
+        }).ToArray();
+        var hovers = WorkflowApiDescriptor.Methods.Select(m => new
+        {
+            label = m.JsName,
+            detail = m.TypedSignature,
+            documentation = m.Summary,
+        }).ToArray();
+
+        try
+        {
+            await JS.InvokeVoidAsync("dotflowMonaco.registerCompletions", "javascript", completions);
+            await JS.InvokeVoidAsync("dotflowMonaco.registerHover", "javascript", hovers);
+        }
+        catch
+        {
+            // Monaco absent (textarea fallback) — the reference panel still works.
+        }
+    }
+
+    private sealed record LanguageOption(string LanguageId, string DisplayName, bool Runnable);
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dotflowKeys.unregister");
+        }
+        catch
+        {
+            // ignore — page tearing down.
+        }
+
+        this.keysRef?.Dispose();
+    }
+}
+

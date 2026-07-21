@@ -70,4 +70,68 @@ public sealed class ModulesClient
         this.listCache = null;
         this.detailsCache.Clear();
     }
+
+    /// <summary>Uploads a <c>.wfmod</c> package (multipart, admin)~ ⬆️.</summary>
+    /// <param name="fileName">The uploaded file name.</param>
+    /// <param name="content">The package bytes.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The install result (details + warnings).</returns>
+    public async Task<ModuleInstallResultDto> UploadAsync(string fileName, System.IO.Stream content, CancellationToken ct = default)
+    {
+        using var form = new MultipartFormDataContent();
+        var fileContent = new StreamContent(content);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        form.Add(fileContent, "package", fileName);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "api/v1/modules/upload") { Content = form };
+        var result = await ApiHttp.SendAsync<ModuleInstallResultDto>(this.http, request, ct).ConfigureAwait(false);
+        this.InvalidateCache();
+        return result;
+    }
+
+    /// <summary>Enables a module (optionally a specific version)~ 🔘.</summary>
+    /// <param name="moduleId">The module id.</param>
+    /// <param name="version">Optional specific version.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The toggle result.</returns>
+    public Task<ModuleToggleResultDto> EnableAsync(string moduleId, string? version = null, CancellationToken ct = default)
+        => this.ToggleAsync(moduleId, "enable", version, ct);
+
+    /// <summary>Disables a module (optionally a specific version)~ 🔘.</summary>
+    /// <param name="moduleId">The module id.</param>
+    /// <param name="version">Optional specific version.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The toggle result.</returns>
+    public Task<ModuleToggleResultDto> DisableAsync(string moduleId, string? version = null, CancellationToken ct = default)
+        => this.ToggleAsync(moduleId, "disable", version, ct);
+
+    /// <summary>Uninstalls a module (optionally a specific version; admin)~ 🗑️.</summary>
+    /// <param name="moduleId">The module id.</param>
+    /// <param name="version">Optional specific version.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A task.</returns>
+    public async Task UninstallAsync(string moduleId, string? version = null, CancellationToken ct = default)
+    {
+        var url = $"api/v1/modules/{System.Uri.EscapeDataString(moduleId)}";
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            url += $"?version={System.Uri.EscapeDataString(version)}";
+        }
+
+        await ApiHttp.SendNoContentAsync(this.http, new HttpRequestMessage(HttpMethod.Delete, url), ct).ConfigureAwait(false);
+        this.InvalidateCache();
+    }
+
+    private async Task<ModuleToggleResultDto> ToggleAsync(string moduleId, string action, string? version, CancellationToken ct)
+    {
+        var url = $"api/v1/modules/{System.Uri.EscapeDataString(moduleId)}/{action}";
+        if (!string.IsNullOrWhiteSpace(version))
+        {
+            url += $"?version={System.Uri.EscapeDataString(version)}";
+        }
+
+        var result = await ApiHttp.SendAsync<ModuleToggleResultDto>(this.http, new HttpRequestMessage(HttpMethod.Post, url), ct).ConfigureAwait(false);
+        this.InvalidateCache();
+        return result;
+    }
 }

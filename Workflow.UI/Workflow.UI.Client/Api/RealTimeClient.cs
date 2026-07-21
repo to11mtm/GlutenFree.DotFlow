@@ -21,6 +21,7 @@ public sealed class RealTimeClient : IAsyncDisposable
     private readonly AuthState auth;
     private HubConnection? connection;
     private Guid? subscribedExecution;
+    private bool subscribedAll;
 
     /// <summary>Initializes a new instance of the <see cref="RealTimeClient"/> class~ 📡.</summary>
     /// <param name="options">The API options (for the hub URL).</param>
@@ -102,6 +103,11 @@ public sealed class RealTimeClient : IAsyncDisposable
                 await this.connection!.InvokeAsync("SubscribeToExecution", execId).ConfigureAwait(false);
             }
 
+            if (this.subscribedAll)
+            {
+                await this.connection!.InvokeAsync("SubscribeToAll").ConfigureAwait(false);
+            }
+
             this.Reconnected?.Invoke();
         };
 
@@ -130,6 +136,33 @@ public sealed class RealTimeClient : IAsyncDisposable
         }
 
         this.subscribedExecution = null;
+    }
+
+    /// <summary>
+    /// Subscribes to the global <c>all</c> firehose (every execution's events). Requires the admin
+    /// policy server-side; throws <see cref="Microsoft.AspNetCore.SignalR.HubException"/> otherwise
+    /// so callers can fall back to polling (3.5 D10)~ 🌐.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A task.</returns>
+    public async Task SubscribeToAllAsync(CancellationToken ct = default)
+    {
+        await this.ConnectAsync(ct).ConfigureAwait(false);
+        await this.connection!.InvokeAsync("SubscribeToAll", ct).ConfigureAwait(false);
+        this.subscribedAll = true;
+    }
+
+    /// <summary>Unsubscribes from the global firehose, if subscribed~ 🌐.</summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A task.</returns>
+    public async Task UnsubscribeFromAllAsync(CancellationToken ct = default)
+    {
+        if (this.connection is not null && this.subscribedAll && this.IsConnected)
+        {
+            await this.connection.InvokeAsync("UnsubscribeFromAll", ct).ConfigureAwait(false);
+        }
+
+        this.subscribedAll = false;
     }
 
     /// <inheritdoc/>

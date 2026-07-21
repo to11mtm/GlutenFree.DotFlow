@@ -1,6 +1,6 @@
 @page "/designer/{Id}"
 @namespace Workflow.UI.Client.Pages
-@rendermode InteractiveWebAssembly
+@rendermode RenderModes.InteractiveWasm
 @using System.Text.Json
 @using Workflow.UI.Client.Designer.Components
 @using Workflow.UI.Client.Designer.State
@@ -65,6 +65,7 @@ else if (document is not null)
                                 Selection="selection" Commands="commands"
                                 OnDropModule="OnDropModule"
                                 OnNodeContextMenu="OnNodeContextMenu"
+                                OnConnectionContextMenu="OnConnectionContextMenu"
                                 OnCanvasContextMenu="OnCanvasContextMenu" />
                 </div>
                 <div class="df-designer__props">
@@ -295,11 +296,28 @@ else if (document is not null)
         }
 
         var node = e.Node;
-        this.menuItems = new List<ContextMenu.MenuItem>
+        var items = new List<ContextMenu.MenuItem>
         {
             new("rename", "Rename", () => { this.BeginRename(node); return Task.CompletedTask; }),
             new("duplicate", "Duplicate", () => { this.Duplicate(node); return Task.CompletedTask; }),
             new("delete", "Delete", () => { this.DeleteSelected(); return Task.CompletedTask; }, Danger: true),
+        };
+
+        if (this.selection.Nodes.Count >= 2)
+        {
+            items.Insert(2, new("merge-fanin", "Merge outputs → Fan In", () => this.MergeSelectedOutputs()));
+        }
+
+        this.menuItems = items;
+        this.ShowMenu(e.Args);
+    }
+
+    private void OnConnectionContextMenu((string Key, MouseEventArgs Args) e)
+    {
+        this.selection.SelectConnection(e.Key);
+        this.menuItems = new List<ContextMenu.MenuItem>
+        {
+            new("delete", "Delete connection", () => { this.DeleteSelected(); return Task.CompletedTask; }, Danger: true),
         };
         this.ShowMenu(e.Args);
     }
@@ -326,13 +344,37 @@ else if (document is not null)
 
     private void DeleteSelected()
     {
-        if (this.commands is null || this.selection.Nodes.Count == 0)
+        if (this.commands is null || this.document is null)
         {
             return;
         }
 
-        this.commands.Execute(new RemoveNodesCommand(this.selection.Nodes.ToList()));
-        this.selection.Prune(this.document!);
+        if (this.selection.Nodes.Count == 0 && this.selection.Connections.Count == 0)
+        {
+            return;
+        }
+
+        var children = new List<IDesignerCommand>();
+        if (this.selection.Nodes.Count > 0)
+        {
+            children.Add(new RemoveNodesCommand(this.selection.Nodes.ToList()));
+        }
+
+        if (this.selection.Connections.Count > 0)
+        {
+            children.Add(new RemoveConnectionsCommand(this.selection.Connections.ToList()));
+        }
+
+        if (children.Count == 1)
+        {
+            this.commands.Execute(children[0]);
+        }
+        else
+        {
+            this.commands.Execute(new CompositeCommand("Delete selection", children));
+        }
+
+        this.selection.Prune(this.document);
     }
 
     private void Duplicate(DesignerNode node)
@@ -348,6 +390,60 @@ else if (document is not null)
         clone.X = node.X + 40;
         clone.Y = node.Y + 40;
         this.commands.Execute(new AddNodeCommand(clone));
+    }
+
+    /// <summary>
+    /// Adds a Fan In node (mode=merge → one composite object) to the right of the selected nodes
+    /// and connects each node's first output to it, as a single undoable action~ 🪄.
+    /// </summary>
+    private async Task MergeSelectedOutputs()
+    {
+        if (this.commands is null || this.document is null || this.selection.Nodes.Count < 2)
+        {
+            return;
+        }
+
+        var sources = this.selection.Nodes
+            .Select(id => this.document.FindNode(id))
+            .Where(n => n is not null)
+            .Select(n => n!)
+            .OrderBy(n => n.Y)
+            .ToList();
+        if (sources.Count < 2)
+        {
+            return;
+        }
+
+        var schema = await this.EnsureSchema("builtin.fanin");
+        var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+        var fanIn = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate("builtin.fanin", existing),
+            ModuleId = "builtin.fanin",
+            Name = "Merge",
+            X = sources.Max(n => n.X) + CanvasGeometry.NodeWidth + 80,
+            Y = sources.Average(n => n.Y),
+            Schema = schema,
+        };
+        fanIn.Properties["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("merge");
+
+        var targetPort = schema is { Inputs.Count: > 0 } ? schema.Inputs[0].Name : "branches";
+        var children = new List<IDesignerCommand> { new AddNodeCommand(fanIn) };
+        foreach (var source in sources)
+        {
+            var outputs = NodePorts.Outputs(source);
+            var sourcePort = outputs.Contains("success") ? "success" : outputs[0];
+            children.Add(new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = source.Id,
+                SourcePortName = sourcePort,
+                TargetNodeId = fanIn.Id,
+                TargetPortName = targetPort,
+            }));
+        }
+
+        this.commands.Execute(new CompositeCommand("Merge outputs", children));
+        this.selection.SelectNode(fanIn.Id);
     }
 
     private void Copy()

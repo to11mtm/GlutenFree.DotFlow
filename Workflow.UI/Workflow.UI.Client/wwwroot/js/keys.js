@@ -47,3 +47,16 @@ window.dotflowKeys = (function () {
         setDirty: function (value) { dirty = value; }
     };
 })();
+
+// 💾 Phase 3.5.4 — Trigger a client-side text-file download (the log viewer's "download .txt").
+window.dotflowDownload = function (filename, text) {
+    const blob = new Blob([text || ""], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "download.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};

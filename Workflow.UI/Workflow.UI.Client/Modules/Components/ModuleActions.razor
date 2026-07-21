@@ -1,0 +1,159 @@
+@namespace Workflow.UI.Client.Modules.Components
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Modules.State
+
+@* 🔘🗑 Phase 3.6.3 — The module management action row: enable/disable (with a dependents heads-up),
+   version toggles, and uninstall (with confirm + server 409 surfacing). *@
+<div class="df-modactions">
+    @if (Doc.Enabled)
+    {
+        <button class="df-btn df-btn--small" data-testid="action-disable" disabled="@busy" @onclick="BeginDisable">🔘 Disable</button>
+    }
+    else
+    {
+        <button class="df-btn df-btn--small df-btn--primary" data-testid="action-enable" disabled="@busy" @onclick="() => ToggleModule(true)">🔘 Enable</button>
+    }
+    <button class="df-btn df-btn--small df-btn--danger" data-testid="action-uninstall" disabled="@busy" @onclick="() => confirmUninstall = true">🗑 Uninstall</button>
+</div>
+
+@if (pendingDisableDependents is not null)
+{
+    <div class="df-modactions__confirm" data-testid="disable-confirm">
+        @if (pendingDisableDependents.Count > 0)
+        {
+            <p>⚠ These loaded modules depend on <strong>@Doc.Id</strong>: @string.Join(", ", pendingDisableDependents).</p>
+        }
+        else
+        {
+            <p>⚠ Disabling may break workflows that use <strong>@Doc.Id</strong> (workflow-level usage isn't indexed).</p>
+        }
+        <button class="df-btn df-btn--small df-btn--danger" data-testid="disable-confirm-yes" @onclick="() => ToggleModule(false)">Disable anyway</button>
+        <button class="df-btn df-btn--small" data-testid="disable-confirm-no" @onclick="() => pendingDisableDependents = null">Cancel</button>
+    </div>
+}
+
+@if (confirmUninstall)
+{
+    <div class="df-modactions__confirm" data-testid="uninstall-confirm">
+        <p>Uninstall <strong>@Doc.Id</strong>? This cannot be undone.</p>
+        <button class="df-btn df-btn--small df-btn--danger" data-testid="uninstall-confirm-yes" @onclick="Uninstall">Uninstall</button>
+        <button class="df-btn df-btn--small" data-testid="uninstall-confirm-no" @onclick="() => confirmUninstall = false">Cancel</button>
+    </div>
+}
+
+@if (error is not null)
+{
+    <div class="df-field-error" data-testid="action-error">@error</div>
+}
+
+@code {
+    private bool busy;
+    private bool confirmUninstall;
+    private IReadOnlyList<string>? pendingDisableDependents;
+    private string? error;
+
+    /// <summary>The module's generated documentation (for id/version/enabled).</summary>
+    [Parameter, EditorRequired]
+    public ModuleDocModel Doc { get; set; } = default!;
+
+    /// <summary>The modules client.</summary>
+    [Parameter, EditorRequired]
+    public ModulesClient Modules { get; set; } = default!;
+
+    /// <summary>The module details the client has loaded (for the dependents heads-up).</summary>
+    [Parameter]
+    public IReadOnlyList<ModuleDetailsDto> KnownDetails { get; set; } = System.Array.Empty<ModuleDetailsDto>();
+
+    /// <summary>Raised after a successful mutation (the page re-fetches + reloads).</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    /// <summary>Raised after a successful uninstall (the page closes the drawer).</summary>
+    [Parameter]
+    public EventCallback OnUninstalled { get; set; }
+
+    private void BeginDisable()
+        => this.pendingDisableDependents = DependencyHints.Dependents(this.KnownDetails, this.Doc.Id);
+
+    private async Task ToggleModule(bool enable)
+    {
+        this.pendingDisableDependents = null;
+        this.busy = true;
+        this.error = null;
+        try
+        {
+            if (enable)
+            {
+                await this.Modules.EnableAsync(this.Doc.Id, this.Doc.Version);
+            }
+            else
+            {
+                await this.Modules.DisableAsync(this.Doc.Id, this.Doc.Version);
+            }
+
+            await this.OnChanged.InvokeAsync();
+        }
+        catch (ApiException ex)
+        {
+            this.error = Friendly(ex);
+        }
+        finally
+        {
+            this.busy = false;
+        }
+    }
+
+    /// <summary>Toggles a specific version (from the version panel)~ 🔢.</summary>
+    /// <param name="request">The (version, enable) request.</param>
+    /// <returns>A task.</returns>
+    public async Task ToggleVersion((string Version, bool Enable) request)
+    {
+        this.busy = true;
+        this.error = null;
+        try
+        {
+            if (request.Enable)
+            {
+                await this.Modules.EnableAsync(this.Doc.Id, request.Version);
+            }
+            else
+            {
+                await this.Modules.DisableAsync(this.Doc.Id, request.Version);
+            }
+
+            await this.OnChanged.InvokeAsync();
+        }
+        catch (ApiException ex)
+        {
+            this.error = Friendly(ex);
+        }
+        finally
+        {
+            this.busy = false;
+        }
+    }
+
+    private async Task Uninstall()
+    {
+        this.confirmUninstall = false;
+        this.busy = true;
+        this.error = null;
+        try
+        {
+            await this.Modules.UninstallAsync(this.Doc.Id);
+            await this.OnUninstalled.InvokeAsync();
+        }
+        catch (ApiException ex)
+        {
+            this.error = Friendly(ex);
+        }
+        finally
+        {
+            this.busy = false;
+        }
+    }
+
+    private static string Friendly(ApiException ex)
+        => ex.Error.StatusCode is 401 or 403 ? "This action requires admin/write access." : ex.Error.Summarize();
+}

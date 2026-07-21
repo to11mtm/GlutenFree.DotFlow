@@ -1,0 +1,37 @@
+@namespace Workflow.UI.Client.Modules.Components
+@using Workflow.UI.Client.Modules.State
+
+@* 🔍 Phase 3.6.0 — The manager filter bar (search + category + enabled-only). Edits the shared
+   catalog; raises OnChanged so the page re-renders. *@
+<div class="df-modfilters">
+    <input class="df-input" data-testid="mod-search" placeholder="🔍 search modules…"
+           value="@Catalog.Search" @oninput="OnSearch" />
+    <select class="df-input df-input--tiny" data-testid="mod-category" @bind="Catalog.Category" @bind:after="Raise">
+        <option value="All">All categories</option>
+        @foreach (var c in Catalog.Categories)
+        {
+            <option value="@c">@c</option>
+        }
+    </select>
+    <label class="df-modfilters__toggle">
+        <input type="checkbox" data-testid="mod-enabled-only" @bind="Catalog.EnabledOnly" @bind:after="Raise" /> enabled only
+    </label>
+</div>
+
+@code {
+    /// <summary>The shared catalog the bar edits.</summary>
+    [Parameter, EditorRequired]
+    public ModuleCatalog Catalog { get; set; } = default!;
+
+    /// <summary>Raised when a filter changes.</summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private Task OnSearch(ChangeEventArgs e)
+    {
+        this.Catalog.Search = e.Value?.ToString() ?? string.Empty;
+        return this.Raise();
+    }
+
+    private Task Raise() => this.OnChanged.HasDelegate ? this.OnChanged.InvokeAsync() : Task.CompletedTask;
+}

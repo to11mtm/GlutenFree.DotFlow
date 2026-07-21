@@ -1,0 +1,114 @@
+@namespace Workflow.UI.Client.Modules.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+
+@* ⬆️ Phase 3.6.2 — Upload a .wfmod package (InputFile + drag-drop) with progress + validation
+   feedback (warnings on success, ProblemDetails errors on failure). *@
+<div class="df-modal" data-testid="upload-dialog">
+    <div class="df-modal__panel">
+        <h3>Upload module (.wfmod)</h3>
+
+        <label class="df-upload__zone" data-testid="upload-zone">
+            <InputFile OnChange="OnFileSelected" accept=".wfmod" class="df-upload__input" />
+            @if (file is null)
+            {
+                <span>⬆ Drag a <code>.wfmod</code> here, or choose a file</span>
+            }
+            else
+            {
+                <span data-testid="upload-file">@file.Name (@FormatSize(file.Size))</span>
+            }
+        </label>
+
+        @if (uploading)
+        {
+            <div class="df-upload__progress" data-testid="upload-progress">▓▓▓▓ installing…</div>
+        }
+
+        @if (result is not null)
+        {
+            <div class="df-upload__ok" data-testid="upload-success">✅ Installed @result.Module.Id v@(result.Module.Version)</div>
+            @if (result.Warnings.Count > 0)
+            {
+                <div class="df-upload__warn" data-testid="upload-warnings">
+                    ⚠ warnings:
+                    <ul>
+                        @foreach (var w in result.Warnings)
+                        {
+                            <li>@w</li>
+                        }
+                    </ul>
+                </div>
+            }
+        }
+
+        @if (error is not null)
+        {
+            <div class="df-field-error" data-testid="upload-error">✖ @error</div>
+        }
+
+        <div class="df-modal__actions">
+            <button class="df-btn df-btn--primary" data-testid="upload-submit" disabled="@(file is null || uploading)" @onclick="Upload">Upload</button>
+            <button class="df-btn" data-testid="upload-close" @onclick="() => OnClose.InvokeAsync()">Close</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IBrowserFile? file;
+    private bool uploading;
+    private ModuleInstallResultDto? result;
+    private string? error;
+
+    /// <summary>Raised after a successful install (the page refreshes the list).</summary>
+    [Parameter]
+    public EventCallback OnUploaded { get; set; }
+
+    /// <summary>Raised when the dialog is dismissed.</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>The injected modules client.</summary>
+    [Parameter, EditorRequired]
+    public ModulesClient Modules { get; set; } = default!;
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        this.file = e.File;
+        this.result = null;
+        this.error = null;
+    }
+
+    private async Task Upload()
+    {
+        if (this.file is null)
+        {
+            return;
+        }
+
+        this.uploading = true;
+        this.result = null;
+        this.error = null;
+        try
+        {
+            // .wfmod packages bundle DLLs — allow a generous size (100 MB).
+            await using var stream = this.file.OpenReadStream(104_857_600);
+            this.result = await this.Modules.UploadAsync(this.file.Name, stream);
+            await this.OnUploaded.InvokeAsync();
+        }
+        catch (ApiException ex)
+        {
+            this.error = ex.Error.StatusCode is 401 or 403
+                ? "Uploading requires admin."
+                : ex.Error.Summarize();
+        }
+        finally
+        {
+            this.uploading = false;
+        }
+    }
+
+    private static string FormatSize(long bytes)
+        => bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):F1} MB" : $"{bytes / 1024.0:F0} KB";
+}

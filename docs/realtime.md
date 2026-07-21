@@ -3,6 +3,9 @@
 > Phase 3.2 — stream workflow execution events to clients in real time over SignalR,
 > instead of polling. Made with 💖 by Ami-Chan~ ✨
 
+> 📡 The **[Execution Monitor](execution-monitor.md)** (`/monitor`) is the main consumer of this
+> hub — a live dashboard + per-execution detail built on the firehose described here.
+
 The `WorkflowHub` pushes execution and node lifecycle events to subscribed clients as they
 happen. It's a thin real-time layer over the engine's existing observability: the engine
 publishes lifecycle events to the Akka `EventStream`, and a hosted `ExecutionEventBridge`

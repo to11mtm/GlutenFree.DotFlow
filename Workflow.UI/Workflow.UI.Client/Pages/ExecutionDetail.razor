@@ -1,0 +1,286 @@
+@page "/monitor/{ExecutionId}"
+@namespace Workflow.UI.Client.Pages
+@rendermode RenderModes.InteractiveWasm
+@implements IAsyncDisposable
+@using System.Text.Json
+@using Workflow.UI.Client.Execution.Components
+@using Workflow.UI.Client.Execution.State
+@inject Workflow.UI.Client.Api.ExecutionsClient Executions
+@inject Workflow.UI.Client.Api.RealTimeClient RealTime
+@inject Workflow.UI.Client.Services.ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>Execution · DotFlow</PageTitle>
+
+<TopBar Subtitle="Monitor" />
+<ToastHost />
+
+<div class="df-execdetail">
+    <div class="df-execdetail__header">
+        <button class="df-btn df-btn--link" data-testid="back-to-monitor" @onclick="@(() => Nav.NavigateTo("/monitor"))">← Monitor</button>
+        @if (loadError is not null)
+        {
+            <span class="df-status-item df-status-item--warn" data-testid="detail-error">@loadError</span>
+        }
+        else if (detail is { } d)
+        {
+            <span class="df-execdetail__id">@d.ExecutionId.ToString()[..8]…</span>
+            <span class="df-execdetail__wf" data-testid="detail-workflow">@d.WorkflowId.ToString()[..8]…</span>
+            <span class="df-execdetail__state df-execdetail__state--@d.State.ToLowerInvariant()" data-testid="detail-state">@d.State</span>
+            <span class="df-execdetail__dur">@DurationText(d)</span>
+            @if (IsRunning)
+            {
+                <button class="df-btn df-btn--danger df-btn--small" data-testid="detail-cancel" @onclick="Cancel">⏹ Cancel</button>
+            }
+            <button class="df-btn df-btn--link" data-testid="open-in-designer" @onclick="OpenInDesigner">open workflow in designer →</button>
+        }
+    </div>
+
+    @if (detail is not null)
+    {
+        <NodeInspector Nodes="NodeRecords" OnSelect="SelectNode" />
+        <div class="df-execdetail__logs">
+            <div class="df-nodeinspect__label">run log</div>
+            <LogViewer Entries="runState.Log" />
+        </div>
+        <div class="df-execdetail__replay">
+            <div class="df-nodeinspect__label">replay</div>
+            <ReplayTimeline Nodes="NodeRecords" Running="IsRunning" />
+        </div>
+    }
+</div>
+
+@code {
+    private ExecutionDetailDto? detail;
+    private List<NodeExecutionRecordDto> nodeRecords = new();
+    private readonly RunState runState = new();
+    private string? selectedNode;
+    private string? loadError;
+    private bool disposed;
+
+    /// <summary>The execution id (from the route).</summary>
+    [Parameter]
+    public string ExecutionId { get; set; } = string.Empty;
+
+    private bool IsRunning => this.detail is { State: "Running" or "Pending" };
+
+    private IReadOnlyList<NodeExecutionRecordDto> NodeRecords
+        => this.nodeRecords.Count > 0 ? this.nodeRecords : this.SynthesizeFromRunState();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!System.Guid.TryParse(this.ExecutionId, out var id))
+        {
+            this.loadError = "Invalid execution id.";
+            return;
+        }
+
+        try
+        {
+            this.detail = await this.Executions.GetDetailAsync(id);
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+            return;
+        }
+
+        if (this.detail is null)
+        {
+            this.loadError = "Execution not found.";
+            return;
+        }
+
+        await this.LoadNodesAsync(id);
+
+        if (this.IsRunning)
+        {
+            await this.SubscribeLiveAsync(id);
+        }
+    }
+
+    private async Task LoadNodesAsync(System.Guid id)
+    {
+        try
+        {
+            this.nodeRecords = await this.Executions.GetNodesAsync(id);
+            if (this.selectedNode is null && this.nodeRecords.Count > 0)
+            {
+                this.selectedNode = this.nodeRecords[0].NodeId;
+            }
+        }
+        catch (Workflow.UI.Client.Api.ApiException)
+        {
+            // The node list is best-effort; the header still renders.
+        }
+    }
+
+    private async Task SubscribeLiveAsync(System.Guid id)
+    {
+        this.runState.ExecutionId = id;
+        this.RealTime.ExecutionSnapshot += this.OnSnapshot;
+        this.RealTime.NodeStarted += this.OnNodeStarted;
+        this.RealTime.NodeCompleted += this.OnNodeCompleted;
+        this.RealTime.NodeFailed += this.OnNodeFailed;
+        this.RealTime.ExecutionCompleted += this.OnExecutionDone;
+        this.RealTime.ExecutionFailed += this.OnExecutionFailed;
+
+        try
+        {
+            await this.RealTime.SubscribeToExecutionAsync(id);
+        }
+        catch (Exception)
+        {
+            // Hub unreachable — the historical node records (if any) still render.
+        }
+    }
+
+    private void OnSnapshot(Workflow.UI.Client.Api.Dtos.ExecutionSnapshotEvent e)
+    {
+        if (e.ExecutionId == this.runState.ExecutionId)
+        {
+            this.runState.SeedFromSnapshot(e.State, e.Progress, e.NodeStates, e.Error);
+            this.InvokeAsync(this.StateHasChanged);
+        }
+    }
+
+    private void OnNodeStarted(Workflow.UI.Client.Api.Dtos.NodeStartedEvent e)
+    {
+        if (e.ExecutionId == this.runState.ExecutionId)
+        {
+            this.runState.NodeStarted(e.NodeId);
+            this.InvokeAsync(this.StateHasChanged);
+        }
+    }
+
+    private void OnNodeCompleted(Workflow.UI.Client.Api.Dtos.NodeCompletedEvent e)
+    {
+        if (e.ExecutionId == this.runState.ExecutionId)
+        {
+            this.runState.NodeCompleted(e.NodeId, e.DurationMs);
+            this.InvokeAsync(this.StateHasChanged);
+        }
+    }
+
+    private void OnNodeFailed(Workflow.UI.Client.Api.Dtos.NodeFailedEvent e)
+    {
+        if (e.ExecutionId == this.runState.ExecutionId)
+        {
+            this.runState.NodeFailed(e.NodeId, e.Error, e.DurationMs);
+            this.InvokeAsync(this.StateHasChanged);
+        }
+    }
+
+    private async void OnExecutionDone(Workflow.UI.Client.Api.Dtos.ExecutionCompletedEvent e)
+    {
+        if (e.ExecutionId == this.runState.ExecutionId)
+        {
+            await this.RefreshTerminalAsync("Completed");
+        }
+    }
+
+    private async void OnExecutionFailed(Workflow.UI.Client.Api.Dtos.ExecutionFailedEvent e)
+    {
+        if (e.ExecutionId == this.runState.ExecutionId)
+        {
+            await this.RefreshTerminalAsync("Failed");
+        }
+    }
+
+    private async Task RefreshTerminalAsync(string state)
+    {
+        // On terminal transition, fetch the final node records (with I/O the live events didn't carry).
+        if (this.detail is not null)
+        {
+            this.detail = this.detail with { State = state };
+        }
+
+        await this.LoadNodesAsync(this.runState.ExecutionId);
+        await this.InvokeAsync(this.StateHasChanged);
+    }
+
+    private IReadOnlyList<NodeExecutionRecordDto> SynthesizeFromRunState()
+    {
+        var list = new List<NodeExecutionRecordDto>();
+        foreach (var (nodeId, status) in this.runState.Nodes)
+        {
+            list.Add(new NodeExecutionRecordDto(
+                nodeId,
+                status.State.ToString(),
+                System.DateTimeOffset.UtcNow,
+                null,
+                status.DurationMs ?? 0,
+                null,
+                null,
+                status.Error,
+                null,
+                null));
+        }
+
+        return list;
+    }
+
+    private void SelectNode(string nodeId) => this.selectedNode = nodeId;
+
+    private async Task Cancel()
+    {
+        if (this.detail is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await this.Executions.CancelAsync(this.detail.ExecutionId);
+            this.Toasts.Success("Cancellation requested");
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            this.Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private void OpenInDesigner()
+    {
+        if (this.detail is not null)
+        {
+            this.Nav.NavigateTo($"/designer/{this.detail.WorkflowId}");
+        }
+    }
+
+    private static string DurationText(ExecutionDetailDto d)
+    {
+        if (d.DurationMs is { } ms)
+        {
+            return ms >= 1000 ? $"{ms / 1000:F1}s" : $"{ms:F0}ms";
+        }
+
+        return d.State is "Running" or "Pending" ? "running…" : "—";
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        this.disposed = true;
+        this.RealTime.ExecutionSnapshot -= this.OnSnapshot;
+        this.RealTime.NodeStarted -= this.OnNodeStarted;
+        this.RealTime.NodeCompleted -= this.OnNodeCompleted;
+        this.RealTime.NodeFailed -= this.OnNodeFailed;
+        this.RealTime.ExecutionCompleted -= this.OnExecutionDone;
+        this.RealTime.ExecutionFailed -= this.OnExecutionFailed;
+
+        try
+        {
+            await this.RealTime.UnsubscribeAsync();
+        }
+        catch (Exception)
+        {
+            // best-effort teardown.
+        }
+    }
+}

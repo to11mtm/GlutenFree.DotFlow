@@ -1,0 +1,177 @@
+@page "/monitor"
+@namespace Workflow.UI.Client.Pages
+@rendermode RenderModes.InteractiveWasm
+@implements IAsyncDisposable
+@using Workflow.UI.Client.Execution.Components
+@using Workflow.UI.Client.Execution.State
+@inject Workflow.UI.Client.Api.RealTimeClient RealTime
+@inject Workflow.UI.Client.Api.ExecutionsClient Executions
+@inject Workflow.UI.Client.Execution.State.MonitorState Monitor
+@inject Workflow.UI.Client.Services.ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>Monitor · DotFlow</PageTitle>
+
+<TopBar Subtitle="Monitor" />
+<ToastHost />
+
+<div class="df-monitor">
+    <MonitorFilters Filter="filter" OnApply="ApplyFilters" />
+
+    <div class="df-monitor__section">
+        <div class="df-monitor__heading">● LIVE <span class="df-monitor__count">@Monitor.Running.Count running</span></div>
+        @if (Monitor.Running.Count == 0)
+        {
+            <div class="df-empty" data-testid="live-empty">No running executions right now.</div>
+        }
+        else
+        {
+            @foreach (var row in Monitor.Running)
+            {
+                <ExecutionRow Row="row" OnOpen="Open" OnCancel="Cancel" />
+            }
+        }
+    </div>
+
+    <div class="df-monitor__section">
+        <div class="df-monitor__heading">
+            RECENT
+            <span class="df-monitor__sort">
+                <button class="df-btn df-btn--small" data-testid="sort-started" @onclick="@(() => Sort("Started"))">Started@(SortArrow("Started"))</button>
+                <button class="df-btn df-btn--small" data-testid="sort-duration" @onclick="@(() => Sort("Duration"))">Duration@(SortArrow("Duration"))</button>
+            </span>
+        </div>
+        @{
+            var recent = filter.Apply(Monitor.Recent(filter.SortColumn, filter.Descending));
+        }
+        @if (recent.Count == 0)
+        {
+            <div class="df-empty" data-testid="recent-empty">
+                @(live ? "Finished executions will appear here as they complete." : "Enter a workflow id above + Apply to load recent history (live-all requires admin).")
+            </div>
+        }
+        else
+        {
+            @foreach (var row in recent)
+            {
+                <ExecutionRow Row="row" OnOpen="Open" OnCancel="Cancel" />
+            }
+        }
+    </div>
+
+    <div class="df-monitor__status">
+        @if (live)
+        {
+            <span class="df-status-item" data-testid="mode-live">🟢 hub connected · live firehose</span>
+        }
+        else
+        {
+            <span class="df-status-item df-status-item--warn" data-testid="mode-polling">🟡 polling (live-all requires admin / hub)</span>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly ExecutionFilterModel filter = new();
+    private bool live;
+    private bool disposed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.Monitor.Changed += this.OnMonitorChanged;
+
+        this.RealTime.ExecutionStarted += this.OnStarted;
+        this.RealTime.ExecutionProgress += this.OnProgress;
+        this.RealTime.ExecutionCompleted += this.OnCompleted;
+        this.RealTime.ExecutionFailed += this.OnFailed;
+
+        try
+        {
+            await this.RealTime.SubscribeToAllAsync();
+            this.live = true;
+        }
+        catch (Exception)
+        {
+            // No admin or the hub is unreachable → degrade to the polling indicator (D10).
+            this.live = false;
+        }
+    }
+
+    private void OnStarted(Workflow.UI.Client.Api.Dtos.ExecutionStartedEvent e) => this.Monitor.ApplyStarted(e);
+
+    private void OnProgress(Workflow.UI.Client.Api.Dtos.ExecutionProgressEvent e) => this.Monitor.ApplyProgress(e);
+
+    private void OnCompleted(Workflow.UI.Client.Api.Dtos.ExecutionCompletedEvent e) => this.Monitor.ApplyCompleted(e);
+
+    private void OnFailed(Workflow.UI.Client.Api.Dtos.ExecutionFailedEvent e) => this.Monitor.ApplyFailed(e);
+
+    private void OnMonitorChanged() => this.InvokeAsync(this.StateHasChanged);
+
+    private void Open(System.Guid executionId) => this.Nav.NavigateTo($"/monitor/{executionId}");
+
+    private async Task ApplyFilters()
+    {
+        if (this.filter.WorkflowId is { } wf)
+        {
+            try
+            {
+                var page = await this.Executions.ListAsync(wf, status: this.filter.ServerStatus, from: this.filter.From, to: this.filter.To);
+                this.Monitor.SeedFromList(page.Items);
+            }
+            catch (Workflow.UI.Client.Api.ApiException ex)
+            {
+                this.Toasts.Error(ex.Error.Summarize());
+            }
+        }
+
+        this.StateHasChanged();
+    }
+
+    private void Sort(string column)
+    {
+        this.filter.ToggleSort(column);
+        this.StateHasChanged();
+    }
+
+    private string SortArrow(string column)
+        => this.filter.SortColumn == column ? (this.filter.Descending ? " ▾" : " ▴") : string.Empty;
+
+    private async Task Cancel(System.Guid executionId)
+    {
+        try
+        {
+            await this.Executions.CancelAsync(executionId);
+            this.Monitor.MarkCancelled(executionId);
+            this.Toasts.Success("Cancellation requested");
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            this.Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        this.disposed = true;
+        this.Monitor.Changed -= this.OnMonitorChanged;
+        this.RealTime.ExecutionStarted -= this.OnStarted;
+        this.RealTime.ExecutionProgress -= this.OnProgress;
+        this.RealTime.ExecutionCompleted -= this.OnCompleted;
+        this.RealTime.ExecutionFailed -= this.OnFailed;
+
+        try
+        {
+            await this.RealTime.UnsubscribeFromAllAsync();
+        }
+        catch (Exception)
+        {
+            // best-effort teardown.
+        }
+    }
+}

@@ -3,6 +3,7 @@
 @using Workflow.UI.Client.Designer.State
 @using Workflow.UI.Client.Designer.State.Commands
 @using Workflow.UI.Client.Services
+@implements IDisposable
 @inject IJSRuntime JS
 @inject PaletteDragState DragState
 
@@ -18,13 +19,16 @@
      style="cursor:@(panning ? "grabbing" : "grab");">
     <div class="df-canvas-content"
          style="transform: translate(@(T.PanX.ToString(Inv))px, @(T.PanY.ToString(Inv))px) scale(@(T.Zoom.ToString(Inv)));">
-        <EdgeLayer Document="Document" />
+        <EdgeLayer Document="Document" Selection="Selection" OnConnectionContextMenu="OnConnectionContextMenuInternal" />
         @foreach (var node in Document.Nodes)
         {
             <NodeView @key="node.Id" Node="node"
                       StateClass="@StateClassFor(node.Id)"
                       Selected="@IsSelected(node.Id)"
                       InputCompatible="@(connecting ? (p => IsCompatibleInput(node, p)) : null)"
+                      ActiveSourcePort="@(connecting && connectSource?.Id == node.Id ? connectSourcePort : null)"
+                      InputEndpoint="@(p => IsSelectedConnectionEndpoint(node.Id, p, isOutput: false))"
+                      OutputEndpoint="@(p => IsSelectedConnectionEndpoint(node.Id, p, isOutput: true))"
                       OnNodePointerDown="e => OnNodePointerDownInternal(node, e)"
                       OnNodeContextMenu="e => OnNodeContextMenu.InvokeAsync((node, e))"
                       OnOutputPortPointerDown="p => OnOutputPortPointerDownInternal(node, p)"
@@ -96,6 +100,38 @@
     [Parameter]
     public SelectionState? Selection { get; set; }
 
+    private SelectionState? subscribedSelection;
+
+    protected override void OnParametersSet()
+    {
+        // Re-render nodes/edges when the selection changes (endpoint + edge highlights).
+        if (!ReferenceEquals(this.subscribedSelection, this.Selection))
+        {
+            if (this.subscribedSelection is not null)
+            {
+                this.subscribedSelection.Changed -= this.OnSelectionChanged;
+            }
+
+            this.subscribedSelection = this.Selection;
+            if (this.subscribedSelection is not null)
+            {
+                this.subscribedSelection.Changed += this.OnSelectionChanged;
+            }
+        }
+    }
+
+    private void OnSelectionChanged() => this.InvokeAsync(this.StateHasChanged);
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (this.subscribedSelection is not null)
+        {
+            this.subscribedSelection.Changed -= this.OnSelectionChanged;
+            this.subscribedSelection = null;
+        }
+    }
+
     /// <summary>Command stack (node moves push a <see cref="MoveNodesCommand"/>).</summary>
     [Parameter]
     public CommandStack? Commands { get; set; }
@@ -116,6 +152,13 @@
     [Parameter]
     public EventCallback<MouseEventArgs> OnCanvasContextMenu { get; set; }
 
+    /// <summary>Raised on an edge right-click (connection key + args).</summary>
+    [Parameter]
+    public EventCallback<(string Key, MouseEventArgs Args)> OnConnectionContextMenu { get; set; }
+
+    private Task OnConnectionContextMenuInternal((string Key, MouseEventArgs Args) e)
+        => this.OnConnectionContextMenu.InvokeAsync(e);
+
     /// <summary>Raised on output-port pointer-down (connection drag in 3.3.b.2).</summary>
     [Parameter]
     public EventCallback<(DesignerNode Node, string Port)> OnOutputPortPointerDown { get; set; }
@@ -129,6 +172,34 @@
     private string StateClassFor(string nodeId) => this.NodeStateClass?.Invoke(nodeId) ?? string.Empty;
 
     private bool IsSelected(string nodeId) => this.Selection?.IsNodeSelected(nodeId) ?? false;
+
+    private bool IsSelectedConnectionEndpoint(string nodeId, string port, bool isOutput)
+    {
+        if (this.Selection is null || this.Selection.Connections.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var c in this.Document.Connections)
+        {
+            if (!this.Selection.IsConnectionSelected(c.Key))
+            {
+                continue;
+            }
+
+            if (isOutput && c.SourceNodeId == nodeId && c.SourcePortName == port)
+            {
+                return true;
+            }
+
+            if (!isOutput && c.TargetNodeId == nodeId && c.TargetPortName == port)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>Fits all nodes into the viewport~ ⤢.</summary>
     public async Task FitAsync()

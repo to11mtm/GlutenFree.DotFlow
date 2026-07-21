@@ -13,6 +13,10 @@ memory ceilings, and reach the workflow only through a single, capability-gated
 - [Workflow script API](#workflow-script-api)
 - [Sandbox & security](#sandbox--security)
 - [Script libraries](#script-libraries)
+
+> 💻 Prefer a UI? **[Script Studio](script-studio.md)** (`/scripts` in the designer app) is an
+> in-browser editor for writing, testing (with IntelliSense + templates), and managing these
+> scripts and libraries.
 - [Script test endpoint](#script-test-endpoint)
 - [Inline expressions in property bindings](#inline-expressions-in-property-bindings)
 

@@ -1,0 +1,119 @@
+@namespace Workflow.UI.Client.Scripts.Components
+@inject Workflow.UI.Client.Api.ScriptsClient Scripts
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+
+@* 📚 Phase 3.4.4 — The Libraries dropdown: list (filtered to the current language), open into the
+   editor, and delete (with confirm). Errors surface via the toast/host; open/delete are raised to
+   the page which owns the editor + active-library state. *@
+<div class="df-libbar">
+    <button type="button" class="df-btn" data-testid="libraries-btn" @onclick="Toggle">📚 Libraries ▾</button>
+    @if (open)
+    {
+        <div class="df-libbar__menu" data-testid="libraries-menu">
+            @if (loading)
+            {
+                <div class="df-libbar__empty">Loading…</div>
+            }
+            else if (loadError is not null)
+            {
+                <div class="df-libbar__empty" data-testid="libraries-error">@loadError</div>
+            }
+            else if (libraries.Count == 0)
+            {
+                <div class="df-libbar__empty" data-testid="libraries-empty">No libraries for @Language</div>
+            }
+            else
+            {
+                @foreach (var lib in libraries)
+                {
+                    <div class="df-libbar__item" data-testid="library-item">
+                        <span class="df-libbar__name">@lib.Name</span>
+                        <button class="df-btn df-btn--small" data-testid="library-open" @onclick="() => Open(lib)">Open</button>
+                        @if (confirmDeleteId == lib.LibraryId)
+                        {
+                            <button class="df-btn df-btn--danger df-btn--small" data-testid="library-confirm-delete" @onclick="() => Delete(lib.LibraryId)">Confirm</button>
+                        }
+                        else
+                        {
+                            <button class="df-btn df-btn--danger df-btn--small" data-testid="library-delete" @onclick="() => confirmDeleteId = lib.LibraryId">🗑</button>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private bool open;
+    private bool loading;
+    private string? loadError;
+    private string? confirmDeleteId;
+    private readonly List<ScriptLibraryDto> libraries = new();
+
+    /// <summary>The current language (filters the list)~ 🌈.</summary>
+    [Parameter]
+    public string Language { get; set; } = "javascript";
+
+    /// <summary>Raised when a library is opened (the page loads it into the editor)~ 📂.</summary>
+    [Parameter]
+    public EventCallback<ScriptLibraryDto> OnOpen { get; set; }
+
+    /// <summary>Raised (with the id) after a library is deleted~ 🗑️.</summary>
+    [Parameter]
+    public EventCallback<string> OnDeleted { get; set; }
+
+    private async Task Toggle()
+    {
+        this.open = !this.open;
+        this.confirmDeleteId = null;
+        if (this.open)
+        {
+            await this.Reload();
+        }
+    }
+
+    /// <summary>Reloads the library list for the current language~ 🔄.</summary>
+    /// <returns>A task.</returns>
+    public async Task Reload()
+    {
+        this.loading = true;
+        this.loadError = null;
+        try
+        {
+            var libs = await Scripts.ListLibrariesAsync(this.Language);
+            this.libraries.Clear();
+            this.libraries.AddRange(libs);
+        }
+        catch (ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+        }
+        finally
+        {
+            this.loading = false;
+        }
+    }
+
+    private async Task Open(ScriptLibraryDto lib)
+    {
+        this.open = false;
+        await this.OnOpen.InvokeAsync(lib);
+    }
+
+    private async Task Delete(string libraryId)
+    {
+        this.confirmDeleteId = null;
+        try
+        {
+            await Scripts.DeleteLibraryAsync(libraryId);
+            this.libraries.RemoveAll(l => l.LibraryId == libraryId);
+            await this.OnDeleted.InvokeAsync(libraryId);
+        }
+        catch (ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+        }
+    }
+}

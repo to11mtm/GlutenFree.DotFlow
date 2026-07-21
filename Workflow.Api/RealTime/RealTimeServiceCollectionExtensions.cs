@@ -32,18 +32,34 @@ public static class RealTimeServiceCollectionExtensions
 
         var origins = configuration.GetSection("Api:RealTime:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 
-        services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
+        services.AddCors(options =>
         {
-            // Deny-by-default: with no configured origins there is no cross-origin access.
-            // SignalR requires AllowCredentials, which forbids a wildcard origin~ 🔒
-            if (origins.Length > 0)
+            // Named policy for the SignalR hub (requires AllowCredentials, so no wildcard origin)~ 🔒
+            options.AddPolicy(CorsPolicy, policy =>
             {
-                policy.WithOrigins(origins)
-                    .AllowAnyHeader()
-                    .AllowAnyMethod()
-                    .AllowCredentials();
-            }
-        }));
+                // Deny-by-default: with no configured origins there is no cross-origin access.
+                if (origins.Length > 0)
+                {
+                    policy.WithOrigins(origins)
+                        .AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .AllowCredentials();
+                }
+            });
+
+            // Default policy applied to the REST endpoints via app.UseCors(). The Blazor WASM
+            // client is served from a different origin, so cross-origin REST calls need CORS too~ 🌐
+            options.AddDefaultPolicy(policy =>
+            {
+                if (origins.Length > 0)
+                {
+                    policy.WithOrigins(origins)
+                        .AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .AllowCredentials();
+                }
+            });
+        });
 
         return services;
     }

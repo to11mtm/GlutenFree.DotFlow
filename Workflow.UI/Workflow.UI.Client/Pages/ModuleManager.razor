@@ -1,0 +1,205 @@
+@page "/modules"
+@namespace Workflow.UI.Client.Pages
+@rendermode RenderModes.InteractiveWasm
+@using Workflow.UI.Client.Modules.Components
+@using Workflow.UI.Client.Modules.State
+@inject Workflow.UI.Client.Api.ModulesClient Modules
+@inject Workflow.UI.Client.Services.ToastService Toasts
+@inject Workflow.UI.Client.Services.ILocalStorage Storage
+
+<PageTitle>Modules · DotFlow</PageTitle>
+
+<TopBar Subtitle="Modules">
+    <button class="df-btn df-btn--primary" data-testid="upload-btn" @onclick="() => showUpload = true">⬆ Upload</button>
+</TopBar>
+<ToastHost />
+
+<div class="df-foundry">
+    <ModuleFilters Catalog="catalog" OnChanged="OnFilterChanged" />
+
+    @if (loading)
+    {
+        <div class="df-empty" data-testid="modules-loading">Loading modules…</div>
+    }
+    else if (loadError is not null)
+    {
+        <div class="df-empty" data-testid="modules-error">
+            @loadError <button class="df-btn df-btn--small" data-testid="modules-retry" @onclick="Reload">Retry</button>
+        </div>
+    }
+    else if (catalog.Filtered().Count == 0)
+    {
+        <div class="df-empty" data-testid="modules-empty">No modules match.</div>
+    }
+    else
+    {
+        <div class="df-foundry__grid">
+            @foreach (var group in catalog.Grouped())
+            {
+                <div class="df-foundry__group" data-testid="module-group">
+                    <div class="df-foundry__group-title">@group.Category</div>
+                    <div class="df-foundry__cards">
+                        @foreach (var m in group.Modules)
+                        {
+                            <ModuleCard Module="m" OnOpen="Open" />
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (docModel is not null)
+    {
+        <ModuleDocsDrawer Doc="docModel" OnClose="CloseDrawer">
+            <ActionsContent>
+                <ModuleActions Doc="docModel" Modules="Modules" KnownDetails="KnownDetailsList"
+                               OnChanged="RefreshDrawer" OnUninstalled="OnModuleUninstalled" />
+            </ActionsContent>
+            <VersionsContent>
+                <VersionPanel Versions="docModel.Versions" OnToggle="ToggleVersion" />
+            </VersionsContent>
+        </ModuleDocsDrawer>
+    }
+    else if (drawerLoading)
+    {
+        <aside class="df-foundry__drawer" data-testid="module-drawer">
+            <div class="df-empty" data-testid="drawer-loading">Loading…</div>
+        </aside>
+    }
+</div>
+
+@if (showUpload)
+{
+    <UploadDialog Modules="Modules" OnUploaded="OnUploaded" OnClose="() => showUpload = false" />
+}
+
+@code {
+    private readonly ModuleCatalog catalog = new();
+    private readonly Dictionary<string, Workflow.UI.Client.Api.Dtos.ModuleDetailsDto> knownDetails = new();
+    private bool loading = true;
+    private string? loadError;
+    private ModuleDocModel? docModel;
+    private string? openModuleId;
+    private bool drawerLoading;
+    private bool showUpload;
+
+    private System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.ModuleDetailsDto> KnownDetailsList
+        => this.knownDetails.Values.ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var saved = await Storage.GetAsync(EnabledOnlyKey);
+        this.catalog.EnabledOnly = saved == "1";
+        await this.Reload();
+    }
+
+    private const string EnabledOnlyKey = "dotflow.modules.enabledOnly";
+
+    private async Task OnFilterChanged()
+    {
+        await Storage.SetAsync(EnabledOnlyKey, this.catalog.EnabledOnly ? "1" : "0");
+        this.StateHasChanged();
+    }
+
+    private async Task Reload()
+    {
+        this.loading = true;
+        this.loadError = null;
+        try
+        {
+            var list = await Modules.ListAsync();
+            this.catalog.SetModules(list);
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+        }
+        finally
+        {
+            this.loading = false;
+        }
+    }
+
+    private async Task Open(Workflow.UI.Client.Api.Dtos.ModuleSummaryDto module)
+    {
+        this.docModel = null;
+        this.openModuleId = module.Id;
+        this.drawerLoading = true;
+        await this.LoadDetailsAsync(module.Id);
+        this.drawerLoading = false;
+    }
+
+    private async Task LoadDetailsAsync(string moduleId)
+    {
+        try
+        {
+            var details = await Modules.GetAsync(moduleId);
+            if (details is null)
+            {
+                Toasts.Error($"Module '{moduleId}' details could not be loaded.");
+                return;
+            }
+
+            this.knownDetails[moduleId] = details;
+            this.docModel = ModuleDocModel.From(details);
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private async Task RefreshDrawer()
+    {
+        // A toggle changed state — re-list and re-fetch the open module's details.
+        Modules.InvalidateCache();
+        await this.Reload();
+        if (this.openModuleId is not null)
+        {
+            await this.LoadDetailsAsync(this.openModuleId);
+        }
+    }
+
+    private async Task ToggleVersion((string Version, bool Enable) request)
+    {
+        if (this.openModuleId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (request.Enable)
+            {
+                await Modules.EnableAsync(this.openModuleId, request.Version);
+            }
+            else
+            {
+                await Modules.DisableAsync(this.openModuleId, request.Version);
+            }
+
+            await this.RefreshDrawer();
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            Toasts.Error(ex.Error.StatusCode is 401 or 403 ? "This action requires admin/write access." : ex.Error.Summarize());
+        }
+    }
+
+    private async Task OnModuleUninstalled()
+    {
+        Toasts.Success("Module uninstalled");
+        this.CloseDrawer();
+        await this.Reload();
+    }
+
+    private void CloseDrawer()
+    {
+        this.docModel = null;
+        this.openModuleId = null;
+    }
+
+    // Refresh the grid in the background; the dialog stays open showing its success/warnings.
+    private Task OnUploaded() => this.Reload();
+}

@@ -62,3 +62,90 @@ public record ExecutionDto(
     DateTimeOffset StartedAt,
     DateTimeOffset? CompletedAt,
     string? TriggeredBy);
+
+/// <summary>
+/// 📊 Phase 3.5.0 — A persisted execution record projection (for the monitor's historical detail).
+/// Unlike <see cref="ExecutionStatusDto"/> (live, from the actor) this reads the history repository,
+/// so it renders even after the run leaves memory~ ✨.
+/// </summary>
+/// <param name="ExecutionId">The execution id.</param>
+/// <param name="WorkflowId">The owning workflow id.</param>
+/// <param name="State">The state (string).</param>
+/// <param name="StartedAt">Started timestamp.</param>
+/// <param name="CompletedAt">Completed timestamp (if terminal).</param>
+/// <param name="DurationMs">Total duration in milliseconds (if terminal).</param>
+/// <param name="Inputs">The execution inputs.</param>
+/// <param name="Outputs">The execution outputs (if complete).</param>
+/// <param name="Error">The error (if failed).</param>
+/// <param name="TriggeredBy">Caller id / trigger source.</param>
+public record ExecutionDetailDto(
+    Guid ExecutionId,
+    Guid WorkflowId,
+    string State,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    double? DurationMs,
+    IReadOnlyDictionary<string, object?>? Inputs,
+    IReadOnlyDictionary<string, object?>? Outputs,
+    string? Error,
+    string? TriggeredBy)
+{
+    /// <summary>Projects an <see cref="Workflow.Persistence.Models.ExecutionRecord"/> into the DTO~ 📊.</summary>
+    /// <param name="r">The execution record.</param>
+    /// <returns>The DTO.</returns>
+    public static ExecutionDetailDto From(Workflow.Persistence.Models.ExecutionRecord r)
+        => new(
+            r.ExecutionId,
+            r.WorkflowId,
+            r.State.ToString(),
+            r.StartedAt,
+            r.CompletedAt,
+            r.CompletedAt is { } done ? (done - r.StartedAt).TotalMilliseconds : null,
+            r.Inputs,
+            r.Outputs,
+            r.Error,
+            r.TriggeredBy);
+}
+
+/// <summary>
+/// 🌸 Phase 3.5.0 — A persisted node-execution record projection (for the monitor's node inspector
+/// + replay). Carries the inputs/outputs/timing/error the engine already stores per node~ ✨.
+/// </summary>
+/// <param name="NodeId">The node id.</param>
+/// <param name="State">The node state (string).</param>
+/// <param name="StartedAt">Started timestamp.</param>
+/// <param name="CompletedAt">Completed timestamp (if terminal).</param>
+/// <param name="DurationMs">Node duration in milliseconds.</param>
+/// <param name="Inputs">The node inputs.</param>
+/// <param name="Outputs">The node outputs.</param>
+/// <param name="Error">The error (if failed).</param>
+/// <param name="LoopId">The loop scope id, if the node ran inside a loop.</param>
+/// <param name="LoopIteration">The 1-based iteration within the loop scope, if any.</param>
+public record NodeExecutionRecordDto(
+    string NodeId,
+    string State,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? CompletedAt,
+    double DurationMs,
+    IReadOnlyDictionary<string, object?>? Inputs,
+    IReadOnlyDictionary<string, object?>? Outputs,
+    string? Error,
+    string? LoopId,
+    int? LoopIteration)
+{
+    /// <summary>Projects a <see cref="Workflow.Persistence.Models.NodeExecutionRecord"/> into the DTO~ 🌸.</summary>
+    /// <param name="r">The node record.</param>
+    /// <returns>The DTO.</returns>
+    public static NodeExecutionRecordDto From(Workflow.Persistence.Models.NodeExecutionRecord r)
+        => new(
+            r.NodeId,
+            r.State.ToString(),
+            r.StartedAt,
+            r.CompletedAt,
+            r.Duration.TotalMilliseconds,
+            r.Inputs,
+            r.Outputs,
+            r.Error,
+            r.LoopId,
+            r.LoopIteration);
+}

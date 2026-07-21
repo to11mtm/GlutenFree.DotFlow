@@ -6,6 +6,7 @@ namespace Workflow.Tests.UI.Components;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
@@ -31,6 +32,7 @@ public sealed class DesignerPageTests : TestContext
         this.Services.AddSingleton(new AuthState());
         this.Services.AddSingleton(new Workflow.UI.Client.Services.PaletteDragState());
         this.Services.AddSingleton(new Workflow.UI.Client.Designer.State.DesignerClipboard());
+        this.Services.AddSingleton(new Workflow.UI.Client.Scripts.State.ScriptStudioHandoff());
         this.Services.AddSingleton(new ApiClientOptions { BaseUrl = "http://localhost" });
         this.Services.AddSingleton(sp => new RealTimeClient(sp.GetRequiredService<ApiClientOptions>(), sp.GetRequiredService<AuthState>()));
     }
@@ -118,5 +120,60 @@ public sealed class DesignerPageTests : TestContext
 
         cut.WaitForAssertion(() => cut.FindAll(".df-canvas-viewport").Should().NotBeEmpty());
         cut.FindAll(".df-node").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void MergeOutputs_AddsFanInNode_ConnectedToSelection()
+    {
+        var id = Guid.NewGuid();
+        var workflow = new WorkflowDto(
+            id, "wf", null, "1.0.0",
+            new List<NodeDto>
+            {
+                new("a", "builtin.log", "A", new Dictionary<string, JsonElement>(), new PositionDto(100, 100)),
+                new("b", "builtin.log", "B", new Dictionary<string, JsonElement>(), new PositionDto(100, 300)),
+            },
+            new List<ConnectionDto>(), new Dictionary<string, JsonElement>(), null, null, null, null, new List<string>());
+
+        var fanInDetails = new ModuleDetailsDto(
+            "builtin.fanin", "Fan In", "Flow", "d", "🪄", "1.0.0",
+            new ModuleSchemaDto(
+                new List<PortDefinitionDto> { new("branches", "Branches", "object", null, false, null) },
+                new List<PortDefinitionDto> { new("result", "Result", "object", null, false, null) },
+                new List<ModulePropertyDefinitionDto>()),
+            new List<string>());
+
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            var body = path switch
+            {
+                "/api/v1/modules" => Json(new List<ModuleSummaryDto>()),
+                var p when p.StartsWith("/api/v1/modules/") => Json(fanInDetails),
+                var p when p.StartsWith("/api/v1/workflows/") => Json(workflow),
+                _ => "{}",
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, id.ToString()));
+        cut.WaitForAssertion(() => cut.FindAll(".df-node").Should().HaveCount(2));
+
+        // Select both nodes, then open the node context menu.
+        cut.Find("[data-node-id=a]").PointerDown(new Microsoft.AspNetCore.Components.Web.PointerEventArgs());
+        cut.Find("[data-node-id=b]").PointerDown(new Microsoft.AspNetCore.Components.Web.PointerEventArgs { CtrlKey = true });
+        cut.Find("[data-node-id=b]").ContextMenu();
+
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Merge outputs"));
+        cut.FindAll(".df-ctxmenu__item").First(b => b.TextContent.Contains("Merge outputs")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(3);
+            cut.Markup.Should().Contain("builtin.fanin");
+            // Both sources feed the fan-in: two edges rendered.
+            cut.FindAll("path.df-edge").Should().HaveCount(2);
+        });
     }
 }

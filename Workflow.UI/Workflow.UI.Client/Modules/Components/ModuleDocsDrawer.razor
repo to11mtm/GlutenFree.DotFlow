@@ -1,0 +1,129 @@
+@namespace Workflow.UI.Client.Modules.Components
+@using Workflow.UI.Client.Modules.State
+
+@* 📖 Phase 3.6.1 — The generated documentation drawer for a module (schema-derived). Management
+   actions (enable/disable/uninstall/versions) are rendered by the caller via ActionsContent. *@
+<aside class="df-foundry__drawer" data-testid="module-drawer">
+    <div class="df-foundry__drawer-head">
+        <span class="df-modcard__icon">@Doc.Icon</span>
+        <strong data-testid="drawer-name">@Doc.DisplayName</strong>
+        <button class="df-btn df-btn--small" data-testid="drawer-close" @onclick="() => OnClose.InvokeAsync()">✖</button>
+    </div>
+    <div class="df-modcard__id">@Doc.Id · v@(Doc.Version ?? "?") ·
+        <span class="@(Doc.Enabled ? "df-modcard__state--on" : "df-modcard__state--off")" data-testid="drawer-state">
+            @(Doc.Enabled ? "🟢 enabled" : "⚪ disabled")
+        </span>
+    </div>
+    <p class="df-drawer__desc">@Doc.Description</p>
+
+    @if (ActionsContent is not null)
+    {
+        <div class="df-drawer__actions" data-testid="drawer-actions">@ActionsContent</div>
+    }
+
+    <div class="df-drawer__section">
+        <div class="df-drawer__section-title">Inputs</div>
+        @if (Doc.Inputs.Count == 0)
+        {
+            <div class="df-drawer__none" data-testid="inputs-none">none</div>
+        }
+        else
+        {
+            @foreach (var p in Doc.Inputs)
+            {
+                <div class="df-drawer__port" data-testid="input-@p.Name">
+                    <code>@p.Name</code> : <span class="df-drawer__type">@p.Type</span>
+                    @if (p.Required) { <span class="df-required">*</span> }
+                    @if (!string.IsNullOrWhiteSpace(p.Description)) { <div class="df-drawer__hint">@p.Description</div> }
+                </div>
+            }
+        }
+    </div>
+
+    <div class="df-drawer__section">
+        <div class="df-drawer__section-title">Outputs</div>
+        @if (Doc.Outputs.Count == 0)
+        {
+            <div class="df-drawer__none" data-testid="outputs-none">none</div>
+        }
+        else
+        {
+            @foreach (var p in Doc.Outputs)
+            {
+                <div class="df-drawer__port" data-testid="output-@p.Name">
+                    <code>@p.Name</code> : <span class="df-drawer__type">@p.Type</span>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="df-drawer__section">
+        <div class="df-drawer__section-title">Properties</div>
+        @if (Doc.Properties.Count == 0)
+        {
+            <div class="df-drawer__none">none</div>
+        }
+        else
+        {
+            @foreach (var p in Doc.Properties)
+            {
+                <div class="df-drawer__prop" data-testid="prop-@p.Name">
+                    <code>@p.Name</code> <span class="df-drawer__editor">(@p.Editor)</span>
+                    @if (p.Required) { <span class="df-required">*required</span> }
+                    @if (p.Allowed.Count > 0) { <div class="df-drawer__hint">values: @string.Join(", ", p.Allowed)</div> }
+                    @if (p.Default is not null) { <div class="df-drawer__hint">default: @p.Default</div> }
+                    @if (!string.IsNullOrWhiteSpace(p.Description)) { <div class="df-drawer__hint">@p.Description</div> }
+                </div>
+            }
+        }
+    </div>
+
+    @if (Doc.Dependencies.Count > 0)
+    {
+        <div class="df-drawer__section">
+            <div class="df-drawer__section-title">Dependencies</div>
+            @foreach (var dep in Doc.Dependencies)
+            {
+                <span class="df-drawer__chip" data-testid="dep-@dep">@dep</span>
+            }
+        </div>
+    }
+
+    @if (Doc.Versions.Count > 0)
+    {
+        <div class="df-drawer__section">
+            <div class="df-drawer__section-title">Versions</div>
+            @if (VersionsContent is not null)
+            {
+                @VersionsContent
+            }
+            else
+            {
+                @foreach (var v in Doc.Versions)
+                {
+                    <span class="df-drawer__chip @(v.Active ? "df-drawer__chip--active" : "")" data-testid="ver-@v.Version">
+                        @v.Version @(v.Active ? "(active)" : "")
+                    </span>
+                }
+            }
+        </div>
+    }
+</aside>
+
+@code {
+    /// <summary>The generated documentation to render.</summary>
+    [Parameter, EditorRequired]
+    public ModuleDocModel Doc { get; set; } = default!;
+
+    /// <summary>Optional action row (enable/disable/uninstall) supplied by the page (3.6.3).</summary>
+    [Parameter]
+    public RenderFragment? ActionsContent { get; set; }
+
+    /// <summary>Optional custom versions panel (3.6.3); falls back to read-only chips.</summary>
+    [Parameter]
+    public RenderFragment? VersionsContent { get; set; }
+
+    /// <summary>Raised when the drawer is closed.</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+}

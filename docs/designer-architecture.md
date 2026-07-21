@@ -77,6 +77,57 @@ behavioral contracts a TypeScript port must satisfy:
 5. **Untouched:** the **entire backend** — REST endpoints, the validate endpoint, the 3.2
    hub, and all engine code. A React client is a drop-in replacement for `Workflow.UI.Client`.
 
+## Script Studio state services (Phase 3.4)
+
+Script Studio (`/scripts`, see [`script-studio.md`](script-studio.md)) follows the same D2
+framework-free boundary — these `Scripts/State/*` + `Api/*` types are pure C# with xUnit specs and
+port mechanically:
+
+| Service | Responsibility | Spec |
+|---------|----------------|------|
+| `ScriptsClient` + `Api/Dtos/ScriptDtos` | typed `/scripts/*` REST (test/languages/libraries) | `ScriptsClientTests` |
+| `WorkflowApiDescriptor` + `ApiMethodInfo` | the `workflow.*` catalog driving completions/hover + the reference panel; drift-guarded vs `IWorkflowScriptApi` | `DescriptorTests` |
+| `ScriptTemplateCatalog` + `ScriptTemplate` | the static starter-template catalog | `TemplateCatalogTests` |
+| `TestRunState` | inputs/config/run status + log filtering | `TestRunStateTests` |
+| `ScriptEditorOptions` | theme/options + language↔Monaco-mode map | `ScriptsClientTests` |
+| `ScriptStudioHandoff` | designer ↔ studio code round-trip carrier | `DesignerIntegrationTests` |
+
+The only JS-interop surface is the shared `monaco-interop.js` (editor + completion/hover provider
+registration) — swap for `@monaco-editor/react` in a port.
+
+## Execution Monitor state services (Phase 3.5)
+
+The Execution Monitor (`/monitor`, see [`execution-monitor.md`](execution-monitor.md)) reuses the
+shared `RunState` (moved to `Execution/State` in 3.5.1) and adds these framework-free services with
+xUnit specs — all portable:
+
+| Service | Responsibility | Spec |
+|---------|----------------|------|
+| `MonitorState` + `MonitorRow` | live dashboard rows + REST-seed + hub event merge | `MonitorStateTests` |
+| `ExecutionFilterModel` + `RunLogClassifier` | status/date→server + duration/sort client-side + log-level classification | `FilterModelTests` |
+| `ReplayCursor` | read-only step/scrub over ordered node records | `ReplayCursorTests` |
+| `RunState` (shared, moved) | live/historical node run state + run log | `RunStateTests` |
+| `ExecutionsClient` (+detail/nodes) · `RealTimeClient` (+SubscribeToAll) | typed REST + hub firehose | `ExecutionsClientMonitorTests` |
+
+3.5's **only backend addition** is two read-only endpoints (`/executions/{id}/detail` + `/nodes`) —
+a React port consumes them unchanged.
+
+## Module Manager state services (Phase 3.6)
+
+The Module Manager (`/modules`, see [`module-manager.md`](module-manager.md)) is a client feature
+over the shipped `/modules/*` endpoints (read 2.7.3 + write 2.8.5) — **zero new backend**. Its
+framework-free services with xUnit specs port cleanly:
+
+| Service | Responsibility | Spec |
+|---------|----------------|------|
+| `ModuleCatalog` | search + category + enabled-only filter + category grouping | `ModuleCatalogTests` |
+| `ModuleDocModel` | details DTO → generated documentation (ports/properties/deps/versions) | `DocModelTests` |
+| `DependencyHints` | module→module dependents for the disable heads-up | `DependencyHintsTests` |
+| `ModulesClient` (+upload/enable/disable/uninstall) | typed `/modules/*` REST (multipart upload) | `ModulesClientManagementTests` |
+
+The only browser-API surface is the `InputFile`/drag-drop upload in `UploadDialog` (swap for a React
+file input + `FormData`).
+
 ## Performance notes
 
 - Node views are keyed by id (`@key`); pan/zoom mutate only the transform style, so panning

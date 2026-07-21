@@ -1,0 +1,40 @@
+@namespace Workflow.UI.Client.Execution.Components
+@using Workflow.UI.Client.Execution.State
+
+@* 🔍 Phase 3.5.4 — The dashboard filter bar. Workflow + status + date map to the REST query; min
+   duration is client-side (D9). Apply raises OnApply so the page requeries / re-sorts. *@
+<div class="df-monitorfilters">
+    <input class="df-input df-input--tiny df-input--mono" data-testid="filter-workflow" placeholder="workflow id (for history)"
+           value="@workflowText" @oninput="OnWorkflowInput" />
+    <select class="df-input df-input--tiny" data-testid="filter-status" @bind="Filter.Status">
+        <option value="All">All states</option>
+        <option value="Running">Running</option>
+        <option value="Completed">Completed</option>
+        <option value="Failed">Failed</option>
+        <option value="Cancelled">Cancelled</option>
+    </select>
+    <label class="df-monitorfilters__dur">⏱ ≥ <input type="number" class="df-input df-input--tiny" data-testid="filter-duration" min="0" @bind="minDurationSeconds" /> s</label>
+    <button class="df-btn df-btn--small df-btn--primary" data-testid="filter-apply" @onclick="Apply">Apply</button>
+</div>
+
+@code {
+    private string workflowText = string.Empty;
+    private double? minDurationSeconds;
+
+    /// <summary>The shared filter model the bar edits.</summary>
+    [Parameter, EditorRequired]
+    public ExecutionFilterModel Filter { get; set; } = default!;
+
+    /// <summary>Raised when Apply is clicked (the page requeries / re-sorts).</summary>
+    [Parameter]
+    public EventCallback OnApply { get; set; }
+
+    private void OnWorkflowInput(ChangeEventArgs e) => this.workflowText = e.Value?.ToString() ?? string.Empty;
+
+    private Task Apply()
+    {
+        this.Filter.WorkflowId = System.Guid.TryParse(this.workflowText, out var id) ? id : null;
+        this.Filter.MinDurationMs = this.minDurationSeconds is { } s and > 0 ? s * 1000 : null;
+        return this.OnApply.HasDelegate ? this.OnApply.InvokeAsync() : Task.CompletedTask;
+    }
+}

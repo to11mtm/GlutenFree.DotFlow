@@ -1,7 +1,11 @@
 @namespace Workflow.UI.Client.Designer.Components
+@using System.Linq
 @using System.Text.Json
 @using Workflow.UI.Client.Designer.State
 @using Workflow.UI.Client.Designer.State.Commands
+@using Workflow.UI.Client.Scripts.State
+@inject NavigationManager Nav
+@inject ScriptStudioHandoff Handoff
 
 <div class="df-props">
     @if (SelectedNode is not null)
@@ -34,6 +38,32 @@
         <div class="df-row">
             <button class="df-btn df-btn--primary" data-testid="apply" @onclick="Apply">Apply</button>
             <button class="df-btn" @onclick="Reset">Reset</button>
+        </div>
+        @if (IsScriptNode)
+        {
+            <button class="df-btn df-btn--link" data-testid="edit-in-studio" @onclick="OpenInScriptStudio">Edit in Script Studio →</button>
+        }
+    }
+    else if (SelectedConnection is not null)
+    {
+        <div class="df-props__header">
+            <div class="df-props__module">🔗 Connection</div>
+        </div>
+        <div class="df-field">
+            <label class="df-label">From</label>
+            <div class="df-props__conn" data-testid="conn-from">@NodeName(SelectedConnection.SourceNodeId) · @SelectedConnection.SourcePortName</div>
+        </div>
+        <div class="df-field">
+            <label class="df-label">To</label>
+            <div class="df-props__conn" data-testid="conn-to">@NodeName(SelectedConnection.TargetNodeId) · @SelectedConnection.TargetPortName</div>
+        </div>
+        <div class="df-field">
+            <label class="df-label">Condition (optional)</label>
+            <input class="df-input" data-testid="conn-condition" @bind="connCondition" placeholder="e.g. output.status == 200" />
+        </div>
+        <div class="df-row">
+            <button class="df-btn df-btn--primary" data-testid="conn-apply" @onclick="ApplyConnection">Apply</button>
+            <button class="df-btn df-btn--danger" data-testid="conn-delete" @onclick="DeleteConnection">Delete</button>
         </div>
     }
     else if (Selection.Nodes.Count > 1)
@@ -71,6 +101,9 @@
     private string wfTags = string.Empty;
     private bool wfSeeded;
 
+    private string? seededConnKey;
+    private string connCondition = string.Empty;
+
     /// <summary>The document.</summary>
     [Parameter, EditorRequired]
     public DesignerDocument Document { get; set; } = default!;
@@ -86,8 +119,31 @@
     private DesignerNode? SelectedNode
         => this.Selection.Nodes.Count == 1 ? this.Document.FindNode(System.Linq.Enumerable.First(this.Selection.Nodes)) : null;
 
+    private DesignerConnection? SelectedConnection
+        => this.Selection.Connections.Count == 1
+            ? this.Document.Connections.FirstOrDefault(c => c.Key == Enumerable.First(this.Selection.Connections))
+            : null;
+
+    private string NodeName(string nodeId) => this.Document.FindNode(nodeId)?.Name ?? nodeId;
+
     protected override void OnParametersSet()
     {
+        // Consume an edit returned from Script Studio (D9) — apply it as one undoable edit.
+        if (this.Handoff.HasResult && this.Handoff.TakeResult() is { } result)
+        {
+            var target = this.Document.FindNode(result.NodeId);
+            if (target is not null && (!target.Properties.TryGetValue("code", out var existing) || JsonValues.ToText(existing) != result.Code))
+            {
+                var before = new Dictionary<string, JsonElement>(target.Properties);
+                var after = new Dictionary<string, JsonElement>(target.Properties) { ["code"] = JsonValues.FromString(result.Code) };
+                this.Commands.Execute(new EditNodePropertiesCommand(target.Id, before, after));
+                if (target.Id == this.seededNodeId)
+                {
+                    this.buffer["code"] = JsonValues.FromString(result.Code);
+                }
+            }
+        }
+
         var node = this.SelectedNode;
         if (node is not null && node.Id != this.seededNodeId)
         {
@@ -101,6 +157,33 @@
                 this.SeedWorkflow();
             }
         }
+
+        var conn = this.SelectedConnection;
+        if (conn is not null && conn.Key != this.seededConnKey)
+        {
+            this.seededConnKey = conn.Key;
+            this.connCondition = conn.Condition ?? string.Empty;
+        }
+        else if (conn is null)
+        {
+            this.seededConnKey = null;
+        }
+    }
+
+    private bool IsScriptNode
+        => this.SelectedNode is { ModuleId: "builtin.script" } && this.buffer.ContainsKey("code");
+
+    private void OpenInScriptStudio()
+    {
+        var node = this.SelectedNode;
+        if (node is null)
+        {
+            return;
+        }
+
+        var code = this.buffer.TryGetValue("code", out var c) ? JsonValues.ToText(c) : string.Empty;
+        this.Handoff.Request(node.Id, code, this.CodeLanguageFor(), this.Nav.Uri);
+        this.Nav.NavigateTo("/scripts");
     }
 
     private void SeedBuffer(DesignerNode node)
@@ -184,6 +267,33 @@
         {
             this.SeedBuffer(node);
         }
+    }
+
+    private void ApplyConnection()
+    {
+        var conn = this.SelectedConnection;
+        if (conn is null)
+        {
+            return;
+        }
+
+        var after = string.IsNullOrWhiteSpace(this.connCondition) ? null : this.connCondition.Trim();
+        if (after != conn.Condition)
+        {
+            this.Commands.Execute(new EditConnectionCommand(conn.Key, conn.Condition, after));
+        }
+    }
+
+    private void DeleteConnection()
+    {
+        var conn = this.SelectedConnection;
+        if (conn is null)
+        {
+            return;
+        }
+
+        this.Commands.Execute(new RemoveConnectionsCommand(new[] { conn.Key }));
+        this.Selection.Prune(this.Document);
     }
 
     private void ApplyWorkflowMeta()

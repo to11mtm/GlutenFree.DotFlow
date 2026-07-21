@@ -1,0 +1,101 @@
+@namespace Workflow.UI.Client.Execution.Components
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Execution.State
+
+@* 🎬 Phase 3.5.5 — A read-only replay scrubber over a finished run's node records. Disabled while
+   the execution is still running. *@
+<div class="df-replay" data-testid="replay" tabindex="0" @onkeydown="OnKeyDown">
+    @if (Running)
+    {
+        <div class="df-replay__disabled" data-testid="replay-disabled">Replay is available once the execution finishes.</div>
+    }
+    else if (cursor.Count == 0)
+    {
+        <div class="df-empty" data-testid="replay-empty">No node records to replay.</div>
+    }
+    else
+    {
+        <div class="df-replay__controls">
+            <button class="df-btn df-btn--small" data-testid="replay-first" disabled="@(!cursor.CanStepBack)" @onclick="() => Move(c => c.First())">⏮</button>
+            <button class="df-btn df-btn--small" data-testid="replay-back" disabled="@(!cursor.CanStepBack)" @onclick="() => Move(c => c.StepBack())">◀</button>
+            <span class="df-replay__label" data-testid="replay-label">step @(cursor.Step + 1) / @cursor.Count</span>
+            <button class="df-btn df-btn--small" data-testid="replay-fwd" disabled="@(!cursor.CanStepForward)" @onclick="() => Move(c => c.StepForward())">▶</button>
+            <button class="df-btn df-btn--small" data-testid="replay-last" disabled="@(!cursor.CanStepForward)" @onclick="() => Move(c => c.Last())">⏭</button>
+        </div>
+        @if (cursor.Current is { } cur)
+        {
+            <div class="df-replay__current" data-testid="replay-current">
+                @IconFor(cur.State) <strong>@cur.NodeId</strong> · @cur.State
+            </div>
+        }
+        <div class="df-replay__track">
+            @for (var i = 0; i < cursor.Count; i++)
+            {
+                var idx = i;
+                <button type="button" class="df-replay__tick @(idx <= cursor.Step ? "df-replay__tick--done" : "")"
+                        title="@cursor.Ordered[idx].NodeId" @onclick="() => Move(c => c.SeekTo(idx))"></button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private ReplayCursor cursor = new(System.Array.Empty<NodeExecutionRecordDto>());
+    private IReadOnlyList<NodeExecutionRecordDto>? lastNodes;
+
+    /// <summary>The finished run's node records.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<NodeExecutionRecordDto> Nodes { get; set; } = System.Array.Empty<NodeExecutionRecordDto>();
+
+    /// <summary>Whether the execution is still running (replay disabled).</summary>
+    [Parameter]
+    public bool Running { get; set; }
+
+    /// <summary>Raised with the current node id whenever the cursor moves (for inspector sync).</summary>
+    [Parameter]
+    public EventCallback<string> OnStep { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(this.lastNodes, this.Nodes))
+        {
+            this.lastNodes = this.Nodes;
+            this.cursor = new ReplayCursor(this.Nodes);
+        }
+    }
+
+    private async Task Move(System.Action<ReplayCursor> move)
+    {
+        move(this.cursor);
+        if (this.cursor.Current is { } cur && this.OnStep.HasDelegate)
+        {
+            await this.OnStep.InvokeAsync(cur.NodeId);
+        }
+    }
+
+    private Task OnKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (this.Running)
+        {
+            return Task.CompletedTask;
+        }
+
+        return e.Key switch
+        {
+            "ArrowRight" => this.Move(c => c.StepForward()),
+            "ArrowLeft" => this.Move(c => c.StepBack()),
+            "Home" => this.Move(c => c.First()),
+            "End" => this.Move(c => c.Last()),
+            _ => Task.CompletedTask,
+        };
+    }
+
+    private static string IconFor(string state) => state switch
+    {
+        "Completed" => "✅",
+        "Failed" => "❌",
+        "Running" => "🔄",
+        "Skipped" => "⏭",
+        _ => "⬜",
+    };
+}

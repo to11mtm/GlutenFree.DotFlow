@@ -9,20 +9,21 @@
      @oncontextmenu="OnContextMenu" @oncontextmenu:preventDefault="true" @oncontextmenu:stopPropagation="true">
     <div class="df-node__header" style="height:@(CanvasGeometry.HeaderHeight.ToString(Inv))px;">
         <span class="df-node__icon">@Icon</span>
-        <span class="df-node__name" title="@Node.Name">@Node.Name</span>
+        <span class="df-node__titles">
+            <span class="df-node__name" title="@Node.Name">@Node.Name</span>
+            <span class="df-node__module" title="@Node.ModuleId">@Node.ModuleId</span>
+        </span>
+        @if (!Node.IsModuleKnown)
+        {
+            <span class="df-node__warn" title="unknown module">⚠</span>
+        }
     </div>
-    <div class="df-node__module">@Node.ModuleId</div>
-
-    @if (!Node.IsModuleKnown)
-    {
-        <div class="df-node__warn">⚠ unknown module</div>
-    }
 
     <div class="df-node__ports">
         <div class="df-node__col df-node__col--in">
             @foreach (var port in Inputs)
             {
-                <div class="df-port df-port--in @(InputCompatible?.Invoke(port) == true ? "df-port--compatible" : "")"
+                <div class="df-port df-port--in @(InputCompatible?.Invoke(port) == true ? "df-port--compatible" : "") @(InputEndpoint?.Invoke(port) == true ? "df-port--endpoint" : "")"
                      style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
                      data-port-in="@port"
                      @onpointerup="() => OnInputPointerUp(port)" @onpointerup:stopPropagation="true">
@@ -34,7 +35,8 @@
         <div class="df-node__col df-node__col--out">
             @foreach (var port in Outputs)
             {
-                <div class="df-port df-port--out" style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
+                <div class="df-port df-port--out @(port == ActiveSourcePort ? "df-port--source" : "") @(OutputEndpoint?.Invoke(port) == true ? "df-port--endpoint" : "")"
+                     style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
                      data-port-out="@port"
                      @onpointerdown="() => OnOutputPointerDown(port)" @onpointerdown:stopPropagation="true">
                     <span class="df-port__label">@port</span>
@@ -79,6 +81,18 @@
     /// <summary>Returns whether an input port is a compatible drop target during a connection drag.</summary>
     [Parameter]
     public Func<string, bool>? InputCompatible { get; set; }
+
+    /// <summary>The output port a connection drag started from (highlighted), or null.</summary>
+    [Parameter]
+    public string? ActiveSourcePort { get; set; }
+
+    /// <summary>Returns whether an input port is an endpoint of a selected connection.</summary>
+    [Parameter]
+    public Func<string, bool>? InputEndpoint { get; set; }
+
+    /// <summary>Returns whether an output port is an endpoint of a selected connection.</summary>
+    [Parameter]
+    public Func<string, bool>? OutputEndpoint { get; set; }
 
     private IReadOnlyList<string> Inputs => NodePorts.Inputs(Node);
 

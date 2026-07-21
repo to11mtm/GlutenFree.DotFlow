@@ -1,0 +1,132 @@
+@namespace Workflow.UI.Client.Scripts.Components
+@inject Workflow.UI.Client.Api.ScriptsClient Scripts
+@using System.Linq
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+
+@* 💾 Phase 3.4.4 — Save the current editor as a script library: update an open library (PUT same id)
+   or save-as-new (id/name/description/language/exportedFunctions). Validation + dependency-cycle
+   errors surface from ProblemDetails in the dialog. *@
+<div class="df-modal" data-testid="save-dialog">
+    <div class="df-modal__panel">
+        <h3>@(IsUpdate ? $"Update “{ActiveLibrary!.Name}”" : "Save as library")</h3>
+
+        <div class="df-field">
+            <label class="df-label" for="lib-id">Library id</label>
+            <input id="lib-id" class="df-input df-input--mono" data-testid="lib-id" @bind="libraryId" disabled="@IsUpdate" />
+        </div>
+        <div class="df-field">
+            <label class="df-label" for="lib-name">Name</label>
+            <input id="lib-name" class="df-input" data-testid="lib-name" @bind="name" />
+        </div>
+        <div class="df-field">
+            <label class="df-label" for="lib-desc">Description</label>
+            <input id="lib-desc" class="df-input" data-testid="lib-desc" @bind="description" />
+        </div>
+        <div class="df-field">
+            <label class="df-label" for="lib-exports">Exported functions (comma-separated)</label>
+            <input id="lib-exports" class="df-input df-input--mono" data-testid="lib-exports" @bind="exportedFunctions" />
+        </div>
+
+        @if (error is not null)
+        {
+            <div class="df-field-error" data-testid="save-error">@error</div>
+        }
+
+        <div class="df-modal__actions">
+            <button class="df-btn df-btn--primary" data-testid="save-confirm" disabled="@saving" @onclick="Save">@(saving ? "Saving…" : "Save")</button>
+            @if (IsUpdate)
+            {
+                <button class="df-btn" data-testid="save-as-new" @onclick="ToggleSaveAsNew">@(saveAsNew ? "↩ Update instead" : "Save as new…")</button>
+            }
+            <button class="df-btn" data-testid="save-cancel" @onclick="Cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string libraryId = string.Empty;
+    private string name = string.Empty;
+    private string description = string.Empty;
+    private string exportedFunctions = string.Empty;
+    private bool saving;
+    private bool saveAsNew;
+    private string? error;
+
+    /// <summary>The current editor source to persist.</summary>
+    [Parameter]
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>The current language id.</summary>
+    [Parameter]
+    public string Language { get; set; } = "javascript";
+
+    /// <summary>The open library (update mode), or null (save-as-new)~ 📚.</summary>
+    [Parameter]
+    public ScriptLibraryDto? ActiveLibrary { get; set; }
+
+    /// <summary>Raised with the stored library after a successful save~ ✅.</summary>
+    [Parameter]
+    public EventCallback<ScriptLibraryDto> OnSaved { get; set; }
+
+    /// <summary>Raised when the dialog is dismissed~ ✖️.</summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private bool IsUpdate => this.ActiveLibrary is not null && !this.saveAsNew;
+
+    protected override void OnInitialized()
+    {
+        if (this.ActiveLibrary is { } lib)
+        {
+            this.libraryId = lib.LibraryId;
+            this.name = lib.Name;
+            this.description = lib.Description ?? string.Empty;
+            this.exportedFunctions = string.Join(", ", lib.ExportedFunctions);
+        }
+    }
+
+    private void ToggleSaveAsNew()
+    {
+        this.saveAsNew = !this.saveAsNew;
+        if (this.saveAsNew && this.ActiveLibrary is not null && this.libraryId == this.ActiveLibrary.LibraryId)
+        {
+            this.libraryId = this.ActiveLibrary.LibraryId + "-copy";
+        }
+    }
+
+    private async Task Save()
+    {
+        this.error = null;
+        if (string.IsNullOrWhiteSpace(this.libraryId) || string.IsNullOrWhiteSpace(this.name))
+        {
+            this.error = "Library id and name are required.";
+            return;
+        }
+
+        var exports = this.exportedFunctions
+            .Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries)
+            .ToList();
+        var dto = new ScriptLibraryDto(
+            this.libraryId.Trim(), this.name.Trim(),
+            string.IsNullOrWhiteSpace(this.description) ? null : this.description.Trim(),
+            this.Language, this.Code, exports, System.Array.Empty<string>());
+
+        this.saving = true;
+        try
+        {
+            var saved = await Scripts.SaveLibraryAsync(dto);
+            await this.OnSaved.InvokeAsync(saved);
+        }
+        catch (ApiException ex)
+        {
+            this.error = ex.Error.Summarize();
+        }
+        finally
+        {
+            this.saving = false;
+        }
+    }
+
+    private Task Cancel() => this.OnCancel.InvokeAsync();
+}

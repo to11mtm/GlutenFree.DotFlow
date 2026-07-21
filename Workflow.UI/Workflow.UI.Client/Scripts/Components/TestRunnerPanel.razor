@@ -1,0 +1,192 @@
+@namespace Workflow.UI.Client.Scripts.Components
+@implements IDisposable
+@inject Workflow.UI.Client.Api.ScriptsClient Scripts
+@inject Workflow.UI.Client.Services.ILocalStorage Storage
+@using System.Text.Json
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Scripts.State
+
+@* 🧪 Phase 3.4.3 — The inline test runner (mockup S1 right rail): JSON inputs + config toggles →
+   POST /scripts/test → result / logs / variable updates / structured error. A script error is a
+   normal 200 with success=false (rendered inline, not a toast). *@
+<div class="df-runner" data-testid="test-runner">
+    <div class="df-runner__inputs">
+        <label class="df-label" for="inputs-json">Inputs (JSON)</label>
+        <textarea id="inputs-json" class="df-textarea df-input--mono" data-testid="inputs-json" rows="5"
+                  spellcheck="false" value="@state.Inputs" @oninput="OnInputsChanged"></textarea>
+        @if (inputsError is not null)
+        {
+            <div class="df-field-error" data-testid="inputs-error">@inputsError</div>
+        }
+    </div>
+
+    <div class="df-runner__config">
+        <label>timeout <input type="number" class="df-input df-input--tiny" data-testid="timeout" min="1" @bind="state.TimeoutSeconds" /> s</label>
+        <label><input type="checkbox" data-testid="allow-network" @bind="state.AllowNetwork" /> network</label>
+        <label><input type="checkbox" data-testid="allow-files" @bind="state.AllowFileSystem" /> files</label>
+    </div>
+
+    <button class="df-btn df-btn--primary" data-testid="run-test" disabled="@RunDisabled" @onclick="Run">
+        @(state.Running ? "⏳ Running…" : "▶ Test")
+    </button>
+    @if (!CanRun)
+    {
+        <div class="df-runner__hint" data-testid="run-hint">Pick a runnable language to test.</div>
+    }
+
+    @if (state.RequestError is not null)
+    {
+        <div class="df-runner__error" data-testid="request-error">@state.RequestError</div>
+    }
+
+    @if (state.Result is { } result)
+    {
+        <div class="df-runner__result">
+            @if (result.Success)
+            {
+                <div class="df-runner__banner df-runner__banner--ok" data-testid="run-success">✅ @($"{result.DurationMs:0}ms")</div>
+            }
+            else
+            {
+                <div class="df-runner__banner df-runner__banner--fail" data-testid="run-failure">
+                    ❌ @(result.Error ?? "Script failed") <span class="df-runner__dur">@($"{result.DurationMs:0}ms")</span>
+                </div>
+            }
+
+            <details open>
+                <summary>result</summary>
+                <pre class="df-runner__json" data-testid="run-result">@PrettyResult(result)</pre>
+            </details>
+
+            <div class="df-runner__logs">
+                <div class="df-runner__logbar">
+                    <select class="df-input df-input--tiny" data-testid="log-level-filter" @bind="logLevel">
+                        <option value="All">All</option>
+                        <option value="Debug">Debug</option>
+                        <option value="Info">Info</option>
+                        <option value="Warning">Warning</option>
+                        <option value="Error">Error</option>
+                    </select>
+                    <input class="df-input df-input--tiny" data-testid="log-search" placeholder="🔍 logs" @bind="logSearch" @bind:event="oninput" />
+                </div>
+                @foreach (var log in state.FilteredLogs(logLevel, logSearch))
+                {
+                    <div class="df-runner__log" data-testid="log-line">[@log.Level] @log.Message</div>
+                }
+            </div>
+
+            @if (result.VariableUpdates.Count > 0)
+            {
+                <div class="df-runner__vars">
+                    <div class="df-runner__label">variables</div>
+                    @foreach (var kv in result.VariableUpdates)
+                    {
+                        <div class="df-runner__var" data-testid="var-update">@kv.Key = @kv.Value.ToString()</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private readonly TestRunState state = new();
+    private string? inputsError;
+    private string logLevel = "All";
+    private string logSearch = string.Empty;
+    private string? loadedForLanguage;
+
+    /// <summary>The current script source.</summary>
+    [Parameter]
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>The current language id.</summary>
+    [Parameter]
+    public string Language { get; set; } = "javascript";
+
+    /// <summary>Whether the language is runnable (Python/empty disable the button).</summary>
+    [Parameter]
+    public bool CanRun { get; set; } = true;
+
+    /// <summary>Library ids to import for the run (empty for MVP; wired in 3.4.4).</summary>
+    [Parameter]
+    public IReadOnlyList<string>? Libraries { get; set; }
+
+    private bool RunDisabled => !this.CanRun || this.state.Running || string.IsNullOrWhiteSpace(this.Code);
+
+    /// <summary>Runs the test if it isn't disabled (used by the Ctrl+Enter shortcut)~ ⌨️.</summary>
+    /// <returns>A task.</returns>
+    public Task RunExternalAsync() => this.RunDisabled ? Task.CompletedTask : this.Run();
+
+    protected override void OnInitialized() => this.state.Changed += this.OnStateChanged;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (this.loadedForLanguage != this.Language)
+        {
+            this.loadedForLanguage = this.Language;
+            await this.LoadRememberedInputsAsync();
+        }
+    }
+
+    private void OnInputsChanged(ChangeEventArgs e)
+    {
+        this.state.Inputs = e.Value?.ToString() ?? string.Empty;
+        this.inputsError = null;
+    }
+
+    private async Task Run()
+    {
+        var inputs = this.state.ParseInputs(out var parseError);
+        if (parseError is not null)
+        {
+            this.inputsError = parseError;
+            return;
+        }
+
+        this.inputsError = null;
+        this.state.BeginRun();
+        try
+        {
+            var request = new ScriptTestRequestDto(this.Language, this.Code, inputs, this.Libraries, this.state.ToConfig());
+            var result = await Scripts.TestAsync(request);
+            this.state.CompleteRun(result);
+            await this.SaveRememberedInputsAsync();
+        }
+        catch (ApiException ex)
+        {
+            this.state.FailRun(ex.Error.Summarize());
+        }
+    }
+
+    private async Task LoadRememberedInputsAsync()
+    {
+        var saved = await Storage.GetAsync(this.StorageKey());
+        if (!string.IsNullOrWhiteSpace(saved))
+        {
+            this.state.Inputs = saved!;
+        }
+    }
+
+    private Task SaveRememberedInputsAsync() => Storage.SetAsync(this.StorageKey(), this.state.Inputs).AsTask();
+
+    private string StorageKey() => $"dotflow.scriptinputs.{this.Language}";
+
+    private static string PrettyResult(ScriptTestResultDto result)
+    {
+        try
+        {
+            return JsonSerializer.Serialize(result.Result, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException)
+        {
+            return result.Result.ToString();
+        }
+    }
+
+    private void OnStateChanged() => this.InvokeAsync(this.StateHasChanged);
+
+    /// <inheritdoc/>
+    public void Dispose() => this.state.Changed -= this.OnStateChanged;
+}

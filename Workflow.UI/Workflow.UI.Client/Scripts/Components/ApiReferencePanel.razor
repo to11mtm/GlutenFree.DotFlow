@@ -1,0 +1,88 @@
+@namespace Workflow.UI.Client.Scripts.Components
+@using Workflow.UI.Client.Scripts.State
+
+@* 💡 Phase 3.4.1 — A searchable, category-grouped reference for the workflow.* API. Clicking a
+   method inserts its call at the editor cursor (via OnInsert). Hover/tooltip shows the signature
+   and doc. Framework-free data (WorkflowApiDescriptor) drives it — the React port reuses it. *@
+<div class="df-apiref" data-testid="api-reference">
+    <div class="df-apiref__search">
+        <input class="df-input" data-testid="api-search" placeholder="🔍 filter API…"
+               @bind="search" @bind:event="oninput" aria-label="Filter the workflow API" />
+    </div>
+    <div class="df-apiref__list">
+        @if (Groups.Count == 0)
+        {
+            <div class="df-apiref__empty" data-testid="api-empty">No matches</div>
+        }
+        @foreach (var group in Groups)
+        {
+            <div class="df-apiref__group" data-testid="api-group">
+                <div class="df-apiref__category">@CategoryIcon(group.Category) @group.Category</div>
+                @foreach (var method in group.Methods)
+                {
+                    <button type="button" class="df-apiref__method" data-testid="api-method"
+                            title="@method.TypedSignature&#10;@method.Summary"
+                            @onclick="() => Insert(method)">
+                        <span class="df-apiref__name">@method.JsName</span>
+                        @if (method.Gated)
+                        {
+                            <span class="df-apiref__gated" title="Requires a capability (network/file)">🔒</span>
+                        }
+                    </button>
+                }
+            </div>
+        }
+    </div>
+    @if (Selected is not null)
+    {
+        <div class="df-apiref__detail" data-testid="api-detail">
+            <code class="df-apiref__sig">@Selected.TypedSignature</code>
+            <p class="df-apiref__doc">@Selected.Summary</p>
+            @if (Selected.Gated)
+            {
+                <p class="df-apiref__gated-note">🔒 Requires @(Selected.Category == "HTTP" ? "network" : "file") access enabled in the run config.</p>
+            }
+        </div>
+    }
+    <a class="df-apiref__more" href="https://github.com/to11mtm/GlutenFree.DotFlow/blob/main/docs/scripting.md" target="_blank" rel="noopener">Full reference →</a>
+</div>
+
+@code {
+    private string search = string.Empty;
+
+    /// <summary>Raised with the chosen method when the user clicks it (the host inserts its call)~ ✍️.</summary>
+    [Parameter]
+    public EventCallback<ApiMethodInfo> OnInsert { get; set; }
+
+    /// <summary>The last-clicked method, whose signature + doc are shown in the detail pane.</summary>
+    private ApiMethodInfo? Selected { get; set; }
+
+    private List<(string Category, IReadOnlyList<ApiMethodInfo> Methods)> Groups
+    {
+        get
+        {
+            var matches = WorkflowApiDescriptor.Search(this.search);
+            var set = matches.Select(x => x.ClrName).ToHashSet();
+            return WorkflowApiDescriptor.ByCategory()
+                .Select(g => (g.Category, (IReadOnlyList<ApiMethodInfo>)g.Methods.Where(x => set.Contains(x.ClrName)).ToList()))
+                .Where(g => g.Item2.Count > 0)
+                .ToList();
+        }
+    }
+
+    private Task Insert(ApiMethodInfo method)
+    {
+        this.Selected = method;
+        return this.OnInsert.HasDelegate ? this.OnInsert.InvokeAsync(method) : Task.CompletedTask;
+    }
+
+    private static string CategoryIcon(string category) => category switch
+    {
+        "Variables" => "💾",
+        "Logging" => "📝",
+        "HTTP" => "🌐",
+        "Files" => "📁",
+        "Context" => "🧭",
+        _ => "🔧",
+    };
+}

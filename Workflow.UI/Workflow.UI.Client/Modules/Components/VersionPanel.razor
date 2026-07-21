@@ -1,0 +1,29 @@
+@namespace Workflow.UI.Client.Modules.Components
+@using Workflow.UI.Client.Modules.State
+
+@* 🔢 Phase 3.6.3 — Per-version enable/disable (upgrade = upload a newer version; rollback = enable
+   an older / disable the newer). The active (resolved) version is flagged. *@
+<div class="df-versions" data-testid="version-panel">
+    @foreach (var v in Versions)
+    {
+        <div class="df-versions__row" data-testid="version-@v.Version">
+            <span class="df-drawer__chip @(v.Active ? "df-drawer__chip--active" : "")">@v.Version @(v.Active ? "(active)" : "")</span>
+            <button class="df-btn df-btn--small" data-testid="ver-enable-@v.Version" disabled="@Busy" @onclick="() => OnToggle.InvokeAsync((v.Version, true))">Enable</button>
+            <button class="df-btn df-btn--small" data-testid="ver-disable-@v.Version" disabled="@Busy" @onclick="() => OnToggle.InvokeAsync((v.Version, false))">Disable</button>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>The available versions (with the active one flagged).</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DocVersion> Versions { get; set; } = System.Array.Empty<DocVersion>();
+
+    /// <summary>Whether a mutation is in flight (disables the buttons).</summary>
+    [Parameter]
+    public bool Busy { get; set; }
+
+    /// <summary>Raised with (version, enable) when a version toggle is clicked.</summary>
+    [Parameter]
+    public EventCallback<(string Version, bool Enable)> OnToggle { get; set; }
+}
