@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <!-- 🧬 SA0002: StyleCop (older Roslyn) vs. the newer Microsoft.CodeAnalysis runtime library —
+             same cosmetic conflict suppressed in Workflow.Modules.Database.Linq~ 🌸 -->
+        <NoWarn>$(NoWarn);SA0002</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 📦 IBlobStore for the compiled-assembly cache~ -->
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
+        <ProjectReference Include="..\Workflow.Scripting\Workflow.Scripting.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- 🧠 Roslyn — publish-time C# compile pipeline (domain-agnostic scripting core)~ -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+        <!-- 📚 Portable reference assemblies — deterministic compiler reference set~ -->
+        <PackageReference Include="Basic.Reference.Assemblies" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="StyleCop.Analyzers">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+    </ItemGroup>
+
+</Project>

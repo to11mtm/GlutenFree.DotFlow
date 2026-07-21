@@ -1,0 +1,53 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Designer.State
+
+<div class="df-statusbar">
+    @if (Issues.Count == 0)
+    {
+        <span class="df-statusbar__ok">✓ Valid</span>
+    }
+    else
+    {
+        <span class="df-statusbar__warn">⚠ @ErrorCount error(s), @WarnCount warning(s)</span>
+    }
+    <span class="df-statusbar__sep">·</span>
+    <span>@Document.Nodes.Count nodes, @Document.Connections.Count connections</span>
+    @if (ExtraInfo is not null)
+    {
+        <span class="df-statusbar__sep">·</span>
+        <span>@ExtraInfo</span>
+    }
+</div>
+
+@code {
+    /// <summary>The document being edited.</summary>
+    [Parameter, EditorRequired]
+    public DesignerDocument Document { get; set; } = default!;
+
+    /// <summary>The current validation issues.</summary>
+    [Parameter]
+    public IReadOnlyList<GraphIssue> Issues { get; set; } = System.Array.Empty<GraphIssue>();
+
+    /// <summary>Optional trailing info (e.g. save time / connection state).</summary>
+    [Parameter]
+    public string? ExtraInfo { get; set; }
+
+    private int ErrorCount
+    {
+        get
+        {
+            var n = 0;
+            foreach (var i in Issues)
+            {
+                if (i.Severity == IssueSeverity.Error)
+                {
+                    n++;
+                }
+            }
+
+            return n;
+        }
+    }
+
+    private int WarnCount => Issues.Count - ErrorCount;
+}

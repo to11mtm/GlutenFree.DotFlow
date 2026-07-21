@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+
+        <!--
+            🐳 CopilotNote: This project hosts tests that require a running Docker daemon
+            (Testcontainers-based integration tests for NATS, PostgreSQL, MinIO/S3, etc.).
+            Keep them OUT of the main Workflow.Tests project so iterative dev/test loops
+            stay fast and don't fail on machines without Docker. uwu~ ✨
+        -->
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" />
+        <PackageReference Include="LanguageExt.Core" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="Microsoft.Extensions.Logging" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <PackageReference Include="xunit" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+        <PackageReference Include="FluentAssertions" />
+        <PackageReference Include="Testcontainers.Nats" />
+        <PackageReference Include="Testcontainers.PostgreSql" />
+        <PackageReference Include="Testcontainers.Minio" />
+        <!-- ☁️ Phase 2.5.b — Azurite (Azure Storage emulator) for blob module E2E~ -->
+        <PackageReference Include="Testcontainers.Azurite" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
+        <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
+        <!-- 🧬 Phase 2.4.b — typed linq family (compiler + cache + ALC runner + module)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database.Linq\Workflow.Modules.Database.Linq.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Nats\Workflow.Persistence.Nats.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Postgres\Workflow.Persistence.Postgres.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.S3\Workflow.Persistence.S3.csproj" />
+        <!-- ☁️ Phase 2.5.b — cloud storage module family (S3 + Azure Blob modules)~ -->
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <ProjectReference Include="..\Workflow.Modules.Cloud\Workflow.Modules.Cloud.csproj" />
+    </ItemGroup>
+
+</Project>
+

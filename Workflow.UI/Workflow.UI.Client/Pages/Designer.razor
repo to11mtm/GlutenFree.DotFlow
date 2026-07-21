@@ -1,0 +1,772 @@
+@page "/designer/{Id}"
+@namespace Workflow.UI.Client.Pages
+@rendermode InteractiveWebAssembly
+@using System.Text.Json
+@using Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Designer.State
+@using Workflow.UI.Client.Designer.State.Commands
+@implements IAsyncDisposable
+@inject Workflow.UI.Client.Api.WorkflowsClient Workflows
+@inject Workflow.UI.Client.Api.ModulesClient Modules
+@inject Workflow.UI.Client.Api.ExecutionsClient Executions
+@inject Workflow.UI.Client.Api.RealTimeClient RealTime
+@inject Workflow.UI.Client.Services.ToastService Toasts
+@inject Workflow.UI.Client.Designer.State.DesignerClipboard Clipboard
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Designer · DotFlow</PageTitle>
+
+<TopBar Subtitle="@(document?.Name)">
+    @if (commands is not null && runState is null)
+    {
+        <button class="df-btn df-btn--primary" data-testid="save" @onclick="Save">💾 Save</button>
+        <button class="df-btn" data-testid="undo" disabled="@(!commands.CanUndo)" title="@commands.UndoDescription" @onclick="() => commands.Undo()">↩</button>
+        <button class="df-btn" data-testid="redo" disabled="@(!commands.CanRedo)" title="@commands.RedoDescription" @onclick="() => commands.Redo()">↪</button>
+        <button class="df-btn" data-testid="run" @onclick="OpenRunDialog">▶ Run</button>
+        <button class="df-btn" data-testid="history" @onclick="ToggleHistory">🕘 History</button>
+        <span class="df-topbar__dirty" data-testid="dirty">@(commands.IsDirty ? "●unsaved" : "")</span>
+    }
+    else if (runState is not null)
+    {
+        <span class="df-topbar__runmode">▶ RUN</span>
+    }
+</TopBar>
+<ToastHost />
+
+@if (loading)
+{
+    <div class="df-empty">Loading workflow…</div>
+}
+else if (loadError is not null)
+{
+    <div class="df-empty">
+        @loadError <button class="df-btn" @onclick="Load">Retry</button>
+    </div>
+}
+else if (document is not null)
+{
+    <div class="df-designer">
+        <div class="df-designer__body">
+            @if (runState is null)
+            {
+                <div class="df-designer__palette">
+                    @if (showHistory && document.Id != System.Guid.Empty)
+                    {
+                        <ExecutionHistory WorkflowId="document.Id" SelectedId="null" OnSelect="InspectExecution" />
+                    }
+                    else
+                    {
+                        <ModulePalette />
+                    }
+                </div>
+                <div class="df-designer__canvas">
+                    <CanvasView @ref="canvas" Document="document"
+                                Selection="selection" Commands="commands"
+                                OnDropModule="OnDropModule"
+                                OnNodeContextMenu="OnNodeContextMenu"
+                                OnCanvasContextMenu="OnCanvasContextMenu" />
+                </div>
+                <div class="df-designer__props">
+                    <PropertiesPanel Document="document" Selection="selection" Commands="commands" />
+                </div>
+            }
+            else
+            {
+                <div class="df-designer__canvas">
+                    <CanvasView @ref="canvas" Document="document" NodeStateClass="runState.CssClassFor" />
+                </div>
+                <div class="df-designer__props">
+                    <RunOverlay Document="document" Run="runState" Reconnecting="reconnecting" OnCancel="CancelRun" OnClose="CloseRun" OnRerun="Rerun" OnJumpTo="JumpTo" />
+                </div>
+            }
+        </div>
+        <StatusBar Document="document" Issues="issues" ExtraInfo="@(runState is null ? statusInfo : "run mode (read-only)")" />
+    </div>
+
+    @if (showRunDialog)
+    {
+        <div class="df-modal-backdrop" @onclick="() => showRunDialog = false">
+            <div class="df-modal" @onclick:stopPropagation="true" data-testid="run-dialog">
+                <div class="df-label">Run inputs (JSON)</div>
+                <textarea class="df-textarea" @bind="runInputs" data-testid="run-inputs"></textarea>
+                <div class="df-row" style="margin-top: var(--df-space-3);">
+                    <button class="df-btn df-btn--primary" data-testid="run-start" @onclick="StartRun">Start</button>
+                    <button class="df-btn" @onclick="() => showRunDialog = false">Cancel</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <ContextMenu Visible="menuVisible" X="menuX" Y="menuY" Items="menuItems" OnClose="() => menuVisible = false" />
+
+    @if (renameNodeId is not null)
+    {
+        <div class="df-modal-backdrop" @onclick="() => renameNodeId = null">
+            <div class="df-modal" @onclick:stopPropagation="true">
+                <div class="df-label">Rename node</div>
+                <input class="df-input" @bind="renameValue" data-testid="rename-input" />
+                <div class="df-row" style="margin-top: var(--df-space-3);">
+                    <button class="df-btn df-btn--primary" data-testid="rename-ok" @onclick="ConfirmRename">OK</button>
+                    <button class="df-btn" @onclick="() => renameNodeId = null">Cancel</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (showSaveDialog)
+    {
+        <div class="df-modal-backdrop" @onclick="() => showSaveDialog = false">
+            <div class="df-modal" @onclick:stopPropagation="true" data-testid="save-dialog">
+                <div class="df-label">Cannot save — fix these first:</div>
+                <ul class="df-issue-list">
+                    @foreach (var issue in saveIssues)
+                    {
+                        <li class="df-issue df-issue--@issue.Severity">
+                            @issue.Message
+                            @if (issue.NodeId is not null)
+                            {
+                                <button class="df-link" @onclick="() => JumpTo(issue.NodeId)">→ @issue.NodeId</button>
+                            }
+                        </li>
+                    }
+                </ul>
+                <button class="df-btn" @onclick="() => showSaveDialog = false">Close</button>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private CanvasView? canvas;
+    private DesignerDocument? document;
+    private CommandStack? commands;
+    private readonly SelectionState selection = new();
+    private readonly HashSet<string> knownModuleIds = new();
+    private readonly Dictionary<string, ModuleSchemaDto?> schemaCache = new(System.StringComparer.Ordinal);
+    private IReadOnlyList<GraphIssue> issues = System.Array.Empty<GraphIssue>();
+    private bool loading = true;
+    private string? loadError;
+    private readonly string statusInfo = "editing";
+    private DotNetObjectReference<Designer>? keysRef;
+
+    private bool menuVisible;
+    private double menuX, menuY;
+    private IReadOnlyList<ContextMenu.MenuItem> menuItems = System.Array.Empty<ContextMenu.MenuItem>();
+
+    private string? renameNodeId;
+    private string renameValue = string.Empty;
+
+    private bool showSaveDialog;
+    private List<SaveIssue> saveIssues = new();
+
+    // Run mode.
+    private RunState? runState;
+    private bool showRunDialog;
+    private string runInputs = "{}";
+    private bool reconnecting;
+    private System.Threading.CancellationTokenSource? pollCts;
+    private bool showHistory;
+
+    private sealed record SaveIssue(string Severity, string Message, string? NodeId);
+
+    /// <summary>The workflow id from the route (or <c>new</c>).</summary>
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    protected override Task OnParametersSetAsync() => this.Load();
+
+    private async Task Load()
+    {
+        this.loading = true;
+        this.loadError = null;
+        try
+        {
+            var modules = await Modules.ListAsync();
+            this.knownModuleIds.Clear();
+            foreach (var m in modules)
+            {
+                this.knownModuleIds.Add(m.Id);
+            }
+
+            if (string.Equals(this.Id, "new", System.StringComparison.OrdinalIgnoreCase))
+            {
+                this.document = DesignerDocument.NewBlank("Untitled workflow");
+            }
+            else if (System.Guid.TryParse(this.Id, out var guid))
+            {
+                var dto = await Workflows.GetAsync(guid);
+                foreach (var node in dto.Nodes)
+                {
+                    await this.EnsureSchema(node.ModuleId);
+                }
+
+                this.document = DesignerDocument.FromDto(dto, mid => this.schemaCache.TryGetValue(mid, out var s) ? s : null);
+            }
+            else
+            {
+                this.loadError = $"Invalid workflow id '{this.Id}'.";
+                return;
+            }
+
+            this.commands = new CommandStack(this.document);
+            this.commands.Changed += this.OnDocumentChanged;
+            this.selection.Changed += this.OnSelectionChanged;
+            this.Revalidate();
+
+            // Deep link: /designer/{id}?execution={executionId} opens history mode.
+            var query = new System.Uri(Nav.Uri).Query;
+            if (query.Contains("execution=", System.StringComparison.OrdinalIgnoreCase))
+            {
+                var raw = query.Split(new[] { "execution=" }, System.StringSplitOptions.None)[1].Split('&')[0];
+                if (System.Guid.TryParse(System.Uri.UnescapeDataString(raw), out var execId))
+                {
+                    await this.InspectExecution(execId);
+                }
+            }
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+        }
+        finally
+        {
+            this.loading = false;
+        }
+    }
+
+    private async Task<ModuleSchemaDto?> EnsureSchema(string moduleId)
+    {
+        if (this.schemaCache.TryGetValue(moduleId, out var cached))
+        {
+            return cached;
+        }
+
+        var details = await Modules.GetAsync(moduleId);
+        this.schemaCache[moduleId] = details?.Schema;
+        return details?.Schema;
+    }
+
+    private async Task OnDropModule((string ModuleId, Point CanvasPoint) drop)
+    {
+        if (this.document is null || this.commands is null)
+        {
+            return;
+        }
+
+        var schema = await this.EnsureSchema(drop.ModuleId);
+        var existing = new HashSet<string>();
+        foreach (var n in this.document.Nodes)
+        {
+            existing.Add(n.Id);
+        }
+
+        var node = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate(drop.ModuleId, existing),
+            ModuleId = drop.ModuleId,
+            Name = DisplayNameFor(drop.ModuleId),
+            X = drop.CanvasPoint.X,
+            Y = drop.CanvasPoint.Y,
+            Schema = schema,
+        };
+
+        if (schema is not null)
+        {
+            foreach (var prop in schema.Properties)
+            {
+                if (prop.DefaultValue is JsonElement def)
+                {
+                    node.Properties[prop.Name] = def;
+                }
+            }
+        }
+
+        this.commands.Execute(new AddNodeCommand(node));
+    }
+
+    // ─── Context menu ────────────────────────────────────────────────────────────
+
+    private void OnNodeContextMenu((DesignerNode Node, MouseEventArgs Args) e)
+    {
+        if (!this.selection.IsNodeSelected(e.Node.Id))
+        {
+            this.selection.SelectNode(e.Node.Id);
+        }
+
+        var node = e.Node;
+        this.menuItems = new List<ContextMenu.MenuItem>
+        {
+            new("rename", "Rename", () => { this.BeginRename(node); return Task.CompletedTask; }),
+            new("duplicate", "Duplicate", () => { this.Duplicate(node); return Task.CompletedTask; }),
+            new("delete", "Delete", () => { this.DeleteSelected(); return Task.CompletedTask; }, Danger: true),
+        };
+        this.ShowMenu(e.Args);
+    }
+
+    private void OnCanvasContextMenu(MouseEventArgs e)
+    {
+        this.menuItems = new List<ContextMenu.MenuItem>
+        {
+            new("select-all", "Select all", () => { this.selection.SelectAll(this.document!); return Task.CompletedTask; }),
+            new("paste", "Paste", () => { this.Paste(); return Task.CompletedTask; }),
+            new("fit", "Fit to screen", async () => { if (this.canvas is not null) { await this.canvas.FitAsync(); } }),
+        };
+        this.ShowMenu(e);
+    }
+
+    private void ShowMenu(MouseEventArgs e)
+    {
+        this.menuX = e.ClientX;
+        this.menuY = e.ClientY;
+        this.menuVisible = true;
+    }
+
+    // ─── Edit operations ─────────────────────────────────────────────────────────
+
+    private void DeleteSelected()
+    {
+        if (this.commands is null || this.selection.Nodes.Count == 0)
+        {
+            return;
+        }
+
+        this.commands.Execute(new RemoveNodesCommand(this.selection.Nodes.ToList()));
+        this.selection.Prune(this.document!);
+    }
+
+    private void Duplicate(DesignerNode node)
+    {
+        if (this.commands is null || this.document is null)
+        {
+            return;
+        }
+
+        var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+        var clone = node.Clone();
+        clone.Id = NodeIdGenerator.Generate(node.ModuleId, existing);
+        clone.X = node.X + 40;
+        clone.Y = node.Y + 40;
+        this.commands.Execute(new AddNodeCommand(clone));
+    }
+
+    private void Copy()
+    {
+        if (this.document is not null && this.selection.Nodes.Count > 0)
+        {
+            this.Clipboard.Copy(this.document, this.selection.Nodes);
+        }
+    }
+
+    private void Paste()
+    {
+        if (this.commands is null || this.document is null || !this.Clipboard.HasContent)
+        {
+            return;
+        }
+
+        var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+        var (nodes, conns) = this.Clipboard.BuildPaste(existing);
+        var children = new List<IDesignerCommand>();
+        foreach (var n in nodes)
+        {
+            children.Add(new AddNodeCommand(n));
+        }
+
+        foreach (var c in conns)
+        {
+            children.Add(new AddConnectionCommand(c));
+        }
+
+        if (children.Count > 0)
+        {
+            this.commands.Execute(new CompositeCommand("Paste", children));
+            this.selection.SetNodes(nodes.Select(n => n.Id));
+        }
+    }
+
+    private void BeginRename(DesignerNode node)
+    {
+        this.renameNodeId = node.Id;
+        this.renameValue = node.Name;
+    }
+
+    private void ConfirmRename()
+    {
+        if (this.commands is not null && this.renameNodeId is not null && this.document is not null)
+        {
+            var node = this.document.FindNode(this.renameNodeId);
+            if (node is not null && node.Name != this.renameValue)
+            {
+                this.commands.Execute(new RenameNodeCommand(node.Id, node.Name, this.renameValue));
+            }
+        }
+
+        this.renameNodeId = null;
+    }
+
+    private void JumpTo(string nodeId)
+    {
+        this.selection.SelectNode(nodeId);
+        this.showSaveDialog = false;
+    }
+
+    // ─── Run mode (3.3.c.0 / c.1) ────────────────────────────────────────────────
+
+    private void OpenRunDialog() => this.showRunDialog = true;
+
+    private void ToggleHistory() => this.showHistory = !this.showHistory;
+
+    private async Task InspectExecution(System.Guid executionId)
+    {
+        this.showHistory = false;
+        try
+        {
+            var status = await Executions.GetStatusAsync(executionId);
+            var run = new RunState { ExecutionId = executionId };
+            run.SetTotalNodes(this.document?.Nodes.Count ?? 0);
+            if (status is not null)
+            {
+                run.SeedFromSnapshot(status.State, status.Progress, status.NodeStates, status.Error);
+            }
+
+            run.Changed += this.OnRunChanged;
+            this.runState = run;
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private async Task Rerun()
+    {
+        await this.CloseRun();
+        this.OpenRunDialog();
+    }
+
+    private async Task StartRun()
+    {
+        if (this.document is null)
+        {
+            return;
+        }
+
+        this.showRunDialog = false;
+
+        Dictionary<string, JsonElement> inputs;
+        try
+        {
+            inputs = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                string.IsNullOrWhiteSpace(this.runInputs) ? "{}" : this.runInputs) ?? new();
+        }
+        catch (JsonException)
+        {
+            Toasts.Error("Run inputs must be a valid JSON object.");
+            return;
+        }
+
+        try
+        {
+            var started = await Executions.ExecuteAsync(this.document.Id, inputs);
+            this.runState = new RunState { ExecutionId = started.ExecutionId };
+            this.runState.SetTotalNodes(this.document.Nodes.Count);
+            this.runState.Changed += this.OnRunChanged;
+            this.runState.AddLog("execution started");
+
+            // Subscribe to live events (c.1). Best-effort — the overlay still shows start state if the hub is down.
+            await this.SubscribeRealTime(started.ExecutionId);
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private async Task SubscribeRealTime(Guid executionId)
+    {
+        this.WireRealTimeHandlers();
+        try
+        {
+            await RealTime.SubscribeToExecutionAsync(executionId);
+        }
+        catch
+        {
+            Toasts.Warning("Live updates unavailable — falling back to polling.");
+            this.StartPolling(executionId);
+        }
+    }
+
+    private void StartPolling(Guid executionId)
+    {
+        this.pollCts?.Cancel();
+        this.pollCts = new System.Threading.CancellationTokenSource();
+        var ct = this.pollCts.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!ct.IsCancellationRequested && this.runState is { IsTerminal: false })
+            {
+                try
+                {
+                    await Task.Delay(2000, ct);
+                    var status = await Executions.GetStatusAsync(executionId, ct);
+                    if (status is not null && this.runState is not null)
+                    {
+                        this.runState.SeedFromSnapshot(status.State, status.Progress, status.NodeStates, status.Error);
+                    }
+                }
+                catch (System.OperationCanceledException)
+                {
+                    break;
+                }
+                catch
+                {
+                    // transient — keep polling until terminal or cancelled.
+                }
+            }
+        });
+    }
+
+    private bool realTimeWired;
+
+    private void WireRealTimeHandlers()
+    {
+        if (this.realTimeWired)
+        {
+            return;
+        }
+
+        this.realTimeWired = true;
+        RealTime.ExecutionSnapshot += e => this.runState?.SeedFromSnapshot(e.State, e.Progress, e.NodeStates, e.Error);
+        RealTime.NodeStarted += e => this.runState?.NodeStarted(e.NodeId);
+        RealTime.NodeCompleted += e => this.runState?.NodeCompleted(e.NodeId, e.DurationMs);
+        RealTime.NodeFailed += e => this.runState?.NodeFailed(e.NodeId, e.Error, e.DurationMs);
+        RealTime.ExecutionProgress += e => this.runState?.Progress(e.Percentage, e.CurrentNode, e.CompletedNodes, e.TotalNodes);
+        RealTime.ExecutionCompleted += e => this.runState?.MarkCompleted(e.DurationMs);
+        RealTime.ExecutionFailed += e => this.runState?.MarkFailed(e.Error, e.DurationMs);
+        RealTime.Reconnecting += () => { this.reconnecting = true; this.InvokeAsync(this.StateHasChanged); };
+        RealTime.Reconnected += () => { this.reconnecting = false; this.InvokeAsync(this.StateHasChanged); };
+    }
+
+    private async Task CancelRun()
+    {
+        if (this.runState is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Executions.CancelAsync(this.runState.ExecutionId);
+            this.runState.MarkCancelled();
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private async Task CloseRun()
+    {
+        this.pollCts?.Cancel();
+        if (this.runState is not null)
+        {
+            this.runState.Changed -= this.OnRunChanged;
+            this.runState = null;
+        }
+
+        try
+        {
+            await RealTime.UnsubscribeAsync();
+        }
+        catch
+        {
+            // ignore~
+        }
+    }
+
+    private void OnRunChanged() => this.InvokeAsync(this.StateHasChanged);
+
+    // ─── Keyboard shortcuts (called from keys.js) ────────────────────────────────
+
+    /// <summary>Handles a window-level shortcut forwarded by keys.js~ ⌨️.</summary>
+    /// <param name="key">The key.</param>
+    /// <param name="ctrl">Whether Ctrl/Cmd was held.</param>
+    /// <param name="shift">Whether Shift was held.</param>
+    /// <returns>A task.</returns>
+    [JSInvokable]
+    public async Task OnShortcut(string key, bool ctrl, bool shift)
+    {
+        if (this.commands is null || this.document is null)
+        {
+            return;
+        }
+
+        var k = key.ToLowerInvariant();
+        if (ctrl && k == "z" && !shift)
+        {
+            this.commands.Undo();
+        }
+        else if (ctrl && (k == "y" || (k == "z" && shift)))
+        {
+            this.commands.Redo();
+        }
+        else if (ctrl && k == "a")
+        {
+            this.selection.SelectAll(this.document);
+        }
+        else if (ctrl && k == "c")
+        {
+            this.Copy();
+        }
+        else if (ctrl && k == "v")
+        {
+            this.Paste();
+        }
+        else if (ctrl && k == "s")
+        {
+            await this.Save();
+        }
+        else if (k is "delete" or "backspace")
+        {
+            this.DeleteSelected();
+        }
+
+        await this.InvokeAsync(this.StateHasChanged);
+    }
+
+    // ─── Save pipeline (D5/D14/Q5) ───────────────────────────────────────────────
+
+    private async Task Save()
+    {
+        if (this.document is null || this.commands is null)
+        {
+            return;
+        }
+
+        // Stage 1: client structural gate.
+        var clientErrors = this.issues.Where(i => i.Severity == IssueSeverity.Error).ToList();
+        if (clientErrors.Count > 0)
+        {
+            this.saveIssues = clientErrors.Select(i => new SaveIssue("error", i.Message, i.NodeId)).ToList();
+            this.showSaveDialog = true;
+            return;
+        }
+
+        // Stage 2: authoritative server validate (degrade gracefully if unavailable).
+        try
+        {
+            var vr = await Workflows.ValidateAsync(this.document.ToDto());
+            if (!vr.Valid)
+            {
+                this.saveIssues = vr.Issues.Select(i => new SaveIssue(i.Severity, i.Message, i.NodeId)).ToList();
+                this.showSaveDialog = true;
+                return;
+            }
+        }
+        catch (Workflow.UI.Client.Api.ApiException)
+        {
+            Toasts.Warning("Server validation unavailable — saving with client checks only.");
+        }
+
+        // Stage 3: persist.
+        try
+        {
+            if (this.document.Id == System.Guid.Empty)
+            {
+                var created = await Workflows.CreateAsync(this.document.ToDto());
+                this.commands.MarkSaved();
+                Toasts.Success("Workflow created");
+                Nav.NavigateTo($"/designer/{created.Id}");
+            }
+            else
+            {
+                await Workflows.UpdateAsync(this.document.ToDto());
+                this.commands.MarkSaved();
+                Toasts.Success("Workflow saved");
+            }
+        }
+        catch (Workflow.UI.Client.Api.ApiException ex)
+        {
+            this.saveIssues = new List<SaveIssue> { new("error", ex.Error.Summarize(), null) };
+            this.showSaveDialog = true;
+        }
+    }
+
+    private static string DisplayNameFor(string moduleId)
+    {
+        var lastDot = moduleId.LastIndexOf('.');
+        return lastDot >= 0 && lastDot < moduleId.Length - 1 ? moduleId[(lastDot + 1)..] : moduleId;
+    }
+
+    private void OnDocumentChanged()
+    {
+        this.Revalidate();
+        _ = this.SyncDirty();
+        this.InvokeAsync(this.StateHasChanged);
+    }
+
+    private async Task SyncDirty()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dotflowKeys.setDirty", this.commands?.IsDirty ?? false);
+        }
+        catch
+        {
+            // JS not ready — ignore.
+        }
+    }
+
+    private void OnSelectionChanged() => this.InvokeAsync(this.StateHasChanged);
+
+    private void Revalidate()
+    {
+        if (this.document is not null)
+        {
+            this.issues = GraphValidator.Validate(this.document, this.knownModuleIds);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            this.keysRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("dotflowKeys.register", this.keysRef);
+            }
+            catch
+            {
+                // JS unavailable (tests) — shortcuts simply won't fire from the window.
+            }
+
+            if (this.canvas is not null && this.document is not null)
+            {
+                await this.canvas.FitAsync();
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (this.commands is not null)
+        {
+            this.commands.Changed -= this.OnDocumentChanged;
+        }
+
+        this.selection.Changed -= this.OnSelectionChanged;
+
+        try
+        {
+            await JS.InvokeVoidAsync("dotflowKeys.unregister");
+        }
+        catch
+        {
+            // ignore~
+        }
+
+        this.keysRef?.Dispose();
+    }
+}

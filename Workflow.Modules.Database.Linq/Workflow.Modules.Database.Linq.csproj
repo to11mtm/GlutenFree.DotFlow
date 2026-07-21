@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <!-- 🧬 SA0002: StyleCop.Analyzers (pinned to an older Microsoft.CodeAnalysis) can't load its
+             stylecop.json settings when a project references a NEWER Roslyn as a runtime library
+             (Microsoft.CodeAnalysis.CSharp, needed by the compile pipeline). This is a known,
+             cosmetic StyleCop-vs-Roslyn-library conflict — suppress it for this project only~ 🌸 -->
+        <NoWarn>$(NoWarn);SA0002</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 🧬 Phase 2.4.b — the typed linq family builds on the shared DB infra (2.4.a.0) and the
+             module contract. Roslyn + portable reference assemblies are quarantined HERE (D14) so
+             AddWorkflowModules() / raw-SQL-only hosts never transitively load Microsoft.CodeAnalysis~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <!-- 📦 2.4.b.2 — IBlobStore for the compiled-assembly cache~ -->
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- 🧠 Roslyn — publish-time C# compile pipeline for builtin.database.linq (2.4.b.1)~ -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+        <!-- 📚 Portable reference assemblies — deterministic reference set for the compiler,
+             avoids depending on the host's installed runtime refs (mitigates C8)~ -->
+        <PackageReference Include="Basic.Reference.Assemblies" />
+        <!-- 🗄️ linq2db — the compiled bodies target DataConnection/ITable<T> (D1)~ -->
+        <PackageReference Include="linq2db" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="StyleCop.Analyzers">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+    </ItemGroup>
+
+</Project>
+
+
+

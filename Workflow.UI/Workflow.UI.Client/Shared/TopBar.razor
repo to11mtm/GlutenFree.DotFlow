@@ -1,0 +1,33 @@
+@namespace Workflow.UI.Client.Shared
+@implements IDisposable
+@inject Workflow.UI.Client.Api.AuthState Auth
+@inject NavigationManager Nav
+
+<div class="df-topbar">
+    <span class="df-topbar__brand">🌊 DotFlow Designer</span>
+    @if (!string.IsNullOrEmpty(Subtitle))
+    {
+        <span class="df-topbar__subtitle">@Subtitle</span>
+    }
+    <span class="df-topbar__spacer"></span>
+    @ChildContent
+    <span class="df-status-dot @(Auth.HasCredential ? "df-status-dot--ok" : "df-status-dot--idle")"
+          title="@(Auth.HasCredential ? "Authenticated" : "No credential")"></span>
+    <button class="df-btn" @onclick="@(() => Nav.NavigateTo("/settings"))">⚙ Settings</button>
+</div>
+
+@code {
+    /// <summary>Optional subtitle (e.g. the open workflow name).</summary>
+    [Parameter]
+    public string? Subtitle { get; set; }
+
+    /// <summary>Optional toolbar content rendered before the status dot.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized() => Auth.Changed += this.OnChanged;
+
+    private void OnChanged() => this.InvokeAsync(this.StateHasChanged);
+
+    public void Dispose() => Auth.Changed -= this.OnChanged;
+}

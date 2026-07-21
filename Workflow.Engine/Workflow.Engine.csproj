@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Akka" />
+        <PackageReference Include="Akka.Persistence" />
+        <PackageReference Include="Akka.Cluster" />
+        <PackageReference Include="Akka.DependencyInjection" />
+        <PackageReference Include="Akka.Serialization.MessagePack2" />
+        <PackageReference Include="LanguageExt.Core" />
+        <PackageReference Include="MessagePack" />
+        <PackageReference Include="System.Text.Json" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="Serilog" />
+        <PackageReference Include="Jint" />
+        <PackageReference Include="DynamicExpresso.Core" />
+        <PackageReference Include="Microsoft.Extensions.ObjectPool" />
+        <PackageReference Include="StyleCop.Analyzers">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+    </ItemGroup>
+
+</Project>

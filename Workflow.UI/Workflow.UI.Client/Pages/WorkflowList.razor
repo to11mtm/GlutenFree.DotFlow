@@ -1,0 +1,140 @@
+@page "/"
+@namespace Workflow.UI.Client.Pages
+@rendermode InteractiveWebAssembly
+@inject Workflow.UI.Client.Api.WorkflowsClient Workflows
+@inject Workflow.UI.Client.Api.ExecutionsClient Executions
+@inject Workflow.UI.Client.Services.ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>Workflows · DotFlow</PageTitle>
+
+<TopBar />
+<ToastHost />
+
+<div class="df-page">
+    <div class="df-row" style="justify-content: space-between; margin-bottom: var(--df-space-4);">
+        <h1 style="margin:0;">Workflows</h1>
+        <button class="df-btn df-btn--primary" @onclick="StartNew">＋ New Workflow</button>
+    </div>
+
+    <div class="df-field">
+        <input class="df-input" placeholder="🔍 Search workflows…" @bind="search" @bind:event="oninput" @onkeyup="OnSearchKey" />
+    </div>
+
+    @if (loading)
+    {
+        <div class="df-empty">Loading…</div>
+    }
+    else if (loadError is not null)
+    {
+        <div class="df-empty">
+            @loadError <button class="df-btn" @onclick="Reload">Retry</button>
+        </div>
+    }
+    else if (items.Count == 0)
+    {
+        <div class="df-empty">No workflows yet — create one! ✨</div>
+    }
+    else
+    {
+        <table class="df-table">
+            <thead>
+                <tr><th>Name</th><th>Version</th><th>Nodes</th><th>Updated</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var wf in items)
+                {
+                    <tr>
+                        <td>@wf.Name</td>
+                        <td>@wf.Version</td>
+                        <td>@wf.NodeCount</td>
+                        <td>@(wf.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                        <td>
+                            <button class="df-btn" data-testid="open" @onclick="() => Open(wf.Id)">Open</button>
+                            <button class="df-btn" data-testid="run" @onclick="() => Run(wf.Id)">▶</button>
+                            @if (confirmDeleteId == wf.Id)
+                            {
+                                <button class="df-btn df-btn--danger" data-testid="confirm-delete" @onclick="() => ConfirmDelete(wf.Id)">Confirm</button>
+                                <button class="df-btn" @onclick="() => confirmDeleteId = null">Cancel</button>
+                            }
+                            else
+                            {
+                                <button class="df-btn df-btn--danger" data-testid="delete" @onclick="() => confirmDeleteId = wf.Id">🗑</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private readonly List<WorkflowSummaryDto> items = new();
+    private string search = string.Empty;
+    private bool loading = true;
+    private string? loadError;
+    private Guid? confirmDeleteId;
+
+    protected override Task OnInitializedAsync() => this.Reload();
+
+    private async Task Reload()
+    {
+        this.loading = true;
+        this.loadError = null;
+        try
+        {
+            var page = await Workflows.ListAsync(string.IsNullOrWhiteSpace(this.search) ? null : this.search);
+            this.items.Clear();
+            this.items.AddRange(page.Items);
+        }
+        catch (ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+        }
+        finally
+        {
+            this.loading = false;
+        }
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await this.Reload();
+        }
+    }
+
+    private void StartNew() => Nav.NavigateTo("/designer/new");
+
+    private void Open(Guid id) => Nav.NavigateTo($"/designer/{id}");
+
+    private async Task Run(Guid id)
+    {
+        try
+        {
+            var started = await Executions.ExecuteAsync(id);
+            Toasts.Success($"Execution started: {started.ExecutionId}");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private async Task ConfirmDelete(Guid id)
+    {
+        this.confirmDeleteId = null;
+        try
+        {
+            await Workflows.DeleteAsync(id);
+            this.items.RemoveAll(x => x.Id == id);
+            Toasts.Success("Workflow deleted");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+}

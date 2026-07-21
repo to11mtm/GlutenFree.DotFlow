@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" />
+        <PackageReference Include="LanguageExt.Core" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="Microsoft.Extensions.Logging" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+        <PackageReference Include="WireMock.Net" />
+        <!-- 🪝 Phase 2.3.6 — WebApplicationFactory for webhook API integration tests~ -->
+        <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+        <!-- 📡 Phase 3.2 — SignalR client for the WorkflowHub integration test harness~ -->
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+        <PackageReference Include="xunit" />
+        <PackageReference Include="xunit.runner.visualstudio" />
+        <PackageReference Include="FluentAssertions" />
+        <PackageReference Include="Moq" />
+        <PackageReference Include="Akka.TestKit.Xunit2" />
+        <PackageReference Include="MessagePack" />
+        <PackageReference Include="System.Text.Json" />
+        <!--
+            🐳 CopilotNote: Testcontainers.* packages live in Workflow.Tests.Integration now —
+            this project is the fast, Docker-free unit/integration test suite. uwu~
+        -->
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Xunit" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
+        <ProjectReference Include="..\Workflow.Engine\Workflow.Engine.csproj" />
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <!-- 🗄️ Phase 2.4 — database module family (shared infra + built-in modules)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
+        <!-- 🧬 Phase 2.4.b — typed linq family (Roslyn quarantined here; referenced for scaffolding tests)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database.Linq\Workflow.Modules.Database.Linq.csproj" />
+        <!-- ☁️ Phase 2.5.b — cloud storage module family~ -->
+        <ProjectReference Include="..\Workflow.Modules.Cloud\Workflow.Modules.Cloud.csproj" />
+        <!-- 🌟 Phase 2.6.b — typed transform script family + shared scripting core~ -->
+        <ProjectReference Include="..\Workflow.Scripting.Roslyn\Workflow.Scripting.Roslyn.csproj" />
+        <ProjectReference Include="..\Workflow.Scripting\Workflow.Scripting.csproj" />
+        <ProjectReference Include="..\Workflow.Scripting.Lua\Workflow.Scripting.Lua.csproj" />
+        <ProjectReference Include="..\Workflow.Modules.Transform.Script\Workflow.Modules.Transform.Script.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj" />
+        <ProjectReference Include="..\Workflow.Api\Workflow.Api.csproj" />
+        <!--  SampleModules is referenced here only to enforce build order — loader tests
+             need the DLL to exist on disk before running. We resolve the path at test time
+             via typeof(SampleLogModule).Assembly.Location so no hardcoded paths~  -->
+        <ProjectReference Include="..\Workflow.Tests.SampleModules\Workflow.Tests.SampleModules.csproj" />
+    </ItemGroup>
+
+</Project>

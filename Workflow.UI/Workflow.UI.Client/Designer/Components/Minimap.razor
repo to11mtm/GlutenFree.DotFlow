@@ -1,0 +1,117 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using System.Globalization
+@using System.Text
+@using Workflow.UI.Client.Designer.State
+
+@* 🗺️ Phase 3.3.c.3 (Q6) — lightweight minimap: scaled node rectangles + a viewport frame,
+   click-to-navigate. No rendered thumbnails (that's 3.3.P6). *@
+<div class="df-minimap @(collapsed ? "df-minimap--collapsed" : "")">
+    <button class="df-minimap__toggle" data-testid="minimap-toggle" @onclick="() => collapsed = !collapsed">🗺️</button>
+    @if (!collapsed)
+    {
+        <svg class="df-minimap__svg" width="@Width" height="@Height" @onclick="OnClick">
+            <rect x="0" y="0" width="@Width" height="@Height" fill="var(--df-bg)" />
+            @((MarkupString)NodesMarkup)
+            <rect x="@(frame.X.ToString(Inv))" y="@(frame.Y.ToString(Inv))" width="@(frame.Width.ToString(Inv))" height="@(frame.Height.ToString(Inv))"
+                  fill="none" stroke="var(--df-accent)" stroke-width="1" />
+        </svg>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private const double Width = 180;
+    private const double Height = 120;
+    private bool collapsed;
+    private Rect frame;
+    private double scale = 1;
+    private double contentMinX, contentMinY;
+
+    /// <summary>The document (node bounds).</summary>
+    [Parameter, EditorRequired]
+    public DesignerDocument Document { get; set; } = default!;
+
+    /// <summary>The current canvas transform.</summary>
+    [Parameter]
+    public CanvasTransform Transform { get; set; } = CanvasTransform.Identity;
+
+    /// <summary>The main viewport width (screen px).</summary>
+    [Parameter]
+    public double ViewportWidth { get; set; } = 1200;
+
+    /// <summary>The main viewport height (screen px).</summary>
+    [Parameter]
+    public double ViewportHeight { get; set; } = 800;
+
+    /// <summary>Raised when the minimap is clicked, with the target canvas point.</summary>
+    [Parameter]
+    public EventCallback<Point> OnNavigate { get; set; }
+
+    private string NodesMarkup
+    {
+        get
+        {
+            this.Recompute();
+            var sb = new StringBuilder();
+            foreach (var n in this.Document.Nodes)
+            {
+                var b = CanvasGeometry.NodeBounds(n.X, n.Y, NodePorts.Inputs(n).Count, NodePorts.Outputs(n).Count);
+                var x = (b.X - this.contentMinX) * this.scale;
+                var y = (b.Y - this.contentMinY) * this.scale;
+                var w = System.Math.Max(2, b.Width * this.scale);
+                var h = System.Math.Max(2, b.Height * this.scale);
+                sb.Append(CultureInfo.InvariantCulture,
+                    $"<rect x=\"{x:F1}\" y=\"{y:F1}\" width=\"{w:F1}\" height=\"{h:F1}\" rx=\"1\" fill=\"var(--df-border)\" />");
+            }
+
+            return sb.ToString();
+        }
+    }
+
+    private void Recompute()
+    {
+        double minX = 0, minY = 0, maxX = 1000, maxY = 800;
+        var any = false;
+        foreach (var n in this.Document.Nodes)
+        {
+            var b = CanvasGeometry.NodeBounds(n.X, n.Y, NodePorts.Inputs(n).Count, NodePorts.Outputs(n).Count);
+            if (!any)
+            {
+                minX = b.X; minY = b.Y; maxX = b.Right; maxY = b.Bottom;
+                any = true;
+            }
+            else
+            {
+                minX = System.Math.Min(minX, b.X);
+                minY = System.Math.Min(minY, b.Y);
+                maxX = System.Math.Max(maxX, b.Right);
+                maxY = System.Math.Max(maxY, b.Bottom);
+            }
+        }
+
+        var pad = 100.0;
+        minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+        this.contentMinX = minX;
+        this.contentMinY = minY;
+        var cw = System.Math.Max(1, maxX - minX);
+        var ch = System.Math.Max(1, maxY - minY);
+        this.scale = System.Math.Min(Width / cw, Height / ch);
+
+        // Viewport frame: the canvas region currently visible, in minimap coords.
+        var tl = CanvasGeometry.ScreenToCanvas(new Point(0, 0), this.Transform);
+        var br = CanvasGeometry.ScreenToCanvas(new Point(this.ViewportWidth, this.ViewportHeight), this.Transform);
+        this.frame = new Rect(
+            (tl.X - this.contentMinX) * this.scale,
+            (tl.Y - this.contentMinY) * this.scale,
+            System.Math.Max(2, (br.X - tl.X) * this.scale),
+            System.Math.Max(2, (br.Y - tl.Y) * this.scale));
+    }
+
+    private async Task OnClick(MouseEventArgs e)
+    {
+        // Map minimap coords back to a canvas point.
+        var canvasX = (e.OffsetX / this.scale) + this.contentMinX;
+        var canvasY = (e.OffsetY / this.scale) + this.contentMinY;
+        await this.OnNavigate.InvokeAsync(new Point(canvasX, canvasY));
+    }
+}

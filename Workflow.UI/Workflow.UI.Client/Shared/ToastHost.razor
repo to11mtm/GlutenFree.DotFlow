@@ -1,0 +1,21 @@
+@namespace Workflow.UI.Client.Shared
+@implements IDisposable
+@inject Workflow.UI.Client.Services.ToastService Toasts
+
+<div class="df-toasts">
+    @foreach (var toast in Toasts.Toasts)
+    {
+        <div class="df-toast df-toast--@toast.Level.ToString().ToLowerInvariant()"
+             @onclick="() => Toasts.Dismiss(toast.Id)">
+            @toast.Message
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => Toasts.Changed += this.OnChanged;
+
+    private void OnChanged() => this.InvokeAsync(this.StateHasChanged);
+
+    public void Dispose() => Toasts.Changed -= this.OnChanged;
+}

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Workflow.Core\Workflow.Core.csproj" />
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- 🗄️ Phase 2.4 — linq2db is the ONLY DB access library (D1)~ -->
+        <PackageReference Include="linq2db" />
+        <!-- 🐘 Postgres provider (linq2db provider adapter + Npgsql ADO driver)~ -->
+        <PackageReference Include="linq2db.PostgreSQL" />
+        <PackageReference Include="Npgsql" />
+        <!-- 🪶 SQLite via Microsoft.Data.Sqlite (ProviderName.SQLiteMS)~ -->
+        <PackageReference Include="Microsoft.Data.Sqlite" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="Microsoft.Extensions.Options" />
+        <PackageReference Include="StyleCop.Analyzers">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+    </ItemGroup>
+
+</Project>
+

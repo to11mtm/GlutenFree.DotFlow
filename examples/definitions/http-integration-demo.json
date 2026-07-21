@@ -1,0 +1,174 @@
+﻿{
+  "$schema": "../../Workflow.Core/schema/workflow-definition.json",
+  "id": "b2c3d4e5-0001-0000-0000-http-demo-v1",
+  "name": "HTTP Integration Demo",
+  "description": "Phase 2.3 showcase — a webhook trigger fans into a TryCatch + Parallel block that calls two external APIs (one with retry, one with bearer auth). On success both results are merged via SetVariable; on failure the catch handler logs an error and the finally block always writes an audit flag~ 🌐🪝💖",
+  "version": "1.0.0",
+  "metadata": {
+    "phase": "2.3.8",
+    "purpose": "end-to-end Phase 2.3 feature showcase",
+    "scenario": "External webhook fires when an order is placed. The workflow calls an inventory API (GET with retry) and a notification API (POST with bearer auth) in parallel. If either call fails the error is caught and logged; the audit flag is always written via the finally block~ 🎯",
+    "modulesUsed": [
+      "builtin.http.webhook",
+      "builtin.trycatch",
+      "builtin.parallel",
+      "builtin.http.request",
+      "builtin.log",
+      "builtin.setvariable"
+    ],
+    "expectedShape": "WebhookTrigger → TryCatch(try→Parallel[inventory_call | notify_call]; catch→Log; finally→SetVariable(audit))"
+  },
+  "nodes": [
+    {
+      "id": "webhook_trigger",
+      "moduleId": "builtin.http.webhook",
+      "name": "Order Webhook Trigger",
+      "properties": {
+        "webhookId": "order-placed"
+      },
+      "position": { "x": 100, "y": 300 }
+    },
+    {
+      "id": "error_boundary",
+      "moduleId": "builtin.trycatch",
+      "name": "API Calls Error Boundary",
+      "properties": {
+        "rethrow": false,
+        "catchTypes": []
+      },
+      "position": { "x": 320, "y": 300 }
+    },
+    {
+      "id": "parallel_calls",
+      "moduleId": "builtin.parallel",
+      "name": "Parallel API Fan-out",
+      "properties": {
+        "branches": "[\"inventory\", \"notify\"]",
+        "maxDegreeOfParallelism": 2,
+        "failFast": true
+      },
+      "position": { "x": 540, "y": 300 }
+    },
+    {
+      "id": "inventory_call",
+      "moduleId": "builtin.http.request",
+      "name": "Inventory API — GET with Retry",
+      "properties": {
+        "url": "{{inventoryApiUrl}}/items/{{orderId}}",
+        "method": "GET",
+        "timeoutSeconds": 10,
+        "retryCount": 2,
+        "retryBackoff": "exponential",
+        "retryDelaySeconds": 1.0,
+        "retryOnStatusCodes": [429, 500, 502, 503, 504]
+      },
+      "position": { "x": 760, "y": 180 }
+    },
+    {
+      "id": "notify_call",
+      "moduleId": "builtin.http.request",
+      "name": "Notification API — POST with Bearer Auth",
+      "properties": {
+        "url": "{{notifyApiUrl}}/events",
+        "method": "POST",
+        "body": { "event": "order.placed", "orderId": "{{orderId}}" },
+        "authType": "bearer",
+        "bearerToken": "{{notifyApiToken}}",
+        "timeoutSeconds": 10
+      },
+      "position": { "x": 760, "y": 420 }
+    },
+    {
+      "id": "catch_log",
+      "moduleId": "builtin.log",
+      "name": "Catch — Log API Failure",
+      "properties": {
+        "message": "⚠️ API call failed: {{error.message}} (type: {{error.errorType}})~ 💔",
+        "level": "Warning"
+      },
+      "position": { "x": 540, "y": 480 }
+    },
+    {
+      "id": "finally_audit",
+      "moduleId": "builtin.setvariable",
+      "name": "Finally — Write Audit Flag",
+      "properties": {
+        "name": "audit",
+        "value": "done"
+      },
+      "position": { "x": 320, "y": 600 }
+    }
+  ],
+  "connections": [
+    {
+      "sourceNodeId": "webhook_trigger",
+      "sourcePortName": "body",
+      "targetNodeId": "error_boundary",
+      "targetPortName": "input",
+      "comment": "Webhook fires → enter the TryCatch error boundary~"
+    },
+    {
+      "sourceNodeId": "error_boundary",
+      "sourcePortName": "try",
+      "targetNodeId": "parallel_calls",
+      "targetPortName": "input",
+      "comment": "Try body → parallel fan-out~"
+    },
+    {
+      "sourceNodeId": "parallel_calls",
+      "sourcePortName": "inventory",
+      "targetNodeId": "inventory_call",
+      "targetPortName": "input",
+      "comment": "Inventory branch~"
+    },
+    {
+      "sourceNodeId": "parallel_calls",
+      "sourcePortName": "notify",
+      "targetNodeId": "notify_call",
+      "targetPortName": "input",
+      "comment": "Notification branch~"
+    },
+    {
+      "sourceNodeId": "error_boundary",
+      "sourcePortName": "catch",
+      "targetNodeId": "catch_log",
+      "targetPortName": "input",
+      "comment": "Catch → log the failure reason~"
+    },
+    {
+      "sourceNodeId": "error_boundary",
+      "sourcePortName": "finally",
+      "targetNodeId": "finally_audit",
+      "targetPortName": "input",
+      "comment": "Finally always runs → write audit flag~"
+    }
+  ],
+  "variables": {
+    "inventoryApiUrl": {
+      "type": "string",
+      "defaultValue": "https://api.example.com/inventory",
+      "description": "Base URL for the inventory API~ 🌐"
+    },
+    "notifyApiUrl": {
+      "type": "string",
+      "defaultValue": "https://api.example.com/notify",
+      "description": "Base URL for the notification API~ 📨"
+    },
+    "notifyApiToken": {
+      "type": "string",
+      "defaultValue": "",
+      "description": "Bearer token for the notification API auth~ 🔐"
+    },
+    "orderId": {
+      "type": "string",
+      "defaultValue": "",
+      "description": "Order ID passed through from the webhook trigger payload~ 📦"
+    },
+    "audit": {
+      "type": "string",
+      "defaultValue": "",
+      "description": "Set to 'done' by the finally block when the workflow completes regardless of success/failure~ 📋"
+    }
+  }
+}
+

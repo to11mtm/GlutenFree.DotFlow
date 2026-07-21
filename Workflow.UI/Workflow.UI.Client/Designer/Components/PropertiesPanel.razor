@@ -1,0 +1,201 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using System.Text.Json
+@using Workflow.UI.Client.Designer.State
+@using Workflow.UI.Client.Designer.State.Commands
+
+<div class="df-props">
+    @if (SelectedNode is not null)
+    {
+        <div class="df-props__header">
+            <input class="df-input" @bind="nameBuffer" data-testid="prop-name" />
+            <div class="df-props__module">@SelectedNode.ModuleId</div>
+            @if (SelectedNode.Metadata.TryGetValue("moduleVersion", out var ver))
+            {
+                <span class="df-props__version" title="pinned module version">📌 v@ver</span>
+            }
+        </div>
+
+        @if (SelectedNode.Schema is { Properties.Count: > 0 } schema)
+        {
+            @foreach (var prop in schema.Properties)
+            {
+                <PropertyEditor Property="prop"
+                                Value="@ValueFor(prop.Name)"
+                                CodeLanguage="@CodeLanguageFor()"
+                                Error="@ErrorFor(prop)"
+                                ValueChanged="v => OnValueChanged(prop.Name, v)" />
+            }
+        }
+        else
+        {
+            <div class="df-empty">This module has no configurable properties.</div>
+        }
+
+        <div class="df-row">
+            <button class="df-btn df-btn--primary" data-testid="apply" @onclick="Apply">Apply</button>
+            <button class="df-btn" @onclick="Reset">Reset</button>
+        </div>
+    }
+    else if (Selection.Nodes.Count > 1)
+    {
+        <div class="df-props__multi">@Selection.Nodes.Count nodes selected</div>
+    }
+    else
+    {
+        <div class="df-props__workflow">
+            <h3>Workflow</h3>
+            <div class="df-field">
+                <label class="df-label">Name</label>
+                <input class="df-input" @bind="wfName" data-testid="wf-name" />
+            </div>
+            <div class="df-field">
+                <label class="df-label">Description</label>
+                <textarea class="df-textarea" @bind="wfDescription" data-testid="wf-description"></textarea>
+            </div>
+            <div class="df-field">
+                <label class="df-label">Tags (comma-separated)</label>
+                <input class="df-input" @bind="wfTags" data-testid="wf-tags" />
+            </div>
+            <button class="df-btn df-btn--primary" data-testid="wf-apply" @onclick="ApplyWorkflowMeta">Apply</button>
+        </div>
+    }
+</div>
+
+@code {
+    private string? seededNodeId;
+    private readonly Dictionary<string, JsonElement> buffer = new();
+    private string nameBuffer = string.Empty;
+
+    private string wfName = string.Empty;
+    private string? wfDescription;
+    private string wfTags = string.Empty;
+    private bool wfSeeded;
+
+    /// <summary>The document.</summary>
+    [Parameter, EditorRequired]
+    public DesignerDocument Document { get; set; } = default!;
+
+    /// <summary>The current selection.</summary>
+    [Parameter, EditorRequired]
+    public SelectionState Selection { get; set; } = default!;
+
+    /// <summary>The command stack (edits are pushed here).</summary>
+    [Parameter, EditorRequired]
+    public CommandStack Commands { get; set; } = default!;
+
+    private DesignerNode? SelectedNode
+        => this.Selection.Nodes.Count == 1 ? this.Document.FindNode(System.Linq.Enumerable.First(this.Selection.Nodes)) : null;
+
+    protected override void OnParametersSet()
+    {
+        var node = this.SelectedNode;
+        if (node is not null && node.Id != this.seededNodeId)
+        {
+            this.SeedBuffer(node);
+        }
+        else if (node is null)
+        {
+            this.seededNodeId = null;
+            if (!this.wfSeeded)
+            {
+                this.SeedWorkflow();
+            }
+        }
+    }
+
+    private void SeedBuffer(DesignerNode node)
+    {
+        this.seededNodeId = node.Id;
+        this.nameBuffer = node.Name;
+        this.buffer.Clear();
+        foreach (var (k, v) in node.Properties)
+        {
+            this.buffer[k] = v;
+        }
+    }
+
+    private void SeedWorkflow()
+    {
+        this.wfSeeded = true;
+        this.wfName = this.Document.Name;
+        this.wfDescription = this.Document.Description;
+        this.wfTags = string.Join(", ", this.Document.Tags);
+    }
+
+    private JsonElement ValueFor(string name)
+        => this.buffer.TryGetValue(name, out var v) ? v : JsonValues.Null;
+
+    private void OnValueChanged(string name, JsonElement value) => this.buffer[name] = value;
+
+    private string? ErrorFor(ModulePropertyDefinitionDto prop)
+    {
+        if (prop.IsRequired)
+        {
+            var v = this.ValueFor(prop.Name);
+            var isEmpty = v.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ||
+                          (v.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(v.GetString()));
+            if (isEmpty)
+            {
+                return "required";
+            }
+        }
+
+        return null;
+    }
+
+    private string CodeLanguageFor()
+    {
+        if (this.buffer.TryGetValue("language", out var lang) && lang.ValueKind == JsonValueKind.String)
+        {
+            return lang.GetString() switch
+            {
+                "javascript" => "javascript",
+                "csharp" => "csharp",
+                "lua" => "lua",
+                _ => "plaintext",
+            };
+        }
+
+        return "plaintext";
+    }
+
+    private void Apply()
+    {
+        var node = this.SelectedNode;
+        if (node is null)
+        {
+            return;
+        }
+
+        if (node.Name != this.nameBuffer)
+        {
+            this.Commands.Execute(new RenameNodeCommand(node.Id, node.Name, this.nameBuffer));
+        }
+
+        var before = new Dictionary<string, JsonElement>(node.Properties);
+        var after = new Dictionary<string, JsonElement>(this.buffer);
+        this.Commands.Execute(new EditNodePropertiesCommand(node.Id, before, after));
+    }
+
+    private void Reset()
+    {
+        var node = this.SelectedNode;
+        if (node is not null)
+        {
+            this.SeedBuffer(node);
+        }
+    }
+
+    private void ApplyWorkflowMeta()
+    {
+        var tags = new List<string>();
+        foreach (var t in this.wfTags.Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries))
+        {
+            tags.Add(t);
+        }
+
+        var before = (this.Document.Name, this.Document.Description, new List<string>(this.Document.Tags));
+        var after = (this.wfName, this.wfDescription, tags);
+        this.Commands.Execute(new EditWorkflowMetaCommand(before, after));
+    }
+}

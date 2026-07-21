@@ -1,0 +1,106 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Designer.State
+@using Workflow.UI.Client.Api.Dtos
+
+<div class="df-node @StateClass @(Selected ? "df-node--selected" : "")"
+     style="left:@(Node.X.ToString(Inv))px; top:@(Node.Y.ToString(Inv))px; width:@(CanvasGeometry.NodeWidth.ToString(Inv))px;"
+     data-node-id="@Node.Id"
+     @onpointerdown="OnPointerDown" @onpointerdown:stopPropagation="true"
+     @oncontextmenu="OnContextMenu" @oncontextmenu:preventDefault="true" @oncontextmenu:stopPropagation="true">
+    <div class="df-node__header" style="height:@(CanvasGeometry.HeaderHeight.ToString(Inv))px;">
+        <span class="df-node__icon">@Icon</span>
+        <span class="df-node__name" title="@Node.Name">@Node.Name</span>
+    </div>
+    <div class="df-node__module">@Node.ModuleId</div>
+
+    @if (!Node.IsModuleKnown)
+    {
+        <div class="df-node__warn">⚠ unknown module</div>
+    }
+
+    <div class="df-node__ports">
+        <div class="df-node__col df-node__col--in">
+            @foreach (var port in Inputs)
+            {
+                <div class="df-port df-port--in @(InputCompatible?.Invoke(port) == true ? "df-port--compatible" : "")"
+                     style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
+                     data-port-in="@port"
+                     @onpointerup="() => OnInputPointerUp(port)" @onpointerup:stopPropagation="true">
+                    <span class="df-port__dot" data-port-anchor="in:@port"></span>
+                    <span class="df-port__label">@port</span>
+                </div>
+            }
+        </div>
+        <div class="df-node__col df-node__col--out">
+            @foreach (var port in Outputs)
+            {
+                <div class="df-port df-port--out" style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
+                     data-port-out="@port"
+                     @onpointerdown="() => OnOutputPointerDown(port)" @onpointerdown:stopPropagation="true">
+                    <span class="df-port__label">@port</span>
+                    <span class="df-port__dot" data-port-anchor="out:@port"></span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+    /// <summary>The node to render.</summary>
+    [Parameter, EditorRequired]
+    public DesignerNode Node { get; set; } = default!;
+
+    /// <summary>Extra CSS state class (run overlay: running/completed/failed…).</summary>
+    [Parameter]
+    public string StateClass { get; set; } = string.Empty;
+
+    /// <summary>Whether the node is selected.</summary>
+    [Parameter]
+    public bool Selected { get; set; }
+
+    /// <summary>Raised on node pointer-down (selection / move-start in editing slices).</summary>
+    [Parameter]
+    public EventCallback<PointerEventArgs> OnNodePointerDown { get; set; }
+
+    /// <summary>Raised on output-port pointer-down (connection-drag start in 3.3.b.2).</summary>
+    [Parameter]
+    public EventCallback<string> OnOutputPortPointerDown { get; set; }
+
+    /// <summary>Raised on node right-click (context menu).</summary>
+    [Parameter]
+    public EventCallback<MouseEventArgs> OnNodeContextMenu { get; set; }
+
+    /// <summary>Raised on input-port pointer-up (connection-drop target in 3.3.b.2).</summary>
+    [Parameter]
+    public EventCallback<string> OnInputPortPointerUp { get; set; }
+
+    /// <summary>Returns whether an input port is a compatible drop target during a connection drag.</summary>
+    [Parameter]
+    public Func<string, bool>? InputCompatible { get; set; }
+
+    private IReadOnlyList<string> Inputs => NodePorts.Inputs(Node);
+
+    private IReadOnlyList<string> Outputs => NodePorts.Outputs(Node);
+
+    private string Icon => Node.ModuleId switch
+    {
+        var m when m.Contains("http") => "🌐",
+        var m when m.Contains("script") => "📜",
+        var m when m.Contains("condition") || m.Contains("switch") => "◇",
+        var m when m.Contains("log") => "📝",
+        var m when m.Contains("database") => "🗄️",
+        var m when m.Contains("file") || m.Contains("csv") => "📄",
+        var m when m.Contains("transform") => "🔄",
+        _ => "⚙️",
+    };
+
+    private Task OnPointerDown(PointerEventArgs e) => OnNodePointerDown.InvokeAsync(e);
+
+    private Task OnContextMenu(MouseEventArgs e) => OnNodeContextMenu.InvokeAsync(e);
+
+    private Task OnOutputPointerDown(string port) => OnOutputPortPointerDown.InvokeAsync(port);
+
+    private Task OnInputPointerUp(string port) => OnInputPortPointerUp.InvokeAsync(port);
+}

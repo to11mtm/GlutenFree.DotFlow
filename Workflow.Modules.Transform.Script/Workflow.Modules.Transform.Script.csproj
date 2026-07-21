@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <!-- 🧬 SA0002: StyleCop vs. newer Roslyn runtime library (same as the scripting core)~ 🌸 -->
+        <NoWarn>$(NoWarn);SA0002</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- 🔄 Module contract + transform normaliser~ -->
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <!-- 🧬 Shared scripting core (Roslyn quarantined HERE, not in Workflow.Modules — D4)~ -->
+        <ProjectReference Include="..\Workflow.Scripting.Roslyn\Workflow.Scripting.Roslyn.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="StyleCop.Analyzers">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+    </ItemGroup>
+
+</Project>

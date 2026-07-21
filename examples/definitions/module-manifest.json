@@ -1,0 +1,14 @@
+﻿{
+  "packageId": "com.example.mycustommodule",
+  "name": "My Custom Module",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "description": "A super kawaii custom module! ✨",
+  "entryAssembly": "MyCustomModule.dll",
+  "minimumEngineVersion": "1.0.0",
+  "permissions": [
+    "network",
+    "filesystem"
+  ]
+}
+

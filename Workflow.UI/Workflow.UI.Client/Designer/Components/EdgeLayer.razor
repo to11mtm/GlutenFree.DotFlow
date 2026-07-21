@@ -1,0 +1,68 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using System.Globalization
+@using System.Text
+@using Workflow.UI.Client.Designer.State
+
+<svg class="df-edges" style="width:@(Extent.W.ToString(Inv))px; height:@(Extent.H.ToString(Inv))px;">
+    <defs>
+        <marker id="df-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="var(--df-border)"></path>
+        </marker>
+    </defs>
+    @((MarkupString)EdgesMarkup)
+</svg>
+
+@code {
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    /// <summary>The document whose connections to draw.</summary>
+    [Parameter, EditorRequired]
+    public DesignerDocument Document { get; set; } = default!;
+
+    private (double W, double H) Extent
+    {
+        get
+        {
+            double maxX = 1000, maxY = 800;
+            foreach (var n in Document.Nodes)
+            {
+                var b = CanvasGeometry.NodeBounds(n.X, n.Y, NodePorts.Inputs(n).Count, NodePorts.Outputs(n).Count);
+                maxX = System.Math.Max(maxX, b.Right + 200);
+                maxY = System.Math.Max(maxY, b.Bottom + 200);
+            }
+
+            return (maxX, maxY);
+        }
+    }
+
+    private string EdgesMarkup
+    {
+        get
+        {
+            var sb = new StringBuilder();
+            foreach (var c in Document.Connections)
+            {
+                var source = Document.FindNode(c.SourceNodeId);
+                var target = Document.FindNode(c.TargetNodeId);
+                if (source is null || target is null)
+                {
+                    continue;
+                }
+
+                var s = NodePorts.Anchor(source, c.SourcePortName, isOutput: true);
+                var t = NodePorts.Anchor(target, c.TargetPortName, isOutput: false);
+                var path = CanvasGeometry.BezierPath(s, t);
+                sb.Append(CultureInfo.InvariantCulture, $"<path class=\"df-edge\" d=\"{path}\" fill=\"none\" stroke=\"var(--df-border)\" stroke-width=\"2\" marker-end=\"url(#df-arrow)\" />");
+
+                if (!string.IsNullOrWhiteSpace(c.Condition))
+                {
+                    var lx = ((s.X + t.X) / 2).ToString(Inv);
+                    var ly = (((s.Y + t.Y) / 2) - 4).ToString(Inv);
+                    sb.Append(CultureInfo.InvariantCulture, $"<text class=\"df-edge__label\" x=\"{lx}\" y=\"{ly}\" fill=\"var(--df-text-dim)\">{System.Net.WebUtility.HtmlEncode(c.Condition)}</text>");
+                }
+            }
+
+            return sb.ToString();
+        }
+    }
+}

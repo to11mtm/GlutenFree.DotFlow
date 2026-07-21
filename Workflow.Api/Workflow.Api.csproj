@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <!-- 📖 Phase 2.7.8 — XML docs feed Swagger; suppress "missing XML comment" for internal-ish members~ -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+        <PackageReference Include="Swashbuckle.AspNetCore" />
+        <PackageReference Include="Serilog" />
+        <PackageReference Include="Serilog.Extensions.Hosting" />
+        <PackageReference Include="Serilog.Sinks.Console" />
+        <PackageReference Include="StyleCop.Analyzers">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Workflow.Engine\Workflow.Engine.csproj" />
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+        <!-- 🗄️ Phase 2.4 — database module family (AddDatabaseModules + IConnectionStringProtector)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database\Workflow.Modules.Database.csproj" />
+        <!-- 🧬 Phase 2.4.b.5 — typed linq family (validate/preview/compile endpoints; opt-in Roslyn, D14)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Database.Linq\Workflow.Modules.Database.Linq.csproj" />
+        <!-- ☁️ Phase 2.5.b — cloud storage module family (AddCloudStorageModules; opt-in AWS/Azure SDKs, D4)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Cloud\Workflow.Modules.Cloud.csproj" />
+        <!-- 🌟 Phase 2.6.b — typed transform script family (validate/preview/compile; opt-in Roslyn, D4)~ -->
+        <ProjectReference Include="..\Workflow.Modules.Transform.Script\Workflow.Modules.Transform.Script.csproj" />
+        <!-- 📜 Phase 3.1 — scripting executors (JS core + C# Roslyn + Lua)~ -->
+        <ProjectReference Include="..\Workflow.Scripting\Workflow.Scripting.csproj" />
+        <ProjectReference Include="..\Workflow.Scripting.Lua\Workflow.Scripting.Lua.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Sqlite\Workflow.Persistence.Sqlite.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Postgres\Workflow.Persistence.Postgres.csproj" />
+        <ProjectReference Include="..\Workflow.Persistence.Nats\Workflow.Persistence.Nats.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="..\stylecop.json" Link="stylecop.json" />
+    </ItemGroup>
+
+</Project>
