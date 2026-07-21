@@ -127,4 +127,42 @@ public sealed class ConnectionSelectionTests : TestContext
 
         doc.Connections[0].Condition.Should().Be("output.status == 200");
     }
+
+    [Fact]
+    public void SelectedConnection_HighlightsEndpointPorts()
+    {
+        var doc = TwoNodeDoc();
+        var selection = new SelectionState();
+        var cut = this.RenderComponent<CanvasView>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, selection)
+            .Add(x => x.Commands, new CommandStack(doc)));
+
+        cut.Find("path.df-edge-hit").PointerDown();
+
+        // The success output on http-1 and input on log-1 are the selected edge's endpoints.
+        cut.Find("[data-node-id='http-1'] [data-port-out=success]").ClassList.Should().Contain("df-port--endpoint");
+        cut.Find("[data-node-id='log-1'] [data-port-in=input]").ClassList.Should().Contain("df-port--endpoint");
+        // The unrelated error port is not highlighted.
+        cut.Find("[data-node-id='http-1'] [data-port-out=error]").ClassList.Should().NotContain("df-port--endpoint");
+    }
+
+    [Fact]
+    public void ConnectionDrag_HighlightsSourcePort_AndCompatibleTargets()
+    {
+        var doc = TwoNodeDoc();
+        var selection = new SelectionState();
+        var cut = this.RenderComponent<CanvasView>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, selection)
+            .Add(x => x.Commands, new CommandStack(doc)));
+
+        // Start a connection drag from http-1's error output.
+        cut.Find("[data-node-id='http-1'] [data-port-out=error]").PointerDown();
+
+        cut.Find("[data-node-id='http-1'] [data-port-out=error]").ClassList.Should().Contain("df-port--source");
+        cut.Find("[data-node-id='http-1'] [data-port-out=success]").ClassList.Should().NotContain("df-port--source");
+        // log-1's input is a valid target → compatible highlight.
+        cut.Find("[data-node-id='log-1'] [data-port-in=input]").ClassList.Should().Contain("df-port--compatible");
+    }
 }
