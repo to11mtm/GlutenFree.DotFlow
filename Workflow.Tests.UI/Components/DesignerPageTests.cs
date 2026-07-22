@@ -12,6 +12,7 @@ using System.Net.Http;
 using System.Text.Json;
 using Bunit;
 using FluentAssertions;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Workflow.Tests.UI.Api;
 using Workflow.UI.Client.Api;
@@ -246,6 +247,171 @@ public sealed class DesignerPageTests : TestContext
             cut.Markup.Should().Contain("builtin.fanin");
             // Both http outputs (success + error) are wired into the fan-in.
             cut.FindAll("path.df-edge").Should().HaveCount(2);
+        });
+    }
+
+    [Fact]
+    public void CanvasMenu_InsertLoopSkeleton_AddsWiredPair_UndoRemovesAll()
+    {
+        var handler = new FakeHttpMessageHandler(req =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(req.RequestUri!.AbsolutePath == "/api/v1/modules" ? "[]" : "{}") });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, "new"));
+        cut.WaitForAssertion(() => cut.FindAll(".df-canvas-viewport").Should().NotBeEmpty());
+
+        cut.Find(".df-canvas-viewport").ContextMenu(new MouseEventArgs { OffsetX = 200, OffsetY = 200 });
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Insert loop skeleton"));
+        cut.FindAll(".df-ctxmenu__item").First(b => b.TextContent.Contains("Insert loop skeleton")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(2);
+            cut.Markup.Should().Contain("builtin.loop.foreach");
+            cut.FindAll("path.df-edge--structural").Should().ContainSingle();
+            cut.FindAll(".df-region--loop").Should().ContainSingle();
+        });
+
+        // One undo removes the whole skeleton (composite command).
+        cut.Find("[data-testid=undo]").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".df-node").Should().BeEmpty());
+    }
+
+    [Fact]
+    public void DroppingForEach_OnEmptyCanvas_InsertsSkeleton()
+    {
+        var handler = new FakeHttpMessageHandler(req =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(req.RequestUri!.AbsolutePath == "/api/v1/modules" ? "[]" : "{}") });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, "new"));
+        cut.WaitForAssertion(() => cut.FindAll(".df-canvas-viewport").Should().NotBeEmpty());
+
+        var drag = this.Services.GetRequiredService<PaletteDragState>();
+        drag.Begin("builtin.loop.foreach");
+        cut.Find(".df-canvas-viewport").Drop(new DragEventArgs { OffsetX = 200, OffsetY = 200 });
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(2);
+            cut.Markup.Should().Contain("builtin.loop.foreach");
+            cut.FindAll("path.df-edge--structural").Should().ContainSingle();
+            cut.FindAll(".df-region--loop").Should().ContainSingle();
+        });
+    }
+
+    [Fact]
+    public void DroppingTryCatch_OnNodeOutputSide_ScaffoldsAndWiresFromSource()
+    {
+        var id = Guid.NewGuid();
+        var workflow = new WorkflowDto(
+            id, "wf", null, "1.0.0",
+            new List<NodeDto>
+            {
+                new("http-1", "builtin.http.request", "HTTP", new Dictionary<string, JsonElement>(), new PositionDto(100, 100)),
+            },
+            new List<ConnectionDto>(), new Dictionary<string, JsonElement>(), null, null, null, null, new List<string>());
+
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            var body = path switch
+            {
+                "/api/v1/modules" => Json(new List<ModuleSummaryDto>()),
+                var p when p.StartsWith("/api/v1/workflows/") => Json(workflow),
+                _ => "{}",
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, id.ToString()));
+        cut.WaitForAssertion(() => cut.FindAll(".df-node").Should().ContainSingle());
+
+        // Drop trycatch just right of http-1 (right edge = 100+200), through the live transform.
+        var transform = cut.FindComponent<Workflow.UI.Client.Designer.Components.CanvasView>().Instance.Transform;
+        var screen = Workflow.UI.Client.Designer.State.CanvasGeometry.CanvasToScreen(
+            new Workflow.UI.Client.Designer.State.Point(320, 130), transform);
+        var drag = this.Services.GetRequiredService<PaletteDragState>();
+        drag.Begin("builtin.trycatch");
+        cut.Find(".df-canvas-viewport").Drop(new DragEventArgs { OffsetX = screen.X, OffsetY = screen.Y });
+
+        cut.WaitForAssertion(() =>
+        {
+            // http-1 + guard + try step + catch step.
+            cut.FindAll(".df-node").Should().HaveCount(4);
+            cut.Markup.Should().Contain("builtin.trycatch");
+            // try + catch structural routes, plus the plain wire http-1 → guard.
+            cut.FindAll("path.df-edge--structural").Should().HaveCount(2);
+            cut.FindAll("path.df-edge").Should().HaveCount(3);
+        });
+    }
+
+    [Fact]
+    public void DroppingOrdinaryModule_OnNodeOutputSide_WiresFromSource()
+    {
+        var id = Guid.NewGuid();
+        var workflow = new WorkflowDto(
+            id, "wf", null, "1.0.0",
+            new List<NodeDto>
+            {
+                new("http-1", "builtin.http.request", "HTTP", new Dictionary<string, JsonElement>(), new PositionDto(100, 100)),
+            },
+            new List<ConnectionDto>(), new Dictionary<string, JsonElement>(), null, null, null, null, new List<string>());
+
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            var body = path switch
+            {
+                "/api/v1/modules" => Json(new List<ModuleSummaryDto>()),
+                var p when p.StartsWith("/api/v1/workflows/") => Json(workflow),
+                _ => "{}",
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, id.ToString()));
+        cut.WaitForAssertion(() => cut.FindAll(".df-node").Should().ContainSingle());
+
+        var transform = cut.FindComponent<Workflow.UI.Client.Designer.Components.CanvasView>().Instance.Transform;
+        var screen = Workflow.UI.Client.Designer.State.CanvasGeometry.CanvasToScreen(
+            new Workflow.UI.Client.Designer.State.Point(320, 130), transform);
+        var drag = this.Services.GetRequiredService<PaletteDragState>();
+        drag.Begin("builtin.log");
+        cut.Find(".df-canvas-viewport").Drop(new DragEventArgs { OffsetX = screen.X, OffsetY = screen.Y });
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(2);
+            cut.Markup.Should().Contain("builtin.log");
+            // Exactly one plain wire http-1 → log.
+            cut.FindAll("path.df-edge").Should().ContainSingle();
+        });
+    }
+
+    [Fact]
+    public void CanvasMenu_InsertTryCatchSkeleton_AddsThreeNodes_TwoRegions()
+    {
+        var handler = new FakeHttpMessageHandler(req =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(req.RequestUri!.AbsolutePath == "/api/v1/modules" ? "[]" : "{}") });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, "new"));
+        cut.WaitForAssertion(() => cut.FindAll(".df-canvas-viewport").Should().NotBeEmpty());
+
+        cut.Find(".df-canvas-viewport").ContextMenu(new MouseEventArgs { OffsetX = 200, OffsetY = 200 });
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Insert try/catch skeleton"));
+        cut.FindAll(".df-ctxmenu__item").First(b => b.TextContent.Contains("Insert try/catch skeleton")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(3);
+            cut.Markup.Should().Contain("builtin.trycatch");
+            cut.FindAll("path.df-edge--structural").Should().HaveCount(2);
+            cut.FindAll(".df-region--try").Should().ContainSingle();
+            cut.FindAll(".df-region--catch").Should().ContainSingle();
         });
     }
 }

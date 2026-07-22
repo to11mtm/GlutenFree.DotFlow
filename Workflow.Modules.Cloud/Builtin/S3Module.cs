@@ -58,7 +58,7 @@ public sealed class S3Module : IWorkflowModule
             new PortDefinition("bytesTransferred", "Bytes Transferred", typeof(long), "Bytes up/downloaded~ 📊", false),
             new PortDefinition("durationMs", "Duration (ms)", typeof(long), "Operation duration~ ⏱️", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("operation", "Operation", typeof(string), "upload, download, delete, list, or exists~ 🎯", true, "upload", PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition("operation", "Operation", typeof(string), "upload, download, delete, list, or exists~ 🎯", true, "upload", PropertyEditorType.Dropdown, Arr.create<object>("upload", "download", "delete", "list", "exists")),
             new ModulePropertyDefinition("storageConnectionId", "Storage Connection", typeof(string), "Named storage connection (preferred)~ 📇", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("accessKey", "Access Key", typeof(string), "Inline access key (dev escape hatch)~ 🔑", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("secretKey", "Secret Key", typeof(string), "Inline secret key (dev escape hatch)~ 🔐", false, null, PropertyEditorType.Text),

@@ -4,6 +4,13 @@
 
 This guide covers every control-flow primitive shipped in **Phase 2.2** of DotFlow: conditional branching, loops, parallelism, fan-out/fan-in, and error boundaries. All examples use built-in modules only — **no external services required**~ 🌸
 
+> **🎚️ Merged output mode:** any *data* node (multi-port modules like HTTP, files, database,
+> transforms) can set the reserved property `"outputMode": "merged"` to emit a **single
+> `output` port** whose value is an object of all its outputs (e.g. HTTP →
+> `output = { statusCode, headers, body, … }`). Handled centrally by the engine; connections
+> from `output` validate automatically. Control-flow modules (condition/switch/fan-out/loops/
+> try-catch) are excluded, and Fan In keeps its richer `meta` option.
+
 > **Audience:** Workflow authors who want to compose advanced logic (branching, iteration, concurrency, error recovery) declaratively. Module developers should also read [`module-author-guide.md`](./module-author-guide.md)~ 💖
 
 ---
@@ -277,11 +284,13 @@ The convergence point downstream from a `parallel` or `fanout`. Holds until *all
 
 | Property | Type | Required | Default | Notes |
 |---|---|---|---|---|
-| `mode` | `string` enum | optional | `"Concat"` | One of: `Concat`, `Merge`, `First`, `Last` |
+| `mode` | `string` enum | optional | `"Concat"` | One of: `Concat`, `Merge`, `Named`, `First`, `Last` |
+| `meta` | `string` enum | optional | `"separate"` | Where `count` goes: `separate` (own output port), `embedded` (`result = { value, count }` — one item), `hidden` (result only) |
 
 **Modes:**
 - `Concat` — collects payloads into an array in branch-completion order
 - `Merge` — last-writer-wins shallow merge across branches
+- `Named` — one object keyed by each branch's **source port name** — e.g. a node with outputs `foo, bar, baz` fanned in yields `{ "foo": …, "bar": …, "baz": … }`. Port-name collisions (same port from different nodes) fall back to `nodeId.port` keys
 - `First` — only the first branch's payload
 - `Last` — only the last branch's payload
 

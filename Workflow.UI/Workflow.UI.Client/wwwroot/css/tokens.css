@@ -177,6 +177,18 @@ a.df-link:hover { text-decoration: underline; }
 .df-palette__details-id { color: var(--df-text-dim); font-size: 0.75rem; margin-bottom: var(--df-space-2); }
 
 /* 🎯 Selection / context menu / modal */
+/* 🔁🛡️ Structural body regions (presentation-only halos behind loop/try bodies) */
+.df-region { position: absolute; border: 1.5px dashed transparent; border-radius: calc(var(--df-radius) * 2); pointer-events: none; z-index: 0; }
+.df-region__label { position: absolute; top: -9px; left: 10px; padding: 0 var(--df-space-2); font-size: 0.7rem; background: var(--df-bg); border-radius: var(--df-radius); }
+.df-region--loop { border-color: var(--df-accent); background: rgba(79,156,249,0.06); }
+.df-region--loop .df-region__label { color: var(--df-accent); }
+.df-region--try { border-color: var(--df-state-completed); background: rgba(74,222,128,0.06); }
+.df-region--try .df-region__label { color: var(--df-state-completed); }
+.df-region--catch { border-color: var(--df-state-failed); background: rgba(248,113,113,0.06); }
+.df-region--catch .df-region__label { color: var(--df-state-failed); }
+.df-region--finally { border-color: var(--df-text-dim); background: rgba(148,163,184,0.06); }
+.df-region--finally .df-region__label { color: var(--df-text-dim); }
+
 .df-rubberband { position: absolute; border: 1px dashed var(--df-accent); background: rgba(79,156,249,0.12); pointer-events: none; }
 
 /* 🪄 Fan-in drop zones (shown while dragging builtin.fanin from the palette) */
@@ -199,6 +211,7 @@ a.df-link:hover { text-decoration: underline; }
 .df-props__module { color: var(--df-text-dim); font-size: 0.75rem; margin-top: var(--df-space-1); }
 .df-props__version { display: inline-block; margin-top: var(--df-space-1); font-size: 0.7rem; color: var(--df-text-dim); }
 .df-props__conn { padding: var(--df-space-2) var(--df-space-3); background: var(--df-surface-2); border-radius: var(--df-radius); font-size: 0.85rem; word-break: break-word; }
+.df-props__hint { margin: var(--df-space-2) 0 var(--df-space-3); padding: var(--df-space-2) var(--df-space-3); background: var(--df-accent-weak); border-left: 3px solid var(--df-accent); border-radius: var(--df-radius); font-size: 0.8rem; line-height: 1.4; }
 .df-props__multi { color: var(--df-text-dim); padding: var(--df-space-4); }
 .df-required { color: var(--df-state-failed); }
 .df-field-error { color: var(--df-state-failed); font-size: 0.75rem; margin-top: var(--df-space-1); }

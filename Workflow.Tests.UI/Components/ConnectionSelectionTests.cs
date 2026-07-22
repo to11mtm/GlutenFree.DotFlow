@@ -185,8 +185,11 @@ public sealed class ConnectionSelectionTests : TestContext
         cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().BeEmpty());
     }
 
-    [Fact]
-    public void OtherModuleDrag_ShowsNoDropZones()
+    [Theory]
+    [InlineData("builtin.loop.foreach", "loop from here")]
+    [InlineData("builtin.loop.while", "loop from here")]
+    [InlineData("builtin.trycatch", "guard from here")]
+    public void StructuralDrag_ShowsDropZones_WithKindLabel(string moduleId, string expectedLabel)
     {
         var doc = TwoNodeDoc();
         var drag = this.Services.GetRequiredService<Workflow.UI.Client.Services.PaletteDragState>();
@@ -195,9 +198,34 @@ public sealed class ConnectionSelectionTests : TestContext
             .Add(x => x.Selection, new SelectionState())
             .Add(x => x.Commands, new CommandStack(doc)));
 
-        drag.Begin("builtin.log");
-        cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().BeEmpty());
+        drag.Begin(moduleId);
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-dropzone").Should().HaveCount(2);
+            cut.Find(".df-dropzone .df-dropzone__label").TextContent.Should().Contain(expectedLabel);
+        });
         drag.End();
+    }
+
+    [Fact]
+    public void OrdinaryModuleDrag_ShowsGenericWireZones()
+    {
+        var doc = TwoNodeDoc();
+        var drag = this.Services.GetRequiredService<Workflow.UI.Client.Services.PaletteDragState>();
+        var cut = this.RenderComponent<CanvasView>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, new SelectionState())
+            .Add(x => x.Commands, new CommandStack(doc)));
+
+        // UX-R2: every palette drag can dock onto a node's output side.
+        drag.Begin("builtin.log");
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-dropzone").Should().HaveCount(2);
+            cut.Find(".df-dropzone .df-dropzone__label").TextContent.Should().Contain("wire from here");
+        });
+        drag.End();
+        cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().BeEmpty());
     }
 
     [Fact]

@@ -55,7 +55,7 @@ public sealed class DataJoinModule : IWorkflowModule
             new ModulePropertyDefinition("right", "Right", typeof(object), "Right data when not connected via port~ 📥", false, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("leftKey", "Left Key", typeof(string), "Dot-path or expression for the left key~ 🔑", true, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("rightKey", "Right Key", typeof(string), "Dot-path or expression for the right key~ 🔑", true, null, PropertyEditorType.Text),
-            new ModulePropertyDefinition("joinType", "Join Type", typeof(string), "inner (default) / left / full~ 🔗", false, "inner", PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition("joinType", "Join Type", typeof(string), "inner (default) / left / full~ 🔗", false, "inner", PropertyEditorType.Dropdown, Arr.create<object>("inner", "left", "full")),
             new ModulePropertyDefinition("select", "Select", typeof(object), "Projection over { left, right } (expression or mapping)~ 🎯", false, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("language", "Expression Language", typeof(string), "js (default) or csharp~ 🧮", false, "js", PropertyEditorType.Text)));
 

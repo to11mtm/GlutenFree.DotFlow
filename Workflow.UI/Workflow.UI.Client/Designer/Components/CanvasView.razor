@@ -19,8 +19,16 @@
      style="cursor:@(panning ? "grabbing" : "grab");">
     <div class="df-canvas-content"
          style="transform: translate(@(T.PanX.ToString(Inv))px, @(T.PanY.ToString(Inv))px) scale(@(T.Zoom.ToString(Inv)));">
+        @foreach (var region in StructuralRegions.Compute(Document))
+        {
+            <div class="df-region df-region--@region.Kind"
+                 data-region-for="@region.OwnerNodeId" data-region-port="@region.Port"
+                 style="left:@(region.Bounds.X.ToString(Inv))px; top:@(region.Bounds.Y.ToString(Inv))px; width:@(region.Bounds.Width.ToString(Inv))px; height:@(region.Bounds.Height.ToString(Inv))px;">
+                <span class="df-region__label">@region.Label</span>
+            </div>
+        }
         <EdgeLayer Document="Document" Selection="Selection" OnConnectionContextMenu="OnConnectionContextMenuInternal" />
-        @if (Commands is not null && DragState.DraggingModuleId == DropZones.FanInModuleId)
+        @if (Commands is not null && DragState.DraggingModuleId is not null)
         {
             @foreach (var node in Document.Nodes)
             {
@@ -28,7 +36,7 @@
                 <div class="df-dropzone @(node.Id == dragArmedNodeId ? "df-dropzone--armed" : string.Empty)"
                      data-dropzone-for="@node.Id"
                      style="left:@(zone.X.ToString(Inv))px; top:@(zone.Y.ToString(Inv))px; width:@(zone.Width.ToString(Inv))px; height:@(zone.Height.ToString(Inv))px;">
-                    <span class="df-dropzone__label">🪄 all outputs</span>
+                    <span class="df-dropzone__label">@DropZones.LabelFor(DragState.DraggingModuleId!)</span>
                 </div>
             }
         }
@@ -568,7 +576,7 @@
 
     private void OnDragOver(DragEventArgs e)
     {
-        if (this.Commands is null || this.DragState.DraggingModuleId != DropZones.FanInModuleId)
+        if (this.Commands is null || this.DragState.DraggingModuleId is null)
         {
             return;
         }

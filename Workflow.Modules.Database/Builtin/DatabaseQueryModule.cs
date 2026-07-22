@@ -109,7 +109,8 @@ public sealed class DatabaseQueryModule : IWorkflowModule
                 Description: "Provider key ('postgres'/'sqlite') — required only with connectionString~ 🗂️",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("postgres", "sqlite")),
             new ModulePropertyDefinition(
                 Name: "query",
                 DisplayName: "Query (SQL)",
@@ -141,7 +142,8 @@ public sealed class DatabaseQueryModule : IWorkflowModule
                 Description: "'text' (default). 'storedProcedure' is deferred to 2.4.a.P1~ 🎛️",
                 IsRequired: false,
                 DefaultValue: "text",
-                EditorType: PropertyEditorType.Dropdown)));
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("text"))));
 
     /// <inheritdoc/>
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)

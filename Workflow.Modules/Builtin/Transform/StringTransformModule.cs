@@ -58,7 +58,10 @@ public sealed class StringTransformModule : IWorkflowModule
             new PortDefinition("success", "Success", typeof(bool), "Whether the operation succeeded~ ✅", false)),
         Properties: Arr.create(
             new ModulePropertyDefinition("input", "Input", typeof(object), "Input when not connected via port~ 📥", false, null, PropertyEditorType.MultilineText),
-            new ModulePropertyDefinition("operation", "Operation", typeof(string), "The string operation~ 📝", true, "upper", PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition("operation", "Operation", typeof(string), "The string operation~ 📝", true, "upper", PropertyEditorType.Dropdown, Arr.create<object>(
+                "upper", "lower", "trim", "trimstart", "trimend", "substring", "replace", "split", "join",
+                "padleft", "padright", "truncate", "format", "regexmatch", "regexreplace", "regexextract",
+                "base64encode", "base64decode", "urlencode", "urldecode", "htmlencode", "htmldecode", "hash", "newguid")),
             new ModulePropertyDefinition("parameters", "Parameters", typeof(object), "Operation-specific parameters~ ⚙️", false, null, PropertyEditorType.Json)));
 
     /// <inheritdoc />

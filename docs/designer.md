@@ -51,12 +51,81 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
 - **Configure (right):** the **Properties** panel renders the right editor for each
   property (text, number, checkbox, dropdown, expression, JSON, code). `Code`/`Json` use
   the Monaco editor (with a plain-textarea fallback). **Apply** commits your edits.
+  Data modules with multiple outputs also get an **Output mode** selector: `ports`
+  (default — each output as its own port) or `merged` (one **`output`** port carrying an
+  object of all outputs — the canvas collapses the node's ports accordingly).
 - **Context menus:** right-click a node (Rename / Duplicate / Delete) or the canvas
   (Select all / Paste / Fit).
 - **Undo/redo:** toolbar ↩ / ↪ or Ctrl+Z / Ctrl+Y (50-step history).
 - **Save:** 💾 or Ctrl+S. Saving runs client structural checks **and** the server
   validate endpoint; blocking issues show in a dialog with jump-to-node links. The
   `●unsaved` indicator + a browser warning protect against losing edits.
+
+### Combining outputs (Fan In) 🪄
+
+Three ways to funnel multiple outputs into **one object** on the `result` port:
+
+- **Drop gesture (one node, all ports):** drag **Fan In** from the palette over a node —
+  dashed drop zones appear on every node's output side (green when armed). Drop it and *all*
+  of that node's outputs are wired in with **`named` mode**: a node with `foo/bar/baz`
+  outputs yields `{ "foo": …, "bar": …, "baz": … }`.
+- **Context menu (many nodes):** select 2+ nodes → right-click → **Merge outputs → Fan In**.
+  Wires each node's primary output in with **`merge` mode** (shallow union).
+- **Manual:** drop a Fan In anywhere and connect edges yourself, then pick a `mode` in the
+  Properties panel: `concat` (array), `merge` (union), `named` (keyed by source port),
+  `first` / `last`.
+
+Connect downstream nodes to **`result`** — `count` and `done` are auxiliary
+(branch count / ordering-only activation). The **Count/Done Outputs** dropdown on the node
+controls how they surface: `separate` (own ports, default), `embedded`
+(`result = { value, count }` as a single item), or `hidden` (result only) — picking
+`embedded`/`hidden` also hides the auxiliary ports on the canvas.
+
+### Wiring by drop 🔗
+
+While dragging **any module** from the palette, **drop zones** appear on every node's
+output side. Drop into one and the new node is added **already wired** from that node's
+primary output into its first input (single undo). Structural modules do more: Fan In
+aggregates *all* outputs; For Each / While / Try Catch scaffold their skeletons wired from
+the source (see below).
+
+### Loops 🔁
+
+Drop **For Each** (`builtin.loop.foreach`) or **While** (`builtin.loop.while`) from the
+palette — the designer scaffolds the **skeleton** (loop + placeholder body step, pre-wired)
+in one undoable action. Drop it **on another node's output side** (drop zones appear while
+dragging, like Fan In) and the loop is also wired from that node's primary output into
+`collection` / `condition`. You can also right-click the canvas → **Insert loop skeleton**.
+The loop **body** is the sub-graph connected from the **`loopBody`** output port — those
+nodes run **once per item** (For Each) or **per iteration** (While). Body edges render
+**dashed**, the body sub-graph gets a soft **🔁 loop body** region halo, and the Properties
+panel shows a 💡 callout explaining the convention.
+
+- Connect `loopBody →` your per-item work (chain as many nodes as you like).
+- The body's terminal output is collected into **`results`** (For Each).
+- **`done`** fires after the last iteration — continue the main flow from there.
+- `builtin.break` / `builtin.continue` inside the body control iteration.
+
+Worked example: `HTTP (list) → For Each · loopBody → Transform → …` with
+`For Each · done → next step` — see [Advanced Flow Control](advanced-flow-control.md).
+
+### Error handling (Try/Catch) 🛡️
+
+Drop **Try Catch** (`builtin.trycatch`) from the palette — the designer scaffolds the guard
+plus placeholder try/catch steps, pre-wired, in one undoable action. Drop it **on another
+node's output side** and the guard is also wired from that node's primary output into its
+`input` activation port. (Or right-click the canvas → **Insert try/catch skeleton**.) The
+designer exposes the conventional routing ports — **`try`**, **`catch`**, **`finally`**,
+**`done`**:
+
+- `try →` the guarded sub-graph.
+- `catch →` runs only if a try node fails (error details flow in).
+- `finally →` always runs.
+- `done →` continue the main flow.
+
+Like loop bodies, these routes render **dashed**, and each wired body gets a tinted region
+halo (green try / red catch / grey finally). `rethrow` re-raises the error after
+`finally`; `catchTypes` filters which error types are caught.
 
 ## Running (S3)
 

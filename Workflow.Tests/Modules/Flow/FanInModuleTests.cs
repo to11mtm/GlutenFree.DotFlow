@@ -150,6 +150,173 @@ public sealed class FanInModuleTests
         merged["only_second"].Should().Be("B", because: "unique key from second branch preserved~ 🎗️");
     }
 
+    /// <summary>UX-F2: Named mode keys each branch by its source port name~ 🏷️.</summary>
+    [Fact]
+    public async Task Named_KeysByPortName()
+    {
+        // One node with ports foo/bar/baz fanned into one object.
+        var branches = new List<Dictionary<string, object?>>
+        {
+            new() { ["foo"] = 1, ["bar"] = 2, ["baz"] = 3 },
+            new() { ["foo"] = 1, ["bar"] = 2, ["baz"] = 3 },
+            new() { ["foo"] = 1, ["bar"] = 2, ["baz"] = 3 },
+        };
+        var meta = new List<Dictionary<string, object?>>
+        {
+            new() { ["sourceNodeId"] = "n1", ["sourcePortName"] = "foo" },
+            new() { ["sourceNodeId"] = "n1", ["sourcePortName"] = "bar" },
+            new() { ["sourceNodeId"] = "n1", ["sourcePortName"] = "baz" },
+        };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?>
+            {
+                ["__incomingBranches__"] = branches,
+                ["__incomingBranchMeta__"] = meta,
+            },
+            properties: new Dictionary<string, object?> { ["mode"] = "named" });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        result.Success.Should().BeTrue();
+        var named = result.Outputs["result"].Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        named.Keys.Should().BeEquivalentTo(new[] { "foo", "bar", "baz" });
+        named["foo"].Should().Be(1);
+        named["bar"].Should().Be(2);
+        named["baz"].Should().Be(3);
+    }
+
+    /// <summary>UX-F2: Named mode falls back to <c>nodeId.port</c> keys on port-name collision~ 🏷️.</summary>
+    [Fact]
+    public async Task Named_Collision_FallsBackToNodePortKeys()
+    {
+        var branches = new List<Dictionary<string, object?>>
+        {
+            new() { ["success"] = "a" },
+            new() { ["success"] = "b" },
+        };
+        var meta = new List<Dictionary<string, object?>>
+        {
+            new() { ["sourceNodeId"] = "http-1", ["sourcePortName"] = "success" },
+            new() { ["sourceNodeId"] = "http-2", ["sourcePortName"] = "success" },
+        };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?>
+            {
+                ["__incomingBranches__"] = branches,
+                ["__incomingBranchMeta__"] = meta,
+            },
+            properties: new Dictionary<string, object?> { ["mode"] = "named" });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        var named = result.Outputs["result"].Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        named.Keys.Should().BeEquivalentTo(new[] { "http-1.success", "http-2.success" });
+        named["http-1.success"].Should().Be("a");
+        named["http-2.success"].Should().Be("b");
+    }
+
+    /// <summary>UX-F2: Named mode without metadata uses positional <c>branch{i}</c> keys~ 🏷️.</summary>
+    [Fact]
+    public async Task Named_NoMeta_UsesPositionalKeys()
+    {
+        var branches = new List<Dictionary<string, object?>>
+        {
+            new() { ["x"] = 1 },
+            new() { ["y"] = 2 },
+        };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?> { ["__incomingBranches__"] = branches },
+            properties: new Dictionary<string, object?> { ["mode"] = "named" });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        var named = result.Outputs["result"].Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        named.Keys.Should().BeEquivalentTo(new[] { "branch0", "branch1" });
+        named["branch0"].Should().BeSameAs(branches[0], because: "without a port name the whole snapshot is the value~ 🏷️");
+    }
+
+    /// <summary>UX-F2: Named mode with empty branches returns an empty object~ 🪹.</summary>
+    [Fact]
+    public async Task Named_EmptyBranches_ReturnsEmptyObject()
+    {
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?> { ["__incomingBranches__"] = new List<Dictionary<string, object?>>() },
+            properties: new Dictionary<string, object?> { ["mode"] = "named" });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        result.Success.Should().BeTrue();
+        result.Outputs["result"].Should().BeAssignableTo<Dictionary<string, object?>>()
+            .Which.Should().BeEmpty();
+    }
+
+    /// <summary>UX-R1: meta=embedded wraps the payload + count into a single result item~ 🎚️.</summary>
+    [Fact]
+    public async Task Meta_Embedded_WrapsValueAndCount_IntoResult()
+    {
+        var branches = new List<Dictionary<string, object?>>
+        {
+            new() { ["x"] = 1 },
+            new() { ["y"] = 2 },
+        };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?> { ["__incomingBranches__"] = branches },
+            properties: new Dictionary<string, object?> { ["mode"] = "merge", ["meta"] = "embedded" });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        result.Success.Should().BeTrue();
+        result.Outputs.Keys.Should().BeEquivalentTo(new[] { "result" }, because: "embedded meta emits a single output item~ 🎚️");
+        var wrapped = result.Outputs["result"].Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        wrapped["count"].Should().Be(2);
+        wrapped["value"].Should().BeAssignableTo<Dictionary<string, object?>>()
+            .Which.Keys.Should().BeEquivalentTo(new[] { "x", "y" });
+    }
+
+    /// <summary>UX-R1: meta=hidden suppresses count/done entirely~ 🎚️.</summary>
+    [Fact]
+    public async Task Meta_Hidden_EmitsOnlyResult()
+    {
+        var branches = new List<Dictionary<string, object?>> { new() { ["x"] = 1 } };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?> { ["__incomingBranches__"] = branches },
+            properties: new Dictionary<string, object?> { ["meta"] = "hidden" });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        result.Outputs.Keys.Should().BeEquivalentTo(new[] { "result" });
+    }
+
+    /// <summary>UX-R1: default meta keeps the separate count output (back-compat)~ 🎚️.</summary>
+    [Fact]
+    public async Task Meta_Default_KeepsSeparateCount()
+    {
+        var branches = new List<Dictionary<string, object?>> { new() { ["x"] = 1 } };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?> { ["__incomingBranches__"] = branches });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        result.Outputs.Keys.Should().BeEquivalentTo(new[] { "result", "count" });
+        result.Outputs["count"].Should().Be(1);
+    }
+
+    /// <summary>UX-R1: an invalid meta value fails validation~ 💔.</summary>
+    [Fact]
+    public void ValidateConfiguration_InvalidMeta_Fails()
+    {
+        var result = _module.ValidateConfiguration(new Dictionary<string, object?> { ["meta"] = "nope" });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Code == "INVALID_META");
+    }
+
     /// <summary>First mode returns the first branch's payload~ 🥇.</summary>
     [Fact]
     public async Task First_ReturnsFirstPayload()
@@ -369,6 +536,148 @@ public class FanInEngineIntegrationTests : TestKit
             because: "Parallel → work → FanIn → post workflow must complete~ 🪄✅");
         workerA.Count.Should().Be(1, because: "worker runs once for the single branch~ 🎁");
         doneCounter.Count.Should().Be(1, because: "post-FanIn node runs once after aggregation~ ✅");
+    }
+
+    /// <summary>
+    /// UX-F2 end-to-end: a node with two output ports fans into a named FanIn — the engine's
+    /// <c>__incomingBranchMeta__</c> lets the result be keyed by port name~ 🏷️✅
+    /// </summary>
+    [Fact]
+    public void FanIn_Named_KeysResultBySourcePortName_EndToEnd()
+    {
+        var source = new TwoPortSourceModule();
+        var fanInModule = new FanInModule();
+        var capture = new CaptureModule();
+
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(source);
+        registry.RegisterModule(fanInModule);
+        registry.RegisterModule(capture);
+
+        var sp = new ServiceCollection().AddSingleton<IModuleRegistry>(registry).BuildServiceProvider();
+
+        var fanInProps = new Dictionary<string, JsonElement>
+        {
+            ["mode"] = JsonSerializer.SerializeToElement("named"),
+        }.ToHashMap();
+
+        var def = new WorkflowDefinition(
+            Id: Guid.NewGuid(), Name: "fanin-named", Description: null, Version: new Version(1, 0),
+            Nodes: Arr.create(
+                new NodeDefinition("src", "test.fanin.twoport", "Source", HashMap<string, JsonElement>.Empty),
+                new NodeDefinition("fanin", "builtin.fanin", "FanIn", fanInProps),
+                new NodeDefinition("cap", "test.fanin.capture", "Capture", HashMap<string, JsonElement>.Empty)),
+            Connections: Arr.create(
+                new ConnectionDefinition("src", "foo", "fanin", "branches"),
+                new ConnectionDefinition("src", "bar", "fanin", "branches"),
+                new ConnectionDefinition("fanin", "result", "cap", "input")),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        var parent = CreateTestProbe("fanin-named-parent");
+        var exec = parent.ChildActorOf(
+            WorkflowExecutor.Props(Guid.NewGuid(), def, new Dictionary<string, object?>(), sp),
+            "fanin-named-exec");
+
+        exec.Tell(new StartExecution(Guid.NewGuid()));
+
+        var msg = parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, TimeSpan.FromSeconds(10));
+        msg.Should().BeOfType<WorkflowCompleted>(because: "src → named FanIn → capture must complete~ 🏷️✅");
+
+        var named = capture.Received.Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        named.Keys.Should().BeEquivalentTo(new[] { "foo", "bar" });
+        named["foo"].Should().Be("F");
+        named["bar"].Should().Be("B");
+    }
+
+    /// <summary>
+    /// 🎚️ UX — a node with <c>outputMode=merged</c> emits one 'output' port carrying all of its
+    /// outputs; a downstream connection from 'output' passes load-time port validation~ 📦✅
+    /// </summary>
+    [Fact]
+    public void MergedOutputMode_EmitsSingleOutputObject_EndToEnd()
+    {
+        var source = new TwoPortSourceModule();
+        var capture = new CaptureModule();
+
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(source);
+        registry.RegisterModule(capture);
+
+        var sp = new ServiceCollection().AddSingleton<IModuleRegistry>(registry).BuildServiceProvider();
+
+        var srcProps = new Dictionary<string, JsonElement>
+        {
+            ["outputMode"] = JsonSerializer.SerializeToElement("merged"),
+        }.ToHashMap();
+
+        var def = new WorkflowDefinition(
+            Id: Guid.NewGuid(), Name: "merged-output", Description: null, Version: new Version(1, 0),
+            Nodes: Arr.create(
+                new NodeDefinition("src", "test.fanin.twoport", "Source", srcProps),
+                new NodeDefinition("cap", "test.fanin.capture", "Capture", HashMap<string, JsonElement>.Empty)),
+            Connections: Arr.create(
+                new ConnectionDefinition("src", "output", "cap", "input")),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        var parent = CreateTestProbe("merged-output-parent");
+        var exec = parent.ChildActorOf(
+            WorkflowExecutor.Props(Guid.NewGuid(), def, new Dictionary<string, object?>(), sp),
+            "merged-output-exec");
+
+        exec.Tell(new StartExecution(Guid.NewGuid()));
+
+        var msg = parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, TimeSpan.FromSeconds(10));
+        msg.Should().BeOfType<WorkflowCompleted>(because: "merged src → capture must complete~ 📦✅");
+
+        var merged = capture.Received.Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        merged.Keys.Should().BeEquivalentTo(new[] { "foo", "bar" });
+        merged["foo"].Should().Be("F");
+        merged["bar"].Should().Be("B");
+    }
+
+    /// <summary>A module with two output ports (<c>foo</c>/<c>bar</c>)~ 🎁.</summary>
+    private sealed class TwoPortSourceModule : IWorkflowModule
+    {
+        public string ModuleId => "test.fanin.twoport";
+        public string DisplayName => "TwoPort";
+        public string Category => "Test";
+        public string Description => "Emits foo + bar~ 🎁";
+        public string Icon => "🎁";
+        public Version Version => new(1, 0);
+
+        public ModuleSchema Schema => new(
+            Inputs: Arr.create(PortDefinition.Create<object>("input", isRequired: false)),
+            Outputs: Arr.create(
+                PortDefinition.Create<object>("foo", isRequired: false),
+                PortDefinition.Create<object>("bar", isRequired: false)),
+            Properties: Arr<ModulePropertyDefinition>.Empty);
+
+        public Task<ModuleResult> ExecuteAsync(ModuleExecutionContext ctx, CancellationToken ct = default)
+            => Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?> { ["foo"] = "F", ["bar"] = "B" }));
+    }
+
+    /// <summary>Captures its <c>input</c> value for assertions~ 🎁.</summary>
+    private sealed class CaptureModule : IWorkflowModule
+    {
+        public object? Received { get; private set; }
+
+        public string ModuleId => "test.fanin.capture";
+        public string DisplayName => "Capture";
+        public string Category => "Test";
+        public string Description => "Captures input~ 🎁";
+        public string Icon => "🎁";
+        public Version Version => new(1, 0);
+
+        public ModuleSchema Schema => new(
+            Inputs: Arr.create(PortDefinition.Create<object>("input", isRequired: false)),
+            Outputs: Arr.create(PortDefinition.Create<object>("output", isRequired: false)),
+            Properties: Arr<ModulePropertyDefinition>.Empty);
+
+        public Task<ModuleResult> ExecuteAsync(ModuleExecutionContext ctx, CancellationToken ct = default)
+        {
+            this.Received = ctx.Inputs.TryGetValue("input", out var v) ? v : null;
+            return Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?> { ["output"] = null }));
+        }
     }
 
     /// <summary>Wraps a PassThroughModule under an alias~ 🎀.</summary>

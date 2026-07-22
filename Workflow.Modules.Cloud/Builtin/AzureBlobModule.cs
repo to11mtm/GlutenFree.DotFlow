@@ -57,7 +57,7 @@ public sealed class AzureBlobModule : IWorkflowModule
             new PortDefinition("bytesTransferred", "Bytes Transferred", typeof(long), "Bytes up/downloaded~ 📊", false),
             new PortDefinition("durationMs", "Duration (ms)", typeof(long), "Operation duration~ ⏱️", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("operation", "Operation", typeof(string), "upload, download, delete, list, or exists~ 🎯", true, "upload", PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition("operation", "Operation", typeof(string), "upload, download, delete, list, or exists~ 🎯", true, "upload", PropertyEditorType.Dropdown, Arr.create<object>("upload", "download", "delete", "list", "exists")),
             new ModulePropertyDefinition("storageConnectionId", "Storage Connection", typeof(string), "Named storage connection (preferred)~ 📇", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("connectionString", "Connection String", typeof(string), "Inline connection string (dev escape hatch)~ 🔐", false, null, PropertyEditorType.ConnectionString),
             new ModulePropertyDefinition("containerName", "Container", typeof(string), "Blob container name~ 🪣", true, null, PropertyEditorType.Text),

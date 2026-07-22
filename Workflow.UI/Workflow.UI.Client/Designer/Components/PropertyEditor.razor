@@ -23,13 +23,22 @@
             <input class="df-input" type="number" value="@JsonValues.ToText(Value)" @oninput="OnNumberInput" data-testid="editor-@Property.Name" />
             break;
 
-        case "Dropdown":
+        case "Dropdown" when AllowedOptions.Count > 0:
             <select class="df-input" @onchange="OnStringChange" data-testid="editor-@Property.Name">
+                @if (!Property.IsRequired)
+                {
+                    <option value="" selected="@(string.IsNullOrEmpty(JsonValues.ToText(Value)))">(auto)</option>
+                }
                 @foreach (var option in AllowedOptions)
                 {
                     <option value="@option" selected="@(option == JsonValues.ToText(Value))">@option</option>
                 }
             </select>
+            break;
+
+        case "Dropdown":
+            @* No AllowedValues declared (e.g. a third-party module) — fall back to free text. *@
+            <input class="df-input" value="@JsonValues.ToText(Value)" @oninput="OnStringInput" data-testid="editor-@Property.Name" />
             break;
 
         case "MultilineText":
@@ -107,7 +116,13 @@
 
     private Task OnStringInput(ChangeEventArgs e) => this.ValueChanged.InvokeAsync(JsonValues.FromString(e.Value?.ToString()));
 
-    private Task OnStringChange(ChangeEventArgs e) => this.ValueChanged.InvokeAsync(JsonValues.FromString(e.Value?.ToString()));
+    private Task OnStringChange(ChangeEventArgs e)
+    {
+        // A dropdown's "(auto)" option means "unset" — store null so module validation
+        // treats it as omitted rather than an invalid empty string.
+        var text = e.Value?.ToString();
+        return this.ValueChanged.InvokeAsync(string.IsNullOrEmpty(text) ? JsonValues.Null : JsonValues.FromString(text));
+    }
 
     private Task OnStringChangeText(string value) => this.ValueChanged.InvokeAsync(JsonValues.FromString(value));
 

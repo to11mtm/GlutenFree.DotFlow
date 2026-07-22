@@ -181,6 +181,12 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{44ADFF90-B
 		docs\README.md = docs\README.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "use-testing-feedback", "use-testing-feedback", "{C29A0EB2-E8E4-457C-9EF0-D3203A14F63B}"
+	ProjectSection(SolutionItems) = preProject
+		use-testing-feedback\Designer-and-maybe-output-port-concerns.md = use-testing-feedback\Designer-and-maybe-output-port-concerns.md
+		use-testing-feedback\Designer-UX-Feedback-Plan.md = use-testing-feedback\Designer-UX-Feedback-Plan.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -484,5 +490,6 @@ Global
 		{C7D924E2-B5A1-420E-B3C3-EE647AD90F8E} = {B03E88AB-68AB-40B6-BAD4-D8AAD5D84EE4}
 		{B1C9ADDD-0456-43A1-BD8B-BB4322D9A8FA} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
 		{44ADFF90-B3F6-4957-B8FA-08229D6CECE8} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
+		{C29A0EB2-E8E4-457C-9EF0-D3203A14F63B} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
 	EndGlobalSection
 EndGlobal

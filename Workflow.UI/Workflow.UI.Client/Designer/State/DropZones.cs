@@ -17,6 +17,35 @@ public static class DropZones
     /// <summary>The module id whose palette drag activates the zones~ 🪄.</summary>
     public const string FanInModuleId = "builtin.fanin";
 
+    /// <summary>
+    /// Structural modules whose palette drag shows the output-side drop zones (UX-S4): fan-in
+    /// aggregates all outputs; loop / try-catch scaffold a skeleton wired from the source node~ 🎯.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> StructuralDropModules =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [FanInModuleId] = "🪄 all outputs",
+            ["builtin.loop.foreach"] = "🔁 loop from here",
+            ["builtin.loop.while"] = "🌀 loop from here",
+            ["builtin.trycatch"] = "🛡️ guard from here",
+        };
+
+    /// <summary>Returns whether a palette drag of this module activates the drop zones~ 🎯.</summary>
+    /// <param name="moduleId">The dragged module id (or null).</param>
+    /// <returns>True when zones should render.</returns>
+    public static bool IsStructuralDrop(string? moduleId)
+        => moduleId is not null && StructuralDropModules.ContainsKey(moduleId);
+
+    /// <summary>
+    /// Gets the zone label for a dragged module: the structural label, or the generic
+    /// wire-from-here hint for ordinary modules (UX-R2 — every palette drag can dock onto a
+    /// node's output side)~ 🏷️.
+    /// </summary>
+    /// <param name="moduleId">The dragged module id.</param>
+    /// <returns>The label text.</returns>
+    public static string LabelFor(string moduleId)
+        => StructuralDropModules.TryGetValue(moduleId, out var label) ? label : "🔗 wire from here";
+
     /// <summary>How far right of a node's edge still counts as its output side~ 📏.</summary>
     public const double Reach = 120;
 

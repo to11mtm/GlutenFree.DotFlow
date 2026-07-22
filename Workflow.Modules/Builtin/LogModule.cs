@@ -89,7 +89,8 @@ public class LogModule : IWorkflowModule
                 Description: "Log level: Trace, Debug, Information, Warning, Error, Critical~ 🎚️",
                 IsRequired: false,
                 DefaultValue: "Information",
-                EditorType: PropertyEditorType.Dropdown),
+                EditorType: PropertyEditorType.Dropdown,
+                AllowedValues: Arr.create<object>("Trace", "Debug", "Information", "Warning", "Error", "Critical")),
             new ModulePropertyDefinition(
                 Name: "includeContext",
                 DisplayName: "Include Context",

@@ -57,7 +57,7 @@ public sealed class FileWriteModule : IWorkflowModule
             new ModulePropertyDefinition("path", "Path", typeof(string), "File path to write. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath),
             new ModulePropertyDefinition("content", "Content", typeof(object), "Content to write when not connected via port~ 📄", false, null, PropertyEditorType.MultilineText),
             new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding (utf-8, utf-16, ascii, latin1)~ 🔤", false, "utf-8", PropertyEditorType.Text),
-            new ModulePropertyDefinition("mode", "Mode", typeof(string), "overwrite, append, or createNew~ 📝", false, "overwrite", PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition("mode", "Mode", typeof(string), "overwrite, append, or createNew~ 📝", false, "overwrite", PropertyEditorType.Dropdown, Arr.create<object>("overwrite", "append", "createNew")),
             new ModulePropertyDefinition("createDirectory", "Create Directory", typeof(bool), "Create the parent directory if missing~ 📁", false, true, PropertyEditorType.Boolean)));
 
     /// <inheritdoc />

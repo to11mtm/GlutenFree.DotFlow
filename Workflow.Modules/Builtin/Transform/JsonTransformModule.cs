@@ -56,7 +56,7 @@ public sealed class JsonTransformModule : IWorkflowModule
             new PortDefinition("success", "Success", typeof(bool), "Whether the transform succeeded~ ✅", false)),
         Properties: Arr.create(
             new ModulePropertyDefinition("data", "Data", typeof(object), "Primary operand when not connected~ 📥", false, null, PropertyEditorType.Json),
-            new ModulePropertyDefinition("operation", "Operation", typeof(string), "merge/patch/diff/flatten/unflatten~ 📝", true, "merge", PropertyEditorType.Dropdown),
+            new ModulePropertyDefinition("operation", "Operation", typeof(string), "merge/patch/diff/flatten/unflatten~ 📝", true, "merge", PropertyEditorType.Dropdown, Arr.create<object>("merge", "patch", "diff", "flatten", "unflatten")),
             new ModulePropertyDefinition("other", "Other", typeof(object), "Second operand when not connected~ 📥", false, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("separator", "Separator", typeof(string), "Key separator for flatten/unflatten~ 🔣", false, ".", PropertyEditorType.Text)));
 
