@@ -187,6 +187,12 @@ public sealed class ModuleAwareWorkflowValidator
 
         foreach (var configuredKey in node.Properties.Keys)
         {
+            // 🎚️ Reserved cross-cutting properties handled by the engine, not the module~
+            if (string.Equals(configuredKey, OutputShaping.PropertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (!knownPropertyNames.Contains(configuredKey))
             {
                 errors.Add(new ValidationError(
@@ -199,6 +205,14 @@ public sealed class ModuleAwareWorkflowValidator
             }
         }
     }
+
+    /// <summary>🎚️ Whether a node opts into merged output shaping via the reserved property~.</summary>
+    private static bool IsMergedOutputNode(WorkflowDefinition workflow, string nodeId)
+        => workflow.Nodes.Find(n => n.Id == nodeId).Match(
+            Some: n => n.Properties.Find(OutputShaping.PropertyName).Match(
+                Some: v => v.ValueKind == System.Text.Json.JsonValueKind.String && OutputShaping.IsMerged(v.GetString()),
+                None: () => false),
+            None: () => false);
 
     /// <summary>
     /// Validates that connection <c>SourcePortName</c> and <c>TargetPortName</c> match
@@ -222,7 +236,11 @@ public sealed class ModuleAwareWorkflowValidator
                     .Select(p => p.Name)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                if (!outputPortNames.Contains(connection.SourcePortName))
+                // 🎚️ Merged-output nodes legitimately expose the single reserved 'output' port~
+                var mergedOk = string.Equals(connection.SourcePortName, OutputShaping.MergedPortName, StringComparison.OrdinalIgnoreCase)
+                    && IsMergedOutputNode(workflow, connection.SourceNodeId);
+
+                if (!mergedOk && !outputPortNames.Contains(connection.SourcePortName))
                 {
                     errors.Add(new ValidationError(
                         "MA003",

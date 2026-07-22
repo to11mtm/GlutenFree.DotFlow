@@ -82,6 +82,12 @@ public static class NodePorts
             outputs = outputs.Where(p => p is not ("count" or "done")).ToList();
         }
 
+        // 🎚️ Universal merged-output mode collapses everything to the single 'output' port.
+        if (OutputShapingUx.IsEligible(node) && OutputShapingUx.IsMerged(node))
+        {
+            return new[] { OutputShapingUx.MergedPortName };
+        }
+
         return outputs;
     }
 

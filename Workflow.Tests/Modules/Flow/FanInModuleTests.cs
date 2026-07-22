@@ -589,6 +589,52 @@ public class FanInEngineIntegrationTests : TestKit
         named["bar"].Should().Be("B");
     }
 
+    /// <summary>
+    /// 🎚️ UX — a node with <c>outputMode=merged</c> emits one 'output' port carrying all of its
+    /// outputs; a downstream connection from 'output' passes load-time port validation~ 📦✅
+    /// </summary>
+    [Fact]
+    public void MergedOutputMode_EmitsSingleOutputObject_EndToEnd()
+    {
+        var source = new TwoPortSourceModule();
+        var capture = new CaptureModule();
+
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(source);
+        registry.RegisterModule(capture);
+
+        var sp = new ServiceCollection().AddSingleton<IModuleRegistry>(registry).BuildServiceProvider();
+
+        var srcProps = new Dictionary<string, JsonElement>
+        {
+            ["outputMode"] = JsonSerializer.SerializeToElement("merged"),
+        }.ToHashMap();
+
+        var def = new WorkflowDefinition(
+            Id: Guid.NewGuid(), Name: "merged-output", Description: null, Version: new Version(1, 0),
+            Nodes: Arr.create(
+                new NodeDefinition("src", "test.fanin.twoport", "Source", srcProps),
+                new NodeDefinition("cap", "test.fanin.capture", "Capture", HashMap<string, JsonElement>.Empty)),
+            Connections: Arr.create(
+                new ConnectionDefinition("src", "output", "cap", "input")),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        var parent = CreateTestProbe("merged-output-parent");
+        var exec = parent.ChildActorOf(
+            WorkflowExecutor.Props(Guid.NewGuid(), def, new Dictionary<string, object?>(), sp),
+            "merged-output-exec");
+
+        exec.Tell(new StartExecution(Guid.NewGuid()));
+
+        var msg = parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, TimeSpan.FromSeconds(10));
+        msg.Should().BeOfType<WorkflowCompleted>(because: "merged src → capture must complete~ 📦✅");
+
+        var merged = capture.Received.Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        merged.Keys.Should().BeEquivalentTo(new[] { "foo", "bar" });
+        merged["foo"].Should().Be("F");
+        merged["bar"].Should().Be("B");
+    }
+
     /// <summary>A module with two output ports (<c>foo</c>/<c>bar</c>)~ 🎁.</summary>
     private sealed class TwoPortSourceModule : IWorkflowModule
     {

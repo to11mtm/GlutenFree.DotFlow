@@ -147,6 +147,68 @@ public sealed class ModuleAwareWorkflowValidatorTests
 
     #region Property Schema Validation Tests (MA002) ⚙️
 
+    /// <summary>🎚️ The reserved <c>outputMode</c> property is engine-handled — never MA002~ ✅.</summary>
+    [Fact]
+    public void Validate_ReservedOutputModeProperty_NoMA002()
+    {
+        var registry = BuildRegistry();
+        var validator = new ModuleAwareWorkflowValidator(registry);
+        var props = new HashMap<string, JsonElement>().Add("outputMode", JsonSerializer.SerializeToElement("merged"));
+        var workflow = SingleNodeWorkflow(properties: props);
+
+        var result = validator.Validate(workflow);
+
+        result.Errors.Should().NotContain(e => e.Code == "MA002", "outputMode is a reserved engine property~ 🎚️");
+    }
+
+    /// <summary>🎚️ A merged node's <c>output</c> source port passes MA003~ ✅.</summary>
+    [Fact]
+    public void Validate_MergedNode_OutputSourcePort_NoMA003()
+    {
+        var registry = BuildRegistry();
+        registry.RegisterModule(new LogModule());
+        var validator = new ModuleAwareWorkflowValidator(registry);
+
+        var props = new HashMap<string, JsonElement>()
+            .Add("message", JsonSerializer.SerializeToElement("hi"))
+            .Add("outputMode", JsonSerializer.SerializeToElement("merged"));
+        var workflow = new WorkflowDefinition(
+            Id: Guid.NewGuid(), Name: "merged", Description: null, Version: new Version(1, 0),
+            Nodes: Arr.create(
+                new NodeDefinition("log1", "builtin.log", "Log", props),
+                new NodeDefinition("sink", "builtin.passthrough", "Sink", HashMap<string, JsonElement>.Empty)),
+            Connections: Arr.create(new ConnectionDefinition("log1", "output", "sink", "input")),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        var result = validator.Validate(workflow);
+
+        result.Errors.Should().NotContain(e => e.Code == "MA003", "merged nodes expose the reserved 'output' port~ 📦");
+    }
+
+    /// <summary>🎚️ Without merged mode, an undeclared <c>output</c> source port still fails MA003~ ❌.</summary>
+    [Fact]
+    public void Validate_NonMergedNode_OutputSourcePort_ProducesMA003()
+    {
+        var registry = BuildRegistry();
+        registry.RegisterModule(new LogModule());
+        var validator = new ModuleAwareWorkflowValidator(registry);
+
+        var props = new HashMap<string, JsonElement>().Add("message", JsonSerializer.SerializeToElement("hi"));
+        var workflow = new WorkflowDefinition(
+            Id: Guid.NewGuid(), Name: "not-merged", Description: null, Version: new Version(1, 0),
+            Nodes: Arr.create(
+                new NodeDefinition("log1", "builtin.log", "Log", props),
+                new NodeDefinition("sink", "builtin.passthrough", "Sink", HashMap<string, JsonElement>.Empty)),
+            Connections: Arr.create(new ConnectionDefinition("log1", "output", "sink", "input")),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        var result = validator.Validate(workflow);
+
+        result.Errors.Should().Contain(
+            e => e.Code == "MA003",
+            "'output' is not declared on builtin.log and the node is not merged~ 💔");
+    }
+
     /// <summary>
     /// A node with no configured properties should pass (PassThroughModule has no required properties)~ ✅
     /// </summary>

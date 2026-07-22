@@ -24,6 +24,17 @@
             <div class="df-props__hint" data-testid="structural-hint">💡 @StructuralHint</div>
         }
 
+        @if (OutputShapingUx.IsEligible(SelectedNode))
+        {
+            <div class="df-field">
+                <label class="df-label">Output mode</label>
+                <select class="df-input" data-testid="output-mode" @onchange="OnOutputModeChanged">
+                    <option value="ports" selected="@(!OutputShapingUx.IsMerged(SelectedNode))">ports — each output separately</option>
+                    <option value="merged" selected="@(OutputShapingUx.IsMerged(SelectedNode))">merged — one 'output' object</option>
+                </select>
+            </div>
+        }
+
         @if (SelectedNode.Schema is { Properties.Count: > 0 } schema)
         {
             @foreach (var prop in schema.Properties)
@@ -130,6 +141,32 @@
             : null;
 
     private string NodeName(string nodeId) => this.Document.FindNode(nodeId)?.Name ?? nodeId;
+
+    /// <summary>
+    /// 🎚️ Applies the merged-output selection immediately as one undoable property edit
+    /// (ports = property removed; merged = reserved <c>outputMode</c> property set).
+    /// </summary>
+    private void OnOutputModeChanged(ChangeEventArgs e)
+    {
+        var node = this.SelectedNode;
+        if (node is null)
+        {
+            return;
+        }
+
+        var before = new Dictionary<string, JsonElement>(node.Properties);
+        var after = new Dictionary<string, JsonElement>(node.Properties);
+        if (e.Value?.ToString() == OutputShapingUx.Merged)
+        {
+            after[OutputShapingUx.PropertyName] = JsonSerializer.SerializeToElement(OutputShapingUx.Merged);
+        }
+        else
+        {
+            after.Remove(OutputShapingUx.PropertyName);
+        }
+
+        this.Commands.Execute(new EditNodePropertiesCommand(node.Id, before, after));
+    }
 
     /// <summary>A how-it-works callout for structural (loop / error-boundary) modules (UX-F4/F5)~ 💡.</summary>
     private string? StructuralHint => this.SelectedNode?.ModuleId switch

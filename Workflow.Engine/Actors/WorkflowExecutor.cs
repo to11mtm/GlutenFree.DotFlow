@@ -477,6 +477,13 @@ public class WorkflowExecutor : ReceiveActor
             // Skip validation for modules with no declared outputs (dynamic-port modules like builtin.parallel)
             if (declaredOutputs.Count == 0) continue;
 
+            // 🎚️ Merged-output nodes legitimately expose the single reserved 'output' port~
+            if (connection.SourcePortName == OutputShaping.MergedPortName &&
+                IsMergedOutputNode(connection.SourceNodeId))
+            {
+                continue;
+            }
+
             if (!declaredOutputs.Contains(connection.SourcePortName))
             {
                 _portValidationErrors.Add(
@@ -504,6 +511,23 @@ public class WorkflowExecutor : ReceiveActor
         return _definition.Nodes.Find(n => n.Id == nodeId).Match(
             Some: n => n,
             None: () => null);
+    }
+
+    /// <summary>
+    /// 🎚️ Whether the node opts into merged output shaping via the reserved
+    /// <see cref="OutputShaping.PropertyName"/> property~.
+    /// </summary>
+    private bool IsMergedOutputNode(string nodeId)
+    {
+        var node = GetNodeDefinition(nodeId);
+        if (node is null)
+        {
+            return false;
+        }
+
+        return node.Properties.Find(OutputShaping.PropertyName).Match(
+            Some: v => v.ValueKind == System.Text.Json.JsonValueKind.String && OutputShaping.IsMerged(v.GetString()),
+            None: () => false);
     }
 
     #endregion
@@ -780,8 +804,14 @@ public class WorkflowExecutor : ReceiveActor
 
         _completedNodes = _completedNodes.Add(nodeId);
         _runningNodes = _runningNodes.Remove(nodeId);
-        _nodeOutputs[nodeId] = new Dictionary<string, object?>(
-            message.Outputs.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
+
+        // 🎚️ UX — reserved 'outputMode' property: merged nodes emit one 'output' port with everything~
+        var rawOutputs = message.Outputs
+            .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        var shapedOutputs = IsMergedOutputNode(nodeId) ? OutputShaping.Merge(rawOutputs) : rawOutputs;
+
+        _nodeOutputs[nodeId] = new Dictionary<string, object?>(shapedOutputs);
 
         var nodeStart = _context.NodeTimings.Find(nodeId)
             .Bind(t => t.StartTime)
@@ -791,9 +821,7 @@ public class WorkflowExecutor : ReceiveActor
             ? new Dictionary<string, object?>(capturedInputs)
             : null;
 
-        var nodeOutputs = message.Outputs
-            .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
-            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        var nodeOutputs = new Dictionary<string, object?>(shapedOutputs);
 
         QueueRecordNodeExecution(new NodeExecutionRecord(
             ExecutionId: _executionId,

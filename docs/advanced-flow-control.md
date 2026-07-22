@@ -4,6 +4,13 @@
 
 This guide covers every control-flow primitive shipped in **Phase 2.2** of DotFlow: conditional branching, loops, parallelism, fan-out/fan-in, and error boundaries. All examples use built-in modules only — **no external services required**~ 🌸
 
+> **🎚️ Merged output mode:** any *data* node (multi-port modules like HTTP, files, database,
+> transforms) can set the reserved property `"outputMode": "merged"` to emit a **single
+> `output` port** whose value is an object of all its outputs (e.g. HTTP →
+> `output = { statusCode, headers, body, … }`). Handled centrally by the engine; connections
+> from `output` validate automatically. Control-flow modules (condition/switch/fan-out/loops/
+> try-catch) are excluded, and Fan In keeps its richer `meta` option.
+
 > **Audience:** Workflow authors who want to compose advanced logic (branching, iteration, concurrency, error recovery) declaratively. Module developers should also read [`module-author-guide.md`](./module-author-guide.md)~ 💖
 
 ---

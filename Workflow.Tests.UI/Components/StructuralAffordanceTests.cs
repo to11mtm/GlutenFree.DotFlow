@@ -152,6 +152,98 @@ public sealed class StructuralAffordanceTests : TestContext
     }
 
     [Fact]
+    public void OutputMode_Eligibility_DataModulesOnly()
+    {
+        static DesignerNode WithTwoOutputs(string moduleId)
+        {
+            var n = new DesignerNode { Id = "n", ModuleId = moduleId, Name = "N" };
+            n.Schema = new Workflow.UI.Client.Api.Dtos.ModuleSchemaDto(
+                new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.PortDefinitionDto> { new("input", "In", "object", null, false, null) },
+                new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.PortDefinitionDto>
+                {
+                    new("body", "Body", "object", null, false, null),
+                    new("statusCode", "Status", "int", null, false, null),
+                },
+                new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.ModulePropertyDefinitionDto>());
+            return n;
+        }
+
+        OutputShapingUx.IsEligible(WithTwoOutputs("builtin.http.request")).Should().BeTrue();
+        OutputShapingUx.IsEligible(WithTwoOutputs("builtin.fanin")).Should().BeFalse(because: "fanin has its own meta option~");
+        OutputShapingUx.IsEligible(WithTwoOutputs("builtin.trycatch")).Should().BeFalse();
+        OutputShapingUx.IsEligible(WithTwoOutputs("builtin.fanout")).Should().BeFalse();
+        OutputShapingUx.IsEligible(new DesignerNode { Id = "x", ModuleId = "builtin.log", Name = "X" })
+            .Should().BeFalse(because: "no schema / fewer than two outputs~");
+    }
+
+    [Fact]
+    public void OutputMode_Merged_CollapsesPortsToSingleOutput()
+    {
+        var node = new DesignerNode { Id = "h", ModuleId = "builtin.http.request", Name = "H" };
+        node.Schema = new Workflow.UI.Client.Api.Dtos.ModuleSchemaDto(
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.PortDefinitionDto>(),
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.PortDefinitionDto>
+            {
+                new("body", "Body", "object", null, false, null),
+                new("statusCode", "Status", "int", null, false, null),
+            },
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.ModulePropertyDefinitionDto>());
+
+        NodePorts.Outputs(node).Should().Equal("body", "statusCode");
+
+        node.Properties["outputMode"] = System.Text.Json.JsonSerializer.SerializeToElement("merged");
+        NodePorts.Outputs(node).Should().Equal("output");
+    }
+
+    [Fact]
+    public void PropertiesPanel_OutputModeSelector_TogglesMerged()
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        var node = new DesignerNode { Id = "h", ModuleId = "builtin.http.request", Name = "H" };
+        node.Schema = new Workflow.UI.Client.Api.Dtos.ModuleSchemaDto(
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.PortDefinitionDto>(),
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.PortDefinitionDto>
+            {
+                new("body", "Body", "object", null, false, null),
+                new("statusCode", "Status", "int", null, false, null),
+            },
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.ModulePropertyDefinitionDto>());
+        doc.Nodes.Add(node);
+        var selection = new SelectionState();
+        selection.SelectNode("h");
+        var commands = new CommandStack(doc);
+
+        var cut = this.RenderComponent<PropertiesPanel>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, selection)
+            .Add(x => x.Commands, commands));
+
+        cut.Find("[data-testid=output-mode]").Change("merged");
+        OutputShapingUx.IsMerged(node).Should().BeTrue();
+
+        // Undoable, and switching back removes the property.
+        cut.Find("[data-testid=output-mode]").Change("ports");
+        OutputShapingUx.IsMerged(node).Should().BeFalse();
+        node.Properties.Should().NotContainKey("outputMode");
+    }
+
+    [Fact]
+    public void PropertiesPanel_NoOutputModeSelector_ForControlFlow()
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        doc.Nodes.Add(new DesignerNode { Id = "tc", ModuleId = "builtin.trycatch", Name = "TC" });
+        var selection = new SelectionState();
+        selection.SelectNode("tc");
+
+        var cut = this.RenderComponent<PropertiesPanel>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, selection)
+            .Add(x => x.Commands, new CommandStack(doc)));
+
+        cut.FindAll("[data-testid=output-mode]").Should().BeEmpty();
+    }
+
+    [Fact]
     public void PropertiesPanel_NoHint_ForOrdinaryModules()
     {
         var doc = new DesignerDocument { Name = "wf" };

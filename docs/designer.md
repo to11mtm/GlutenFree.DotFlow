@@ -51,6 +51,9 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
 - **Configure (right):** the **Properties** panel renders the right editor for each
   property (text, number, checkbox, dropdown, expression, JSON, code). `Code`/`Json` use
   the Monaco editor (with a plain-textarea fallback). **Apply** commits your edits.
+  Data modules with multiple outputs also get an **Output mode** selector: `ports`
+  (default — each output as its own port) or `merged` (one **`output`** port carrying an
+  object of all outputs — the canvas collapses the node's ports accordingly).
 - **Context menus:** right-click a node (Rename / Duplicate / Delete) or the canvas
   (Select all / Paste / Fit).
 - **Undo/redo:** toolbar ↩ / ↪ or Ctrl+Z / Ctrl+Y (50-step history).
