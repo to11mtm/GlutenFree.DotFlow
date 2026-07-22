@@ -11,8 +11,8 @@
 | F1 | Dropdowns don't populate (e.g. Join's `joinType`) | **Bug** | S | ✅ done |
 | F2 | Output ports of one node → single object keyed by port name | Feature | M | ✅ done |
 | F3 | Fan-in with a single obvious output / simpler mental model | UX + docs | S | ✅ done |
-| F4 | Loop construct is undiscoverable; wants a "subwindow" body view | Feature | L | 🔶 affordances done; region viz needs breakdown doc |
-| F5 | Try/catch construct is undiscoverable | Feature | L (shares F4) | 🔶 affordances + port fix done; region viz needs breakdown doc |
+| F4 | Loop construct is undiscoverable; wants a "subwindow" body view | Feature | L | ✅ done (regions + snippet; sub-canvas deferred post-MVP per Q4) |
+| F5 | Try/catch construct is undiscoverable | Feature | L (shares F4) | ✅ done (regions + snippet + port fix) |
 
 Recommended order: **F1 → F2 → F3 → F4 → F5**. F1 is a plain bug. F2/F3 are small and
 compound the recent fan-in UX work. F4/F5 share one "sub-graph visualization" foundation and
@@ -134,14 +134,17 @@ re-enter per item.
       loop-back arrowhead) so body sub-graphs read differently from the main flow.
       *(Done — `loopBody`/`try`/`catch`/`finally` edges render dashed via
       `NodePorts.IsStructuralPort`.)*
-- [ ] F4.3 (foundation) Body-region visualization: compute the sub-graph reachable from
+- [x] F4.3 (foundation) Body-region visualization: compute the sub-graph reachable from
       `loopBody` (stopping at the loop node's other ports) and render a soft container/halo
       around it on the canvas — the "subwindow" feel without new document structure.
-- [ ] F4.4 ~~(Q4) Decide: containment region vs sub-canvas~~ RESOLVED (Q4): region/halo on the
+      *(Done — see [`Designer-F4-F5-SubGraph-Regions.md`](Designer-F4-F5-SubGraph-Regions.md):
+      `StructuralRegions` helper + `CanvasView` region halos.)*
+- [x] F4.4 ~~(Q4) Decide: containment region vs sub-canvas~~ RESOLVED (Q4): region/halo on the
       main canvas (F4.3); collapsible sub-canvas deferred post-MVP. F4.3 gets its own breakdown
       doc before implementation (Q5).
-- [ ] F4.5 Starter template: "Loop over items" canvas snippet (palette or context menu → inserts
-      foreach + body skeleton wired correctly).
+- [x] F4.5 Starter template: "Loop over items" canvas snippet (palette or context menu → inserts
+      foreach + body skeleton wired correctly). *(Done — canvas context menu →
+      "Insert loop skeleton", single undo.)*
 
 ---
 
@@ -155,8 +158,10 @@ its schema exposes **no output ports** — routing is via try/catch/finally conv
 - [x] F5.1 Same cheap affordances as F4.1/F4.2: badge, properties-panel callout, docs section,
       distinct edge styling for `catch`/`finally` routes. *(Done — 🛡️ icon, callout, dashed
       routes, docs "Error handling (Try/Catch)" section.)*
-- [ ] F5.2 Same region visualization as F4.3 once it exists (try body + catch body as two regions).
-- [ ] F5.3 Starter template: "Try / catch" canvas snippet.
+- [x] F5.2 Same region visualization as F4.3 once it exists (try body + catch body as two regions).
+      *(Done — try/catch/finally regions, kind-tinted.)*
+- [x] F5.3 Starter template: "Try / catch" canvas snippet. *(Done — canvas context menu →
+      "Insert try/catch skeleton", single undo.)*
 - [x] F5.4 Review whether `TryCatchModule`'s empty output-port schema renders sensibly in the
       designer today (a node with zero outputs may confuse the port-alignment/edge code).
       *(Confirmed broken — it fell back to a bogus generic `output` port, making try/catch

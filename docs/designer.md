@@ -77,11 +77,15 @@ Connect downstream nodes to **`result`** — `count` and `done` are auxiliary
 
 ### Loops 🔁
 
-Drop **For Each** (`builtin.loop.foreach`) or **While** (`builtin.loop.while`) onto the
-canvas. The loop **body** is simply the sub-graph you connect from the **`loopBody`**
-output port — those nodes run **once per item** (For Each) or **per iteration** (While).
-Body edges render **dashed** so the loop structure reads differently from the main flow,
-and the Properties panel shows a 💡 callout explaining the convention.
+Drop **For Each** (`builtin.loop.foreach`) or **While** (`builtin.loop.while`) from the
+palette — the designer scaffolds the **skeleton** (loop + placeholder body step, pre-wired)
+in one undoable action. Drop it **on another node's output side** (drop zones appear while
+dragging, like Fan In) and the loop is also wired from that node's primary output into
+`collection` / `condition`. You can also right-click the canvas → **Insert loop skeleton**.
+The loop **body** is the sub-graph connected from the **`loopBody`** output port — those
+nodes run **once per item** (For Each) or **per iteration** (While). Body edges render
+**dashed**, the body sub-graph gets a soft **🔁 loop body** region halo, and the Properties
+panel shows a 💡 callout explaining the convention.
 
 - Connect `loopBody →` your per-item work (chain as many nodes as you like).
 - The body's terminal output is collected into **`results`** (For Each).
@@ -93,15 +97,20 @@ Worked example: `HTTP (list) → For Each · loopBody → Transform → …` wit
 
 ### Error handling (Try/Catch) 🛡️
 
-Drop **Try Catch** (`builtin.trycatch`). The designer exposes its conventional routing
-ports — **`try`**, **`catch`**, **`finally`**, **`done`**:
+Drop **Try Catch** (`builtin.trycatch`) from the palette — the designer scaffolds the guard
+plus placeholder try/catch steps, pre-wired, in one undoable action. Drop it **on another
+node's output side** and the guard is also wired from that node's primary output into its
+`input` activation port. (Or right-click the canvas → **Insert try/catch skeleton**.) The
+designer exposes the conventional routing ports — **`try`**, **`catch`**, **`finally`**,
+**`done`**:
 
 - `try →` the guarded sub-graph.
 - `catch →` runs only if a try node fails (error details flow in).
 - `finally →` always runs.
 - `done →` continue the main flow.
 
-Like loop bodies, these routes render **dashed**. `rethrow` re-raises the error after
+Like loop bodies, these routes render **dashed**, and each wired body gets a tinted region
+halo (green try / red catch / grey finally). `rethrow` re-raises the error after
 `finally`; `catchTypes` filters which error types are caught.
 
 ## Running (S3)

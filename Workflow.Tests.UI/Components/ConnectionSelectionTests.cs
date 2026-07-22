@@ -185,6 +185,28 @@ public sealed class ConnectionSelectionTests : TestContext
         cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().BeEmpty());
     }
 
+    [Theory]
+    [InlineData("builtin.loop.foreach", "loop from here")]
+    [InlineData("builtin.loop.while", "loop from here")]
+    [InlineData("builtin.trycatch", "guard from here")]
+    public void StructuralDrag_ShowsDropZones_WithKindLabel(string moduleId, string expectedLabel)
+    {
+        var doc = TwoNodeDoc();
+        var drag = this.Services.GetRequiredService<Workflow.UI.Client.Services.PaletteDragState>();
+        var cut = this.RenderComponent<CanvasView>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, new SelectionState())
+            .Add(x => x.Commands, new CommandStack(doc)));
+
+        drag.Begin(moduleId);
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-dropzone").Should().HaveCount(2);
+            cut.Find(".df-dropzone .df-dropzone__label").TextContent.Should().Contain(expectedLabel);
+        });
+        drag.End();
+    }
+
     [Fact]
     public void OtherModuleDrag_ShowsNoDropZones()
     {

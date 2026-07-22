@@ -44,6 +44,54 @@ public sealed class StructuralAffordanceTests : TestContext
         => NodePorts.IsStructuralPort(port).Should().Be(expected);
 
     [Fact]
+    public void Canvas_RendersRegion_ForLoopBody()
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        doc.Nodes.Add(new DesignerNode { Id = "loop-1", ModuleId = "builtin.loop.foreach", Name = "Loop", X = 100, Y = 100 });
+        doc.Nodes.Add(new DesignerNode { Id = "work-1", ModuleId = "builtin.log", Name = "Work", X = 400, Y = 100 });
+        doc.Connections.Add(new DesignerConnection { SourceNodeId = "loop-1", SourcePortName = "loopBody", TargetNodeId = "work-1", TargetPortName = "input" });
+
+        var cut = this.RenderComponent<CanvasView>(p => p.Add(x => x.Document, doc));
+
+        var region = cut.Find(".df-region--loop");
+        region.GetAttribute("data-region-for").Should().Be("loop-1");
+        region.TextContent.Should().Contain("loop body");
+    }
+
+    [Fact]
+    public void Canvas_RendersThreeRegions_ForWiredTryCatch()
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        doc.Nodes.Add(new DesignerNode { Id = "tc", ModuleId = "builtin.trycatch", Name = "Guard", X = 100, Y = 100 });
+        doc.Nodes.Add(new DesignerNode { Id = "t1", ModuleId = "builtin.log", Name = "T", X = 400, Y = 100 });
+        doc.Nodes.Add(new DesignerNode { Id = "c1", ModuleId = "builtin.log", Name = "C", X = 400, Y = 300 });
+        doc.Nodes.Add(new DesignerNode { Id = "f1", ModuleId = "builtin.log", Name = "F", X = 400, Y = 500 });
+        doc.Connections.Add(new DesignerConnection { SourceNodeId = "tc", SourcePortName = "try", TargetNodeId = "t1", TargetPortName = "input" });
+        doc.Connections.Add(new DesignerConnection { SourceNodeId = "tc", SourcePortName = "catch", TargetNodeId = "c1", TargetPortName = "input" });
+        doc.Connections.Add(new DesignerConnection { SourceNodeId = "tc", SourcePortName = "finally", TargetNodeId = "f1", TargetPortName = "input" });
+
+        var cut = this.RenderComponent<CanvasView>(p => p.Add(x => x.Document, doc));
+
+        cut.FindAll(".df-region").Should().HaveCount(3);
+        cut.FindAll(".df-region--try").Should().ContainSingle();
+        cut.FindAll(".df-region--catch").Should().ContainSingle();
+        cut.FindAll(".df-region--finally").Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Canvas_NoRegions_ForOrdinaryGraph()
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        doc.Nodes.Add(new DesignerNode { Id = "a", ModuleId = "builtin.log", Name = "A", X = 100, Y = 100 });
+        doc.Nodes.Add(new DesignerNode { Id = "b", ModuleId = "builtin.log", Name = "B", X = 400, Y = 100 });
+        doc.Connections.Add(new DesignerConnection { SourceNodeId = "a", SourcePortName = "output", TargetNodeId = "b", TargetPortName = "input" });
+
+        var cut = this.RenderComponent<CanvasView>(p => p.Add(x => x.Document, doc));
+
+        cut.FindAll(".df-region").Should().BeEmpty();
+    }
+
+    [Fact]
     public void LoopBodyEdge_RendersDashed_OtherEdgesSolid()
     {
         var doc = new DesignerDocument { Name = "wf" };

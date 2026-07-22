@@ -18,13 +18,24 @@ public static class NodePorts
     private static readonly IReadOnlyList<string> DefaultOutputs = new[] { "output" };
 
     /// <summary>
-    /// Modules whose output ports are dynamic (empty schema) — the designer surfaces their
+    /// Modules whose ports are dynamic (partial/empty schema) — the designer surfaces their
     /// conventional routing ports so bodies can be wired visually (UX-F5.4)~ 🛡️.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> DynamicOutputs =
         new Dictionary<string, IReadOnlyList<string>>(System.StringComparer.Ordinal)
         {
             ["builtin.trycatch"] = new[] { "try", "catch", "finally", "done" },
+        };
+
+    /// <summary>
+    /// Extra designer-surfaced input ports for modules with dynamic schemas: trycatch declares
+    /// only <c>rethrow</c>/<c>catchTypes</c>, so an <c>input</c> activation port is added for
+    /// wiring a predecessor (the server skips port-name validation for this module)~ 🔌.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> DynamicExtraInputs =
+        new Dictionary<string, IReadOnlyList<string>>(System.StringComparer.Ordinal)
+        {
+            ["builtin.trycatch"] = new[] { "input" },
         };
 
     /// <summary>Output ports that enter a structural sub-graph (loop body / error boundary)~ 🔁.</summary>
@@ -40,7 +51,21 @@ public static class NodePorts
     /// <param name="node">The node.</param>
     /// <returns>The input port names.</returns>
     public static IReadOnlyList<string> Inputs(DesignerNode node)
-        => node.Schema is { Inputs: { Count: > 0 } i } ? i.Select(p => p.Name).ToList() : DefaultInputs;
+    {
+        var declared = node.Schema is { Inputs: { Count: > 0 } i } ? i.Select(p => p.Name).ToList() : null;
+        if (DynamicExtraInputs.TryGetValue(node.ModuleId, out var extra))
+        {
+            var merged = new List<string>(extra);
+            if (declared is not null)
+            {
+                merged.AddRange(declared.Where(p => !extra.Contains(p)));
+            }
+
+            return merged;
+        }
+
+        return declared ?? DefaultInputs;
+    }
 
     /// <summary>Gets the output port names for a node~ 🔌.</summary>
     /// <param name="node">The node.</param>

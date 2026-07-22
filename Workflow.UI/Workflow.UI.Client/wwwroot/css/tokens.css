@@ -177,6 +177,18 @@ a.df-link:hover { text-decoration: underline; }
 .df-palette__details-id { color: var(--df-text-dim); font-size: 0.75rem; margin-bottom: var(--df-space-2); }
 
 /* 🎯 Selection / context menu / modal */
+/* 🔁🛡️ Structural body regions (presentation-only halos behind loop/try bodies) */
+.df-region { position: absolute; border: 1.5px dashed transparent; border-radius: calc(var(--df-radius) * 2); pointer-events: none; z-index: 0; }
+.df-region__label { position: absolute; top: -9px; left: 10px; padding: 0 var(--df-space-2); font-size: 0.7rem; background: var(--df-bg); border-radius: var(--df-radius); }
+.df-region--loop { border-color: var(--df-accent); background: rgba(79,156,249,0.06); }
+.df-region--loop .df-region__label { color: var(--df-accent); }
+.df-region--try { border-color: var(--df-state-completed); background: rgba(74,222,128,0.06); }
+.df-region--try .df-region__label { color: var(--df-state-completed); }
+.df-region--catch { border-color: var(--df-state-failed); background: rgba(248,113,113,0.06); }
+.df-region--catch .df-region__label { color: var(--df-state-failed); }
+.df-region--finally { border-color: var(--df-text-dim); background: rgba(148,163,184,0.06); }
+.df-region--finally .df-region__label { color: var(--df-text-dim); }
+
 .df-rubberband { position: absolute; border: 1px dashed var(--df-accent); background: rgba(79,156,249,0.12); pointer-events: none; }
 
 /* 🪄 Fan-in drop zones (shown while dragging builtin.fanin from the palette) */

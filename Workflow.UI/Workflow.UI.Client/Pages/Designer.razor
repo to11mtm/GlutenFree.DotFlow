@@ -266,6 +266,20 @@ else if (document is not null)
             }
         }
 
+        // 🔁🛡️ Dropping a loop / try-catch from the palette scaffolds its skeleton (empty body);
+        // on a node's output side it is also wired from that node's primary output (UX-S4)~
+        if (drop.ModuleId is "builtin.loop.foreach" or "builtin.loop.while")
+        {
+            await this.InsertLoopSkeleton(drop.CanvasPoint, drop.ModuleId, DropZones.HitTestOutputSide(this.document, drop.CanvasPoint));
+            return;
+        }
+
+        if (drop.ModuleId == "builtin.trycatch")
+        {
+            await this.InsertTryCatchSkeleton(drop.CanvasPoint, DropZones.HitTestOutputSide(this.document, drop.CanvasPoint));
+            return;
+        }
+
         var schema = await this.EnsureSchema(drop.ModuleId);
         var existing = new HashSet<string>();
         foreach (var n in this.document.Nodes)
@@ -379,10 +393,17 @@ else if (document is not null)
 
     private void OnCanvasContextMenu(MouseEventArgs e)
     {
+        // Convert the right-click point through the live canvas transform for snippet placement~
+        var at = this.canvas is not null
+            ? CanvasGeometry.ScreenToCanvas(new Point(e.OffsetX, e.OffsetY), this.canvas.Transform)
+            : new Point(e.OffsetX, e.OffsetY);
+
         this.menuItems = new List<ContextMenu.MenuItem>
         {
             new("select-all", "Select all", () => { this.selection.SelectAll(this.document!); return Task.CompletedTask; }),
             new("paste", "Paste", () => { this.Paste(); return Task.CompletedTask; }),
+            new("loop-skeleton", "Insert loop skeleton", () => this.InsertLoopSkeleton(at)),
+            new("trycatch-skeleton", "Insert try/catch skeleton", () => this.InsertTryCatchSkeleton(at)),
             new("fit", "Fit to screen", async () => { if (this.canvas is not null) { await this.canvas.FitAsync(); } }),
         };
         this.ShowMenu(e);
@@ -843,6 +864,172 @@ else if (document is not null)
             this.saveIssues = new List<SaveIssue> { new("error", ex.Error.Summarize(), null) };
             this.showSaveDialog = true;
         }
+    }
+
+    /// <summary>
+    /// UX-F4.5/S4 — Inserts a loop (For Each / While) + placeholder body step wired
+    /// <c>loopBody → input</c>, as one undoable action. When <paramref name="source"/> is given
+    /// (output-side drop), the loop is placed right of it and wired from its primary output into
+    /// the loop's conventional input (<c>collection</c> / <c>condition</c>)~ 🔁.
+    /// </summary>
+    private async Task InsertLoopSkeleton(Point at, string moduleId = "builtin.loop.foreach", DesignerNode? source = null)
+    {
+        if (this.commands is null || this.document is null)
+        {
+            return;
+        }
+
+        var loopSchema = await this.EnsureSchema(moduleId);
+        var bodySchema = await this.EnsureSchema("builtin.passthrough");
+        var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+
+        var origin = source is null ? at : new Point(source.X + CanvasGeometry.NodeWidth + 80, source.Y);
+        var loop = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate(moduleId, existing),
+            ModuleId = moduleId,
+            Name = moduleId == "builtin.loop.while" ? "While" : "For Each",
+            X = origin.X,
+            Y = origin.Y,
+            Schema = loopSchema,
+        };
+        existing.Add(loop.Id);
+
+        var body = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate("builtin.passthrough", existing),
+            ModuleId = "builtin.passthrough",
+            Name = "Body step (replace me)",
+            X = origin.X + CanvasGeometry.NodeWidth + 80,
+            Y = origin.Y,
+            Schema = bodySchema,
+        };
+
+        var children = new List<IDesignerCommand>
+        {
+            new AddNodeCommand(loop),
+            new AddNodeCommand(body),
+            new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = loop.Id,
+                SourcePortName = "loopBody",
+                TargetNodeId = body.Id,
+                TargetPortName = "input",
+            }),
+        };
+
+        if (source is not null)
+        {
+            children.Add(new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = source.Id,
+                SourcePortName = PrimaryOutput(source),
+                TargetNodeId = loop.Id,
+                TargetPortName = moduleId == "builtin.loop.while" ? "condition" : "collection",
+            }));
+        }
+
+        this.commands.Execute(new CompositeCommand("Insert loop skeleton", children));
+        this.selection.SetNodes(new[] { loop.Id, body.Id });
+        Toasts.Success(source is null
+            ? "Loop skeleton inserted — replace the body step, then continue the flow from 'done'"
+            : $"Loop wired from {source.Name} — replace the body step, then continue from 'done'");
+    }
+
+    /// <summary>
+    /// UX-F5.3/S4 — Inserts a Try Catch + placeholder try/catch steps wired from the <c>try</c>
+    /// and <c>catch</c> routes, as one undoable action. When <paramref name="source"/> is given
+    /// (output-side drop), the guard is placed right of it and wired from its primary output into
+    /// the guard's <c>input</c> activation port~ 🛡️.
+    /// </summary>
+    private async Task InsertTryCatchSkeleton(Point at, DesignerNode? source = null)
+    {
+        if (this.commands is null || this.document is null)
+        {
+            return;
+        }
+
+        var tcSchema = await this.EnsureSchema("builtin.trycatch");
+        var bodySchema = await this.EnsureSchema("builtin.passthrough");
+        var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+
+        var origin = source is null ? at : new Point(source.X + CanvasGeometry.NodeWidth + 80, source.Y);
+        var guard = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate("builtin.trycatch", existing),
+            ModuleId = "builtin.trycatch",
+            Name = "Try Catch",
+            X = origin.X,
+            Y = origin.Y,
+            Schema = tcSchema,
+        };
+        existing.Add(guard.Id);
+
+        var tryStep = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate("builtin.passthrough", existing),
+            ModuleId = "builtin.passthrough",
+            Name = "Try step (replace me)",
+            X = origin.X + CanvasGeometry.NodeWidth + 80,
+            Y = origin.Y,
+            Schema = bodySchema,
+        };
+        existing.Add(tryStep.Id);
+
+        var catchStep = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate("builtin.passthrough", existing),
+            ModuleId = "builtin.passthrough",
+            Name = "Catch step (replace me)",
+            X = origin.X + CanvasGeometry.NodeWidth + 80,
+            Y = origin.Y + 200,
+            Schema = bodySchema,
+        };
+
+        var children = new List<IDesignerCommand>
+        {
+            new AddNodeCommand(guard),
+            new AddNodeCommand(tryStep),
+            new AddNodeCommand(catchStep),
+            new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = guard.Id,
+                SourcePortName = "try",
+                TargetNodeId = tryStep.Id,
+                TargetPortName = "input",
+            }),
+            new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = guard.Id,
+                SourcePortName = "catch",
+                TargetNodeId = catchStep.Id,
+                TargetPortName = "input",
+            }),
+        };
+
+        if (source is not null)
+        {
+            children.Add(new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = source.Id,
+                SourcePortName = PrimaryOutput(source),
+                TargetNodeId = guard.Id,
+                TargetPortName = "input",
+            }));
+        }
+
+        this.commands.Execute(new CompositeCommand("Insert try/catch skeleton", children));
+        this.selection.SetNodes(new[] { guard.Id, tryStep.Id, catchStep.Id });
+        Toasts.Success(source is null
+            ? "Try/catch skeleton inserted — replace the steps, then continue the flow from 'done'"
+            : $"Try/catch wired from {source.Name} — replace the steps, then continue from 'done'");
+    }
+
+    /// <summary>The node's primary output port (prefers <c>success</c>, else the first)~ 🔌.</summary>
+    private static string PrimaryOutput(DesignerNode node)
+    {
+        var outputs = NodePorts.Outputs(node);
+        return outputs.Contains("success") ? "success" : outputs[0];
     }
 
     private static string DisplayNameFor(string moduleId)
