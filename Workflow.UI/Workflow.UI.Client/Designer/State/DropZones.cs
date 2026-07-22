@@ -36,11 +36,15 @@ public static class DropZones
     public static bool IsStructuralDrop(string? moduleId)
         => moduleId is not null && StructuralDropModules.ContainsKey(moduleId);
 
-    /// <summary>Gets the zone label for a dragged module~ 🏷️.</summary>
+    /// <summary>
+    /// Gets the zone label for a dragged module: the structural label, or the generic
+    /// wire-from-here hint for ordinary modules (UX-R2 — every palette drag can dock onto a
+    /// node's output side)~ 🏷️.
+    /// </summary>
     /// <param name="moduleId">The dragged module id.</param>
     /// <returns>The label text.</returns>
     public static string LabelFor(string moduleId)
-        => StructuralDropModules.TryGetValue(moduleId, out var label) ? label : string.Empty;
+        => StructuralDropModules.TryGetValue(moduleId, out var label) ? label : "🔗 wire from here";
 
     /// <summary>How far right of a node's edge still counts as its output side~ 📏.</summary>
     public const double Reach = 120;

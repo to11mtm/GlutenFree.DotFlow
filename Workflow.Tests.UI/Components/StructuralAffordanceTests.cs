@@ -126,6 +126,32 @@ public sealed class StructuralAffordanceTests : TestContext
     }
 
     [Fact]
+    public void FanIn_MetaHidden_HidesCountDonePorts_OnCanvas()
+    {
+        var node = new DesignerNode { Id = "f", ModuleId = "builtin.fanin", Name = "F" };
+        node.Schema = new Workflow.UI.Client.Api.Dtos.ModuleSchemaDto(
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.PortDefinitionDto> { new("branches", "Branches", "object", null, false, null) },
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.PortDefinitionDto>
+            {
+                new("result", "Result", "object", null, false, null),
+                new("count", "Count", "int", null, false, null),
+                new("done", "Done", "object", null, false, null),
+            },
+            new System.Collections.Generic.List<Workflow.UI.Client.Api.Dtos.ModulePropertyDefinitionDto>());
+
+        NodePorts.Outputs(node).Should().Equal("result", "count", "done");
+
+        node.Properties["meta"] = System.Text.Json.JsonSerializer.SerializeToElement("hidden");
+        NodePorts.Outputs(node).Should().Equal("result");
+
+        node.Properties["meta"] = System.Text.Json.JsonSerializer.SerializeToElement("embedded");
+        NodePorts.Outputs(node).Should().Equal("result");
+
+        node.Properties["meta"] = System.Text.Json.JsonSerializer.SerializeToElement("separate");
+        NodePorts.Outputs(node).Should().Equal("result", "count", "done");
+    }
+
+    [Fact]
     public void PropertiesPanel_NoHint_ForOrdinaryModules()
     {
         var doc = new DesignerDocument { Name = "wf" };

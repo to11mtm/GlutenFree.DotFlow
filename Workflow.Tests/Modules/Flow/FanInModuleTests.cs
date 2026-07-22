@@ -253,6 +253,70 @@ public sealed class FanInModuleTests
             .Which.Should().BeEmpty();
     }
 
+    /// <summary>UX-R1: meta=embedded wraps the payload + count into a single result item~ 🎚️.</summary>
+    [Fact]
+    public async Task Meta_Embedded_WrapsValueAndCount_IntoResult()
+    {
+        var branches = new List<Dictionary<string, object?>>
+        {
+            new() { ["x"] = 1 },
+            new() { ["y"] = 2 },
+        };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?> { ["__incomingBranches__"] = branches },
+            properties: new Dictionary<string, object?> { ["mode"] = "merge", ["meta"] = "embedded" });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        result.Success.Should().BeTrue();
+        result.Outputs.Keys.Should().BeEquivalentTo(new[] { "result" }, because: "embedded meta emits a single output item~ 🎚️");
+        var wrapped = result.Outputs["result"].Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        wrapped["count"].Should().Be(2);
+        wrapped["value"].Should().BeAssignableTo<Dictionary<string, object?>>()
+            .Which.Keys.Should().BeEquivalentTo(new[] { "x", "y" });
+    }
+
+    /// <summary>UX-R1: meta=hidden suppresses count/done entirely~ 🎚️.</summary>
+    [Fact]
+    public async Task Meta_Hidden_EmitsOnlyResult()
+    {
+        var branches = new List<Dictionary<string, object?>> { new() { ["x"] = 1 } };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?> { ["__incomingBranches__"] = branches },
+            properties: new Dictionary<string, object?> { ["meta"] = "hidden" });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        result.Outputs.Keys.Should().BeEquivalentTo(new[] { "result" });
+    }
+
+    /// <summary>UX-R1: default meta keeps the separate count output (back-compat)~ 🎚️.</summary>
+    [Fact]
+    public async Task Meta_Default_KeepsSeparateCount()
+    {
+        var branches = new List<Dictionary<string, object?>> { new() { ["x"] = 1 } };
+
+        var ctx = BuildContext(
+            inputs: new Dictionary<string, object?> { ["__incomingBranches__"] = branches });
+
+        var result = await _module.ExecuteAsync(ctx);
+
+        result.Outputs.Keys.Should().BeEquivalentTo(new[] { "result", "count" });
+        result.Outputs["count"].Should().Be(1);
+    }
+
+    /// <summary>UX-R1: an invalid meta value fails validation~ 💔.</summary>
+    [Fact]
+    public void ValidateConfiguration_InvalidMeta_Fails()
+    {
+        var result = _module.ValidateConfiguration(new Dictionary<string, object?> { ["meta"] = "nope" });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.Code == "INVALID_META");
+    }
+
     /// <summary>First mode returns the first branch's payload~ 🥇.</summary>
     [Fact]
     public async Task First_ReturnsFirstPayload()

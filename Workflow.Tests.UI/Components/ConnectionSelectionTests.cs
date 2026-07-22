@@ -208,7 +208,7 @@ public sealed class ConnectionSelectionTests : TestContext
     }
 
     [Fact]
-    public void OtherModuleDrag_ShowsNoDropZones()
+    public void OrdinaryModuleDrag_ShowsGenericWireZones()
     {
         var doc = TwoNodeDoc();
         var drag = this.Services.GetRequiredService<Workflow.UI.Client.Services.PaletteDragState>();
@@ -217,9 +217,15 @@ public sealed class ConnectionSelectionTests : TestContext
             .Add(x => x.Selection, new SelectionState())
             .Add(x => x.Commands, new CommandStack(doc)));
 
+        // UX-R2: every palette drag can dock onto a node's output side.
         drag.Begin("builtin.log");
-        cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().BeEmpty());
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-dropzone").Should().HaveCount(2);
+            cut.Find(".df-dropzone .df-dropzone__label").TextContent.Should().Contain("wire from here");
+        });
         drag.End();
+        cut.WaitForAssertion(() => cut.FindAll(".df-dropzone").Should().BeEmpty());
     }
 
     [Fact]

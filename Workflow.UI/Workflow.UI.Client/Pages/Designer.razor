@@ -287,13 +287,17 @@ else if (document is not null)
             existing.Add(n.Id);
         }
 
+        // 🔗 UX-R2: dropping any ordinary module on a node's output side wires it in
+        // (source primary output → the new node's first input), as one undoable action~
+        var wireSource = DropZones.HitTestOutputSide(this.document, drop.CanvasPoint);
+
         var node = new DesignerNode
         {
             Id = NodeIdGenerator.Generate(drop.ModuleId, existing),
             ModuleId = drop.ModuleId,
             Name = DisplayNameFor(drop.ModuleId),
-            X = drop.CanvasPoint.X,
-            Y = drop.CanvasPoint.Y,
+            X = wireSource is null ? drop.CanvasPoint.X : wireSource.X + CanvasGeometry.NodeWidth + 80,
+            Y = wireSource is null ? drop.CanvasPoint.Y : wireSource.Y,
             Schema = schema,
         };
 
@@ -308,7 +312,25 @@ else if (document is not null)
             }
         }
 
-        this.commands.Execute(new AddNodeCommand(node));
+        if (wireSource is null)
+        {
+            this.commands.Execute(new AddNodeCommand(node));
+            return;
+        }
+
+        this.commands.Execute(new CompositeCommand($"Add {node.Name} (wired)", new List<IDesignerCommand>
+        {
+            new AddNodeCommand(node),
+            new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = wireSource.Id,
+                SourcePortName = PrimaryOutput(wireSource),
+                TargetNodeId = node.Id,
+                TargetPortName = NodePorts.Inputs(node)[0],
+            }),
+        }));
+        this.selection.SelectNode(node.Id);
+        Toasts.Success($"{node.Name} wired from {wireSource.Name}");
     }
 
     /// <summary>

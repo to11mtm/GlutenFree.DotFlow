@@ -71,9 +71,26 @@ public static class NodePorts
     /// <param name="node">The node.</param>
     /// <returns>The output port names.</returns>
     public static IReadOnlyList<string> Outputs(DesignerNode node)
-        => node.Schema is { Outputs: { Count: > 0 } o } ? o.Select(p => p.Name).ToList()
-            : DynamicOutputs.TryGetValue(node.ModuleId, out var dyn) ? dyn
-            : DefaultOutputs;
+    {
+        var outputs = node.Schema is { Outputs: { Count: > 0 } o } ? o.Select(p => p.Name).ToList()
+            : DynamicOutputs.TryGetValue(node.ModuleId, out var dyn) ? dyn.ToList()
+            : DefaultOutputs.ToList();
+
+        // UX-R1: FanIn's 'meta' selection controls whether count/done render as ports.
+        if (node.ModuleId == "builtin.fanin" && FanInMetaMode(node) is "embedded" or "hidden")
+        {
+            outputs = outputs.Where(p => p is not ("count" or "done")).ToList();
+        }
+
+        return outputs;
+    }
+
+    private static string FanInMetaMode(DesignerNode node)
+        => node.Properties.TryGetValue("meta", out var v)
+           && v.ValueKind == System.Text.Json.JsonValueKind.String
+           && v.GetString() is { Length: > 0 } s
+            ? s.ToLowerInvariant()
+            : "separate";
 
     /// <summary>Computes the canvas-space anchor point for a node port~ 📍.</summary>
     /// <param name="node">The node.</param>

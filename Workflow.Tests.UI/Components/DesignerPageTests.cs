@@ -348,6 +348,50 @@ public sealed class DesignerPageTests : TestContext
     }
 
     [Fact]
+    public void DroppingOrdinaryModule_OnNodeOutputSide_WiresFromSource()
+    {
+        var id = Guid.NewGuid();
+        var workflow = new WorkflowDto(
+            id, "wf", null, "1.0.0",
+            new List<NodeDto>
+            {
+                new("http-1", "builtin.http.request", "HTTP", new Dictionary<string, JsonElement>(), new PositionDto(100, 100)),
+            },
+            new List<ConnectionDto>(), new Dictionary<string, JsonElement>(), null, null, null, null, new List<string>());
+
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            var body = path switch
+            {
+                "/api/v1/modules" => Json(new List<ModuleSummaryDto>()),
+                var p when p.StartsWith("/api/v1/workflows/") => Json(workflow),
+                _ => "{}",
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, id.ToString()));
+        cut.WaitForAssertion(() => cut.FindAll(".df-node").Should().ContainSingle());
+
+        var transform = cut.FindComponent<Workflow.UI.Client.Designer.Components.CanvasView>().Instance.Transform;
+        var screen = Workflow.UI.Client.Designer.State.CanvasGeometry.CanvasToScreen(
+            new Workflow.UI.Client.Designer.State.Point(320, 130), transform);
+        var drag = this.Services.GetRequiredService<PaletteDragState>();
+        drag.Begin("builtin.log");
+        cut.Find(".df-canvas-viewport").Drop(new DragEventArgs { OffsetX = screen.X, OffsetY = screen.Y });
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(2);
+            cut.Markup.Should().Contain("builtin.log");
+            // Exactly one plain wire http-1 → log.
+            cut.FindAll("path.df-edge").Should().ContainSingle();
+        });
+    }
+
+    [Fact]
     public void CanvasMenu_InsertTryCatchSkeleton_AddsThreeNodes_TwoRegions()
     {
         var handler = new FakeHttpMessageHandler(req =>

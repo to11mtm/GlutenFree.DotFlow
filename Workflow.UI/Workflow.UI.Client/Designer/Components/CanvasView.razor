@@ -28,7 +28,7 @@
             </div>
         }
         <EdgeLayer Document="Document" Selection="Selection" OnConnectionContextMenu="OnConnectionContextMenuInternal" />
-        @if (Commands is not null && DropZones.IsStructuralDrop(DragState.DraggingModuleId))
+        @if (Commands is not null && DragState.DraggingModuleId is not null)
         {
             @foreach (var node in Document.Nodes)
             {
@@ -576,7 +576,7 @@
 
     private void OnDragOver(DragEventArgs e)
     {
-        if (this.Commands is null || !DropZones.IsStructuralDrop(this.DragState.DraggingModuleId))
+        if (this.Commands is null || this.DragState.DraggingModuleId is null)
         {
             return;
         }

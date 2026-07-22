@@ -278,6 +278,7 @@ The convergence point downstream from a `parallel` or `fanout`. Holds until *all
 | Property | Type | Required | Default | Notes |
 |---|---|---|---|---|
 | `mode` | `string` enum | optional | `"Concat"` | One of: `Concat`, `Merge`, `Named`, `First`, `Last` |
+| `meta` | `string` enum | optional | `"separate"` | Where `count` goes: `separate` (own output port), `embedded` (`result = { value, count }` — one item), `hidden` (result only) |
 
 **Modes:**
 - `Concat` — collects payloads into an array in branch-completion order

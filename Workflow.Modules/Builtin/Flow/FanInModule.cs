@@ -91,6 +91,7 @@ public sealed class FanInModule : IWorkflowModule
             new PortDefinition("done", "Done", typeof(object), "Auxiliary: activation signal for ordering-only successors~", false)),
         Properties: Arr.create(
             new ModulePropertyDefinition("mode", "Mode", typeof(string), "concat (default) / merge / named / first / last~ 🪄", false, "concat", PropertyEditorType.Dropdown, Arr.create<object>("concat", "merge", "named", "first", "last")),
+            new ModulePropertyDefinition("meta", "Count/Done Outputs", typeof(string), "separate (default — count/done as their own ports) / embedded (result = { value, count }) / hidden (result only)~ 🎚️", false, "separate", PropertyEditorType.Dropdown, Arr.create<object>("separate", "embedded", "hidden")),
             ModulePropertyDefinition.Create<TimeSpan>("timeout", isRequired: false)));
 
     /// <inheritdoc />
@@ -104,6 +105,16 @@ public sealed class FanInModule : IWorkflowModule
                 new ValidationError("INVALID_MODE",
                     $"FanInModule: 'mode' must be one of Concat, Merge, Named, First, Last (got '{modeStr}')~ 💔",
                     "mode"));
+        }
+
+        if (configuration.TryGetValue("meta", out var metaRaw2) && metaRaw2 is string metaStr
+            && !string.IsNullOrWhiteSpace(metaStr)
+            && metaStr.ToLowerInvariant() is not ("separate" or "embedded" or "hidden"))
+        {
+            return ValidationResult.Failure(
+                new ValidationError("INVALID_META",
+                    $"FanInModule: 'meta' must be one of separate, embedded, hidden (got '{metaStr}')~ 💔",
+                    "meta"));
         }
 
         return ValidationResult.Success();
@@ -147,10 +158,32 @@ public sealed class FanInModule : IWorkflowModule
             _ => branches.Cast<object?>().ToList(),
         };
 
-        var outputs = new Dictionary<string, object?>
+        // UX-R1: shape the count/done metadata per the 'meta' property~ 🎚️
+        var metaMode = ctx.Properties.TryGetValue("meta", out var mm) && mm is string ms && !string.IsNullOrWhiteSpace(ms)
+            ? ms.ToLowerInvariant()
+            : "separate";
+
+        var outputs = metaMode switch
         {
-            ["result"] = aggregated,
-            ["count"] = branches.Count,
+            // One item: result wraps the payload together with the branch count.
+            "embedded" => new Dictionary<string, object?>
+            {
+                ["result"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["value"] = aggregated,
+                    ["count"] = branches.Count,
+                },
+            },
+
+            // Metadata suppressed entirely.
+            "hidden" => new Dictionary<string, object?> { ["result"] = aggregated },
+
+            // Default: count as its own output port (current behaviour).
+            _ => new Dictionary<string, object?>
+            {
+                ["result"] = aggregated,
+                ["count"] = branches.Count,
+            },
         };
 
         return Task.FromResult(ModuleResult.Ok(outputs));

@@ -76,6 +76,16 @@ boundary without reading docs.
         and wiring. *(Done — zone labels: "🔁/🌀 loop from here", "🛡️ guard from here"; 5 new
         tests; 323 UI tests green.)*
 
+- [x] **S5 — FanIn count/done shaping** (follow-up 2026-07-21): new `meta` dropdown on Fan In —
+      `separate` (default, current ports) / `embedded` (`result = { value, count }`, one item) /
+      `hidden` (result only). Module output shaping + validation + AllowedValues; the designer
+      hides the `count`/`done` ports on the canvas for `embedded`/`hidden`. *(4 module tests +
+      1 port-visibility test; guard test auto-covers the new dropdown.)*
+- [x] **S6 — Universal drop-to-wire** (follow-up 2026-07-21): output-side drop zones now show
+      for **every** palette drag ("🔗 wire from here" for ordinary modules); dropping in a zone
+      adds the node **pre-wired** from the source's primary output to its first input, as one
+      undoable action with a toast. Structural/fan-in behaviours unchanged. *(2 tests updated/new.)*
+
 ## Out of scope (unchanged)
 
 Collapsible sub-canvas editing (Q4(b)), body containment in the save format, drag-into-region

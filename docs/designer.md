@@ -73,7 +73,18 @@ Three ways to funnel multiple outputs into **one object** on the `result` port:
   `first` / `last`.
 
 Connect downstream nodes to **`result`** — `count` and `done` are auxiliary
-(branch count / ordering-only activation).
+(branch count / ordering-only activation). The **Count/Done Outputs** dropdown on the node
+controls how they surface: `separate` (own ports, default), `embedded`
+(`result = { value, count }` as a single item), or `hidden` (result only) — picking
+`embedded`/`hidden` also hides the auxiliary ports on the canvas.
+
+### Wiring by drop 🔗
+
+While dragging **any module** from the palette, **drop zones** appear on every node's
+output side. Drop into one and the new node is added **already wired** from that node's
+primary output into its first input (single undo). Structural modules do more: Fan In
+aggregates *all* outputs; For Each / While / Try Catch scaffold their skeletons wired from
+the source (see below).
 
 ### Loops 🔁
 
