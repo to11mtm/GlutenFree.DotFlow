@@ -147,6 +147,24 @@ standalone build item.
 
 ---
 
+## G8 — Expression builder modal ƒx (follow-up, 2026-07-23)
+
+**Ask.** An optional modal breakout on expression-accepting fields with hints and common
+builders for **Variable** vs **input** sources.
+
+**Resolution (implemented).**
+
+- [x] G8.1 `ExpressionBuilder` state helper (framework-free): operators, `Compose(token, op,
+      value)` with auto-quoting (numbers/booleans/pre-quoted stay raw), and the hint catalog.
+- [x] G8.2 `PropertyEditor`: an **ƒx builder** button on `Expression` editors opens a modal —
+      working-copy textarea, a builder row (source dropdown grouped **Variables** /
+      **Inputs (upstream outputs)** + comparison operator + value → Insert appends the composed
+      `{{…}}`), a syntax hints list, and Apply/Cancel writing through the normal value path.
+- [x] G8.3 Tests: 7 compose unit tests + 2 bUnit flow tests (build+apply round-trip; ƒx only on
+      Expression editors; hints shown).
+
+---
+
 ## Questions — RESOLVED ✅ (2026-07-23)
 
 - [x] **Q1 (G4):** Should the variable picker also offer `{{NodeId.Output}}` upstream-output

@@ -187,6 +187,49 @@ public sealed class PropertiesPanelTests : TestContext
     }
 
     [Fact]
+    public void ExpressionBuilder_BuildsComparison_AndApplies()
+    {
+        // G8: the ƒx modal builds {{Variable.x > 5}} from the source/operator/value pickers.
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("condition", "Expression") });
+        var (doc, sel, cmd) = Setup(schema);
+        doc.Variables["count"] = El("1");
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.Find("[data-testid=exprb-btn-condition]").Click();
+        cut.Find("[data-testid=exprb-condition]").Should().NotBeNull();
+
+        cut.Find("[data-testid=exprb-source-condition]").Change("{{Variable.count}}");
+        cut.Find("[data-testid=exprb-op-condition]").Change(">");
+        cut.Find("[data-testid=exprb-value-condition]").Input("5");
+        cut.Find("[data-testid=exprb-insert-condition]").Click();
+
+        cut.Find("[data-testid=exprb-text-condition]").GetAttribute("value").Should().Be("{{Variable.count > 5}}");
+
+        // Apply writes the buffer value; the panel editor reflects it.
+        cut.Find("[data-testid=exprb-apply-condition]").Click();
+        cut.FindAll("[data-testid=exprb-condition]").Should().BeEmpty(because: "apply closes the builder~ ƒx");
+        cut.Find("[data-testid=editor-condition]").GetAttribute("value").Should().Be("{{Variable.count > 5}}");
+    }
+
+    [Fact]
+    public void ExpressionBuilder_ShowsHints_AndOnlyOnExpressionEditors()
+    {
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto>
+        {
+            Prop("condition", "Expression"),
+            Prop("url", "Text"),
+        });
+        var (doc, sel, cmd) = Setup(schema);
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.FindAll("[data-testid=exprb-btn-url]").Should().BeEmpty(because: "the ƒx breakout is for expression fields~");
+        cut.Find("[data-testid=exprb-btn-condition]").Click();
+        cut.Find("[data-testid=exprb-condition]").TextContent.Should().Contain("{{Variable.count}}").And.Contain("Hints");
+    }
+
+    [Fact]
     public void TokenPicker_Hidden_WhenNoOptions()
     {
         var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text") });

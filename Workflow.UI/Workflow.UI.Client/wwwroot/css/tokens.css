@@ -232,6 +232,13 @@ a.df-link:hover { text-decoration: underline; }
 /* 📤 G6 — outputs summary strip */
 .df-outputs-strip { display: flex; flex-wrap: wrap; gap: var(--df-space-1); }
 .df-outputs-strip__port { padding: 1px var(--df-space-2); border: 1px solid var(--df-border); border-radius: var(--df-radius); background: var(--df-surface-2); font-size: 0.75rem; cursor: default; }
+
+/* ƒx G8 — expression builder modal */
+.df-exprb__builder { margin: var(--df-space-3) 0; }
+.df-exprb__op { max-width: 90px; }
+.df-exprb__hints { margin-bottom: var(--df-space-3); }
+.df-exprb__hint { font-size: 0.78rem; color: var(--df-text-dim); margin: 2px 0; }
+.df-exprb__hint code { color: var(--df-accent); background: var(--df-surface-2); padding: 0 4px; border-radius: 3px; }
 .df-props__multi { color: var(--df-text-dim); padding: var(--df-space-4); }
 .df-required { color: var(--df-state-failed); }
 .df-field-error { color: var(--df-state-failed); font-size: 0.75rem; margin-top: var(--df-space-1); }

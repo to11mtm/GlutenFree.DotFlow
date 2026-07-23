@@ -96,6 +96,12 @@
                         title="Insert a variable or upstream output binding"
                         @onclick="() => tokenPickerOpen = !tokenPickerOpen">{{x}}</button>
             }
+            @if (Property.EditorType == "Expression")
+            {
+                <button type="button" class="df-btn df-btn--small" data-testid="exprb-btn-@Property.Name"
+                        title="Open the expression builder"
+                        @onclick="OpenBuilder">ƒx builder</button>
+            }
         </div>
         @if (tokenPickerOpen && TokenOptions is { Count: > 0 })
         {
@@ -110,6 +116,69 @@
                 }
             </div>
         }
+    }
+
+    @* ƒx G8 — expression builder modal: hints + Variable/input builders. *@
+    @if (builderOpen)
+    {
+        <div class="df-modal-backdrop" data-testid="exprb-@Property.Name" @onclick="() => builderOpen = false">
+            <div class="df-nodemodal" @onclick:stopPropagation="true">
+                <div class="df-props__header">
+                    <strong>ƒx Expression — @Property.DisplayName</strong>
+                    @if (!string.IsNullOrWhiteSpace(Property.Description))
+                    {
+                        <div class="df-props__module">@Property.Description</div>
+                    }
+                </div>
+
+                <textarea class="df-textarea df-input--mono" rows="3" data-testid="exprb-text-@Property.Name"
+                          value="@builderText" @oninput="e => builderText = e.Value?.ToString() ?? string.Empty"></textarea>
+
+                <div class="df-exprb__builder">
+                    <label class="df-label">Build a binding</label>
+                    <div class="df-row">
+                        <select class="df-input" data-testid="exprb-source-@Property.Name" @onchange="e => builderToken = e.Value?.ToString() ?? string.Empty">
+                            <option value="">— source —</option>
+                            @if (TokenOptions is not null)
+                            {
+                                @foreach (var group in TokenOptions.GroupBy(o => o.Category))
+                                {
+                                    <optgroup label="@(group.Key == "Variables" ? "Variables" : "Inputs (upstream outputs)")">
+                                        @foreach (var option in group)
+                                        {
+                                            <option value="@option.Token">@option.Label</option>
+                                        }
+                                    </optgroup>
+                                }
+                            }
+                        </select>
+                        <select class="df-input df-exprb__op" data-testid="exprb-op-@Property.Name" @onchange="e => builderOp = e.Value?.ToString()">
+                            @foreach (var op in ExpressionBuilder.Operators)
+                            {
+                                <option value="@op">@op</option>
+                            }
+                        </select>
+                        <input class="df-input" placeholder="value" data-testid="exprb-value-@Property.Name"
+                               value="@builderValue" @oninput="e => builderValue = e.Value?.ToString()" />
+                        <button type="button" class="df-btn" data-testid="exprb-insert-@Property.Name" @onclick="InsertBuilt">Insert</button>
+                    </div>
+                    <div class="df-field-help">Strings are auto-quoted; numbers and true/false stay raw.</div>
+                </div>
+
+                <div class="df-exprb__hints">
+                    <label class="df-label">Hints</label>
+                    @foreach (var (example, meaning) in ExpressionBuilder.Hints)
+                    {
+                        <div class="df-exprb__hint"><code>@example</code> — @meaning</div>
+                    }
+                </div>
+
+                <div class="df-row">
+                    <button type="button" class="df-btn df-btn--primary" data-testid="exprb-apply-@Property.Name" @onclick="ApplyBuilder">Apply</button>
+                    <button type="button" class="df-btn" data-testid="exprb-cancel-@Property.Name" @onclick="() => builderOpen = false">Cancel</button>
+                </div>
+            </div>
+        </div>
     }
 </div>
 
@@ -126,6 +195,39 @@
     public IReadOnlyList<VariableTokens.TokenOption>? TokenOptions { get; set; }
 
     private bool SupportsTokens => this.Property.EditorType is "Text" or "Expression" or "MultilineText" or "FilePath" or "DirectoryPath";
+
+    // ƒx G8 — expression builder modal state.
+    private bool builderOpen;
+    private string builderText = string.Empty;
+    private string builderToken = string.Empty;
+    private string? builderOp = ExpressionBuilder.NoOperator;
+    private string? builderValue;
+
+    private void OpenBuilder()
+    {
+        this.builderText = JsonValues.ToText(this.Value);
+        this.builderToken = string.Empty;
+        this.builderOp = ExpressionBuilder.NoOperator;
+        this.builderValue = null;
+        this.builderOpen = true;
+    }
+
+    private void InsertBuilt()
+    {
+        if (string.IsNullOrEmpty(this.builderToken))
+        {
+            return;
+        }
+
+        var composed = ExpressionBuilder.Compose(this.builderToken, this.builderOp, this.builderValue);
+        this.builderText = string.IsNullOrEmpty(this.builderText) ? composed : this.builderText + composed;
+    }
+
+    private Task ApplyBuilder()
+    {
+        this.builderOpen = false;
+        return this.ValueChanged.InvokeAsync(JsonValues.FromString(this.builderText));
+    }
 
     private Task InsertToken(VariableTokens.TokenOption option)
     {
