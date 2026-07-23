@@ -75,9 +75,9 @@ public sealed class FanOutModule : IWorkflowModule
             PortDefinition.Create<int>("count", isRequired: false),
             PortDefinition.Create<object>("done", isRequired: false)),
         Properties: Arr.create(
-            ModulePropertyDefinition.Create<object>("items", isRequired: false),
-            ModulePropertyDefinition.Create<int>("maxDegreeOfParallelism", isRequired: false),
-            ModulePropertyDefinition.Create<bool>("failFast", isRequired: false)));
+            new ModulePropertyDefinition("items", "Items", typeof(object), "Static items to fan out over (input port wins when connected)~ 📦", false, null, PropertyEditorType.Json),
+            new ModulePropertyDefinition("maxDegreeOfParallelism", "Max Parallelism", typeof(int), "Cap on concurrently running branches (unset = unbounded)~ 🚦", false, null, PropertyEditorType.Number),
+            new ModulePropertyDefinition("failFast", "Fail Fast", typeof(bool), "Stop all branches as soon as one fails (default false)~ ⚡", false, false, PropertyEditorType.Boolean)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)

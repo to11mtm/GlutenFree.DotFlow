@@ -1,8 +1,8 @@
 window.dotflowCanvas = {
     measure: function (el) {
-        if (!el) { return { width: 0, height: 0 }; }
+        if (!el) { return { width: 0, height: 0, left: 0, top: 0 }; }
         const r = el.getBoundingClientRect();
-        return { width: r.width, height: r.height };
+        return { width: r.width, height: r.height, left: r.left, top: r.top };
     }
 };
 

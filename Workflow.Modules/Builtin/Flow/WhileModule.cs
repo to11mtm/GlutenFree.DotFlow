@@ -77,9 +77,9 @@ public sealed class WhileModule : IWorkflowModule
             PortDefinition.Create<object>("errors", isRequired: false),
             PortDefinition.Create<object>("done", isRequired: false)),
         Properties: Arr.create(
-            ModulePropertyDefinition.Create<object>("condition", isRequired: false),
-            ModulePropertyDefinition.Create<int>("maxIterations", isRequired: false),
-            ModulePropertyDefinition.Create<bool>("continueOnError", isRequired: false)));
+            new ModulePropertyDefinition("condition", "Condition", typeof(object), "Expression re-evaluated before each iteration; loops while truthy (input port wins)~ 🌀", false, null, PropertyEditorType.Expression),
+            new ModulePropertyDefinition("maxIterations", "Max Iterations", typeof(int), "Safety cap on iterations~ 🧯", false, null, PropertyEditorType.Number),
+            new ModulePropertyDefinition("continueOnError", "Continue On Error", typeof(bool), "Keep iterating when a body iteration fails (default false)~ 🛟", false, false, PropertyEditorType.Boolean)));
 
     // ── Execution ──────────────────────────────────────────────────────────────────────
 

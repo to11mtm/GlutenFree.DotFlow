@@ -44,7 +44,8 @@ html, body {
     border-bottom: 1px solid var(--df-border);
 }
 
-.df-topbar__brand { font-weight: 600; font-size: 1.1rem; }
+.df-topbar__brand { font-weight: 600; font-size: 1.1rem; color: var(--df-text); text-decoration: none; }
+.df-topbar__brand:hover { color: var(--df-accent); }
 .df-topbar__spacer { flex: 1; }
 
 .df-status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -202,8 +203,13 @@ a.df-link:hover { text-decoration: underline; }
 .df-ctxmenu__item:hover { background: var(--df-accent-weak); }
 .df-ctxmenu__item--danger { color: var(--df-state-failed); }
 
-.df-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 950; }
+.df-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 950; }
 .df-modal { background: var(--df-surface); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); min-width: 320px; }
+
+/* 🪟 G5 — expanded node editor (own class names: `.df-modal` is redefined as a backdrop
+   by the monitor styles further down, which pinned this modal to the left half-transparent). */
+.df-nodemodal { background: var(--df-surface); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); width: min(720px, 90vw); max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 12px 48px rgba(0,0,0,0.55); }
+.df-nodemodal__body { overflow-y: auto; flex: 1; min-height: 0; margin: var(--df-space-3) 0; }
 
 /* 🧾 Properties panel */
 .df-designer__props { width: 300px; border-left: 1px solid var(--df-border); overflow-y: auto; background: var(--df-surface); padding: var(--df-space-3); }
@@ -212,6 +218,20 @@ a.df-link:hover { text-decoration: underline; }
 .df-props__version { display: inline-block; margin-top: var(--df-space-1); font-size: 0.7rem; color: var(--df-text-dim); }
 .df-props__conn { padding: var(--df-space-2) var(--df-space-3); background: var(--df-surface-2); border-radius: var(--df-radius); font-size: 0.85rem; word-break: break-word; }
 .df-props__hint { margin: var(--df-space-2) 0 var(--df-space-3); padding: var(--df-space-2) var(--df-space-3); background: var(--df-accent-weak); border-left: 3px solid var(--df-accent); border-radius: var(--df-radius); font-size: 0.8rem; line-height: 1.4; }
+.df-label__info { margin-left: var(--df-space-1); color: var(--df-text-dim); cursor: help; font-size: 0.75rem; }
+.df-field-help { color: var(--df-text-dim); font-size: 0.75rem; line-height: 1.4; margin: 2px 0 var(--df-space-1); }
+
+/* 🔗 G4 — binding token picker + bound badge */
+.df-token-row { display: flex; align-items: center; gap: var(--df-space-2); margin-top: 2px; }
+.df-token-badge { font-size: 0.7rem; color: var(--df-accent); }
+.df-token-list { margin-top: 2px; border: 1px solid var(--df-border); border-radius: var(--df-radius); background: var(--df-surface-2); max-height: 180px; overflow-y: auto; }
+.df-token-list__group { padding: var(--df-space-1) var(--df-space-2); color: var(--df-text-dim); font-size: 0.7rem; text-transform: uppercase; }
+.df-token-list__item { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--df-text); padding: var(--df-space-1) var(--df-space-3); cursor: pointer; font: inherit; font-size: 0.8rem; }
+.df-token-list__item:hover { background: var(--df-accent-weak); }
+
+/* 📤 G6 — outputs summary strip */
+.df-outputs-strip { display: flex; flex-wrap: wrap; gap: var(--df-space-1); }
+.df-outputs-strip__port { padding: 1px var(--df-space-2); border: 1px solid var(--df-border); border-radius: var(--df-radius); background: var(--df-surface-2); font-size: 0.75rem; cursor: default; }
 .df-props__multi { color: var(--df-text-dim); padding: var(--df-space-4); }
 .df-required { color: var(--df-state-failed); }
 .df-field-error { color: var(--df-state-failed); font-size: 0.75rem; margin-top: var(--df-space-1); }
@@ -330,9 +350,9 @@ a.df-link:hover { text-decoration: underline; }
 .df-libbar__item { display: flex; align-items: center; gap: var(--df-space-2); padding: var(--df-space-1) var(--df-space-2); }
 .df-libbar__name { flex: 1; font-size: 0.85rem; }
 .df-btn--small { padding: 1px var(--df-space-2); font-size: 0.72rem; }
-.df-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.df-modal__panel { background: var(--df-surface); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); width: 440px; max-width: 90vw; }
-.df-modal__actions { display: flex; gap: var(--df-space-2); margin-top: var(--df-space-3); }
+.df-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.df-overlay__panel { background: var(--df-surface); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); width: 440px; max-width: 90vw; }
+.df-overlay__actions { display: flex; gap: var(--df-space-2); margin-top: var(--df-space-3); }
 .df-topbar__dirty { color: #e0b341; }
 .df-btn--link { background: none; border: none; color: var(--df-accent); cursor: pointer; padding: var(--df-space-1) 0; text-align: left; font-size: 0.85rem; }
 

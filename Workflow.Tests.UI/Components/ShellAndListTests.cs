@@ -65,6 +65,18 @@ public sealed class ShellAndListTests : TestContext
     }
 
     [Fact]
+    public void TopBar_HasWorkflowsNavigation_BrandAndButton()
+    {
+        var cut = this.RenderComponent<Workflow.UI.Client.Shared.TopBar>();
+        var nav = this.Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+
+        // Brand is a link home; a dedicated Workflows button navigates to the list (G2).
+        cut.Find("[data-testid=nav-brand]").GetAttribute("href").Should().Be("/");
+        cut.Find("[data-testid=nav-workflows]").Click();
+        nav.Uri.Should().EndWith("/");
+    }
+
+    [Fact]
     public void WorkflowList_Empty_ShowsEmptyState()
     {
         var page = new PageDto<WorkflowSummaryDto>(new List<WorkflowSummaryDto>(), 0, 1, 20, 0);

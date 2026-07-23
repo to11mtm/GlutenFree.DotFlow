@@ -1,17 +1,28 @@
 @namespace Workflow.UI.Client.Designer.Components
+@using System.Linq
 @using System.Text.Json
 @using Workflow.UI.Client.Api.Dtos
 @using Workflow.UI.Client.Designer.State
 
 @* ⚙️ Phase 3.3.b.3 — Renders the correct control for a property's EditorType (D6). *@
 <div class="df-field" data-prop="@Property.Name">
-    <label class="df-label">
+    <label class="df-label" title="@Tooltip">
         @Property.DisplayName
         @if (Property.IsRequired)
         {
             <span class="df-required">*</span>
         }
+        @if (!string.IsNullOrWhiteSpace(Property.Description))
+        {
+            <span class="df-label__info" data-testid="info-@Property.Name" title="@Tooltip">ⓘ</span>
+        }
     </label>
+
+    @* Tall editors get a visible helper line — hover tooltips are awkward there (G3/Q3). *@
+    @if (!string.IsNullOrWhiteSpace(Property.Description) && Property.EditorType is "MultilineText" or "Json" or "Code")
+    {
+        <div class="df-field-help" data-testid="help-@Property.Name">@Property.Description</div>
+    }
 
     @switch (Property.EditorType)
     {
@@ -70,14 +81,59 @@
     {
         <div class="df-field-error" data-testid="error-@Property.Name">⚠ @Error</div>
     }
+
+    @* 🔗 G4 — insert-a-binding picker on text-like editors + bound-value badge. *@
+    @if (SupportsTokens)
+    {
+        <div class="df-token-row">
+            @if (VariableTokens.ContainsToken(JsonValues.ToText(Value)))
+            {
+                <span class="df-token-badge" data-testid="bound-@Property.Name" title="Contains a {{…}} binding resolved at run time">🔗 bound</span>
+            }
+            @if (TokenOptions is { Count: > 0 })
+            {
+                <button type="button" class="df-btn df-btn--small" data-testid="token-btn-@Property.Name"
+                        title="Insert a variable or upstream output binding"
+                        @onclick="() => tokenPickerOpen = !tokenPickerOpen">{{x}}</button>
+            }
+        </div>
+        @if (tokenPickerOpen && TokenOptions is { Count: > 0 })
+        {
+            <div class="df-token-list" data-testid="token-list-@Property.Name">
+                @foreach (var group in TokenOptions.GroupBy(o => o.Category))
+                {
+                    <div class="df-token-list__group">@group.Key</div>
+                    @foreach (var option in group)
+                    {
+                        <button type="button" class="df-token-list__item" @onclick="() => InsertToken(option)">@option.Label</button>
+                    }
+                }
+            </div>
+        }
+    }
 </div>
 
 @code {
     private bool jsonInvalid;
+    private bool tokenPickerOpen;
 
     /// <summary>The property schema definition.</summary>
     [Parameter, EditorRequired]
     public ModulePropertyDefinitionDto Property { get; set; } = default!;
+
+    /// <summary>Pickable binding tokens (variables + upstream outputs); null hides the picker.</summary>
+    [Parameter]
+    public IReadOnlyList<VariableTokens.TokenOption>? TokenOptions { get; set; }
+
+    private bool SupportsTokens => this.Property.EditorType is "Text" or "Expression" or "MultilineText" or "FilePath" or "DirectoryPath";
+
+    private Task InsertToken(VariableTokens.TokenOption option)
+    {
+        this.tokenPickerOpen = false;
+        var current = JsonValues.ToText(this.Value);
+        var next = string.IsNullOrEmpty(current) ? option.Token : current + option.Token;
+        return this.ValueChanged.InvokeAsync(JsonValues.FromString(next));
+    }
 
     /// <summary>The current value.</summary>
     [Parameter]
@@ -96,6 +152,25 @@
     public string? Error { get; set; }
 
     private string JsonText => Value.ValueKind == JsonValueKind.Undefined ? string.Empty : Value.GetRawText();
+
+    /// <summary>The hover tooltip: description plus the declared default, when present (G3)~ 💬.</summary>
+    private string? Tooltip
+    {
+        get
+        {
+            var desc = this.Property.Description;
+            var def = this.Property.DefaultValue is JsonElement d && d.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+                ? $"Default: {JsonValues.ToText(d)}"
+                : null;
+            return (desc, def) switch
+            {
+                (null or "", null) => null,
+                (null or "", _) => def,
+                (_, null) => desc,
+                _ => $"{desc}\n{def}",
+            };
+        }
+    }
 
     private IReadOnlyList<string> AllowedOptions
     {

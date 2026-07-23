@@ -100,6 +100,10 @@
     // Fan-in drop zones: the node whose zone the drag cursor is currently over.
     private string? dragArmedNodeId;
 
+    // Cached viewport client-rect origin for target-independent cursor math (G1).
+    private double rectLeft, rectTop;
+    private bool rectKnown;
+
     // Connection drawing.
     private bool connecting;
     private DesignerNode? connectSource;
@@ -136,6 +140,11 @@
         if (this.DragState.DraggingModuleId is null)
         {
             this.dragArmedNodeId = null;
+        }
+        else
+        {
+            // Palette drag began — refresh the viewport rect for dragover math (G1)~
+            _ = this.MeasureAsync();
         }
 
         this.InvokeAsync(this.StateHasChanged);
@@ -258,11 +267,17 @@
     {
         try
         {
-            var size = await JS.InvokeAsync<Size>("dotflowCanvas.measure", this.viewportEl);
+            var size = await JS.InvokeAsync<ViewportRect>("dotflowCanvas.measure", this.viewportEl);
             if (size.Width > 1 && size.Height > 1)
             {
                 this.lastViewW = size.Width;
                 this.lastViewH = size.Height;
+
+                // Cache the viewport's client-space origin: pointer events over child elements
+                // report target-relative offsets, so cursor math uses Client − rect instead~ 🎯
+                this.rectLeft = size.Left;
+                this.rectTop = size.Top;
+                this.rectKnown = true;
                 return (size.Width, size.Height);
             }
         }
@@ -273,6 +288,15 @@
 
         return (1200, 800);
     }
+
+    /// <summary>
+    /// Viewport-relative cursor position. Offset coordinates are relative to the event
+    /// <em>target</em> (a node/port when hovering one), which made the connect ghost and
+    /// rubber band snap to the top-left (G1) — client − viewport-rect is target-independent.
+    /// Falls back to offsets when the rect is unknown (JS unavailable in tests)~ 🎯.
+    /// </summary>
+    private (double X, double Y) ViewportPoint(double clientX, double clientY, double offsetX, double offsetY)
+        => this.rectKnown ? (clientX - this.rectLeft, clientY - this.rectTop) : (offsetX, offsetY);
 
     private Task OnNodePointerDownInternal(DesignerNode node, PointerEventArgs e)
     {
@@ -322,12 +346,16 @@
 
     private Task OnViewportPointerDown(PointerEventArgs e)
     {
+        // Refresh the viewport rect at gesture start (handles scroll/resize since last measure).
+        _ = this.MeasureAsync();
+
         if (this.Selection is not null && e.ShiftKey)
         {
+            var (x, y) = this.ViewportPoint(e.ClientX, e.ClientY, e.OffsetX, e.OffsetY);
             this.rubberBanding = true;
-            this.rubberStartX = e.OffsetX;
-            this.rubberStartY = e.OffsetY;
-            this.rubberBand = new Rect(e.OffsetX, e.OffsetY, 0, 0);
+            this.rubberStartX = x;
+            this.rubberStartY = y;
+            this.rubberBand = new Rect(x, y, 0, 0);
             return Task.CompletedTask;
         }
 
@@ -343,8 +371,7 @@
     {
         if (this.connecting)
         {
-            this.connectCursorX = e.OffsetX;
-            this.connectCursorY = e.OffsetY;
+            (this.connectCursorX, this.connectCursorY) = this.ViewportPoint(e.ClientX, e.ClientY, e.OffsetX, e.OffsetY);
             this.UpdateGhost();
             this.StateHasChanged();
             return;
@@ -381,10 +408,11 @@
 
         if (this.rubberBanding)
         {
-            var x = System.Math.Min(this.rubberStartX, e.OffsetX);
-            var y = System.Math.Min(this.rubberStartY, e.OffsetY);
-            var w = System.Math.Abs(e.OffsetX - this.rubberStartX);
-            var h = System.Math.Abs(e.OffsetY - this.rubberStartY);
+            var (cx, cy) = this.ViewportPoint(e.ClientX, e.ClientY, e.OffsetX, e.OffsetY);
+            var x = System.Math.Min(this.rubberStartX, cx);
+            var y = System.Math.Min(this.rubberStartY, cy);
+            var w = System.Math.Abs(cx - this.rubberStartX);
+            var h = System.Math.Abs(cy - this.rubberStartY);
             this.rubberBand = new Rect(x, y, w, h);
             this.StateHasChanged();
             return;
@@ -480,6 +508,9 @@
     {
         if (this.Commands is not null)
         {
+            // Refresh the viewport rect so the ghost tracks client coordinates (G1)~
+            _ = this.MeasureAsync();
+
             this.connecting = true;
             this.connectSource = node;
             this.connectSourcePort = port;
@@ -570,7 +601,8 @@
             return;
         }
 
-        var canvasPoint = CanvasGeometry.ScreenToCanvas(new Point(e.OffsetX, e.OffsetY), this.Transform);
+        var (x, y) = this.ViewportPoint(e.ClientX, e.ClientY, e.OffsetX, e.OffsetY);
+        var canvasPoint = CanvasGeometry.ScreenToCanvas(new Point(x, y), this.Transform);
         await this.OnDropModule.InvokeAsync((moduleId, canvasPoint));
     }
 
@@ -581,7 +613,8 @@
             return;
         }
 
-        var canvasPoint = CanvasGeometry.ScreenToCanvas(new Point(e.OffsetX, e.OffsetY), this.Transform);
+        var (x, y) = this.ViewportPoint(e.ClientX, e.ClientY, e.OffsetX, e.OffsetY);
+        var canvasPoint = CanvasGeometry.ScreenToCanvas(new Point(x, y), this.Transform);
         var hit = DropZones.HitTestOutputSide(this.Document, canvasPoint)?.Id;
         if (hit != this.dragArmedNodeId)
         {
@@ -618,5 +651,4 @@
         this.StateHasChanged();
     }
 
-    private readonly record struct Size(double Width, double Height);
 }

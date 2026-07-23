@@ -4,7 +4,7 @@
 @inject NavigationManager Nav
 
 <div class="df-topbar">
-    <span class="df-topbar__brand">🌊 DotFlow Designer</span>
+    <a class="df-topbar__brand" href="/" data-testid="nav-brand">🌊 DotFlow Designer</a>
     @if (!string.IsNullOrEmpty(Subtitle))
     {
         <span class="df-topbar__subtitle">@Subtitle</span>
@@ -13,6 +13,7 @@
     @ChildContent
     <span class="df-status-dot @(Auth.HasCredential ? "df-status-dot--ok" : "df-status-dot--idle")"
           title="@(Auth.HasCredential ? "Authenticated" : "No credential")"></span>
+    <button class="df-btn" data-testid="nav-workflows" @onclick="@(() => Nav.NavigateTo("/"))">📋 Workflows</button>
     <button class="df-btn" data-testid="nav-scripts" @onclick="@(() => Nav.NavigateTo("/scripts"))">💻 Scripts</button>
     <button class="df-btn" data-testid="nav-monitor" @onclick="@(() => Nav.NavigateTo("/monitor"))">📡 Monitor</button>
     <button class="df-btn" data-testid="nav-modules" @onclick="@(() => Nav.NavigateTo("/modules"))">📦 Modules</button>

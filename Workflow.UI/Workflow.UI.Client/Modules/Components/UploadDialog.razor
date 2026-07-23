@@ -5,8 +5,8 @@
 
 @* ⬆️ Phase 3.6.2 — Upload a .wfmod package (InputFile + drag-drop) with progress + validation
    feedback (warnings on success, ProblemDetails errors on failure). *@
-<div class="df-modal" data-testid="upload-dialog">
-    <div class="df-modal__panel">
+<div class="df-overlay" data-testid="upload-dialog">
+    <div class="df-overlay__panel">
         <h3>Upload module (.wfmod)</h3>
 
         <label class="df-upload__zone" data-testid="upload-zone">
@@ -48,7 +48,7 @@
             <div class="df-field-error" data-testid="upload-error">✖ @error</div>
         }
 
-        <div class="df-modal__actions">
+        <div class="df-overlay__actions">
             <button class="df-btn df-btn--primary" data-testid="upload-submit" disabled="@(file is null || uploading)" @onclick="Upload">Upload</button>
             <button class="df-btn" data-testid="upload-close" @onclick="() => OnClose.InvokeAsync()">Close</button>
         </div>

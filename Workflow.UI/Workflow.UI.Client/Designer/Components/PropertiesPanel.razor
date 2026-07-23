@@ -32,8 +32,20 @@
                     <option value="ports" selected="@(!OutputShapingUx.IsMerged(SelectedNode))">ports — each output separately</option>
                     <option value="merged" selected="@(OutputShapingUx.IsMerged(SelectedNode))">merged — one 'output' object</option>
                 </select>
+                <div class="df-field-help">changes this node's output ports</div>
             </div>
         }
+
+        @* 📤 G6 — live outputs strip: the node's current output ports (reflects merged/meta). *@
+        <div class="df-field">
+            <label class="df-label">Outputs</label>
+            <div class="df-outputs-strip" data-testid="outputs-strip">
+                @foreach (var port in NodePorts.Outputs(SelectedNode))
+                {
+                    <span class="df-outputs-strip__port" title="@OutputDescriptionFor(port)">@port</span>
+                }
+            </div>
+        </div>
 
         @if (SelectedNode.Schema is { Properties.Count: > 0 } schema)
         {
@@ -43,6 +55,7 @@
                                 Value="@ValueFor(prop.Name)"
                                 CodeLanguage="@CodeLanguageFor()"
                                 Error="@ErrorFor(prop)"
+                                TokenOptions="@NodeTokenOptions"
                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
             }
         }
@@ -54,10 +67,55 @@
         <div class="df-row">
             <button class="df-btn df-btn--primary" data-testid="apply" @onclick="Apply">Apply</button>
             <button class="df-btn" @onclick="Reset">Reset</button>
+            <button class="df-btn" data-testid="expand-editor" title="Edit in a larger window" @onclick="() => modalOpen = true">⤢ Expand</button>
         </div>
         @if (IsScriptNode)
         {
             <button class="df-btn df-btn--link" data-testid="edit-in-studio" @onclick="OpenInScriptStudio">Edit in Script Studio →</button>
+        }
+
+        @* 🪟 G5 — modal node inspector: SAME buffer + Apply as the panel (no divergence). *@
+        @if (modalOpen && SelectedNode is not null)
+        {
+            <div class="df-modal-backdrop" data-testid="node-modal" @onclick="() => modalOpen = false">
+                <div class="df-nodemodal" @onclick:stopPropagation="true">
+                    <div class="df-props__header">
+                        <input class="df-input" @bind="nameBuffer" data-testid="modal-prop-name" />
+                        <div class="df-props__module">@SelectedNode.ModuleId</div>
+                    </div>
+                    <div class="df-field">
+                        <label class="df-label">Outputs</label>
+                        <div class="df-outputs-strip">
+                            @foreach (var port in NodePorts.Outputs(SelectedNode))
+                            {
+                                <span class="df-outputs-strip__port" title="@OutputDescriptionFor(port)">@port</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="df-nodemodal__body">
+                        @if (SelectedNode.Schema is { Properties.Count: > 0 } modalSchema)
+                        {
+                            @foreach (var prop in modalSchema.Properties)
+                            {
+                                <PropertyEditor Property="prop"
+                                                Value="@ValueFor(prop.Name)"
+                                                CodeLanguage="@CodeLanguageFor()"
+                                                Error="@ErrorFor(prop)"
+                                                TokenOptions="@NodeTokenOptions"
+                                                ValueChanged="v => OnValueChanged(prop.Name, v)" />
+                            }
+                        }
+                        else
+                        {
+                            <div class="df-empty">This module has no configurable properties.</div>
+                        }
+                    </div>
+                    <div class="df-row">
+                        <button class="df-btn df-btn--primary" data-testid="modal-apply" @onclick="ApplyAndCloseModal">Apply</button>
+                        <button class="df-btn" data-testid="modal-cancel" @onclick="CancelModal">Cancel</button>
+                    </div>
+                </div>
+            </div>
         }
     }
     else if (SelectedConnection is not null)
@@ -111,6 +169,7 @@
     private string? seededNodeId;
     private readonly Dictionary<string, JsonElement> buffer = new();
     private string nameBuffer = string.Empty;
+    private bool modalOpen;
 
     private string wfName = string.Empty;
     private string? wfDescription;
@@ -141,6 +200,15 @@
             : null;
 
     private string NodeName(string nodeId) => this.Document.FindNode(nodeId)?.Name ?? nodeId;
+
+    /// <summary>🔗 G4 — the binding tokens pickable for the selected node~.</summary>
+    private IReadOnlyList<VariableTokens.TokenOption>? NodeTokenOptions
+        => this.SelectedNode is { } node ? VariableTokens.OptionsFor(this.Document, node.Id) : null;
+
+    /// <summary>📤 G6 — the schema description for an output port (tooltip)~.</summary>
+    private string? OutputDescriptionFor(string port)
+        => this.SelectedNode?.Schema?.Outputs?.FirstOrDefault(p => p.Name == port)?.Description
+           ?? (port == OutputShapingUx.MergedPortName ? "All of this node's outputs as one object" : null);
 
     /// <summary>
     /// 🎚️ Applies the merged-output selection immediately as one undoable property edit
@@ -318,6 +386,20 @@
         {
             this.SeedBuffer(node);
         }
+    }
+
+    /// <summary>🪟 G5 — modal Apply: same command path as the panel, then close~.</summary>
+    private void ApplyAndCloseModal()
+    {
+        this.Apply();
+        this.modalOpen = false;
+    }
+
+    /// <summary>🪟 G5 — modal Cancel: discard buffered edits and close~.</summary>
+    private void CancelModal()
+    {
+        this.Reset();
+        this.modalOpen = false;
     }
 
     private void ApplyConnection()

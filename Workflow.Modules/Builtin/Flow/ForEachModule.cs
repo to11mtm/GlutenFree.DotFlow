@@ -75,9 +75,9 @@ public sealed class ForEachModule : IWorkflowModule
             PortDefinition.Create<object>("errors", isRequired: false),
             PortDefinition.Create<object>("done", isRequired: false)),
         Properties: Arr.create(
-            ModulePropertyDefinition.Create<object>("collection", isRequired: false),
-            ModulePropertyDefinition.Create<int>("maxIterations", isRequired: false),
-            ModulePropertyDefinition.Create<bool>("continueOnError", isRequired: false)));
+            new ModulePropertyDefinition("collection", "Collection", typeof(object), "The items to iterate (input port wins; single value is wrapped)~ 📦", false, null, PropertyEditorType.Json),
+            new ModulePropertyDefinition("maxIterations", "Max Iterations", typeof(int), "Safety cap on iterations~ 🧯", false, null, PropertyEditorType.Number),
+            new ModulePropertyDefinition("continueOnError", "Continue On Error", typeof(bool), "Keep iterating when a body iteration fails (default false)~ 🛟", false, false, PropertyEditorType.Boolean)));
 
     // ── Execution ──────────────────────────────────────────────────────────────────────
 

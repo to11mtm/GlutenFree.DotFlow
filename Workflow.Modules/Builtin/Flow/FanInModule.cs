@@ -92,7 +92,7 @@ public sealed class FanInModule : IWorkflowModule
         Properties: Arr.create(
             new ModulePropertyDefinition("mode", "Mode", typeof(string), "concat (default) / merge / named / first / last~ 🪄", false, "concat", PropertyEditorType.Dropdown, Arr.create<object>("concat", "merge", "named", "first", "last")),
             new ModulePropertyDefinition("meta", "Count/Done Outputs", typeof(string), "separate (default — count/done as their own ports) / embedded (result = { value, count }) / hidden (result only)~ 🎚️", false, "separate", PropertyEditorType.Dropdown, Arr.create<object>("separate", "embedded", "hidden")),
-            ModulePropertyDefinition.Create<TimeSpan>("timeout", isRequired: false)));
+            new ModulePropertyDefinition("timeout", "Timeout", typeof(TimeSpan), "Barrier timeout (declared for forward compatibility; not yet enforced)~ ⏱️", false, null, PropertyEditorType.Text)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)

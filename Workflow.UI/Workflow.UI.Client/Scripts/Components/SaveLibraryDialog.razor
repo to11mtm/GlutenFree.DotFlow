@@ -7,8 +7,8 @@
 @* 💾 Phase 3.4.4 — Save the current editor as a script library: update an open library (PUT same id)
    or save-as-new (id/name/description/language/exportedFunctions). Validation + dependency-cycle
    errors surface from ProblemDetails in the dialog. *@
-<div class="df-modal" data-testid="save-dialog">
-    <div class="df-modal__panel">
+<div class="df-overlay" data-testid="save-dialog">
+    <div class="df-overlay__panel">
         <h3>@(IsUpdate ? $"Update “{ActiveLibrary!.Name}”" : "Save as library")</h3>
 
         <div class="df-field">
@@ -33,7 +33,7 @@
             <div class="df-field-error" data-testid="save-error">@error</div>
         }
 
-        <div class="df-modal__actions">
+        <div class="df-overlay__actions">
             <button class="df-btn df-btn--primary" data-testid="save-confirm" disabled="@saving" @onclick="Save">@(saving ? "Saving…" : "Save")</button>
             @if (IsUpdate)
             {
