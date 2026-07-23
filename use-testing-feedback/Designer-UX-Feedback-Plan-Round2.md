@@ -156,12 +156,15 @@ builders for **Variable** vs **input** sources.
 
 - [x] G8.1 `ExpressionBuilder` state helper (framework-free): operators, `Compose(token, op,
       value)` with auto-quoting (numbers/booleans/pre-quoted stay raw), and the hint catalog.
-- [x] G8.2 `PropertyEditor`: an **ƒx builder** button on `Expression` editors opens a modal —
+- [x] G8.2 `PropertyEditor`: an **ƒx builder** button on every template-supporting editor
+      (`Expression`, `Text`, `MultilineText`, `FilePath`, `DirectoryPath` — anything advertising
+      `{{…}}` support) opens a modal —
       working-copy textarea, a builder row (source dropdown grouped **Variables** /
       **Inputs (upstream outputs)** + comparison operator + value → Insert appends the composed
       `{{…}}`), a syntax hints list, and Apply/Cancel writing through the normal value path.
-- [x] G8.3 Tests: 7 compose unit tests + 2 bUnit flow tests (build+apply round-trip; ƒx only on
-      Expression editors; hints shown).
+      *(Initially Expression-only; broadened 2026-07-23 after user feedback on FilePath fields.)*
+- [x] G8.3 Tests: 7 compose unit tests + 2 bUnit flow tests (build+apply round-trip; ƒx on all
+      template fields but not booleans; hints shown).
 
 ---
 

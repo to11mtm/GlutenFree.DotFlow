@@ -213,20 +213,27 @@ public sealed class PropertiesPanelTests : TestContext
     }
 
     [Fact]
-    public void ExpressionBuilder_ShowsHints_AndOnlyOnExpressionEditors()
+    public void ExpressionBuilder_AvailableOnTemplateFields_WithHints()
     {
+        // Users expect the ƒx breakout on every {{…}}-supporting field (e.g. FilePath — see
+        // "CSV file path. Supports {{Variable.Name}}"), not just Expression editors.
         var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto>
         {
             Prop("condition", "Expression"),
+            Prop("path", "FilePath"),
             Prop("url", "Text"),
+            Prop("enabled", "Boolean"),
         });
         var (doc, sel, cmd) = Setup(schema);
 
         var cut = this.Render(doc, sel, cmd);
 
-        cut.FindAll("[data-testid=exprb-btn-url]").Should().BeEmpty(because: "the ƒx breakout is for expression fields~");
-        cut.Find("[data-testid=exprb-btn-condition]").Click();
-        cut.Find("[data-testid=exprb-condition]").TextContent.Should().Contain("{{Variable.count}}").And.Contain("Hints");
+        cut.FindAll("[data-testid=exprb-btn-path]").Should().ContainSingle();
+        cut.FindAll("[data-testid=exprb-btn-url]").Should().ContainSingle();
+        cut.FindAll("[data-testid=exprb-btn-enabled]").Should().BeEmpty(because: "booleans don't take templates~");
+
+        cut.Find("[data-testid=exprb-btn-path]").Click();
+        cut.Find("[data-testid=exprb-path]").TextContent.Should().Contain("{{Variable.count}}").And.Contain("Hints");
     }
 
     [Fact]

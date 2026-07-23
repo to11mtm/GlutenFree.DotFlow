@@ -96,12 +96,10 @@
                         title="Insert a variable or upstream output binding"
                         @onclick="() => tokenPickerOpen = !tokenPickerOpen">{{x}}</button>
             }
-            @if (Property.EditorType == "Expression")
-            {
-                <button type="button" class="df-btn df-btn--small" data-testid="exprb-btn-@Property.Name"
-                        title="Open the expression builder"
-                        @onclick="OpenBuilder">ƒx builder</button>
-            }
+            @* ƒx available on every template-supporting field (paths/text accept {{…}} too). *@
+            <button type="button" class="df-btn df-btn--small" data-testid="exprb-btn-@Property.Name"
+                    title="Open the expression builder"
+                    @onclick="OpenBuilder">ƒx builder</button>
         </div>
         @if (tokenPickerOpen && TokenOptions is { Count: > 0 })
         {

@@ -56,7 +56,8 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
   **⤢ Expand** opens the same editor in a larger modal. The `{{x}}` button on text
   properties inserts a **binding token** — a workflow variable (`{{Variable.name}}`) or an
   upstream node output (`{{nodeId.port}}`) resolved at run time; bound values show a 🔗 badge.
-  Expression fields additionally get an **ƒx builder** modal: pick a source (variable or
+  Expression fields — and every other template-supporting field (text, paths, multiline) —
+  additionally get an **ƒx builder** modal: pick a source (variable or
   upstream input), an optional comparison operator and value (strings auto-quoted), insert the
   composed expression, with syntax hints alongside.
   Data modules with multiple outputs also get an **Output mode** selector: `ports`
