@@ -185,6 +185,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "use-testing-feedback", "use
 	ProjectSection(SolutionItems) = preProject
 		use-testing-feedback\Designer-and-maybe-output-port-concerns.md = use-testing-feedback\Designer-and-maybe-output-port-concerns.md
 		use-testing-feedback\Designer-UX-Feedback-Plan.md = use-testing-feedback\Designer-UX-Feedback-Plan.md
+		use-testing-feedback\Designer-module-option-editor-concerns.md = use-testing-feedback\Designer-module-option-editor-concerns.md
+		use-testing-feedback\Designer-UX-Feedback-Plan-Round2.md = use-testing-feedback\Designer-UX-Feedback-Plan-Round2.md
 	EndProjectSection
 EndProject
 Global
