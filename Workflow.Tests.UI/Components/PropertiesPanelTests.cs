@@ -267,6 +267,38 @@ public sealed class PropertiesPanelTests : TestContext
     }
 
     [Fact]
+    public void SqlParams_AccessibleFromExpandedModal()
+    {
+        // G9 follow-up: the 🛡️ builder is reachable from the ⤢ Expand modal too.
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto>
+        {
+            new("query", "Query (SQL)", "String", null, true, null, "Code", null),
+            new("parameters", "Parameters", "Object", null, false, null, "Json", null),
+        });
+        var (doc, sel, cmd) = Setup(schema);
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.Find("[data-testid=expand-editor]").Click();
+        cut.Find("[data-testid=modal-sqlparams-btn]").Click();
+
+        // Both modals coexist; the SQL-params one is on top and fully functional.
+        cut.Find("[data-testid=node-modal]").Should().NotBeNull();
+        cut.Find("[data-testid=sqlparams-modal]").ClassList.Should().Contain("df-modal-backdrop--top");
+
+        cut.Find("[data-testid=sqlparam-name]").Input("id");
+        cut.Find("[data-testid=sqlparam-value]").Input("7");
+        cut.Find("[data-testid=sqlparam-add]").Click();
+        cut.Find("[data-testid=sqlparams-close]").Click();
+
+        // Apply from the expanded modal commits both buffered properties.
+        cut.Find("[data-testid=modal-apply]").Click();
+        var node = doc.FindNode("n1")!;
+        JsonValues.ToText(node.Properties["query"]).Should().Contain("@id");
+        node.Properties["parameters"].GetProperty("id").GetInt32().Should().Be(7);
+    }
+
+    [Fact]
     public void SqlParams_Button_AbsentOnNonSqlNodes()
     {
         var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text") });
