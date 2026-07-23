@@ -68,10 +68,65 @@
             <button class="df-btn df-btn--primary" data-testid="apply" @onclick="Apply">Apply</button>
             <button class="df-btn" @onclick="Reset">Reset</button>
             <button class="df-btn" data-testid="expand-editor" title="Edit in a larger window" @onclick="() => modalOpen = true">⤢ Expand</button>
+            @if (SqlPropertyName is not null)
+            {
+                <button class="df-btn" data-testid="sqlparams-btn" title="Safely bind values as SQL parameters" @onclick="OpenSqlParams">🛡️ SQL parameters</button>
+            }
         </div>
         @if (IsScriptNode)
         {
             <button class="df-btn df-btn--link" data-testid="edit-in-studio" @onclick="OpenInScriptStudio">Edit in Script Studio →</button>
+        }
+
+        @* 🛡️ G9 — safe SQL parameter builder: values bind as parameters, never concatenated (D7). *@
+        @if (sqlParamsOpen && SqlPropertyName is { } sqlProp)
+        {
+            <div class="df-modal-backdrop df-modal-backdrop--top" data-testid="sqlparams-modal" @onclick="() => sqlParamsOpen = false">
+                <div class="df-nodemodal" @onclick:stopPropagation="true">
+                    <div class="df-props__header">
+                        <strong>🛡️ SQL parameters — @SelectedNode.Name</strong>
+                        <div class="df-props__module">SQL is verbatim (never template-expanded). Put values here — they bind as parameters, never concatenated into the SQL.</div>
+                    </div>
+
+                    <label class="df-label">Current parameters</label>
+                    @{ var entries = SqlParams.Parse(BufferedParameters); }
+                    @if (entries.Count == 0)
+                    {
+                        <div class="df-field-help">None yet — add one below, then reference it in the SQL as <code>@("@name")</code>.</div>
+                    }
+                    else
+                    {
+                        @foreach (var (name, value) in entries)
+                        {
+                            <div class="df-sqlparams__row" data-testid="sqlparam-@name">
+                                <code>@SqlParams.Placeholder(name)</code>
+                                <span class="df-sqlparams__value">@value</span>
+                                <button type="button" class="df-btn df-btn--small" title="Insert the placeholder into the SQL"
+                                        @onclick="() => InsertSqlPlaceholder(name)">insert @("@" + name)</button>
+                                <button type="button" class="df-btn df-btn--small df-btn--danger" data-testid="sqlparam-remove-@name"
+                                        @onclick="() => RemoveSqlParam(name)">✕</button>
+                            </div>
+                        }
+                    }
+
+                    <label class="df-label">Add a parameter</label>
+                    <div class="df-row">
+                        <input class="df-input" placeholder="name" data-testid="sqlparam-name"
+                               value="@sqlParamName" @oninput="e => sqlParamName = e.Value?.ToString()" />
+                        <input class="df-input" placeholder="value (number / true / false / text)" data-testid="sqlparam-value"
+                               value="@sqlParamValue" @oninput="e => sqlParamValue = e.Value?.ToString()" />
+                        <button type="button" class="df-btn df-btn--primary" data-testid="sqlparam-add" @onclick="AddSqlParam">Add + insert</button>
+                    </div>
+                    <div class="df-field-help">
+                        Adds <code>"name": value</code> to the Parameters map and appends <code>@("@name")</code> to the SQL.
+                        Numbers and true/false stay typed; everything else binds as text. Never paste values into the SQL itself.
+                    </div>
+
+                    <div class="df-row">
+                        <button type="button" class="df-btn" data-testid="sqlparams-close" @onclick="() => sqlParamsOpen = false">Close</button>
+                    </div>
+                </div>
+            </div>
         }
 
         @* 🪟 G5 — modal node inspector: SAME buffer + Apply as the panel (no divergence). *@
@@ -113,6 +168,10 @@
                     <div class="df-row">
                         <button class="df-btn df-btn--primary" data-testid="modal-apply" @onclick="ApplyAndCloseModal">Apply</button>
                         <button class="df-btn" data-testid="modal-cancel" @onclick="CancelModal">Cancel</button>
+                        @if (SqlPropertyName is not null)
+                        {
+                            <button class="df-btn" data-testid="modal-sqlparams-btn" title="Safely bind values as SQL parameters" @onclick="OpenSqlParams">🛡️ SQL parameters</button>
+                        }
                     </div>
                 </div>
             </div>
@@ -170,6 +229,11 @@
     private readonly Dictionary<string, JsonElement> buffer = new();
     private string nameBuffer = string.Empty;
     private bool modalOpen;
+
+    // 🛡️ G9 — SQL parameter builder state.
+    private bool sqlParamsOpen;
+    private string? sqlParamName;
+    private string? sqlParamValue;
 
     private string wfName = string.Empty;
     private string? wfDescription;
@@ -401,6 +465,54 @@
         this.Reset();
         this.modalOpen = false;
     }
+
+    // ─── 🛡️ G9 — SQL parameter builder ─────────────────────────────────────────
+
+    /// <summary>The node's verbatim-SQL property name, or null when not a SQL node~ 🔍.</summary>
+    private string? SqlPropertyName => SqlParams.FindSqlProperty(this.SelectedNode?.Schema);
+
+    private JsonElement? BufferedParameters
+        => this.buffer.TryGetValue(SqlParams.ParametersProperty, out var v) ? v : null;
+
+    private void OpenSqlParams()
+    {
+        this.sqlParamName = null;
+        this.sqlParamValue = null;
+        this.sqlParamsOpen = true;
+    }
+
+    /// <summary>Adds the parameter to the buffered map and appends its placeholder to the SQL~ 🧷.</summary>
+    private void AddSqlParam()
+    {
+        var name = SqlParams.SanitizeName(this.sqlParamName);
+        if (name is null || this.SqlPropertyName is not { } sqlProp)
+        {
+            return;
+        }
+
+        this.buffer[SqlParams.ParametersProperty] = SqlParams.Upsert(this.BufferedParameters, name, this.sqlParamValue ?? string.Empty);
+        this.InsertSqlPlaceholder(name);
+        this.sqlParamName = null;
+        this.sqlParamValue = null;
+    }
+
+    private void InsertSqlPlaceholder(string name)
+    {
+        if (this.SqlPropertyName is not { } sqlProp)
+        {
+            return;
+        }
+
+        var sql = this.buffer.TryGetValue(sqlProp, out var v) ? JsonValues.ToText(v) : string.Empty;
+        var placeholder = SqlParams.Placeholder(name);
+        if (!sql.Contains(placeholder, StringComparison.Ordinal))
+        {
+            this.buffer[sqlProp] = JsonValues.FromString(string.IsNullOrEmpty(sql) ? placeholder : sql + " " + placeholder);
+        }
+    }
+
+    private void RemoveSqlParam(string name)
+        => this.buffer[SqlParams.ParametersProperty] = SqlParams.Remove(this.BufferedParameters, name);
 
     private void ApplyConnection()
     {

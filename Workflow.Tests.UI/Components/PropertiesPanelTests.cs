@@ -237,6 +237,47 @@ public sealed class PropertiesPanelTests : TestContext
     }
 
     [Fact]
+    public void SqlParams_AddInsertsPlaceholder_AndApplyCommits()
+    {
+        // G9: DB-shaped node (Code query + Json parameters) gets the 🛡️ builder.
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto>
+        {
+            new("query", "Query (SQL)", "String", "Verbatim SELECT SQL", true, null, "Code", null),
+            new("parameters", "Parameters", "Object", "Named SQL parameters", false, null, "Json", null),
+        });
+        var (doc, sel, cmd) = Setup(schema);
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.Find("[data-testid=sqlparams-btn]").Click();
+        cut.Find("[data-testid=sqlparams-modal]").Should().NotBeNull();
+
+        cut.Find("[data-testid=sqlparam-name]").Input("@id");
+        cut.Find("[data-testid=sqlparam-value]").Input("42");
+        cut.Find("[data-testid=sqlparam-add]").Click();
+
+        // Listed with sanitized name; close + apply commits both properties.
+        cut.Find("[data-testid=sqlparam-id]").TextContent.Should().Contain("@id").And.Contain("42");
+        cut.Find("[data-testid=sqlparams-close]").Click();
+        cut.Find("[data-testid=apply]").Click();
+
+        var node = doc.FindNode("n1")!;
+        JsonValues.ToText(node.Properties["query"]).Should().Contain("@id");
+        node.Properties["parameters"].GetProperty("id").GetInt32().Should().Be(42);
+    }
+
+    [Fact]
+    public void SqlParams_Button_AbsentOnNonSqlNodes()
+    {
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text") });
+        var (doc, sel, cmd) = Setup(schema);
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.FindAll("[data-testid=sqlparams-btn]").Should().BeEmpty();
+    }
+
+    [Fact]
     public void TokenPicker_Hidden_WhenNoOptions()
     {
         var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text") });

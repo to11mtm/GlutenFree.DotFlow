@@ -168,6 +168,32 @@ builders for **Variable** vs **input** sources.
 
 ---
 
+## G9 — Safe SQL parameter builder 🛡️ (follow-up, 2026-07-23)
+
+**Ask.** A similar assisted interface guaranteeing **safe parameters in SQL** (Database Query's
+"Verbatim SELECT SQL. NOT template-expanded (D7) — use parameters for values").
+
+**Finding.** SQL properties (`query`/`command`, `Code` editors) are deliberately never
+template-expanded; values bind through the sibling `parameters` JSON map (`@name` placeholders,
+`SqlParameterBinder` — mandatory parameterisation, no concatenation). Also verified: the binder
+resolves `{{…}}` only in **top-level string** properties, so tokens nested inside the parameters
+JSON would NOT resolve — the builder therefore produces **typed literals**, the supported path.
+
+**Resolution (implemented).**
+
+- [x] G9.1 `SqlParams` state helper (framework-free): SQL-node detection (`Code` property named
+      query/command/sql + `parameters` Json map), name sanitising (strips `@:?`/invalid chars),
+      `@name` placeholders, typed `Upsert`/`Remove`/`Parse` (numbers & booleans stay typed).
+- [x] G9.2 PropertiesPanel: a **🛡️ SQL parameters** button on SQL-shaped nodes opens a modal —
+      lists current parameters (insert-placeholder / remove per row), an add row
+      (name + value → **Add + insert** upserts the map *and* appends `@name` to the SQL buffer),
+      and D7 safety hints ("never paste values into the SQL"). Buffer-based; the panel's Apply
+      commits both properties as usual.
+- [x] G9.3 Tests: 5 `SqlParams` unit tests + 2 bUnit flow tests (add→placeholder→apply
+      round-trip; button absent on non-SQL nodes).
+
+---
+
 ## Questions — RESOLVED ✅ (2026-07-23)
 
 - [x] **Q1 (G4):** Should the variable picker also offer `{{NodeId.Output}}` upstream-output

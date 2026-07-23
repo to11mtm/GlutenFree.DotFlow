@@ -204,6 +204,7 @@ a.df-link:hover { text-decoration: underline; }
 .df-ctxmenu__item--danger { color: var(--df-state-failed); }
 
 .df-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 950; }
+.df-modal-backdrop--top { z-index: 960; } /* stacks above another open modal (e.g. 🛡️ from ⤢ Expand) */
 .df-modal { background: var(--df-surface); border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); min-width: 320px; }
 
 /* 🪟 G5 — expanded node editor (own class names: `.df-modal` is redefined as a backdrop
@@ -239,6 +240,11 @@ a.df-link:hover { text-decoration: underline; }
 .df-exprb__hints { margin-bottom: var(--df-space-3); }
 .df-exprb__hint { font-size: 0.78rem; color: var(--df-text-dim); margin: 2px 0; }
 .df-exprb__hint code { color: var(--df-accent); background: var(--df-surface-2); padding: 0 4px; border-radius: 3px; }
+
+/* 🛡️ G9 — SQL parameter builder */
+.df-sqlparams__row { display: flex; align-items: center; gap: var(--df-space-2); padding: var(--df-space-1) 0; font-size: 0.85rem; }
+.df-sqlparams__row code { color: var(--df-accent); }
+.df-sqlparams__value { flex: 1; color: var(--df-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .df-props__multi { color: var(--df-text-dim); padding: var(--df-space-4); }
 .df-required { color: var(--df-state-failed); }
 .df-field-error { color: var(--df-state-failed); font-size: 0.75rem; margin-top: var(--df-space-1); }

@@ -59,7 +59,10 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
   Expression fields — and every other template-supporting field (text, paths, multiline) —
   additionally get an **ƒx builder** modal: pick a source (variable or
   upstream input), an optional comparison operator and value (strings auto-quoted), insert the
-  composed expression, with syntax hints alongside.
+  composed expression, with syntax hints alongside. Database nodes additionally get a
+  **🛡️ SQL parameters** builder: SQL text is verbatim (never template-expanded), so the modal
+  adds typed values to the `parameters` map and inserts the matching `@name` placeholder into
+  the SQL — values always bind as parameters, never concatenated.
   Data modules with multiple outputs also get an **Output mode** selector: `ports`
   (default — each output as its own port) or `merged` (one **`output`** port carrying an
   object of all outputs — the canvas collapses the node's ports accordingly).
