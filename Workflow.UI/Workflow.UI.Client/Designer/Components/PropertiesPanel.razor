@@ -101,6 +101,11 @@
                             <div class="df-sqlparams__row" data-testid="sqlparam-@name">
                                 <code>@SqlParams.Placeholder(name)</code>
                                 <span class="df-sqlparams__value">@value</span>
+                                @if (VariableTokens.ContainsToken(value))
+                                {
+                                    <span class="df-token-badge" data-testid="sqlparam-bound-@name"
+                                          title="Bound at run time to the referenced variable / upstream output">🔗 bound</span>
+                                }
                                 <button type="button" class="df-btn df-btn--small" title="Insert the placeholder into the SQL"
                                         @onclick="() => InsertSqlPlaceholder(name)">insert @("@" + name)</button>
                                 <button type="button" class="df-btn df-btn--small df-btn--danger" data-testid="sqlparam-remove-@name"
@@ -113,13 +118,32 @@
                     <div class="df-row">
                         <input class="df-input" placeholder="name" data-testid="sqlparam-name"
                                value="@sqlParamName" @oninput="e => sqlParamName = e.Value?.ToString()" />
-                        <input class="df-input" placeholder="value (number / true / false / text)" data-testid="sqlparam-value"
+                        <input class="df-input" placeholder="value — literal or {{binding}}" data-testid="sqlparam-value"
                                value="@sqlParamValue" @oninput="e => sqlParamValue = e.Value?.ToString()" />
                         <button type="button" class="df-btn df-btn--primary" data-testid="sqlparam-add" @onclick="AddSqlParam">Add + insert</button>
                     </div>
+                    @if (NodeTokenOptions is { Count: > 0 })
+                    {
+                        <div class="df-row">
+                            <select class="df-input" data-testid="sqlparam-bind-source" @onchange="OnSqlParamBindSource">
+                                <option value="">🔗 …or bind the value from a variable / input</option>
+                                @foreach (var group in NodeTokenOptions.GroupBy(o => o.Category))
+                                {
+                                    <optgroup label="@(group.Key == "Variables" ? "Variables" : "Inputs (upstream outputs)")">
+                                        @foreach (var option in group)
+                                        {
+                                            <option value="@option.Token">@option.Label</option>
+                                        }
+                                    </optgroup>
+                                }
+                            </select>
+                        </div>
+                    }
                     <div class="df-field-help">
                         Adds <code>"name": value</code> to the Parameters map and appends <code>@("@name")</code> to the SQL.
-                        Numbers and true/false stay typed; everything else binds as text. Never paste values into the SQL itself.
+                        Literals: numbers and true/false stay typed, everything else binds as text.
+                        Bindings like <code>{{Variable.customerId}}</code> or <code>{{http-1.body}}</code> resolve at
+                        run time — either way the value binds as a parameter, never concatenated into the SQL.
                     </div>
 
                     <div class="df-row">
@@ -513,6 +537,25 @@
 
     private void RemoveSqlParam(string name)
         => this.buffer[SqlParams.ParametersProperty] = SqlParams.Remove(this.BufferedParameters, name);
+
+    /// <summary>🔗 Fills the value with a binding token (and suggests a name from it)~.</summary>
+    private void OnSqlParamBindSource(ChangeEventArgs e)
+    {
+        var token = e.Value?.ToString();
+        if (string.IsNullOrEmpty(token))
+        {
+            return;
+        }
+
+        this.sqlParamValue = token;
+        if (string.IsNullOrWhiteSpace(this.sqlParamName))
+        {
+            // {{Variable.customerId}} → customerId; {{http-1.body}} → body.
+            var inner = ExpressionBuilder.InnerOf(token);
+            var lastDot = inner.LastIndexOf('.');
+            this.sqlParamName = SqlParams.SanitizeName(lastDot >= 0 ? inner[(lastDot + 1)..] : inner);
+        }
+    }
 
     private void ApplyConnection()
     {

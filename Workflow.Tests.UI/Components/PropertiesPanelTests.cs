@@ -299,6 +299,37 @@ public sealed class PropertiesPanelTests : TestContext
     }
 
     [Fact]
+    public void SqlParams_BindFromInput_FillsValueAndName_ShowsBadge()
+    {
+        // G9b: the "bind from" picker fills the value with a {{token}} (+ suggested name),
+        // and the row shows a 🔗 badge — the intuitive path to "use an input as a parameter".
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto>
+        {
+            new("query", "Query (SQL)", "String", null, true, null, "Code", null),
+            new("parameters", "Parameters", "Object", null, false, null, "Json", null),
+        });
+        var (doc, sel, cmd) = Setup(schema);
+        doc.Nodes.Add(new DesignerNode { Id = "http-1", ModuleId = "builtin.log", Name = "Fetch", X = 0, Y = 0 });
+        doc.Connections.Add(new DesignerConnection { SourceNodeId = "http-1", SourcePortName = "output", TargetNodeId = "n1", TargetPortName = "input" });
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.Find("[data-testid=sqlparams-btn]").Click();
+        cut.Find("[data-testid=sqlparam-bind-source]").Change("{{http-1.output}}");
+
+        cut.Find("[data-testid=sqlparam-value]").GetAttribute("value").Should().Be("{{http-1.output}}");
+        cut.Find("[data-testid=sqlparam-name]").GetAttribute("value").Should().Be("output", because: "a name is suggested from the token~");
+
+        cut.Find("[data-testid=sqlparam-add]").Click();
+        cut.Find("[data-testid=sqlparam-bound-output]").TextContent.Should().Contain("bound");
+
+        // Apply commits the token as the parameter value (resolved server-side at run time).
+        cut.Find("[data-testid=sqlparams-close]").Click();
+        cut.Find("[data-testid=apply]").Click();
+        doc.FindNode("n1")!.Properties["parameters"].GetProperty("output").GetString().Should().Be("{{http-1.output}}");
+    }
+
+    [Fact]
     public void SqlParams_Button_AbsentOnNonSqlNodes()
     {
         var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text") });

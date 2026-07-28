@@ -149,7 +149,7 @@ Runs a parameterised SELECT and returns fully-materialised rows (D8 — no open 
 |----------|------|---------|-------|
 | `connectionId` / `connectionString` + `provider` | string | — | Connection source (one of) |
 | `query` | string | — | **Required.** Verbatim SQL — never template-expanded (D7) |
-| `parameters` | map | — | Named params (name→value) |
+| `parameters` | map | — | Named params (name→value). String values may be `{{Variable.x}}` / `{{nodeId.port}}` bindings — resolved at run time, then bound as parameters (never concatenated) |
 | `timeoutSeconds` | int | `30` | Command timeout |
 | `commandType` | string | `"text"` | `"storedProcedure"` deferred to 2.4.a.P1 |
 

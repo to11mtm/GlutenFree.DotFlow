@@ -62,7 +62,9 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
   composed expression, with syntax hints alongside. Database nodes additionally get a
   **🛡️ SQL parameters** builder: SQL text is verbatim (never template-expanded), so the modal
   adds typed values to the `parameters` map and inserts the matching `@name` placeholder into
-  the SQL — values always bind as parameters, never concatenated.
+  the SQL — values always bind as parameters, never concatenated. Parameter values can also be
+  **bound** from a workflow variable or upstream input (a "🔗 bind from" picker inserts
+  `{{Variable.x}}` / `{{nodeId.port}}`, resolved at run time before parameter binding).
   Data modules with multiple outputs also get an **Output mode** selector: `ports`
   (default — each output as its own port) or `merged` (one **`output`** port carrying an
   object of all outputs — the canvas collapses the node's ports accordingly).

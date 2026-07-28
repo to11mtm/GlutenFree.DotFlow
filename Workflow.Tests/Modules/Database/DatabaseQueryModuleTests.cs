@@ -1,4 +1,4 @@
-// <copyright file="DatabaseQueryModuleTests.cs" company="GlutenFree">
+﻿// <copyright file="DatabaseQueryModuleTests.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -139,6 +139,66 @@ public sealed class DatabaseQueryModuleTests : IDisposable
         result.Outputs["rowCount"].Should().Be(1);
         var rows = (IReadOnlyList<IReadOnlyDictionary<string, object?>>)result.Outputs["rows"]!;
         rows[0]["name"].Should().Be("bob");
+    }
+
+    /// <summary>🔗 UX G9b — a parameter value of <c>{{Variable.x}}</c> resolves and binds typed~.</summary>
+    [Fact]
+    public async Task ParameterValue_VariableBinding_ResolvesAndBinds()
+    {
+        this.Seed();
+        var ctx = this.BuildContext(
+            new Dictionary<string, object?>
+            {
+                ["connectionId"] = "TestDb",
+                ["query"] = "SELECT id, name FROM users WHERE id = @id",
+                ["parameters"] = new Dictionary<string, object?> { ["id"] = "{{Variable.targetId}}" },
+            },
+            variables: new Dictionary<string, object?> { ["targetId"] = 3 });
+
+        var result = await this.module.ExecuteAsync(ctx, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Outputs["rowCount"].Should().Be(1);
+        var rows = (IReadOnlyList<IReadOnlyDictionary<string, object?>>)result.Outputs["rows"]!;
+        rows[0]["name"].Should().Be("carol");
+    }
+
+    /// <summary>🔗 UX G9b — a parameter bound to an upstream output (<c>{{nodeId.port}}</c>) resolves~.</summary>
+    [Fact]
+    public async Task ParameterValue_UpstreamInputBinding_Resolves()
+    {
+        this.Seed();
+        var ctx = this.BuildContext(
+            new Dictionary<string, object?>
+            {
+                ["connectionId"] = "TestDb",
+                ["query"] = "SELECT id, name FROM users WHERE name = @who",
+                ["parameters"] = new Dictionary<string, object?> { ["who"] = "{{http-1.body}}" },
+            },
+            inputs: new Dictionary<string, object?> { ["http-1.body"] = "alice" });
+
+        var result = await this.module.ExecuteAsync(ctx, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Outputs["rowCount"].Should().Be(1);
+    }
+
+    /// <summary>🔗 UX G9b — an unresolvable binding fails crisply, not silently as literal text~.</summary>
+    [Fact]
+    public async Task ParameterValue_UnresolvableBinding_FailsWithClearError()
+    {
+        this.Seed();
+        var ctx = this.BuildContext(new Dictionary<string, object?>
+        {
+            ["connectionId"] = "TestDb",
+            ["query"] = "SELECT id FROM users WHERE id = @id",
+            ["parameters"] = new Dictionary<string, object?> { ["id"] = "{{Variable.nope}}" },
+        });
+
+        var result = await this.module.ExecuteAsync(ctx, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("nope").And.Contain("not found");
     }
 
     [Fact]
@@ -289,12 +349,15 @@ public sealed class DatabaseQueryModuleTests : IDisposable
         db.Execute("INSERT INTO users (id, name) VALUES (1, 'alice'), (2, 'bob'), (3, 'carol')");
     }
 
-    private ModuleExecutionContext BuildContext(Dictionary<string, object?> properties)
+    private ModuleExecutionContext BuildContext(
+        Dictionary<string, object?> properties,
+        Dictionary<string, object?>? inputs = null,
+        Dictionary<string, object?>? variables = null)
         => new()
         {
-            Inputs = new Dictionary<string, object?>(),
+            Inputs = inputs ?? new Dictionary<string, object?>(),
             Properties = properties,
-            Variables = new Dictionary<string, object?>(),
+            Variables = variables ?? new Dictionary<string, object?>(),
             Logger = NullLogger.Instance,
             Services = new FactoryServiceProvider(this.BuildFactory()),
             ExecutionId = Guid.NewGuid(),

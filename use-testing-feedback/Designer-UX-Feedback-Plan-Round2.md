@@ -191,6 +191,17 @@ JSON would NOT resolve — the builder therefore produces **typed literals**, th
       commits both properties as usual.
 - [x] G9.3 Tests: 5 `SqlParams` unit tests + 2 bUnit flow tests (add→placeholder→apply
       round-trip; button absent on non-SQL nodes).
+- [x] G9.4 (follow-up 2026-07-28) **Bind parameter values from variables / inputs.** Users
+      couldn't see how to use an input's value as a parameter — and tokens in parameter values
+      didn't even resolve (the engine's PropertyBinder only template-expands module *inputs*,
+      never properties). Added `SqlParameterTemplateResolver` (Workflow.Modules.Database):
+      resolves `{{Variable.x}}` / `{{nodeId.port}}` in parameter **values** (whole-token →
+      typed value; embedded → interpolated; unresolved → crisp `SqlParameterBindingException`),
+      wired into Query + Execute between `Normalize` and `Bind` — so bound values still go
+      through `DataParameter`s, never concatenated (D7). Modal gained a **"🔗 …or bind the value
+      from a variable / input"** picker (fills value with the token + suggests the name) and a
+      🔗 badge on bound rows. 4 module tests + 1 bUnit test. *(Transaction/BulkInsert parameter
+      maps not yet wired — follow-up if requested.)*
 
 ---
 

@@ -193,8 +193,13 @@ public sealed class DatabaseExecuteModule : IWorkflowModule
         DataParameter[] parameters;
         try
         {
+            // 🔗 Resolve {{Variable.x}} / {{nodeId.port}} bindings in parameter VALUES, then bind
+            // as DataParameters — never concatenated into the SQL (D7)~
             parameters = SqlParameterBinder.Bind(
-                SqlParameterBinder.Normalize(context.Properties.TryGetValue("parameters", out var p) ? p : null));
+                SqlParameterTemplateResolver.Resolve(
+                    SqlParameterBinder.Normalize(context.Properties.TryGetValue("parameters", out var p) ? p : null),
+                    context.Inputs,
+                    context.Variables));
         }
         catch (SqlParameterBindingException ex)
         {
