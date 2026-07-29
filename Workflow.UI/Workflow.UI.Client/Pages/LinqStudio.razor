@@ -1,0 +1,713 @@
+@page "/linq-studio"
+@namespace Workflow.UI.Client.Pages
+@rendermode RenderModes.InteractiveWasm
+@using System.Text.Json
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Linq.State
+@inject DatabaseLinqClient Linq
+@inject Workflow.UI.Client.Services.ToastService Toasts
+@inject LinqStudioHandoff Handoff
+@inject NavigationManager Nav
+
+<PageTitle>Linq Studio · DotFlow</PageTitle>
+
+<TopBar Subtitle="🧬 Linq Studio" />
+<ToastHost />
+
+<div class="df-linqstudio">
+    <div class="df-linqstudio__toolbar">
+        <label class="df-label">Connection</label>
+        <select class="df-input df-linqstudio__conn" data-testid="lq-connection" @onchange="OnConnectionChanged">
+            <option value="">— select —</option>
+            @foreach (var c in connections)
+            {
+                <option value="@c.Id" selected="@(c.Id == connectionId)">@(c.DisplayName ?? c.Id) (@c.ProviderKey)</option>
+            }
+        </select>
+        <button class="df-btn df-btn--small" data-testid="lq-conn-new" title="Define a new named database connection"
+                @onclick="() => connModalOpen = true">➕ Connection</button>
+        <span class="df-topbar__spacer"></span>
+        <button class="df-btn" data-testid="lq-validate" disabled="@busy" @onclick="Validate">✅ Validate</button>
+        <button class="df-btn" data-testid="lq-preview" disabled="@busy" @onclick="Preview">👀 Preview</button>
+        <button class="df-btn df-btn--primary" data-testid="lq-publish" disabled="@(busy || nodeId is null)"
+                title="@(nodeId is null ? "Open from a linq node in the designer to publish" : "Compile and apply to the node")"
+                @onclick="Publish">🚀 Publish to node</button>
+    </div>
+
+    @if (nodeId is null)
+    {
+        <div class="df-linqstudio__sandbox" data-testid="lq-sandbox-hint">
+            🧪 <strong>Sandbox mode</strong> — explore tables, validate, and preview freely. To publish a
+            query onto a workflow node, open the studio from a linq node in the designer
+            (Properties → <em>Open in Linq Studio →</em>).
+        </div>
+    }
+
+    <div class="df-linqstudio__body">
+        <div class="df-linqstudio__tables">
+            <div class="df-linqstudio__panel-title">
+                📚 Tables
+                <button class="df-btn df-btn--small" data-testid="lq-import" disabled="@(string.IsNullOrEmpty(connectionId) || busy)"
+                        title="Introspect the live connection's schema into the catalog" @onclick="ImportCatalog">📥 Import from connection</button>
+            </div>
+            @if (string.IsNullOrEmpty(connectionId))
+            {
+                <div class="df-empty">Pick a connection to list its catalogued tables.</div>
+            }
+            else if (catalog.Count == 0)
+            {
+                <div class="df-empty" data-testid="lq-no-tables">No tables catalogued yet — import from the connection or define one below.</div>
+            }
+            else
+            {
+                @foreach (var t in catalog)
+                {
+                    <div class="df-linqstudio__table" data-testid="lq-table-@t.TableName">
+                        <label>
+                            <input type="checkbox" checked="@selectedTables.Contains(t.TableName)"
+                                   @onchange="e => ToggleTable(t.TableName, e.Value is true)" />
+                            <strong>@t.TableName</strong>
+                            @if (t.Schema is not null)
+                            {
+                                <span class="df-linqstudio__dim">(@t.Schema)</span>
+                            }
+                        </label>
+                        <button class="df-btn df-btn--small df-btn--danger" data-testid="lq-table-remove-@t.TableName"
+                                @onclick="() => RemoveTable(t.TableName)">✕</button>
+                        @if (t.Columns is { Count: > 0 })
+                        {
+                            <div class="df-linqstudio__cols">
+                                @foreach (var col in t.Columns)
+                                {
+                                    <span class="df-outputs-strip__port" title="@ColTitle(col)">@col.Name</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+
+            <div class="df-linqstudio__panel-title">➕ Define a table</div>
+            <input class="df-input" placeholder="table name" data-testid="lq-newtable-name"
+                   value="@newTableName" @oninput="e => newTableName = e.Value?.ToString()" />
+            @foreach (var (row, i) in newColumns.Select((r, i) => (r, i)))
+            {
+                <div class="df-row df-linqstudio__colrow">
+                    <input class="df-input" placeholder="column" data-testid="lq-col-name-@i"
+                           value="@row.Name" @oninput="e => row.Name = e.Value?.ToString() ?? string.Empty" />
+                    <select class="df-input" data-testid="lq-col-type-@i" @onchange='e => row.DataType = e.Value?.ToString() ?? "text"'>
+                        @foreach (var ty in ColumnTypes)
+                        {
+                            <option value="@ty" selected="@(ty == row.DataType)">@ty</option>
+                        }
+                    </select>
+                    <label title="nullable"><input type="checkbox" checked="@row.Nullable" @onchange="e => row.Nullable = e.Value is true" /> null?</label>
+                    <button class="df-btn df-btn--small" @onclick="() => newColumns.Remove(row)">✕</button>
+                </div>
+            }
+            <div class="df-row">
+                <button class="df-btn df-btn--small" data-testid="lq-col-add" @onclick="() => newColumns.Add(new ColumnRow())">＋ column</button>
+                <button class="df-btn df-btn--primary df-btn--small" data-testid="lq-newtable-save"
+                        disabled="@(string.IsNullOrEmpty(connectionId) || busy)" @onclick="SaveNewTable">Save table</button>
+            </div>
+        </div>
+
+        <div class="df-linqstudio__editor">
+            <div class="df-field-help">
+                The query body — tables surface as typed <code>db.TableName</code> properties, and each
+                table's <strong>row type is named after the table itself</strong> (no namespace prefix:
+                <code>new FooBar { A = "1" }</code>). Column names are used verbatim; inputs are
+                <code>inputs.Name</code>. End with a <code>return</code>, e.g.
+                <code>return db.Users.Where(u => u.id > 0).ToList();</code>
+            </div>
+            <CodeEditor @ref="editor" Value="@codeText" Language="csharp" ValueChanged="v => codeText = v" />
+
+            @if (selectedTables.Count > 0 || inputRows.Any(r => !string.IsNullOrWhiteSpace(r.Name)))
+            {
+                <div class="df-linqstudio__panel-title">🧭 Context reference <span class="df-linqstudio__dim">(click to insert — identifiers are verbatim)</span></div>
+                <div class="df-linqstudio__ref" data-testid="lq-ref">
+                    @foreach (var t in catalog.Where(t => selectedTables.Contains(t.TableName)))
+                    {
+                        <div class="df-linqstudio__ref-row">
+                            <button class="df-outputs-strip__port df-linqstudio__ref-chip" data-testid="lq-ref-table-@t.TableName"
+                                    title="Insert into the query" @onclick='() => InsertSnippet($"db.{t.TableName}")'>db.@t.TableName</button>
+                            <button class="df-outputs-strip__port df-linqstudio__ref-chip" data-testid="lq-ref-new-@t.TableName"
+                                    title="The row type is named after the table — no namespace prefix needed"
+                                    @onclick='() => InsertSnippet($"new {t.TableName} {{ }}")'>new @t.TableName { }</button>
+                            @if (t.Columns is { Count: > 0 })
+                            {
+                                @foreach (var col in t.Columns)
+                                {
+                                    <button class="df-outputs-strip__port df-linqstudio__ref-chip" data-testid="lq-ref-col-@(t.TableName)-@(col.Name)"
+                                            title="@ColTitle(col)" @onclick="() => InsertSnippet(col.Name)">.@col.Name</button>
+                                }
+                            }
+                        </div>
+                    }
+                    @foreach (var r in inputRows.Where(r => !string.IsNullOrWhiteSpace(r.Name)))
+                    {
+                        <button class="df-outputs-strip__port df-linqstudio__ref-chip" data-testid="lq-ref-input-@r.Name"
+                                title="@r.Type input" @onclick='() => InsertSnippet($"inputs.{r.Name}")'>inputs.@r.Name</button>
+                    }
+                </div>
+            }
+
+            @if (diagnostics.Count > 0)
+            {
+                <div class="df-linqstudio__panel-title">🚦 Diagnostics</div>
+                <div class="df-linqstudio__diags" data-testid="lq-diags">
+                    @foreach (var d in diagnostics)
+                    {
+                        <div class="df-linqstudio__diag @(d.Severity == "Error" ? "df-linqstudio__diag--error" : "")">
+                            <code>@d.Id</code> (@d.Line,@d.Column): @d.Message
+                        </div>
+                    }
+                </div>
+            }
+            @if (validateOk)
+            {
+                <div class="df-statusbar__ok" data-testid="lq-ok">✅ Compiles cleanly.</div>
+            }
+
+            @if (previewRows is not null)
+            {
+                <div class="df-linqstudio__panel-title">👀 Preview (sample data · @previewDurationMs ms)</div>
+                <div class="df-linqstudio__preview" data-testid="lq-preview-grid">
+                    @if (previewRows.Count == 0)
+                    {
+                        <div class="df-empty">No rows.</div>
+                    }
+                    else
+                    {
+                        <table class="df-table">
+                            <thead>
+                                <tr>
+                                    @foreach (var col in previewRows[0].Keys)
+                                    {
+                                        <th>@col</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in previewRows)
+                                {
+                                    <tr>
+                                        @foreach (var v in row.Values)
+                                        {
+                                            <td>@(v?.ToString() ?? "∅")</td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="df-linqstudio__inputs">
+            <div class="df-linqstudio__panel-title">🧬 Inputs</div>
+            <div class="df-field-help">Typed values your query reads as <code>inputs.Name</code>; sample values feed Preview.</div>
+            @foreach (var (row, i) in inputRows.Select((r, i) => (r, i)))
+            {
+                <div class="df-row df-linqstudio__colrow">
+                    <input class="df-input" placeholder="name" data-testid="lq-input-name-@i"
+                           value="@row.Name" @oninput="e => row.Name = e.Value?.ToString() ?? string.Empty" />
+                    <select class="df-input" data-testid="lq-input-type-@i" @onchange='e => row.Type = e.Value?.ToString() ?? "string"'>
+                        @foreach (var ty in InputTypes)
+                        {
+                            <option value="@ty" selected="@(ty == row.Type)">@ty</option>
+                        }
+                    </select>
+                    <input class="df-input" placeholder="sample value" data-testid="lq-input-sample-@i"
+                           value="@row.Sample" @oninput="e => row.Sample = e.Value?.ToString()" />
+                    <button class="df-btn df-btn--small" @onclick="() => inputRows.Remove(row)">✕</button>
+                </div>
+            }
+            <button class="df-btn df-btn--small" data-testid="lq-input-add" @onclick="() => inputRows.Add(new InputRow())">＋ input</button>
+        </div>
+    </div>
+</div>
+
+@if (connModalOpen)
+{
+    <div class="df-modal-backdrop df-modal-backdrop--top" data-testid="lq-conn-modal" @onclick="() => connModalOpen = false">
+        <div class="df-nodemodal" @onclick:stopPropagation="true">
+            <div class="df-props__header">
+                <strong>📇 New database connection</strong>
+                <div class="df-props__module">The connection string is stored server-side (encrypted at rest) and masked in responses.</div>
+            </div>
+
+            <label class="df-label">Id</label>
+            <input class="df-input" placeholder="e.g. pg-main" data-testid="lq-conn-id"
+                   value="@connId" @oninput="e => connId = e.Value?.ToString()" />
+
+            <label class="df-label">Provider</label>
+            <select class="df-input" data-testid="lq-conn-provider" @onchange="OnProviderChanged">
+                @foreach (var p in ConnectionStringComposer.Providers)
+                {
+                    <option value="@p" selected="@(p == connProvider)">@ConnectionStringComposer.ProviderLabel(p)</option>
+                }
+            </select>
+
+            @if (connRawMode || ConnectionStringComposer.FieldsFor(connProvider).Count == 0)
+            {
+                <label class="df-label">Connection string</label>
+                <input class="df-input" placeholder="Host=…;Database=…;Username=…;Password=…" data-testid="lq-conn-cs"
+                       value="@connString" @oninput="e => connString = e.Value?.ToString()" />
+            }
+            else
+            {
+                <div class="df-field-help">Fill in the @ConnectionStringComposer.ProviderLabel(connProvider) settings — the connection string is composed for you.</div>
+                @foreach (var f in ConnectionStringComposer.FieldsFor(connProvider))
+                {
+                    <label class="df-label">
+                        @f.Label
+                        @if (f.Required)
+                        {
+                            <span class="df-linqstudio__req" title="required">*</span>
+                        }
+                    </label>
+                    @if (f.Kind == ConnectionFieldKind.Select)
+                    {
+                        <select class="df-input" data-testid="lq-connf-@f.Key.Replace(" ", "-")"
+                                @onchange="e => SetConnField(f.Key, e.Value?.ToString())">
+                            @foreach (var opt in f.Options ?? System.Array.Empty<string>())
+                            {
+                                <option value="@opt" selected="@(opt == ConnFieldValue(f))">@opt</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <input class="df-input" data-testid="lq-connf-@f.Key.Replace(" ", "-")"
+                               type="@(f.Kind == ConnectionFieldKind.Secret ? "password" : f.Kind == ConnectionFieldKind.Number ? "number" : "text")"
+                               placeholder="@(f.Placeholder ?? f.Default)"
+                               value="@ConnFieldValue(f)" @oninput="e => SetConnField(f.Key, e.Value?.ToString())" />
+                    }
+                    @if (f.Help is not null)
+                    {
+                        <div class="df-field-help">@f.Help</div>
+                    }
+                }
+                <div class="df-field-help df-linqstudio__preview-cs" data-testid="lq-conn-preview">
+                    <strong>Preview:</strong> <code>@MaskedPreview()</code>
+                </div>
+            }
+
+            <div class="df-row">
+                <label title="Paste a full ADO.NET connection string instead">
+                    <input type="checkbox" data-testid="lq-conn-raw" checked="@connRawMode" @onchange="OnRawModeChanged" />
+                    Advanced — enter a raw connection string
+                </label>
+            </div>
+
+            <label class="df-label">Display name (optional)</label>
+            <input class="df-input" placeholder="Main Postgres" data-testid="lq-conn-display"
+                   value="@connDisplay" @oninput="e => connDisplay = e.Value?.ToString()" />
+
+            <div class="df-row df-linqstudio__modal-actions">
+                <button class="df-btn" data-testid="lq-conn-cancel" @onclick="() => connModalOpen = false">Cancel</button>
+                <button class="df-btn df-btn--primary" data-testid="lq-conn-save" disabled="@busy" @onclick="SaveConnection">Save connection</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly string[] ColumnTypes = { "text", "integer", "bigint", "numeric", "boolean", "timestamp", "uuid" };
+    private static readonly string[] InputTypes = { "string", "int", "long", "double", "decimal", "bool", "guid", "datetime" };
+
+    private readonly List<DbConnectionDto> connections = new();
+    private readonly List<LinqTableDto> catalog = new();
+    private readonly HashSet<string> selectedTables = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ColumnRow> newColumns = new() { new ColumnRow() };
+    private readonly List<InputRow> inputRows = new();
+    private readonly List<LinqDiagnosticDto> diagnostics = new();
+
+    private string? nodeId;
+    private CodeEditor? editor;
+    private string? definitionId;
+    private string? returnUrl;
+    private string connectionId = string.Empty;
+    private string codeText = "return db.";
+    private string? newTableName;
+    private bool connModalOpen;
+    private bool connRawMode;
+    private string? connId;
+    private string connProvider = "postgres";
+    private string? connString;
+    private string? connDisplay;
+    private Dictionary<string, string?> connFields = ConnectionStringComposer.Defaults("postgres");
+    private bool busy;
+    private bool validateOk;
+    private List<Dictionary<string, object?>>? previewRows;
+    private long previewDurationMs;
+
+    /// <summary>Exposes the selected table names for the reference panel/tests~ 📚.</summary>
+    public IReadOnlyCollection<string> SelectedTables => selectedTables;
+
+    private static string ColTitle(LinqColumnDto col)
+        => col.Nullable ? $"{col.DataType} (nullable)" : col.DataType;
+
+    private async Task InsertSnippet(string text)
+    {
+        if (editor is not null)
+        {
+            await editor.InsertTextAsync(text);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Seed from a designer handoff, when present~ 🔗
+        if (Handoff.TakeRequest() is { } req)
+        {
+            nodeId = req.NodeId;
+            definitionId = req.DefinitionId;
+            codeText = string.IsNullOrEmpty(req.Code) ? codeText : req.Code;
+            connectionId = req.ConnectionId;
+            foreach (var t in req.TableNames)
+            {
+                selectedTables.Add(t);
+            }
+
+            returnUrl = req.ReturnUrl;
+        }
+
+        try
+        {
+            connections.AddRange(await Linq.ListConnectionsAsync());
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Warning("Could not load connections: " + ex.Error.Summarize());
+        }
+
+        if (!string.IsNullOrEmpty(connectionId))
+        {
+            await LoadCatalog();
+        }
+    }
+
+    private async Task OnConnectionChanged(ChangeEventArgs e)
+    {
+        connectionId = e.Value?.ToString() ?? string.Empty;
+        await LoadCatalog();
+    }
+
+    private async Task LoadCatalog()
+    {
+        catalog.Clear();
+        if (string.IsNullOrEmpty(connectionId))
+        {
+            return;
+        }
+
+        try
+        {
+            catalog.AddRange(await Linq.ListCatalogAsync(connectionId));
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private async Task SaveConnection()
+    {
+        var id = connId?.Trim();
+        if (string.IsNullOrEmpty(id))
+        {
+            Toasts.Warning("A connection needs an id.");
+            return;
+        }
+
+        string? cs;
+        if (UseGuidedForm)
+        {
+            var missing = ConnectionStringComposer.MissingRequired(connProvider, connFields);
+            if (missing.Count > 0)
+            {
+                Toasts.Warning("Missing required setting(s): " + string.Join(", ", missing));
+                return;
+            }
+
+            cs = ConnectionStringComposer.Build(connProvider, connFields);
+        }
+        else
+        {
+            cs = connString?.Trim();
+        }
+
+        if (string.IsNullOrEmpty(cs))
+        {
+            Toasts.Warning("A connection needs a connection string.");
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            var saved = await Linq.UpsertConnectionAsync(new DbConnectionUpsertDto(
+                id, connProvider, cs, string.IsNullOrWhiteSpace(connDisplay) ? null : connDisplay!.Trim()));
+            Toasts.Success($"Connection '{saved.Id}' saved");
+            connModalOpen = false;
+            connId = null;
+            connString = null;
+            connDisplay = null;
+            connFields = ConnectionStringComposer.Defaults(connProvider);
+            connections.Clear();
+            connections.AddRange(await Linq.ListConnectionsAsync());
+            connectionId = saved.Id;
+            await LoadCatalog();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private bool UseGuidedForm => !connRawMode && ConnectionStringComposer.FieldsFor(connProvider).Count > 0;
+
+    private string ConnFieldValue(ConnectionField field)
+        => connFields.TryGetValue(field.Key, out var v) ? v ?? string.Empty : field.Default ?? string.Empty;
+
+    private void SetConnField(string key, string? value) => connFields[key] = value;
+
+    private void OnProviderChanged(ChangeEventArgs e)
+    {
+        connProvider = e.Value?.ToString() ?? "postgres";
+        connFields = ConnectionStringComposer.Defaults(connProvider);
+    }
+
+    private void OnRawModeChanged(ChangeEventArgs e)
+    {
+        var raw = e.Value is true;
+        if (raw && UseGuidedForm)
+        {
+            // Carry the composed string over so nothing typed is lost~
+            connString = ConnectionStringComposer.Build(connProvider, connFields);
+        }
+        else if (!raw && !string.IsNullOrWhiteSpace(connString))
+        {
+            connFields = ConnectionStringComposer.Parse(connProvider, connString);
+        }
+
+        connRawMode = raw;
+    }
+
+    /// <summary>Preview of the composed connection string with secrets masked~ 🙈.</summary>
+    private string MaskedPreview()
+    {
+        var masked = new Dictionary<string, string?>(connFields, StringComparer.OrdinalIgnoreCase);
+        foreach (var f in ConnectionStringComposer.FieldsFor(connProvider))
+        {
+            if (f.Kind == ConnectionFieldKind.Secret && !string.IsNullOrEmpty(masked.GetValueOrDefault(f.Key)))
+            {
+                masked[f.Key] = "***";
+            }
+        }
+
+        var built = ConnectionStringComposer.Build(connProvider, masked);
+        return string.IsNullOrEmpty(built) ? "(fill in the required settings)" : built;
+    }
+
+    private async Task ImportCatalog()
+    {
+        busy = true;
+        try
+        {
+            var result = await Linq.ImportCatalogAsync(connectionId);
+            Toasts.Success($"Imported {result.Imported} table(s) from '{connectionId}'");
+            await LoadCatalog();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void ToggleTable(string tableName, bool selected)
+    {
+        if (selected)
+        {
+            selectedTables.Add(tableName);
+        }
+        else
+        {
+            selectedTables.Remove(tableName);
+        }
+    }
+
+    private async Task RemoveTable(string tableName)
+    {
+        try
+        {
+            await Linq.RemoveTableAsync(connectionId, tableName);
+            selectedTables.Remove(tableName);
+            await LoadCatalog();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private async Task SaveNewTable()
+    {
+        var name = newTableName?.Trim();
+        var cols = newColumns.Where(c => !string.IsNullOrWhiteSpace(c.Name))
+            .Select(c => new LinqColumnDto(c.Name.Trim(), c.DataType, c.Nullable)).ToList();
+        if (string.IsNullOrEmpty(name) || cols.Count == 0)
+        {
+            Toasts.Warning("A table needs a name and at least one column.");
+            return;
+        }
+
+        try
+        {
+            await Linq.UpsertTableAsync(connectionId, name, new LinqTableUpsertDto(null, cols, null, null));
+            Toasts.Success($"Table '{name}' saved to the catalog");
+            newTableName = null;
+            newColumns.Clear();
+            newColumns.Add(new ColumnRow());
+            selectedTables.Add(name);
+            await LoadCatalog();
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    private LinqAuthoringRequestDto BuildRequest(bool withSamples)
+        => new(
+            definitionId ?? "studio",
+            nodeId ?? "studio-node",
+            codeText,
+            string.IsNullOrEmpty(connectionId) ? null : connectionId,
+            null,
+            selectedTables.Count > 0 ? selectedTables.ToList() : null,
+            inputRows.Where(r => !string.IsNullOrWhiteSpace(r.Name))
+                .Select(r => new LinqInputDto(r.Name.Trim(), r.Type, Required: false)).ToList(),
+            withSamples
+                ? inputRows.Where(r => !string.IsNullOrWhiteSpace(r.Name))
+                    .ToDictionary(r => r.Name.Trim(), r => (object?)r.Sample)
+                : null);
+
+    private async Task Validate()
+    {
+        busy = true;
+        validateOk = false;
+        previewRows = null;
+        diagnostics.Clear();
+        try
+        {
+            var result = await Linq.ValidateAsync(BuildRequest(withSamples: false));
+            diagnostics.AddRange(result.Errors);
+            diagnostics.AddRange(result.Warnings);
+            validateOk = result.Success;
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task Preview()
+    {
+        busy = true;
+        validateOk = false;
+        previewRows = null;
+        diagnostics.Clear();
+        try
+        {
+            var result = await Linq.PreviewAsync(BuildRequest(withSamples: true));
+            diagnostics.AddRange(result.Diagnostics);
+            if (result.Success)
+            {
+                previewRows = result.Rows ?? new List<Dictionary<string, object?>>();
+                previewDurationMs = result.DurationMs;
+            }
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task Publish()
+    {
+        if (nodeId is null)
+        {
+            return;
+        }
+
+        busy = true;
+        diagnostics.Clear();
+        try
+        {
+            var result = await Linq.CompileAsync(BuildRequest(withSamples: false));
+
+            // Hand the full authoring state back to the designer — one undoable apply there~ 🔗
+            var properties = new Dictionary<string, JsonElement>
+            {
+                ["userCode"] = JsonSerializer.SerializeToElement(codeText),
+                ["connectionId"] = JsonSerializer.SerializeToElement(connectionId),
+                ["tableNames"] = JsonSerializer.SerializeToElement(selectedTables.ToList()),
+                ["inputDefs"] = JsonSerializer.SerializeToElement(
+                    inputRows.Where(r => !string.IsNullOrWhiteSpace(r.Name))
+                        .Select(r => new { name = r.Name.Trim(), type = r.Type, required = false }).ToList()),
+                ["compiledAssemblyKey"] = JsonSerializer.SerializeToElement(result.CompiledAssemblyKey),
+            };
+            Handoff.Fulfill(nodeId, properties);
+            Toasts.Success("Compiled — returning to the designer");
+            Nav.NavigateTo(returnUrl ?? "/");
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private sealed class ColumnRow
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public string DataType { get; set; } = "text";
+
+        public bool Nullable { get; set; }
+    }
+
+    private sealed class InputRow
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public string Type { get; set; } = "string";
+
+        public string? Sample { get; set; }
+    }
+}

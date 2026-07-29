@@ -61,6 +61,57 @@ public sealed class LinqCompilerTests
         result.Errors.Should().Contain(d => d.Id == "CS1061" && d.Message.Contains("Ordrs", StringComparison.Ordinal));
     }
 
+    // ── Row types are named after the table (L7 — no namespace prefix needed) ─────────────
+
+    [Fact]
+    public async Task Compile_NewEntityByTableName_Succeeds()
+    {
+        // The generated POCO is internally 'Gen_Orders'; an alias makes the table's own name work~
+        var result = await this.Compile(
+            "var row = new Orders { total = 1m }; return db.Orders.Where(o => o.total >= row.total).ToList();",
+            new[] { OrdersTable() },
+            Schema());
+
+        result.Success.Should().BeTrue(this.Dump(result));
+    }
+
+    [Fact]
+    public async Task Compile_GenericTableTypeArgument_UsesTheTableName()
+    {
+        var result = await this.Compile(
+            "return db.GetTable<Orders>().ToList();",
+            new[] { OrdersTable() },
+            Schema());
+
+        result.Success.Should().BeTrue(this.Dump(result));
+    }
+
+    [Fact]
+    public async Task Compile_UnknownTypeName_AddsScopeHint()
+    {
+        var result = await this.Compile(
+            "return new NotATable();",
+            new[] { OrdersTable() },
+            Schema());
+
+        result.Success.Should().BeFalse();
+        var hint = result.Errors.Should().ContainSingle(d => d.Id == "WFLINQ010").Subject;
+        hint.Message.Should().Contain("db.Orders").And.Contain("row type 'Orders'");
+    }
+
+    [Fact]
+    public async Task Compile_UnknownTypeName_NoTablesSelected_HintSaysSoW()
+    {
+        var result = await this.Compile(
+            "return new Orders();",
+            System.Array.Empty<WorkflowTableMetadata>(),
+            Schema());
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().Contain(d =>
+            d.Id == "WFLINQ010" && d.Message.Contains("no tables are selected", StringComparison.Ordinal));
+    }
+
     // ── Typed-input validation (LinqInputs) ──────────────────────────────────────────────
 
     [Fact]

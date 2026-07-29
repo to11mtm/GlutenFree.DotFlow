@@ -2,6 +2,8 @@
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
+using LinqToDB;
+
 namespace Workflow.Modules.Database.Builtin;
 
 using System;
@@ -283,7 +285,6 @@ public sealed class DatabaseQueryModule : IWorkflowModule
     {
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         var columns = new List<string>();
-
         using var reader = db.ExecuteReader(query, parameters);
         IDataReader r = reader.Reader!;
 

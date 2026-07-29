@@ -4,6 +4,7 @@
 
 namespace Workflow.Modules.Database.Linq.Compilation;
 
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -13,6 +14,68 @@ using System.Text;
 /// </summary>
 public static class DynamicContextCodeGenerator
 {
+    /// <summary>The namespace the generated compilation unit lives in~ 📦.</summary>
+    public const string RuntimeNamespace = "WorkflowRuntime";
+
+    /// <summary>Names the codegen owns — a table alias must never shadow them~ 🚧.</summary>
+    private static readonly HashSet<string> ReservedNames = new(StringComparer.Ordinal)
+    {
+        "DynamicWorkflowContext",
+        "WorkflowScript",
+        "LinqInputs",
+    };
+
+    /// <summary>
+    /// Emits <c>using Table = Gen_Table;</c> alias directives so user code can name a table's row
+    /// type by the table's own name (<c>new FooBar { … }</c>) instead of the internal
+    /// <c>Gen_FooBar</c>/plugin FQN~ 🏷️.
+    /// </summary>
+    /// <param name="tables">The resolved tables.</param>
+    /// <returns>The alias directive source (empty when nothing can be aliased).</returns>
+    public static string GenerateEntityAliases(IReadOnlyList<ResolvedTable> tables)
+    {
+        var sb = new StringBuilder();
+        foreach (var alias in EntityAliases(tables))
+        {
+            sb.AppendLine($"    using {alias.Key} = {alias.Value};");
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// The alias → entity type map actually emitted (alias name → fully qualified/generated type)~ 🗺️.
+    /// </summary>
+    /// <param name="tables">The resolved tables.</param>
+    /// <returns>An ordered alias map; tables whose name already equals their type are skipped.</returns>
+    public static IReadOnlyDictionary<string, string> EntityAliases(IReadOnlyList<ResolvedTable> tables)
+    {
+        if (tables is null)
+        {
+            throw new ArgumentNullException(nameof(tables));
+        }
+
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var t in tables)
+        {
+            if (t.EntityTypeName is null ||
+                string.Equals(t.ContextPropertyName, t.EntityTypeName, StringComparison.Ordinal) ||
+                ReservedNames.Contains(t.ContextPropertyName) ||
+                map.ContainsKey(t.ContextPropertyName))
+            {
+                continue;
+            }
+
+            // Generated POCOs live in the runtime namespace; plugin types are already global::-qualified.
+            var target = t.EntityTypeName.StartsWith("global::", StringComparison.Ordinal)
+                ? t.EntityTypeName
+                : "global::" + RuntimeNamespace + "." + t.EntityTypeName;
+            map[t.ContextPropertyName] = target;
+        }
+
+        return map;
+    }
+
     /// <summary>Concatenates the generated-POCO class sources (empty for all-plugin tables)~ 🧩.</summary>
     /// <param name="tables">The resolved tables.</param>
     /// <returns>The POCO class sources.</returns>

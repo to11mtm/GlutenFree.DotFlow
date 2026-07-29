@@ -27,7 +27,7 @@ using Workflow.Modules.Database.Linq.Abstractions;
 /// </remarks>
 public sealed class WorkflowLinqCompiler : IWorkflowLinqCompiler
 {
-    private const string RuntimeNamespace = "WorkflowRuntime";
+    private const string RuntimeNamespace = DynamicContextCodeGenerator.RuntimeNamespace;
 
     private readonly TableTypeResolver tableResolver;
     private readonly ILogger<WorkflowLinqCompiler> logger;
@@ -116,6 +116,7 @@ public sealed class WorkflowLinqCompiler : IWorkflowLinqCompiler
 
         if (!emit.Success || errors.Count > 0)
         {
+            AddUnknownTypeHint(errors, resolved);
             this.logger.LogDebug(
                 "Linq compile failed for {DefinitionId}/{NodeId}: {ErrorCount} error(s)~",
                 request.DefinitionId,
@@ -138,12 +139,44 @@ public sealed class WorkflowLinqCompiler : IWorkflowLinqCompiler
         sb.AppendLine();
         sb.AppendLine($"namespace {RuntimeNamespace}");
         sb.AppendLine("{");
+        sb.AppendLine(DynamicContextCodeGenerator.GenerateEntityAliases(tables));
         sb.AppendLine(DynamicContextCodeGenerator.GeneratePocos(tables));
         sb.AppendLine(DynamicContextCodeGenerator.GenerateContext(tables));
         sb.AppendLine(inputsSource);
         sb.AppendLine(DynamicContextCodeGenerator.GenerateWrapper(userBody));
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// 🧭 When the body references an unknown type (CS0246/CS0103), tell the author which table row
+    /// types are actually in scope — the usual cause is a table that wasn't selected, or a name that
+    /// differs from the catalog's~ ✨.
+    /// </summary>
+    private static void AddUnknownTypeHint(List<LinqDiagnostic> errors, IReadOnlyList<ResolvedTable> tables)
+    {
+        var unknown = errors.FirstOrDefault(e => e.Id is "CS0246" or "CS0103");
+        if (unknown is null)
+        {
+            return;
+        }
+
+        var names = tables
+            .Where(t => t.EntityTypeName is not null)
+            .Select(t => t.ContextPropertyName)
+            .ToList();
+
+        var available = names.Count == 0
+            ? "no tables are selected — pick them in the Tables panel first"
+            : "tables in scope: " + string.Join(", ", names.Select(n => $"db.{n} (row type '{n}')"));
+
+        errors.Add(new LinqDiagnostic(
+            "WFLINQ010",
+            LinqDiagnosticSeverity.Error,
+            "Unknown type or name. Each selected table's row type is named after the table itself "
+            + $"(e.g. 'new FooBar {{ … }}' for table FooBar) and needs no namespace prefix — {available}~ 🧭",
+            unknown.Line,
+            unknown.Column));
     }
 
     private static void Partition(
