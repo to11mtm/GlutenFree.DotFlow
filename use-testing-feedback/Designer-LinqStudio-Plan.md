@@ -136,6 +136,14 @@ POCOs are emitted as `WorkflowRuntime.Gen_FooBar`, a name users never see.
 - [x] **L7c — UI/doc surfacing**: editor help text + a `new FooBar { }` reference chip;
       `docs/linq-studio.md` documents the naming rule and the hint.
 
+## L8 — Editing a table definition in place (stakeholder request, 2026-07-29)
+
+- [x] **L8 — Edit an existing catalogue entry**: ✏️ per table loads name/schema/columns into
+      the (now dual-purpose) definition form — "Edit table 'x'" title, Save changes, Cancel.
+      Same-name saves are a plain upsert; renames upsert the new name, remove the old entry,
+      and carry the table's selection across. Removing or switching connections while editing
+      resets the form. A schema field was added to the form (previously always null).
+
 ## Post-MVP (tracked, not in scope now)
 
 - [ ] **L.P1 — Monaco completions for `db.` / columns**: a completion provider fed by the

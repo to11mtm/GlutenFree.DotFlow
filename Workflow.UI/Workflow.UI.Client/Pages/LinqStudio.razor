@@ -74,6 +74,8 @@
                                 <span class="df-linqstudio__dim">(@t.Schema)</span>
                             }
                         </label>
+                        <button class="df-btn df-btn--small" data-testid="lq-table-edit-@t.TableName"
+                                title="Edit this table's definition" @onclick="() => BeginEditTable(t)">✏️</button>
                         <button class="df-btn df-btn--small df-btn--danger" data-testid="lq-table-remove-@t.TableName"
                                 @onclick="() => RemoveTable(t.TableName)">✕</button>
                         @if (t.Columns is { Count: > 0 })
@@ -89,9 +91,17 @@
                 }
             }
 
-            <div class="df-linqstudio__panel-title">➕ Define a table</div>
+            <div class="df-linqstudio__panel-title" data-testid="lq-tableform-title">
+                @(editingTable is null ? "➕ Define a table" : $"✏️ Edit table '{editingTable}'")
+            </div>
             <input class="df-input" placeholder="table name" data-testid="lq-newtable-name"
                    value="@newTableName" @oninput="e => newTableName = e.Value?.ToString()" />
+            @if (editingTable is not null)
+            {
+                <div class="df-field-help">Renaming saves the new definition and removes the old entry; selections follow the rename.</div>
+            }
+            <input class="df-input" placeholder="schema (optional)" data-testid="lq-newtable-schema"
+                   value="@newTableSchema" @oninput="e => newTableSchema = e.Value?.ToString()" />
             @foreach (var (row, i) in newColumns.Select((r, i) => (r, i)))
             {
                 <div class="df-row df-linqstudio__colrow">
@@ -110,7 +120,13 @@
             <div class="df-row">
                 <button class="df-btn df-btn--small" data-testid="lq-col-add" @onclick="() => newColumns.Add(new ColumnRow())">＋ column</button>
                 <button class="df-btn df-btn--primary df-btn--small" data-testid="lq-newtable-save"
-                        disabled="@(string.IsNullOrEmpty(connectionId) || busy)" @onclick="SaveNewTable">Save table</button>
+                        disabled="@(string.IsNullOrEmpty(connectionId) || busy)" @onclick="SaveNewTable">
+                    @(editingTable is null ? "Save table" : "Save changes")
+                </button>
+                @if (editingTable is not null)
+                {
+                    <button class="df-btn df-btn--small" data-testid="lq-newtable-cancel" @onclick="CancelEditTable">Cancel</button>
+                }
             </div>
         </div>
 
@@ -334,6 +350,8 @@
     private string connectionId = string.Empty;
     private string codeText = "return db.";
     private string? newTableName;
+    private string? newTableSchema;
+    private string? editingTable;
     private bool connModalOpen;
     private bool connRawMode;
     private string? connId;
@@ -395,6 +413,7 @@
     private async Task OnConnectionChanged(ChangeEventArgs e)
     {
         connectionId = e.Value?.ToString() ?? string.Empty;
+        ResetTableForm();
         await LoadCatalog();
     }
 
@@ -556,12 +575,46 @@
         {
             await Linq.RemoveTableAsync(connectionId, tableName);
             selectedTables.Remove(tableName);
+            if (string.Equals(editingTable, tableName, StringComparison.OrdinalIgnoreCase))
+            {
+                ResetTableForm();
+            }
+
             await LoadCatalog();
         }
         catch (ApiException ex)
         {
             Toasts.Error(ex.Error.Summarize());
         }
+    }
+
+    /// <summary>Loads a catalogued table into the definition form for editing~ ✏️.</summary>
+    private void BeginEditTable(LinqTableDto table)
+    {
+        editingTable = table.TableName;
+        newTableName = table.TableName;
+        newTableSchema = table.Schema;
+        newColumns.Clear();
+        foreach (var c in table.Columns ?? new List<LinqColumnDto>())
+        {
+            newColumns.Add(new ColumnRow { Name = c.Name, DataType = c.DataType, Nullable = c.Nullable });
+        }
+
+        if (newColumns.Count == 0)
+        {
+            newColumns.Add(new ColumnRow());
+        }
+    }
+
+    private void CancelEditTable() => ResetTableForm();
+
+    private void ResetTableForm()
+    {
+        editingTable = null;
+        newTableName = null;
+        newTableSchema = null;
+        newColumns.Clear();
+        newColumns.Add(new ColumnRow());
     }
 
     private async Task SaveNewTable()
@@ -575,19 +628,43 @@
             return;
         }
 
+        var previousName = editingTable;
+        var renamed = previousName is not null && !string.Equals(previousName, name, StringComparison.OrdinalIgnoreCase);
+
+        busy = true;
         try
         {
-            await Linq.UpsertTableAsync(connectionId, name, new LinqTableUpsertDto(null, cols, null, null));
-            Toasts.Success($"Table '{name}' saved to the catalog");
-            newTableName = null;
-            newColumns.Clear();
-            newColumns.Add(new ColumnRow());
-            selectedTables.Add(name);
+            var schema = string.IsNullOrWhiteSpace(newTableSchema) ? null : newTableSchema!.Trim();
+            await Linq.UpsertTableAsync(connectionId, name, new LinqTableUpsertDto(schema, cols, null, null));
+
+            if (renamed)
+            {
+                await Linq.RemoveTableAsync(connectionId, previousName!);
+                if (selectedTables.Remove(previousName!))
+                {
+                    selectedTables.Add(name);
+                }
+            }
+
+            Toasts.Success(previousName is null
+                ? $"Table '{name}' saved to the catalog"
+                : renamed ? $"Table '{previousName}' renamed to '{name}' and updated" : $"Table '{name}' updated");
+
+            if (previousName is null)
+            {
+                selectedTables.Add(name);
+            }
+
+            ResetTableForm();
             await LoadCatalog();
         }
         catch (ApiException ex)
         {
             Toasts.Error(ex.Error.Summarize());
+        }
+        finally
+        {
+            busy = false;
         }
     }
 

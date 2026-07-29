@@ -73,6 +73,11 @@ public sealed class LinqStudioTests : TestContext
                 return Json("{\"tableName\":\"orders\",\"schema\":null,\"columns\":[{\"name\":\"total\",\"dataType\":\"numeric\",\"nullable\":false}],\"clrTypeName\":null,\"assemblyName\":null}");
             }
 
+            if (req.Method == HttpMethod.Delete && path.StartsWith("/api/database/catalog/pg-main/", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+
             if (req.Method == HttpMethod.Get && path == "/api/database/catalog/pg-main")
             {
                 return Json("[{\"tableName\":\"orders\",\"schema\":\"public\",\"columns\":[{\"name\":\"id\",\"dataType\":\"integer\",\"nullable\":false},{\"name\":\"total\",\"dataType\":\"numeric\",\"nullable\":true}],\"clrTypeName\":null,\"assemblyName\":null}]");
@@ -291,6 +296,85 @@ public sealed class LinqStudioTests : TestContext
             code.Should().NotContain("Gen_");
             code.Should().NotContain("WorkflowRuntime");
         });
+    }
+
+    [Fact]
+    public void Studio_EditTable_LoadsDefinitionIntoTheForm_AndUpsertsChanges()
+    {
+        // L8: editing an existing definition instead of remove-and-recreate~
+        var fake = this.UseDefaultHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
+        cut.Find("[data-testid=lq-connection]").Change("pg-main");
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-table-orders]").Should().NotBeNull());
+
+        cut.Find("[data-testid=lq-table-edit-orders]").Click();
+
+        // The form is seeded with the catalogued definition~
+        cut.Find("[data-testid=lq-tableform-title]").TextContent.Should().Contain("Edit table 'orders'");
+        cut.Find("[data-testid=lq-newtable-name]").GetAttribute("value").Should().Be("orders");
+        cut.Find("[data-testid=lq-newtable-schema]").GetAttribute("value").Should().Be("public");
+        cut.Find("[data-testid=lq-col-name-0]").GetAttribute("value").Should().Be("id");
+        cut.Find("[data-testid=lq-col-name-1]").GetAttribute("value").Should().Be("total");
+
+        // Change a column type and add one, then save.
+        cut.Find("[data-testid=lq-col-type-1]").Change("bigint");
+        cut.Find("[data-testid=lq-col-add]").Click();
+        cut.Find("[data-testid=lq-col-name-2]").Input("note");
+        cut.Find("[data-testid=lq-newtable-save]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            fake.Requests.Should().Contain(r =>
+                r.Method == HttpMethod.Put && r.RequestUri!.AbsolutePath == "/api/database/catalog/pg-main/orders");
+            fake.Bodies.Should().Contain(b => b.Contains("bigint") && b.Contains("note") && b.Contains("public"));
+
+            // No delete for a same-name edit, and the form returns to "define" mode.
+            fake.Requests.Should().NotContain(r => r.Method == HttpMethod.Delete);
+            cut.Find("[data-testid=lq-tableform-title]").TextContent.Should().Contain("Define a table");
+        });
+    }
+
+    [Fact]
+    public void Studio_EditTable_Rename_UpsertsNewAndRemovesOld_AndFollowsSelection()
+    {
+        var fake = this.UseDefaultHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
+        cut.Find("[data-testid=lq-connection]").Change("pg-main");
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-table-orders]").Should().NotBeNull());
+
+        cut.Find("[data-testid=lq-table-orders] input[type=checkbox]").Change(true);
+        cut.Find("[data-testid=lq-table-edit-orders]").Click();
+        cut.Find("[data-testid=lq-newtable-name]").Input("sales_orders");
+        cut.Find("[data-testid=lq-newtable-save]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            fake.Requests.Should().Contain(r =>
+                r.Method == HttpMethod.Put && r.RequestUri!.AbsolutePath == "/api/database/catalog/pg-main/sales_orders");
+            fake.Requests.Should().Contain(r =>
+                r.Method == HttpMethod.Delete && r.RequestUri!.AbsolutePath == "/api/database/catalog/pg-main/orders");
+            cut.Instance.SelectedTables.Should().Contain("sales_orders").And.NotContain("orders");
+        });
+    }
+
+    [Fact]
+    public void Studio_EditTable_Cancel_ReturnsToDefineMode()
+    {
+        var fake = this.UseDefaultHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
+        cut.Find("[data-testid=lq-connection]").Change("pg-main");
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-table-orders]").Should().NotBeNull());
+
+        cut.Find("[data-testid=lq-table-edit-orders]").Click();
+        cut.Find("[data-testid=lq-newtable-cancel]").Click();
+
+        cut.Find("[data-testid=lq-tableform-title]").TextContent.Should().Contain("Define a table");
+        cut.Find("[data-testid=lq-newtable-name]").GetAttribute("value").Should().BeNullOrEmpty();
+        cut.FindAll("[data-testid=lq-newtable-cancel]").Should().BeEmpty();
+        fake.Requests.Should().NotContain(r => r.Method == HttpMethod.Put);
     }
 
     [Fact]

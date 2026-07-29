@@ -55,6 +55,11 @@ The catalog is per-connection and powers the generated POCOs:
 Manually defined tables need a name and at least one column (type + nullability); imported
 tables come straight from the provider's schema.
 
+**Editing a definition:** ✏️ on any catalogued table loads it into the form below (name,
+schema, and every column) — change types, add or drop columns, then **Save changes**. No need
+to delete and recreate. Renaming saves under the new name and removes the old entry, and any
+selection you had follows the rename. **Cancel** drops back to "define a new table" mode.
+
 ## Connections
 
 No connection yet? **➕ Connection** in the toolbar defines one without leaving the studio.
