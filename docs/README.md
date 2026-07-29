@@ -163,6 +163,7 @@ phases/                  the phased build roadmap (design breakdowns + status)
 - [Visual Designer](designer.md) — building workflows on the canvas
 - [Designer Architecture & React-Port Guide](designer-architecture.md) — the framework-free boundary
 - [Script Studio](script-studio.md) — writing/testing/managing scripts
+- [Linq Studio](linq-studio.md) — typed LINQ query authoring with a table catalog
 - [Execution Monitor](execution-monitor.md) — watching runs live + replay
 - [Module Manager](module-manager.md) — browse/upload/enable/uninstall modules
 

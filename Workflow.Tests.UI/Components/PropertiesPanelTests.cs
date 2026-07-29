@@ -24,6 +24,7 @@ public sealed class PropertiesPanelTests : TestContext
     {
         this.JSInterop.Mode = JSRuntimeMode.Loose;
         this.Services.AddSingleton(new Workflow.UI.Client.Scripts.State.ScriptStudioHandoff());
+        this.Services.AddSingleton(new Workflow.UI.Client.Linq.State.LinqStudioHandoff());
     }
 
     private static JsonElement El(string j) => JsonDocument.Parse(j).RootElement.Clone();
@@ -442,5 +443,60 @@ public sealed class PropertiesPanelTests : TestContext
             .Add(x => x.Language, "javascript"));
 
         cut.FindAll("[data-testid=code-textarea]").Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void LinqNode_OpenInStudio_StagesHandoff_AndNavigates()
+    {
+        // L3: a linq node offers the studio breakout; clicking stages the round-trip request~
+        var doc = new DesignerDocument();
+        var node = new DesignerNode { Id = "n1", ModuleId = "builtin.database.linq", Name = "Query" };
+        node.Properties["userCode"] = El("\"return db.orders.ToList();\"");
+        node.Properties["connectionId"] = El("\"pg-main\"");
+        node.Properties["tableNames"] = El("[\"orders\"]");
+        doc.Nodes.Add(node);
+        var sel = new SelectionState();
+        sel.SelectNode("n1");
+        var cut = this.Render(doc, sel, new CommandStack(doc));
+
+        cut.Find("[data-testid=edit-in-linq-studio]").Click();
+
+        var handoff = this.Services.GetRequiredService<Workflow.UI.Client.Linq.State.LinqStudioHandoff>();
+        handoff.HasRequest.Should().BeTrue();
+        handoff.NodeId.Should().Be("n1");
+        handoff.Code.Should().Be("return db.orders.ToList();");
+        handoff.ConnectionId.Should().Be("pg-main");
+        handoff.TableNames.Should().ContainSingle().Which.Should().Be("orders");
+        this.Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>()
+            .Uri.Should().EndWith("/linq-studio");
+    }
+
+    [Fact]
+    public void LinqNode_HandoffResult_AppliedAsUndoableEdit()
+    {
+        var doc = new DesignerDocument();
+        var node = new DesignerNode { Id = "n1", ModuleId = "builtin.database.linq", Name = "Query" };
+        node.Properties["userCode"] = El("\"return db.\"");
+        doc.Nodes.Add(node);
+        var sel = new SelectionState();
+        sel.SelectNode("n1");
+        var cmd = new CommandStack(doc);
+        var cut = this.Render(doc, sel, cmd);
+
+        var handoff = this.Services.GetRequiredService<Workflow.UI.Client.Linq.State.LinqStudioHandoff>();
+        handoff.Fulfill("n1", new Dictionary<string, JsonElement>
+        {
+            ["userCode"] = El("\"return db.orders.ToList();\""),
+            ["connectionId"] = El("\"pg-main\""),
+            ["compiledAssemblyKey"] = El("\"compiled-modules/abc.dll\""),
+        });
+        cut.SetParametersAndRender(p => p.Add(x => x.Document, doc));
+
+        doc.FindNode("n1")!.Properties["userCode"].GetString().Should().Be("return db.orders.ToList();");
+        doc.FindNode("n1")!.Properties["compiledAssemblyKey"].GetString().Should().Be("compiled-modules/abc.dll");
+
+        cmd.Undo();
+        doc.FindNode("n1")!.Properties["userCode"].GetString().Should().Be("return db.");
+        doc.FindNode("n1")!.Properties.Should().NotContainKey("compiledAssemblyKey");
     }
 }

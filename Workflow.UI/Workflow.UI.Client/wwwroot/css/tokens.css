@@ -245,6 +245,34 @@ a.df-link:hover { text-decoration: underline; }
 .df-sqlparams__row { display: flex; align-items: center; gap: var(--df-space-2); padding: var(--df-space-1) 0; font-size: 0.85rem; }
 .df-sqlparams__row code { color: var(--df-accent); }
 .df-sqlparams__value { flex: 1; color: var(--df-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 🧬 Linq Studio */
+.df-linqstudio { padding: var(--df-space-3); display: flex; flex-direction: column; height: calc(100vh - 58px); }
+.df-linqstudio__toolbar { display: flex; align-items: center; gap: var(--df-space-2); margin-bottom: var(--df-space-3); }
+.df-linqstudio__conn { max-width: 320px; }
+.df-linqstudio__body { display: flex; gap: var(--df-space-3); flex: 1; min-height: 0; }
+.df-linqstudio__tables { width: 300px; overflow-y: auto; border-right: 1px solid var(--df-border); padding-right: var(--df-space-3); }
+.df-linqstudio__editor { flex: 1; min-width: 0; overflow-y: auto; }
+.df-linqstudio__inputs { width: 300px; overflow-y: auto; border-left: 1px solid var(--df-border); padding-left: var(--df-space-3); }
+.df-linqstudio__panel-title { display: flex; align-items: center; justify-content: space-between; gap: var(--df-space-2); font-weight: 600; margin: var(--df-space-3) 0 var(--df-space-2); }
+.df-linqstudio__table { padding: var(--df-space-1) 0; border-bottom: 1px solid var(--df-border); }
+.df-linqstudio__dim { color: var(--df-text-dim); font-size: 0.78rem; }
+.df-linqstudio__cols { display: flex; flex-wrap: wrap; gap: var(--df-space-1); margin-top: 2px; }
+.df-linqstudio__ref { display: flex; flex-direction: column; gap: var(--df-space-1); }
+.df-linqstudio__ref-row { display: flex; flex-wrap: wrap; gap: var(--df-space-1); align-items: center; }
+.df-linqstudio__ref-chip { cursor: pointer; border: none; }
+.df-linqstudio__ref-chip:hover { filter: brightness(1.2); }
+.df-linqstudio__sandbox { margin: var(--df-space-2) var(--df-space-3) 0; padding: var(--df-space-2) var(--df-space-3); border: 1px dashed var(--df-border); border-radius: var(--df-radius); color: var(--df-text-dim); font-size: 0.85rem; }
+.df-linqstudio__modal-actions { justify-content: flex-end; margin-top: var(--df-space-3); }
+.df-linqstudio__req { color: var(--df-danger, #e06c75); margin-left: 2px; }
+.df-linqstudio__preview-cs { margin-top: var(--df-space-2); word-break: break-all; }
+.df-linqstudio__colrow { margin-bottom: var(--df-space-1); align-items: center; }
+.df-linqstudio__diags { max-height: 160px; overflow-y: auto; font-size: 0.8rem; }
+.df-linqstudio__diag { padding: 2px 0; color: #e0b341; }
+.df-linqstudio__diag--error { color: var(--df-state-failed); }
+.df-linqstudio__preview { max-height: 260px; overflow: auto; }
+.df-table { border-collapse: collapse; font-size: 0.8rem; width: 100%; }
+.df-table th, .df-table td { border: 1px solid var(--df-border); padding: 2px var(--df-space-2); text-align: left; }
 .df-props__multi { color: var(--df-text-dim); padding: var(--df-space-4); }
 .df-required { color: var(--df-state-failed); }
 .df-field-error { color: var(--df-state-failed); font-size: 0.75rem; margin-top: var(--df-space-1); }

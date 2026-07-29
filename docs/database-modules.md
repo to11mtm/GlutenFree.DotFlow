@@ -25,6 +25,8 @@ This document leads with the **typed linq surface** (2.4.b), then documents the 
 
 Write ordinary, strongly-typed C# linq2db against your tables. Roslyn validates it, an in-memory SQLite sandbox previews it, and it's compiled once at publish time and executed in a collectible `AssemblyLoadContext`. No SQL strings, real compile errors, IDE-grade feedback~ ✨
 
+> 🧬 **In the UI**: this whole flow is wrapped by **[Linq Studio](linq-studio.md)** (`/linq-studio`) — open it from a linq node's properties panel (**Open in Linq Studio →**) to manage the table catalog, author with typed references, validate/preview, and publish back to the node.
+
 ### Authoring flow: import → author → validate → preview → publish
 
 1. **Import the table catalog** — one-shot introspection so you can author against real tables:

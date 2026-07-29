@@ -68,6 +68,10 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
   Data modules with multiple outputs also get an **Output mode** selector: `ports`
   (default — each output as its own port) or `merged` (one **`output`** port carrying an
   object of all outputs — the canvas collapses the node's ports accordingly).
+  **LINQ query nodes** (`builtin.database.linq`) get an **Open in Linq Studio →** breakout:
+  a full-page authoring surface with a per-connection **table catalog**, typed
+  `db.TableName` reference, validate/preview against sample data, and a Publish that
+  returns and applies everything as one undoable edit — see [Linq Studio](linq-studio.md).
 - **Context menus:** right-click a node (Rename / Duplicate / Delete) or the canvas
   (Select all / Paste / Fit).
 - **Undo/redo:** toolbar ↩ / ↪ or Ctrl+Z / Ctrl+Y (50-step history).

@@ -77,6 +77,17 @@ public sealed class ShellAndListTests : TestContext
     }
 
     [Fact]
+    public void TopBar_LinqButton_NavigatesToLinqStudioSandbox()
+    {
+        // L5b: Linq Studio is reachable standalone, like Script Studio~
+        var cut = this.RenderComponent<Workflow.UI.Client.Shared.TopBar>();
+        var nav = this.Services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>();
+
+        cut.Find("[data-testid=nav-linq]").Click();
+        nav.Uri.Should().EndWith("/linq-studio");
+    }
+
+    [Fact]
     public void WorkflowList_Empty_ShowsEmptyState()
     {
         var page = new PageDto<WorkflowSummaryDto>(new List<WorkflowSummaryDto>(), 0, 1, 20, 0);

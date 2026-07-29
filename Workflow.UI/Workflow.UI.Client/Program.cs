@@ -38,6 +38,8 @@ builder.Services.AddScoped(sp =>
     new SystemClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
 builder.Services.AddScoped(sp =>
     new ScriptsClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
+builder.Services.AddScoped(sp =>
+    new DatabaseLinqClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
 
 // 🔔 App services: toasts + localStorage~
 builder.Services.AddScoped<Workflow.UI.Client.Services.ToastService>();
@@ -45,6 +47,7 @@ builder.Services.AddScoped<Workflow.UI.Client.Services.ILocalStorage, Workflow.U
 builder.Services.AddScoped<Workflow.UI.Client.Services.PaletteDragState>();
 builder.Services.AddScoped<Workflow.UI.Client.Designer.State.DesignerClipboard>();
 builder.Services.AddScoped<Workflow.UI.Client.Scripts.State.ScriptStudioHandoff>();
+builder.Services.AddScoped<Workflow.UI.Client.Linq.State.LinqStudioHandoff>();
 builder.Services.AddScoped<Workflow.UI.Client.Execution.State.MonitorState>();
 
 // 📡 Real-time hub client (SignalR)~

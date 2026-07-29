@@ -56,6 +56,28 @@
         }
     }
 
+    /// <summary>Inserts text at the cursor (Monaco) or appends to the value (textarea fallback)~ ✍️.</summary>
+    /// <param name="text">The snippet to insert.</param>
+    /// <returns>A task.</returns>
+    public async Task InsertTextAsync(string text)
+    {
+        if (this.useMonaco)
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>("dotflowMonaco.insertText", this.editorId, text);
+                return;
+            }
+            catch
+            {
+                // fall through to value append.
+            }
+        }
+
+        this.Value = string.IsNullOrEmpty(this.Value) ? text : this.Value + text;
+        await this.ValueChanged.InvokeAsync(this.Value);
+    }
+
     /// <summary>Invoked by the Monaco JS wrapper on content change~ 📜.</summary>
     /// <param name="value">The new value.</param>
     /// <returns>A task.</returns>

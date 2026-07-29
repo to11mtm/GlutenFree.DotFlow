@@ -132,6 +132,90 @@ public sealed class DatabaseLinqApiTests : IClassFixture<WebApplicationFactory<P
         resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // ── 📚 Linq Studio L0 — catalog management ─────────────────────────────────────
+
+    [Fact]
+    public async Task Api_Catalog_UpsertListRemove_RoundTrips()
+    {
+        var client = this.factory.CreateClient();
+        var conn = $"studio-test-{Guid.NewGuid():N}";
+
+        // Manual upsert with a columns grid.
+        var upsert = await client.PutAsJsonAsync($"/api/database/catalog/{conn}/Users", new
+        {
+            schema = "public",
+            columns = new[]
+            {
+                new { name = "id", dataType = "integer", nullable = false },
+                new { name = "email", dataType = "text", nullable = true },
+            },
+            clrTypeName = (string?)null,
+            assemblyName = (string?)null,
+        });
+        upsert.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // List returns it with columns.
+        var list = await client.GetFromJsonAsync<JsonElement>($"/api/database/catalog/{conn}");
+        list.GetArrayLength().Should().Be(1);
+        var table = list[0];
+        table.GetProperty("tableName").GetString().Should().Be("Users");
+        table.GetProperty("schema").GetString().Should().Be("public");
+        table.GetProperty("columns").GetArrayLength().Should().Be(2);
+
+        // Remove → 204, then the list is empty and a re-remove 404s.
+        (await client.DeleteAsync($"/api/database/catalog/{conn}/Users")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await client.GetFromJsonAsync<JsonElement>($"/api/database/catalog/{conn}")).GetArrayLength().Should().Be(0);
+        (await client.DeleteAsync($"/api/database/catalog/{conn}/Users")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Api_Catalog_Upsert_NoColumnsNoClrType_Returns400()
+    {
+        var client = this.factory.CreateClient();
+        var resp = await client.PutAsJsonAsync($"/api/database/catalog/c-{Guid.NewGuid():N}/Bad", new
+        {
+            schema = (string?)null,
+            columns = (object?)null,
+            clrTypeName = (string?)null,
+            assemblyName = (string?)null,
+        });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Api_Catalog_ManualTable_UsableByValidate()
+    {
+        var client = this.factory.CreateClient();
+        var conn = $"studio-vali-{Guid.NewGuid():N}";
+
+        await client.PutAsJsonAsync($"/api/database/catalog/{conn}/Orders", new
+        {
+            schema = (string?)null,
+            columns = new[]
+            {
+                new { name = "id", dataType = "integer", nullable = false },
+                new { name = "total", dataType = "numeric", nullable = false },
+            },
+            clrTypeName = (string?)null,
+            assemblyName = (string?)null,
+        });
+
+        // Validate resolving tables FROM THE CATALOG (no inline tables) — the Studio's path.
+        var resp = await client.PostAsJsonAsync("/api/database/linq/validate", new
+        {
+            definitionId = "def1",
+            nodeId = "node1",
+            userCode = "return db.Orders.Where(o => o.total > 0).ToList();",
+            connectionId = conn,
+            tableNames = new[] { "Orders" },
+        });
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("success").GetBoolean().Should().BeTrue();
+    }
+
     private static object Body(string userCode) => new
     {
         definitionId = "def1",

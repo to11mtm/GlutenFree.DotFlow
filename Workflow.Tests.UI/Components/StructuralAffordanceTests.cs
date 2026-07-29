@@ -22,6 +22,7 @@ public sealed class StructuralAffordanceTests : TestContext
         this.JSInterop.Mode = JSRuntimeMode.Loose;
         this.Services.AddSingleton(new Workflow.UI.Client.Services.PaletteDragState());
         this.Services.AddSingleton(new Workflow.UI.Client.Scripts.State.ScriptStudioHandoff());
+        this.Services.AddSingleton(new Workflow.UI.Client.Linq.State.LinqStudioHandoff());
     }
 
     [Fact]

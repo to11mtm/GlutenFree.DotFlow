@@ -35,6 +35,7 @@ public sealed class DesignerIntegrationTests : TestContext
         this.Services.AddSingleton(new ApiClientOptions { BaseUrl = "http://localhost" });
         this.Services.AddSingleton<ILocalStorage>(new InMemoryLocalStorage());
         this.Services.AddSingleton(this.handoff);
+        this.Services.AddSingleton(new Workflow.UI.Client.Linq.State.LinqStudioHandoff());
     }
 
     private static JsonElement El(string j) => JsonDocument.Parse(j).RootElement.Clone();

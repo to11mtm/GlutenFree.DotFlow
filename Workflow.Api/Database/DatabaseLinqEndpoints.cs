@@ -66,6 +66,27 @@ public static class DatabaseLinqEndpoints
             .Produces<CatalogImportResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
+        // 📚 Linq Studio L0 — catalog management (list / manual upsert / remove)~
+        app.MapGet("/api/database/catalog/{connectionId}", CatalogListHandler)
+            .WithTags("Database Linq")
+            .WithName("ListCatalog")
+            .WithSummary("List the catalogued tables (with columns) for a named connection")
+            .Produces<CatalogTableDto[]>(StatusCodes.Status200OK);
+
+        app.MapPut("/api/database/catalog/{connectionId}/{tableName}", CatalogUpsertHandler)
+            .WithTags("Database Linq")
+            .WithName("UpsertCatalogTable")
+            .WithSummary("Manually define or update a catalogued table for a named connection")
+            .Produces<CatalogTableDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest);
+
+        app.MapDelete("/api/database/catalog/{connectionId}/{tableName}", CatalogRemoveHandler)
+            .WithTags("Database Linq")
+            .WithName("RemoveCatalogTable")
+            .WithSummary("Remove a catalogued table")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
+
         return app;
     }
 
@@ -148,6 +169,66 @@ public static class DatabaseLinqEndpoints
             return Results.NotFound(new { error = $"Connection '{connectionId}' not found." });
         }
     }
+
+    private static async Task<IResult> CatalogListHandler(
+        string connectionId,
+        IWorkflowTableCatalog catalog,
+        CancellationToken ct)
+    {
+        var tables = await catalog.ListAsync(connectionId, ct).ConfigureAwait(false);
+        return Results.Ok(tables.Select(ToDto).ToArray());
+    }
+
+    private static async Task<IResult> CatalogUpsertHandler(
+        string connectionId,
+        string tableName,
+        CatalogTableUpsertRequest request,
+        IWorkflowTableCatalog catalog,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(tableName))
+        {
+            return Results.BadRequest(new { error = "Table name is required." });
+        }
+
+        var hasColumns = request.Columns is { Count: > 0 };
+        var hasClrType = !string.IsNullOrWhiteSpace(request.ClrTypeName);
+        if (!hasColumns && !hasClrType)
+        {
+            return Results.BadRequest(new { error = "Provide either columns (generated POCO) or a clrTypeName (plugin type)." });
+        }
+
+        var table = new WorkflowTableMetadata(
+            connectionId,
+            tableName,
+            string.IsNullOrWhiteSpace(request.Schema) ? null : request.Schema,
+            request.Columns?.Select(c => new WorkflowColumnMetadata(c.Name, c.DataType, c.Nullable)).ToList(),
+            hasClrType ? request.ClrTypeName : null,
+            hasClrType ? request.AssemblyName : null);
+
+        await catalog.UpsertAsync(table, ct).ConfigureAwait(false);
+        return Results.Ok(ToDto(table));
+    }
+
+    private static async Task<IResult> CatalogRemoveHandler(
+        string connectionId,
+        string tableName,
+        IWorkflowTableCatalog catalog,
+        CancellationToken ct)
+    {
+        var removed = await catalog.RemoveAsync(connectionId, tableName, ct).ConfigureAwait(false);
+        return removed
+            ? Results.NoContent()
+            : Results.NotFound(new { error = $"Table '{tableName}' is not catalogued for connection '{connectionId}'." });
+    }
+
+    private static CatalogTableDto ToDto(WorkflowTableMetadata t)
+        => new(
+            t.TableName,
+            t.Schema,
+            t.Columns?.Select(c => new LinqColumnDto(c.Name, c.DataType, c.Nullable)).ToList(),
+            t.ClrTypeName,
+            t.AssemblyName);
 
     // ── Request → domain builders ──────────────────────────────────────────────────────────
 
@@ -372,5 +453,29 @@ public sealed record CompileResponse(string CompiledAssemblyKey);
 /// <summary>Response for catalog import~.</summary>
 /// <param name="Imported">Number of tables imported.</param>
 public sealed record CatalogImportResponse(int Imported);
+
+/// <summary>📚 A catalogued table (list/upsert responses)~.</summary>
+/// <param name="TableName">Table name.</param>
+/// <param name="Schema">Optional schema.</param>
+/// <param name="Columns">Column metadata (generated-POCO tables).</param>
+/// <param name="ClrTypeName">Plugin CLR type name (plugin tables).</param>
+/// <param name="AssemblyName">Plugin assembly name.</param>
+public sealed record CatalogTableDto(
+    string TableName,
+    string? Schema,
+    IReadOnlyList<LinqColumnDto>? Columns,
+    string? ClrTypeName,
+    string? AssemblyName);
+
+/// <summary>📚 Manual table upsert request body~.</summary>
+/// <param name="Schema">Optional schema.</param>
+/// <param name="Columns">Column metadata (name/dataType/nullable) for a generated POCO.</param>
+/// <param name="ClrTypeName">Plugin CLR type name (alternative to columns).</param>
+/// <param name="AssemblyName">Plugin assembly name.</param>
+public sealed record CatalogTableUpsertRequest(
+    string? Schema,
+    IReadOnlyList<LinqColumnDto>? Columns,
+    string? ClrTypeName,
+    string? AssemblyName);
 
 

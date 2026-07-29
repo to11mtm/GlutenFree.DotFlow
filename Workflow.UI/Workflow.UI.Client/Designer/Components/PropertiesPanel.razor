@@ -6,6 +6,7 @@
 @using Workflow.UI.Client.Scripts.State
 @inject NavigationManager Nav
 @inject ScriptStudioHandoff Handoff
+@inject Workflow.UI.Client.Linq.State.LinqStudioHandoff LinqHandoff
 
 <div class="df-props">
     @if (SelectedNode is not null)
@@ -76,6 +77,10 @@
         @if (IsScriptNode)
         {
             <button class="df-btn df-btn--link" data-testid="edit-in-studio" @onclick="OpenInScriptStudio">Edit in Script Studio →</button>
+        }
+        @if (IsLinqNode)
+        {
+            <button class="df-btn df-btn--link" data-testid="edit-in-linq-studio" @onclick="OpenInLinqStudio">Open in Linq Studio →</button>
         }
 
         @* 🛡️ G9 — safe SQL parameter builder: values bind as parameters, never concatenated (D7). *@
@@ -351,6 +356,27 @@
             }
         }
 
+        // Consume a published Linq Studio result — all authoring properties as one undoable edit~ 🧬
+        if (this.LinqHandoff.HasResult && this.LinqHandoff.TakeResult() is { } linqResult)
+        {
+            var linqTarget = this.Document.FindNode(linqResult.NodeId);
+            if (linqTarget is not null)
+            {
+                var beforeLinq = new Dictionary<string, JsonElement>(linqTarget.Properties);
+                var afterLinq = new Dictionary<string, JsonElement>(linqTarget.Properties);
+                foreach (var (key, value) in linqResult.Properties)
+                {
+                    afterLinq[key] = value;
+                }
+
+                this.Commands.Execute(new EditNodePropertiesCommand(linqTarget.Id, beforeLinq, afterLinq));
+                if (linqTarget.Id == this.seededNodeId)
+                {
+                    this.SeedBuffer(linqTarget);
+                }
+            }
+        }
+
         var node = this.SelectedNode;
         if (node is not null && node.Id != this.seededNodeId)
         {
@@ -379,6 +405,34 @@
 
     private bool IsScriptNode
         => this.SelectedNode is { ModuleId: "builtin.script" } && this.buffer.ContainsKey("code");
+
+    private bool IsLinqNode => this.SelectedNode is { ModuleId: "builtin.database.linq" };
+
+    private void OpenInLinqStudio()
+    {
+        var node = this.SelectedNode;
+        if (node is null)
+        {
+            return;
+        }
+
+        var code = this.buffer.TryGetValue("userCode", out var uc) ? JsonValues.ToText(uc) : string.Empty;
+        var conn = this.buffer.TryGetValue("connectionId", out var ci) ? JsonValues.ToText(ci) : string.Empty;
+        var tables = new List<string>();
+        if (this.buffer.TryGetValue("tableNames", out var tn) && tn.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in tn.EnumerateArray())
+            {
+                if (el.ValueKind == JsonValueKind.String && el.GetString() is { Length: > 0 } s)
+                {
+                    tables.Add(s);
+                }
+            }
+        }
+
+        this.LinqHandoff.Request(node.Id, this.Document.Id.ToString(), code, conn, tables, this.Nav.Uri);
+        this.Nav.NavigateTo("/linq-studio");
+    }
 
     private void OpenInScriptStudio()
     {
