@@ -104,8 +104,35 @@ string? Tick **Advanced — enter a raw connection string** (toggling carries yo
 in both directions).
 
 Saving `POST`s to `/api/database/connections/`, selects the new connection, and loads its
-(empty) catalog so you can import or define tables right away. Connection strings are stored
-server-side (encrypted at rest) and always masked in responses.
+(empty) catalog so you can import or define tables right away. 🗑 forgets a saved connection.
+
+### Where connections are stored 💾
+
+By default the registry is in-process (config-seeded, lost on restart). Set
+`Workflow:Database:ConnectionStore:Enabled` to persist them to a small purpose-built SQLite
+file instead — connections you define in the studio then survive restarts:
+
+```jsonc
+"Workflow": {
+  "Database": {
+    "ConnectionStore": {
+      "Enabled": true,
+      "Path": "App_Data/dotflow-connections.db"   // relative to the process dir
+    }
+  }
+}
+```
+
+It's enabled in `appsettings.Development.json` out of the box. Connections declared in
+`Workflow:Database:Connections` (appsettings) are re-seeded on every start and stay
+authoritative; connections created through the API/UI live alongside them and are only changed
+through the API/UI.
+
+Connection strings are written through the `IConnectionStringProtector` seam. The API registers
+a **Data-Protection-backed** protector, so what lands on disk is ciphertext, and rows that can
+no longer be decrypted (rotated keys) surface as *disabled* rather than breaking the listing.
+The library default is a pass-through protector — fine for dev, **not** a substitute for real
+secret management in production.
 
 ## Related
 

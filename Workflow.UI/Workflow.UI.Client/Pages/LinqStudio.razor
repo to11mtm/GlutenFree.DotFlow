@@ -28,6 +28,9 @@
         </select>
         <button class="df-btn df-btn--small" data-testid="lq-conn-new" title="Define a new named database connection"
                 @onclick="() => connModalOpen = true">➕ Connection</button>
+        <button class="df-btn df-btn--small df-btn--danger" data-testid="lq-conn-delete"
+                disabled="@(string.IsNullOrEmpty(connectionId) || busy)"
+                title="Forget this saved connection" @onclick="DeleteConnection">🗑</button>
         <span class="df-topbar__spacer"></span>
         <button class="df-btn" data-testid="lq-validate" disabled="@busy" @onclick="Validate">✅ Validate</button>
         <button class="df-btn" data-testid="lq-preview" disabled="@busy" @onclick="Preview">👀 Preview</button>
@@ -545,6 +548,35 @@
     }
 
     private bool UseGuidedForm => !connRawMode && ConnectionStringComposer.FieldsFor(connProvider).Count > 0;
+
+    private async Task DeleteConnection()
+    {
+        var target = connectionId;
+        if (string.IsNullOrEmpty(target))
+        {
+            return;
+        }
+
+        busy = true;
+        try
+        {
+            await Linq.DeleteConnectionAsync(target);
+            Toasts.Success($"Connection '{target}' removed");
+            connectionId = string.Empty;
+            catalog.Clear();
+            ResetTableForm();
+            connections.Clear();
+            connections.AddRange(await Linq.ListConnectionsAsync());
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
 
     private string ConnFieldValue(ConnectionField field)
         => connFields.TryGetValue(field.Key, out var v) ? v ?? string.Empty : field.Default ?? string.Empty;

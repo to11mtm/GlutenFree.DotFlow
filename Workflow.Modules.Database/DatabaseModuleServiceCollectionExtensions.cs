@@ -6,6 +6,7 @@ namespace Workflow.Modules.Database;
 
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Database.Abstractions;
 using Workflow.Modules.Database.Builtin;
@@ -47,13 +48,25 @@ public static class DatabaseModuleServiceCollectionExtensions
         // ⚙️ Options plumbing — ensures IOptions<DatabaseConnectionsOptions> resolves even
         // when the host didn't bind a config section (empty registry, still functional)~
         services.AddOptions<DatabaseConnectionsOptions>();
+        services.AddOptions<ConnectionStoreOptions>();
 
         // 🗂️ Provider-key → linq2db ProviderName mapping (postgres/sqlite in V1 — D5/D6)~
         services.TryAddSingleton<IDbProviderRegistry, DefaultDbProviderRegistry>();
 
-        // 📇 Named connections — in-memory, config-hydrated. 2.4.a.5 overrides with the
-        // persisted registry when IPersistenceProvider.DbConnections is available~
-        services.TryAddSingleton<IDbConnectionRegistry, InMemoryDbConnectionRegistry>();
+        // 📇 Named connections. In-memory + config-hydrated by default; when
+        //    Workflow:Database:ConnectionStore:Enabled is set, a purpose-built SQLite file backs
+        //    the registry so UI-defined connections survive restarts (at-rest protection is the
+        //    IConnectionStringProtector seam)~ 💾
+        services.TryAddSingleton<IDbConnectionRegistry>(sp =>
+        {
+            var store = sp.GetRequiredService<IOptions<ConnectionStoreOptions>>();
+            return store.Value.Enabled
+                ? new SqliteDbConnectionRegistry(
+                    store,
+                    sp.GetRequiredService<IOptions<DatabaseConnectionsOptions>>(),
+                    sp.GetRequiredService<IConnectionStringProtector>())
+                : new InMemoryDbConnectionRegistry(sp.GetRequiredService<IOptions<DatabaseConnectionsOptions>>());
+        });
 
         // 🔌 The single connection seam both module families share (D2)~
         services.TryAddSingleton<IDbConnectionFactory, DefaultDbConnectionFactory>();

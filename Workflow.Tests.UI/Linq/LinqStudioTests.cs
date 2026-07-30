@@ -56,6 +56,11 @@ public sealed class LinqStudioTests : TestContext
                 return Json("{\"id\":\"sq-new\",\"providerKey\":\"sqlite\",\"connectionString\":\"***\",\"displayName\":\"New SQLite\",\"enabled\":true}");
             }
 
+            if (req.Method == HttpMethod.Delete && path.StartsWith("/api/database/connections/", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+
             if (path == "/api/database/connections/")
             {
                 return Json(connectionSaved
@@ -459,6 +464,28 @@ public sealed class LinqStudioTests : TestContext
         {
             var table = cut.Find("[data-testid=lq-table-orders]");
             table.TextContent.Should().Contain("🔑").And.Contain("⚡");
+        });
+    }
+
+    [Fact]
+    public void Studio_DeleteConnection_RemovesIt_AndClearsSelection()
+    {
+        // L10: saved connections are durable, so forgetting one is an explicit action~
+        var fake = this.UseDefaultHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
+
+        cut.Find("[data-testid=lq-conn-delete]").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("[data-testid=lq-connection]").Change("pg-main");
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-conn-delete]").HasAttribute("disabled").Should().BeFalse());
+
+        cut.Find("[data-testid=lq-conn-delete]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            fake.Requests.Should().Contain(r =>
+                r.Method == HttpMethod.Delete && r.RequestUri!.AbsolutePath == "/api/database/connections/pg-main");
+            cut.Find("[data-testid=lq-conn-delete]").HasAttribute("disabled").Should().BeTrue("the selection was cleared~");
         });
     }
 

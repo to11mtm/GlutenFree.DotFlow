@@ -160,6 +160,20 @@ POCOs are emitted as `WorkflowRuntime.Gen_FooBar`, a name users never see.
       back**, and returns rows + the captured SQL. Trusted-author gated like compile; the studio
       gets a **🗄 Run on connection** button with a clear rollback notice.
 
+## L10 — Persisted connection store (stakeholder request, 2026-07-29)
+
+Connections defined in the UI vanished on restart (the registry was in-memory only; the
+"persisted registry" was a long-standing 2.4.a.5 TODO).
+
+- [x] **L10 — SQLite-backed `IDbConnectionRegistry`**: `SqliteDbConnectionRegistry` +
+      `ConnectionStoreOptions` (`Workflow:Database:ConnectionStore` — `Enabled`, `Path`);
+      registered via a resolve-time factory so the in-memory registry stays the default and
+      hosts opt in (enabled in `appsettings.Development.json`). Config-declared connections are
+      re-seeded each start as `origin=config`; UI-created ones persist as `origin=user`.
+      Connection strings go through the existing `IConnectionStringProtector` seam (the API's
+      Data-Protection protector encrypts at rest; undecryptable rows surface disabled instead of
+      breaking the listing). Studio gained a 🗑 to forget a saved connection.
+
 ## Post-MVP (tracked, not in scope now)
 
 - [ ] **L.P1 — Monaco completions for `db.` / columns**: a completion provider fed by the

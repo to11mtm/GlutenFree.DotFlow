@@ -176,6 +176,11 @@ builder.Services.AddDatabaseModules();
 builder.Services.Configure<DatabaseConnectionsOptions>(
     builder.Configuration.GetSection(DatabaseConnectionsOptions.SectionName));
 
+// 💾 Persisted connection store — when enabled, UI-defined connections live in a purpose-built
+// SQLite file instead of process memory, so they survive restarts~
+builder.Services.Configure<ConnectionStoreOptions>(
+    builder.Configuration.GetSection(ConnectionStoreOptions.SectionName));
+
 // 🔒 Data-Protection-backed connection-string encryption (replaces the no-op default from
 // AddDatabaseModules) so persisted connection strings are encrypted at rest~
 builder.Services.AddDataProtection();

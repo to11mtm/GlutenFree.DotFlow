@@ -131,7 +131,22 @@ Named connections come from two places:
 
 ### Credentials at rest 🔒
 
-When a persistence provider (SQLite) is configured, connection strings are **encrypted at rest** via ASP.NET Data Protection (`IConnectionStringProtector`, purpose `Workflow.Modules.Database.ConnectionString`). The registry never persists plaintext. Without a persistence provider the in-memory registry is used (config values are plain by design).
+Runtime-created connections (API/UI) are **in-process only** unless the connection store is enabled — turn it on so they survive restarts:
+
+```jsonc
+"Workflow": {
+  "Database": {
+    "ConnectionStore": {
+      "Enabled": true,
+      "Path": "App_Data/dotflow-connections.db"
+    }
+  }
+}
+```
+
+The store is a small purpose-built SQLite file (enabled by default in `appsettings.Development.json`). Connections declared in `Workflow:Database:Connections` are re-seeded from config on every start and stay authoritative; API/UI-created ones live alongside them.
+
+Connection strings are written through `IConnectionStringProtector` — the API registers an ASP.NET Data Protection implementation (purpose `Workflow.Modules.Database.ConnectionString`), so what lands on disk is ciphertext and the registry never persists plaintext. Rows that can no longer be decrypted (rotated/lost keys) surface as **disabled** rather than breaking the listing. The library default is a pass-through protector — fine for dev/MVP, not a substitute for real secret management. Config values are plain by design (D3).
 
 ---
 
