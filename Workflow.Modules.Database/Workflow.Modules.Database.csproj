@@ -19,6 +19,8 @@
         <PackageReference Include="Npgsql" />
         <!-- 🪶 SQLite via Microsoft.Data.Sqlite (ProviderName.SQLiteMS)~ -->
         <PackageReference Include="Microsoft.Data.Sqlite" />
+        <!-- 🅾️ Oracle (linq2db provider adapter + Oracle.ManagedDataAccess ADO driver)~ -->
+        <PackageReference Include="linq2db.Oracle" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.Extensions.Options" />

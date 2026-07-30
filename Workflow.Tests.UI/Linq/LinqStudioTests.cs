@@ -623,4 +623,76 @@ public sealed class LinqStudioTests : TestContext
         cut2.WaitForAssertion(() => cut2.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
         cut2.FindAll("[data-testid=lq-sandbox-hint]").Should().BeEmpty();
     }
+
+    // ── 🅾️ Oracle (L11c) ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Studio_NewConnection_OracleProvider_ComposesDataSource()
+    {
+        var fake = this.UseOracleHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Oracle Prod"));
+
+        cut.Find("[data-testid=lq-conn-new]").Click();
+        cut.Find("[data-testid=lq-conn-provider]").InnerHtml.Should().Contain("Oracle");
+        cut.Find("[data-testid=lq-conn-provider]").Change("oracle");
+
+        // Oracle's guided fields — no Postgres "Database" box~
+        cut.FindAll("[data-testid=lq-connf-Database]").Should().BeEmpty();
+        cut.Find("[data-testid=lq-conn-id]").Input("ora-2");
+        cut.Find("[data-testid=lq-connf-Host]").Input("oracle.internal");
+        cut.Find("[data-testid=lq-connf-Service-Name]").Input("ORCLPDB1");
+        cut.Find("[data-testid=lq-connf-User-Id]").Input("APP");
+        cut.Find("[data-testid=lq-conn-preview]").TextContent.Should().Contain("Data Source=oracle.internal:1521/ORCLPDB1");
+
+        cut.Find("[data-testid=lq-conn-save]").Click();
+
+        cut.WaitForAssertion(() => fake.Bodies.Should().Contain(b =>
+            b.Contains("Data Source=oracle.internal:1521/ORCLPDB1") && b.Contains("oracle")));
+    }
+
+    [Fact]
+    public void Studio_OracleConnectionSelected_TableDesignerOffersOracleTypes()
+    {
+        this.UseOracleHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Oracle Prod"));
+
+        cut.Find("[data-testid=lq-connection]").Change("ora-main");
+
+        cut.WaitForAssertion(() =>
+        {
+            var types = cut.Find("[data-testid=lq-col-type-0]").InnerHtml;
+            types.Should().Contain("NUMBER").And.Contain("VARCHAR2");
+            types.Should().NotContain(">text<");
+        });
+    }
+
+    /// <summary>A fake whose only connection is an Oracle one~ 🅾️.</summary>
+    private FakeHttpMessageHandler UseOracleHandler()
+    {
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (req.Method == HttpMethod.Post && path == "/api/database/connections/")
+            {
+                return Json("{\"id\":\"ora-2\",\"providerKey\":\"oracle\",\"connectionString\":\"***\",\"displayName\":\"Oracle 2\",\"enabled\":true}");
+            }
+
+            if (path == "/api/database/connections/")
+            {
+                return Json("[{\"id\":\"ora-main\",\"providerKey\":\"oracle\",\"connectionString\":\"***\",\"displayName\":\"Oracle Prod\",\"enabled\":true}]");
+            }
+
+            if (req.Method == HttpMethod.Get && path.StartsWith("/api/database/catalog/", StringComparison.Ordinal))
+            {
+                return Json("[]");
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        this.Services.AddSingleton(new DatabaseLinqClient(handler.CreateClient()));
+        return handler;
+    }
 }

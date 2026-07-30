@@ -82,22 +82,32 @@ public sealed class SharedInfrastructureTests : IDisposable
     }
 
     [Fact]
+    public void ProviderRegistry_KnownOracle_ResolvesToOracleManaged()
+    {
+        // 🅾️ Oracle is supported by the database MODULE family only (not Workflow.Persistence)~
+        var registry = new DefaultDbProviderRegistry();
+
+        registry.ResolveLinq2DbProvider("oracle").Should().Be(ProviderName.OracleManaged);
+        registry.ResolveLinq2DbProvider("ORACLE").Should().Be(ProviderName.OracleManaged);
+    }
+
+    [Fact]
     public void ProviderRegistry_UnknownKey_ThrowsUnknownProviderException()
     {
         var registry = new DefaultDbProviderRegistry();
 
-        var act = () => registry.ResolveLinq2DbProvider("oracle");
+        var act = () => registry.ResolveLinq2DbProvider("cockroach");
 
         act.Should().Throw<UnknownProviderException>()
-            .Which.ProviderKey.Should().Be("oracle");
+            .Which.ProviderKey.Should().Be("cockroach");
     }
 
     [Fact]
-    public void ProviderRegistry_KnownProviders_ContainsPostgresAndSqlite()
+    public void ProviderRegistry_KnownProviders_ContainsPostgresSqliteAndOracle()
     {
         var registry = new DefaultDbProviderRegistry();
 
-        registry.KnownProviders.Should().BeEquivalentTo("postgres", "sqlite");
+        registry.KnownProviders.Should().BeEquivalentTo("postgres", "sqlite", "oracle");
     }
 
     #endregion

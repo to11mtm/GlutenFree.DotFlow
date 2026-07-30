@@ -94,7 +94,9 @@ The typed surface runs author-supplied C#, so it ships a defence-in-depth sandbo
 Every module accepts **one of two** connection sources (mutually exclusive — D3):
 
 1. **Named connection (preferred)** — `connectionId: "OrdersDb"` references a registration held by the connection registry. Credentials never appear in the workflow definition.
-2. **Raw connection string (escape hatch)** — `connectionString: "..."` **plus** `provider: "postgres" | "sqlite"`.
+2. **Raw connection string (escape hatch)** — `connectionString: "..."` **plus** `provider: "postgres" | "sqlite" | "oracle"`.
+
+> 🅾️ **Oracle** (`provider: "oracle"`, via `Oracle.ManagedDataAccess`) is available to the **database modules and Linq Studio only**. `Workflow.Persistence` deliberately has no Oracle provider — DotFlow's own workflows/history/variables continue to live on SQLite/Postgres/NATS. Connection strings use EZConnect (`Data Source=host:port/service;User Id=…;Password=…`) or a full TNS descriptor; the Linq Studio connection builder composes the former for you.
 
 ### Registering named connections
 

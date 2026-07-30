@@ -256,6 +256,51 @@ public sealed class LinqCompilerTests
         result.Errors.Should().Contain(d => d.Id == "WFLINQ001");
     }
 
+    // ── 🅾️ Oracle types (L11) ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Compile_OracleTypedTable_MapsNumberAndVarchar2()
+    {
+        var oracleTable = new WorkflowTableMetadata(
+            ConnectionId: "conn",
+            TableName: "EMPLOYEES",
+            Columns: new[]
+            {
+                new WorkflowColumnMetadata("EMPLOYEE_ID", "NUMBER", false, IsPrimaryKey: true, IsIdentity: true),
+                new WorkflowColumnMetadata("LAST_NAME", "VARCHAR2(25)", false),
+                new WorkflowColumnMetadata("HIRE_DATE", "DATE", false),
+                new WorkflowColumnMetadata("CHANGED_AT", "TIMESTAMP(6) WITH TIME ZONE", true),
+                new WorkflowColumnMetadata("PHOTO", "BLOB", true),
+            });
+
+        var result = await this.Compile(
+            "return db.EMPLOYEES.Where(e => e.LAST_NAME == \"King\" && e.EMPLOYEE_ID > 0m).ToList();",
+            new[] { oracleTable },
+            Schema());
+
+        result.Success.Should().BeTrue(this.Dump(result));
+    }
+
+    [Fact]
+    public void SqlTypeMapper_OracleTypes_MapToTheExpectedClrTypes()
+    {
+        SqlTypeMapper.TryMap("NUMBER", false, out var number).Should().BeTrue();
+        number.Should().Be("decimal");
+
+        SqlTypeMapper.TryMap("VARCHAR2(50)", false, out var varchar2).Should().BeTrue();
+        varchar2.Should().Be("string");
+
+        // The precision qualifier is stripped but the suffix survives (regression: L11a)~
+        SqlTypeMapper.TryMap("TIMESTAMP(6) WITH TIME ZONE", true, out var tstz).Should().BeTrue();
+        tstz.Should().Be("global::System.DateTimeOffset?");
+
+        SqlTypeMapper.TryMap("BINARY_DOUBLE", false, out var bd).Should().BeTrue();
+        bd.Should().Be("double");
+
+        SqlTypeMapper.TryMap("RAW(16)", true, out var raw).Should().BeTrue();
+        raw.Should().Be("byte[]?");
+    }
+
     // ── Helpers 🛠️ ───────────────────────────────────────────────────────────────────────
 
     private static WorkflowTableMetadata OrdersTable() =>

@@ -115,8 +115,8 @@
                 <div class="df-row df-linqstudio__colrow">
                     <input class="df-input" placeholder="column" data-testid="lq-col-name-@i"
                            value="@row.Name" @oninput="e => row.Name = e.Value?.ToString() ?? string.Empty" />
-                    <select class="df-input" data-testid="lq-col-type-@i" @onchange='e => row.DataType = e.Value?.ToString() ?? "text"'>
-                        @foreach (var ty in ColumnTypes)
+                    <select class="df-input" data-testid="lq-col-type-@i" @onchange='e => row.DataType = e.Value?.ToString() ?? TableDesignerTypes.DefaultFor(SelectedProviderKey)'>
+                        @foreach (var ty in TypeOptionsFor(row))
                         {
                             <option value="@ty" selected="@(ty == row.DataType)">@ty</option>
                         }
@@ -128,7 +128,7 @@
                 </div>
             }
             <div class="df-row">
-                <button class="df-btn df-btn--small" data-testid="lq-col-add" @onclick="() => newColumns.Add(new ColumnRow())">＋ column</button>
+                <button class="df-btn df-btn--small" data-testid="lq-col-add" @onclick="() => newColumns.Add(NewColumnRow())">＋ column</button>
                 <button class="df-btn df-btn--primary df-btn--small" data-testid="lq-newtable-save"
                         disabled="@(string.IsNullOrEmpty(connectionId) || busy)" @onclick="SaveNewTable">
                     @(editingTable is null ? "Save table" : "Save changes")
@@ -356,7 +356,6 @@
 }
 
 @code {
-    private static readonly string[] ColumnTypes = { "text", "integer", "bigint", "numeric", "boolean", "timestamp", "uuid" };
     private static readonly string[] InputTypes = { "string", "int", "long", "double", "decimal", "bool", "guid", "datetime" };
 
     private readonly List<DbConnectionDto> connections = new();
@@ -463,6 +462,28 @@
             await LoadCatalog();
         }
     }
+
+    /// <summary>
+    /// The provider's type list, plus the row's own type when it came from an import/older
+    /// definition — never silently retype a column the user didn't touch~ 🛟.
+    /// </summary>
+    private IReadOnlyList<string> TypeOptionsFor(ColumnRow row)
+    {
+        var options = TableDesignerTypes.For(SelectedProviderKey);
+        if (string.IsNullOrWhiteSpace(row.DataType) ||
+            options.Any(t => string.Equals(t, row.DataType, StringComparison.OrdinalIgnoreCase)))
+        {
+            return options;
+        }
+
+        return options.Prepend(row.DataType).ToList();
+    }
+
+    private ColumnRow NewColumnRow() => new() { DataType = TableDesignerTypes.DefaultFor(SelectedProviderKey) };
+
+    /// <summary>The provider of the selected connection — drives the designer's column types~ 🗂️.</summary>
+    private string? SelectedProviderKey
+        => connections.FirstOrDefault(c => string.Equals(c.Id, connectionId, StringComparison.OrdinalIgnoreCase))?.ProviderKey;
 
     private async Task OnConnectionChanged(ChangeEventArgs e)
     {
@@ -692,7 +713,7 @@
 
         if (newColumns.Count == 0)
         {
-            newColumns.Add(new ColumnRow());
+            newColumns.Add(NewColumnRow());
         }
     }
 
@@ -704,7 +725,7 @@
         newTableName = null;
         newTableSchema = null;
         newColumns.Clear();
-        newColumns.Add(new ColumnRow());
+        newColumns.Add(NewColumnRow());
     }
 
     private async Task SaveNewTable()

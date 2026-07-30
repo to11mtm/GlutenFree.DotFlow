@@ -50,6 +50,8 @@
     <!-- ️ Persistence — Linq2Db + FluentMigrator + providers -->
     <PackageVersion Include="linq2db" Version="6.3.0" />
     <PackageVersion Include="linq2db.PostgreSQL" Version="6.3.0" />
+    <!-- 🅾️ Oracle — database MODULES only (Workflow.Persistence deliberately has no Oracle provider)~ -->
+    <PackageVersion Include="linq2db.Oracle" Version="6.3.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="8.0.11" />
     <PackageVersion Include="Npgsql" Version="8.0.5" />
     <PackageVersion Include="FluentMigrator" Version="8.0.1" />

@@ -97,11 +97,18 @@ Pick the provider and the form adapts to it — you never have to remember ADO.N
 | --- | --- |
 | **PostgreSQL** | Host\*, Port (5432), Database\*, Username\*, Password, SSL mode, Pooling, Connect timeout |
 | **SQLite** | Database file\* (path or `:memory:`), Mode, Cache, Enforce foreign keys, Password (SQLCipher) |
+| **Oracle** | Host\*, Port (1521), Service name\*, User id\*, Password, Connect timeout — composed into an EZConnect `Data Source=host:port/service` |
 
 \* required. A live **Preview** shows the composed connection string with secrets masked, and
 optional settings left at their defaults are omitted to keep it tidy. Prefer to paste a full
 string? Tick **Advanced — enter a raw connection string** (toggling carries your values across
-in both directions).
+in both directions; a full Oracle TNS descriptor is left untouched rather than decomposed).
+
+> 🅾️ **Oracle note:** Oracle is supported for the **database modules and Linq Studio** only —
+> DotFlow's own state (workflows, history, variables) still runs on the persistence providers
+> (SQLite/Postgres/NATS). The table designer switches to Oracle types (`NUMBER`, `VARCHAR2`,
+> `TIMESTAMP WITH TIME ZONE`, …) when an Oracle connection is selected, and catalog import reads
+> `USER_TABLES`/`USER_TAB_COLUMNS` plus PK constraints and 12c+ identity columns.
 
 Saving `POST`s to `/api/database/connections/`, selects the new connection, and loads its
 (empty) catalog so you can import or define tables right away. 🗑 forgets a saved connection.

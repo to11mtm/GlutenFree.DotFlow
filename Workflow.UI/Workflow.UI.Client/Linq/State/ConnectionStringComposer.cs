@@ -90,8 +90,27 @@ public static class ConnectionStringComposer
         new("Password", "Password (SQLCipher)", ConnectionFieldKind.Secret),
     };
 
+    private static readonly IReadOnlyList<ConnectionField> OracleFields = new List<ConnectionField>
+    {
+        new("Host", "Host", ConnectionFieldKind.Text, Required: true, Placeholder: "oracle.internal"),
+        new("Port", "Port", ConnectionFieldKind.Number, Default: "1521"),
+        new(
+            "Service Name",
+            "Service name",
+            ConnectionFieldKind.Text,
+            Required: true,
+            Placeholder: "ORCLPDB1",
+            Help: "The service (or SID) — composed into an EZConnect Data Source: host:port/service."),
+        new("User Id", "User id", ConnectionFieldKind.Text, Required: true, Placeholder: "APP"),
+        new("Password", "Password", ConnectionFieldKind.Secret),
+        new("Connection Timeout", "Connect timeout (s)", ConnectionFieldKind.Number, Default: "15"),
+    };
+
+    /// <summary>Fields Oracle folds into the composed <c>Data Source</c> rather than emitting~ 🅾️.</summary>
+    private static readonly string[] OracleDataSourceParts = { "Host", "Port", "Service Name" };
+
     /// <summary>Gets the provider keys the guided builder understands~ 🗂️.</summary>
-    public static IReadOnlyList<string> Providers { get; } = new[] { "postgres", "sqlite" };
+    public static IReadOnlyList<string> Providers { get; } = new[] { "postgres", "sqlite", "oracle" };
 
     /// <summary>Gets a friendly label for a provider key~ 🏷️.</summary>
     /// <param name="providerKey">The provider key.</param>
@@ -101,17 +120,19 @@ public static class ConnectionStringComposer
         {
             "postgres" => "PostgreSQL",
             "sqlite" => "SQLite",
+            "oracle" => "Oracle",
             _ => providerKey ?? string.Empty,
         };
 
     /// <summary>Gets the guided fields for a provider (empty when unknown → raw entry)~ 🎛️.</summary>
-    /// <param name="providerKey">The provider key ("postgres"/"sqlite").</param>
+    /// <param name="providerKey">The provider key ("postgres"/"sqlite"/"oracle").</param>
     /// <returns>The field set, or an empty list for providers without a guided form.</returns>
     public static IReadOnlyList<ConnectionField> FieldsFor(string? providerKey)
         => Normalize(providerKey) switch
         {
             "postgres" => PostgresFields,
             "sqlite" => SqliteFields,
+            "oracle" => OracleFields,
             _ => Array.Empty<ConnectionField>(),
         };
 
@@ -163,9 +184,26 @@ public static class ConnectionStringComposer
             throw new ArgumentNullException(nameof(values));
         }
 
+        var isOracle = Normalize(providerKey) == "oracle";
         var parts = new List<string>();
+
+        // 🅾️ Oracle's host/port/service are one EZConnect keyword, not three~
+        if (isOracle)
+        {
+            var dataSource = BuildOracleDataSource(values);
+            if (!string.IsNullOrEmpty(dataSource))
+            {
+                parts.Add($"Data Source={Quote(dataSource)}");
+            }
+        }
+
         foreach (var f in FieldsFor(providerKey))
         {
+            if (isOracle && OracleDataSourceParts.Contains(f.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (!values.TryGetValue(f.Key, out var raw))
             {
                 raw = f.Default;
@@ -187,6 +225,20 @@ public static class ConnectionStringComposer
         }
 
         return string.Join(";", parts);
+    }
+
+    private static string BuildOracleDataSource(IReadOnlyDictionary<string, string?> values)
+    {
+        var host = values.TryGetValue("Host", out var h) ? h?.Trim() : null;
+        if (string.IsNullOrEmpty(host))
+        {
+            return string.Empty;
+        }
+
+        var port = values.TryGetValue("Port", out var p) && !string.IsNullOrWhiteSpace(p) ? p!.Trim() : "1521";
+        var service = values.TryGetValue("Service Name", out var s) ? s?.Trim() : null;
+
+        return string.IsNullOrEmpty(service) ? $"{host}:{port}" : $"{host}:{port}/{service}";
     }
 
     /// <summary>
@@ -214,6 +266,14 @@ public static class ConnectionStringComposer
 
             var key = segment[..eq].Trim();
             var value = Unquote(segment[(eq + 1)..].Trim());
+
+            // 🅾️ Split an EZConnect Data Source back into host/port/service~
+            if (Normalize(providerKey) == "oracle" && key.Equals("Data Source", StringComparison.OrdinalIgnoreCase))
+            {
+                ParseOracleDataSource(value, map);
+                continue;
+            }
+
             if (map.ContainsKey(key))
             {
                 map[key] = value;
@@ -221,6 +281,35 @@ public static class ConnectionStringComposer
         }
 
         return map;
+    }
+
+    private static void ParseOracleDataSource(string value, IDictionary<string, string?> map)
+    {
+        var descriptor = value.Trim();
+        if (descriptor.Length == 0 || descriptor.StartsWith('('))
+        {
+            // A full TNS descriptor isn't decomposable into the guided fields — leave them blank
+            // so the user can switch to raw mode without us mangling it~
+            return;
+        }
+
+        var slash = descriptor.IndexOf('/', StringComparison.Ordinal);
+        if (slash >= 0)
+        {
+            map["Service Name"] = descriptor[(slash + 1)..].Trim();
+            descriptor = descriptor[..slash];
+        }
+
+        var colon = descriptor.LastIndexOf(':');
+        if (colon >= 0)
+        {
+            map["Host"] = descriptor[..colon].Trim();
+            map["Port"] = descriptor[(colon + 1)..].Trim();
+        }
+        else
+        {
+            map["Host"] = descriptor.Trim();
+        }
     }
 
     private static IEnumerable<string> SplitSegments(string connectionString)

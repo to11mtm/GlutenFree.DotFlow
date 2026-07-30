@@ -174,6 +174,21 @@ Connections defined in the UI vanished on restart (the registry was in-memory on
       Data-Protection protector encrypts at rest; undecryptable rows surface disabled instead of
       breaking the listing). Studio gained a 🗑 to forget a saved connection.
 
+## L11 — Oracle connections (stakeholder request, 2026-07-29)
+
+Scope is deliberately narrow: the **database module family + Linq Studio authoring UX** learn
+Oracle. `Workflow.Persistence` is untouched (DotFlow's own state never lives in Oracle).
+
+- [x] **L11a — Provider plumbing**: `linq2db.Oracle` package; `"oracle"` →
+      `ProviderName.OracleManaged` in `DefaultDbProviderRegistry`; Oracle SQL-type map for
+      generated POCOs (NUMBER/VARCHAR2/CLOB/TIMESTAMP WITH TIME ZONE/…), including a
+      `Normalise` fix so `TIMESTAMP(6) WITH TIME ZONE` keeps its suffix.
+- [x] **L11b — Catalog import**: `ALL_TAB_COLS` + PK constraint / identity introspection for
+      Oracle in `CatalogSchemaImporter`, dispatched off the resolved provider.
+- [x] **L11c — Studio UX**: guided Oracle connection fields (Host/Port/Service name/User Id/
+      Password composing an EZConnect `Data Source`), plus a provider-aware column-type list in
+      the table designer so Oracle users pick Oracle types.
+
 ## Post-MVP (tracked, not in scope now)
 
 - [ ] **L.P1 — Monaco completions for `db.` / columns**: a completion provider fed by the

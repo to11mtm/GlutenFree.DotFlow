@@ -18,12 +18,98 @@ public sealed class ConnectionStringComposerTests
     [Theory]
     [InlineData("postgres", "Host")]
     [InlineData("sqlite", "Data Source")]
+    [InlineData("oracle", "Host")]
     public void FieldsFor_KnownProvider_LeadsWithTheDefiningSetting(string provider, string firstKey)
         => ConnectionStringComposer.FieldsFor(provider)[0].Key.Should().Be(firstKey);
 
+    // ── 🅾️ Oracle (L11) ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Build_Oracle_ComposesAnEzConnectDataSource()
+    {
+        var values = ConnectionStringComposer.Defaults("oracle");
+        values["Host"] = "oracle.internal";
+        values["Service Name"] = "ORCLPDB1";
+        values["User Id"] = "APP";
+        values["Password"] = "s3cret";
+
+        var cs = ConnectionStringComposer.Build("oracle", values);
+
+        cs.Should().Be("Data Source=oracle.internal:1521/ORCLPDB1;User Id=APP;Password=s3cret");
+        cs.Should().NotContain("Host=", "host/port/service fold into Data Source~");
+    }
+
+    [Fact]
+    public void Build_Oracle_HonoursANonDefaultPort()
+    {
+        var values = ConnectionStringComposer.Defaults("oracle");
+        values["Host"] = "db";
+        values["Port"] = "1522";
+        values["Service Name"] = "SVC";
+        values["User Id"] = "APP";
+
+        ConnectionStringComposer.Build("oracle", values).Should().StartWith("Data Source=db:1522/SVC");
+    }
+
+    [Fact]
+    public void Parse_Oracle_SplitsTheDataSourceBackIntoFields()
+    {
+        var parsed = ConnectionStringComposer.Parse(
+            "oracle",
+            "Data Source=oracle.internal:1522/ORCLPDB1;User Id=APP;Password=s3cret");
+
+        parsed["Host"].Should().Be("oracle.internal");
+        parsed["Port"].Should().Be("1522");
+        parsed["Service Name"].Should().Be("ORCLPDB1");
+        parsed["User Id"].Should().Be("APP");
+        parsed["Password"].Should().Be("s3cret");
+    }
+
+    [Fact]
+    public void Parse_Oracle_FullTnsDescriptor_LeavesGuidedFieldsAlone()
+    {
+        // A TNS descriptor can't be decomposed — don't mangle it; the user switches to raw mode.
+        var parsed = ConnectionStringComposer.Parse(
+            "oracle",
+            "Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=h)(PORT=1521)));User Id=APP");
+
+        parsed["Host"].Should().BeNullOrEmpty();
+        parsed["User Id"].Should().Be("APP");
+    }
+
+    [Fact]
+    public void MissingRequired_Oracle_NamesTheMissingSettings()
+    {
+        var values = ConnectionStringComposer.Defaults("oracle");
+        values["Host"] = "db";
+
+        ConnectionStringComposer.MissingRequired("oracle", values)
+            .Should().BeEquivalentTo(new[] { "Service name", "User id" });
+    }
+
+    [Fact]
+    public void ProviderLabel_Oracle_IsFriendly()
+        => ConnectionStringComposer.ProviderLabel("oracle").Should().Be("Oracle");
+
+    [Fact]
+    public void TableDesignerTypes_AreProviderSpecific()
+    {
+        TableDesignerTypes.For("oracle").Should().Contain("NUMBER").And.Contain("VARCHAR2");
+        TableDesignerTypes.For("oracle").Should().NotContain("text");
+        TableDesignerTypes.For("postgres").Should().Contain("text");
+        TableDesignerTypes.DefaultFor("oracle").Should().Be("NUMBER");
+    }
+
+    [Fact]
+    public void TableDesignerTypes_Coerce_KeepsMatches_AndFallsBackOtherwise()
+    {
+        TableDesignerTypes.Coerce("oracle", "varchar2").Should().Be("VARCHAR2");
+        TableDesignerTypes.Coerce("oracle", "text").Should().Be(TableDesignerTypes.DefaultFor("oracle"));
+    }
+
     [Fact]
     public void FieldsFor_UnknownProvider_IsEmpty_SoTheUiFallsBackToRaw()
-        => ConnectionStringComposer.FieldsFor("oracle").Should().BeEmpty();
+        => ConnectionStringComposer.FieldsFor("cockroach").Should().BeEmpty();
 
     [Fact]
     public void Build_Postgres_ComposesRequiredFields_AndOmitsDefaults()

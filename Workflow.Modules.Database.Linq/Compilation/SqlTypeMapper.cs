@@ -69,11 +69,31 @@ public static class SqlTypeMapper
         // binary
         ["bytea"] = "byte[]",
         ["blob"] = "byte[]",
+
+        // 🅾️ Oracle
+        ["number"] = "decimal",
+        ["binary_integer"] = "int",
+        ["pls_integer"] = "int",
+        ["binary_float"] = "float",
+        ["binary_double"] = "double",
+        ["varchar2"] = "string",
+        ["nvarchar2"] = "string",
+        ["nchar"] = "string",
+        ["nclob"] = "string",
+        ["long"] = "string",
+        ["rowid"] = "string",
+        ["urowid"] = "string",
+        ["raw"] = "byte[]",
+        ["long raw"] = "byte[]",
+        ["bfile"] = "byte[]",
+        ["timestamp with local time zone"] = "global::System.DateTimeOffset",
+        ["interval day to second"] = "global::System.TimeSpan",
+        ["interval year to month"] = "int",
     };
 
     private static readonly HashSet<string> ValueTypes = new(StringComparer.Ordinal)
     {
-        "int", "short", "long", "bool", "double", "decimal",
+        "int", "short", "long", "bool", "double", "float", "decimal",
         "global::System.Guid", "global::System.DateTime",
         "global::System.DateTimeOffset", "global::System.TimeSpan",
     };
@@ -100,7 +120,8 @@ public static class SqlTypeMapper
         return true;
     }
 
-    // Strips length/precision qualifiers, e.g. "numeric(12,4)" → "numeric", "varchar(255)" → "varchar".
+    // Strips length/precision qualifiers while keeping any suffix, e.g. "numeric(12,4)" → "numeric",
+    // "varchar(255)" → "varchar", "TIMESTAMP(6) WITH TIME ZONE" → "timestamp with time zone".
     private static string? Normalise(string? sqlType)
     {
         if (string.IsNullOrWhiteSpace(sqlType))
@@ -109,13 +130,17 @@ public static class SqlTypeMapper
         }
 
         var t = sqlType.Trim();
-        var paren = t.IndexOf('(');
-        if (paren >= 0)
+        var open = t.IndexOf('(', StringComparison.Ordinal);
+        if (open >= 0)
         {
-            t = t[..paren].Trim();
+            var close = t.IndexOf(')', open);
+            t = close > open
+                ? (t[..open] + " " + t[(close + 1)..])
+                : t[..open];
         }
 
-        return t.ToLowerInvariant();
+        return string.Join(' ', t.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .ToLowerInvariant();
     }
 }
 

@@ -56,9 +56,12 @@ public sealed class CatalogSchemaImporter : ICatalogSchemaImporter
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionId);
 
         using var db = await this.connectionFactory.CreateAsync(connectionId, ct).ConfigureAwait(false);
-        var isSqlite = db.DataProvider.Name.Contains("SQLite", StringComparison.OrdinalIgnoreCase);
+        var providerName = db.DataProvider.Name;
 
-        var tables = isSqlite ? ReadSqlite(db) : ReadPostgres(db);
+        var tables =
+            providerName.Contains("SQLite", StringComparison.OrdinalIgnoreCase) ? ReadSqlite(db)
+            : providerName.Contains("Oracle", StringComparison.OrdinalIgnoreCase) ? ReadOracle(db)
+            : ReadPostgres(db);
 
         foreach (var table in tables)
         {
@@ -165,6 +168,96 @@ public sealed class CatalogSchemaImporter : ICatalogSchemaImporter
         }
 
         return result;
+    }
+
+    // ── 🅾️ Oracle ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads the current schema's tables from Oracle's data dictionary. Uses <c>USER_*</c> views so
+    /// the import is scoped to the connecting user (no DBA grants needed) — identity columns come
+    /// from <c>USER_TAB_COLS.IDENTITY_COLUMN</c> (12c+), falling back gracefully on older servers~ 🅾️.
+    /// </summary>
+    private static List<TableSchema> ReadOracle(DataConnection db)
+    {
+        var tableNames = new List<string>();
+        const string tablesSql =
+            "SELECT table_name FROM user_tables ORDER BY table_name";
+        foreach (var row in Read(db, tablesSql))
+        {
+            tableNames.Add(Convert.ToString(row["TABLE_NAME"]) ?? string.Empty);
+        }
+
+        // Primary keys for every table in one hit~
+        var pkByTable = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        const string pkSql =
+            "SELECT c.table_name, cc.column_name FROM user_constraints c "
+            + "JOIN user_cons_columns cc ON c.constraint_name = cc.constraint_name "
+            + "WHERE c.constraint_type = 'P'";
+        foreach (var row in Read(db, pkSql))
+        {
+            var table = Convert.ToString(row["TABLE_NAME"]) ?? string.Empty;
+            var column = Convert.ToString(row["COLUMN_NAME"]) ?? string.Empty;
+            if (!pkByTable.TryGetValue(table, out var set))
+            {
+                set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                pkByTable[table] = set;
+            }
+
+            set.Add(column);
+        }
+
+        var identityByTable = ReadOracleIdentityColumns(db);
+
+        var result = new List<TableSchema>();
+        foreach (var name in tableNames)
+        {
+            var columns = new List<WorkflowColumnMetadata>();
+            const string colsSql =
+                "SELECT column_name, data_type, nullable FROM user_tab_columns "
+                + "WHERE table_name = :t ORDER BY column_id";
+            foreach (var col in Read(db, colsSql, new DataParameter("t", name)))
+            {
+                var colName = Convert.ToString(col["COLUMN_NAME"]) ?? string.Empty;
+                var dataType = Convert.ToString(col["DATA_TYPE"]) ?? string.Empty;
+                var nullable = string.Equals(Convert.ToString(col["NULLABLE"]), "Y", StringComparison.OrdinalIgnoreCase);
+                var isPk = pkByTable.TryGetValue(name, out var pks) && pks.Contains(colName);
+                var isIdentity = identityByTable.TryGetValue(name, out var ids) && ids.Contains(colName);
+
+                columns.Add(new WorkflowColumnMetadata(colName, dataType, nullable, isPk, isIdentity));
+            }
+
+            result.Add(new TableSchema(name, null, columns));
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, HashSet<string>> ReadOracleIdentityColumns(DataConnection db)
+    {
+        var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            const string sql =
+                "SELECT table_name, column_name FROM user_tab_cols WHERE identity_column = 'YES'";
+            foreach (var row in Read(db, sql))
+            {
+                var table = Convert.ToString(row["TABLE_NAME"]) ?? string.Empty;
+                var column = Convert.ToString(row["COLUMN_NAME"]) ?? string.Empty;
+                if (!map.TryGetValue(table, out var set))
+                {
+                    set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    map[table] = set;
+                }
+
+                set.Add(column);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Pre-12c servers have no IDENTITY_COLUMN — import the rest rather than failing~ 🌸
+        }
+
+        return map;
     }
 
     // ── Reader helper ──────────────────────────────────────────────────────────────────────

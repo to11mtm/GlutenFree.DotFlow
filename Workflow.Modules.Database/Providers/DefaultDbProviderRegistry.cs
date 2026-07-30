@@ -10,7 +10,8 @@ using LinqToDB;
 using Workflow.Modules.Database.Abstractions;
 
 /// <summary>
-/// 🗂️ Default provider registry — hardcoded Postgres + SQLite for V1 (D5)~ ✨.
+/// 🗂️ Default provider registry — Postgres + SQLite (D5), plus Oracle for the database module
+/// family (2.4.a.P4 — modules only; DotFlow's own persistence never runs on Oracle)~ ✨.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,6 +19,7 @@ using Workflow.Modules.Database.Abstractions;
 /// <list type="bullet">
 ///   <item><description><c>"postgres"</c> → <see cref="ProviderName.PostgreSQL15"/></description></item>
 ///   <item><description><c>"sqlite"</c> → <see cref="ProviderName.SQLiteMS"/> (Microsoft.Data.Sqlite)</description></item>
+///   <item><description><c>"oracle"</c> → <see cref="ProviderName.OracleManaged"/> (Oracle.ManagedDataAccess)</description></item>
 /// </list>
 /// </para>
 /// <para>
@@ -36,6 +38,7 @@ public sealed class DefaultDbProviderRegistry : IDbProviderRegistry
         {
             ["postgres"] = ProviderName.PostgreSQL15,
             ["sqlite"] = ProviderName.SQLiteMS,
+            ["oracle"] = ProviderName.OracleManaged,
         };
 
     /// <inheritdoc/>
