@@ -10,6 +10,8 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using LanguageExt;
+using LinqToDB;
+using LinqToDB.Data;
 using Workflow.Core.Models;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Database.Abstractions;
@@ -175,6 +177,12 @@ public sealed class LinqQueryModule : IWorkflowModule
             }
 
             var options = await factory.CreateOptionsAsync(connectionId, cancellationToken).ConfigureAwait(false);
+
+            // 💼 When this node sits inside a structural transaction body on the SAME connection,
+            // run against that open connection + transaction so the linq step is atomic with the
+            // rest of the body (the scope owns the connection — we never dispose it here)~
+            options = ApplyAmbientTransaction(context, connectionId, options);
+
             var run = await runner.RunAsync(key, bytes, options, inputs, timeoutSeconds, cancellationToken).ConfigureAwait(false);
             sw.Stop();
 
@@ -218,8 +226,45 @@ public sealed class LinqQueryModule : IWorkflowModule
 #pragma warning restore CA1031
     }
 
-    private static string? GetString(IReadOnlyDictionary<string, object?> config, string key)
-        => config.TryGetValue(key, out var v) && v is not null ? v.ToString() : null;
+    /// <summary>
+    /// 💼 Re-points the compiled query at an ambient transaction's open connection when this node
+    /// runs inside a <c>builtin.database.transaction</c> body on the same named connection. The
+    /// generated context is then built over that connection + transaction, so the linq step commits
+    /// or rolls back with the rest of the body. Returns the options unchanged when there's no
+    /// ambient transaction (the ordinary path)~ ✨.
+    /// </summary>
+    /// <param name="context">The module execution context.</param>
+    /// <param name="connectionId">The node's named connection id.</param>
+    /// <param name="options">The options built from the named connection.</param>
+    /// <returns>The options to run with.</returns>
+    private static DataOptions ApplyAmbientTransaction(
+        ModuleExecutionContext context,
+        string connectionId,
+        DataOptions options)
+    {
+        if (context.Services.GetService(typeof(IAmbientDbTransactions)) is not IAmbientDbTransactions ambient)
+        {
+            return options;
+        }
+
+        if (ambient.TryGet(context.ExecutionId, connectionId) is not DataConnection open)
+        {
+            return options;
+        }
+
+        var transaction = open.Transaction;
+        if (transaction is not null)
+        {
+            // Shares the connection AND the open transaction — linq2db won't dispose either~ 🔒
+            return options.UseTransaction(open.DataProvider, transaction);
+        }
+
+        return open.Connection is { } dbConnection
+            ? options.UseConnection(open.DataProvider, dbConnection, false)
+            : options;
+    }
+
+    private static string? GetString(IReadOnlyDictionary<string, object?> config, string key)        => config.TryGetValue(key, out var v) && v is not null ? v.ToString() : null;
 
     private static int? TryGetInt(IReadOnlyDictionary<string, object?> config, string key)
     {

@@ -441,6 +441,32 @@ public sealed class DesignerPageTests : TestContext
     }
 
     [Fact]
+    public void CanvasMenu_InsertTransactionSkeleton_WithLinqStep_UsesTheLinqModule()
+    {
+        // 🧬 The body can optionally start with a typed LINQ step instead of a SQL execute~
+        var handler = new FakeHttpMessageHandler(req =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(req.RequestUri!.AbsolutePath == "/api/v1/modules" ? "[]" : "{}") });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, "new"));
+        cut.WaitForAssertion(() => cut.FindAll(".df-canvas-viewport").Should().NotBeEmpty());
+
+        cut.Find(".df-canvas-viewport").ContextMenu(new MouseEventArgs { OffsetX = 200, OffsetY = 200 });
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Insert transaction skeleton (Linq step)"));
+        cut.FindAll(".df-ctxmenu__item").First(b => b.TextContent.Contains("Insert transaction skeleton (Linq step)")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(2);
+            cut.Markup.Should().Contain("builtin.database.transaction");
+            cut.Markup.Should().Contain("builtin.database.linq");
+            cut.Markup.Should().NotContain("builtin.database.execute");
+            cut.FindAll("path.df-edge--structural").Should().ContainSingle();
+            cut.FindAll(".df-region--transaction").Should().ContainSingle();
+        });
+    }
+
+    [Fact]
     public void DroppingTransaction_OnNodeOutputSide_ScaffoldsAndWiresFromSource()
     {
         var id = Guid.NewGuid();

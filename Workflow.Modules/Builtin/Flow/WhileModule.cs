@@ -199,15 +199,31 @@ public sealed class WhileModule : IWorkflowModule
 
     private static int? ResolveInt(ModuleExecutionContext ctx, string key)
     {
-        if (ctx.Inputs.TryGetValue(key, out var v) && v != null) return Convert.ToInt32(v);
-        if (ctx.Properties.TryGetValue(key, out v) && v != null) return Convert.ToInt32(v);
+        if (ctx.Inputs.TryGetValue(key, out var v) && v != null)
+        {
+            return Convert.ToInt32(v);
+        }
+
+        if (ctx.Properties.TryGetValue(key, out v) && v != null)
+        {
+            return Convert.ToInt32(v);
+        }
+
         return null;
     }
 
     private static bool? ResolveBool(ModuleExecutionContext ctx, string key)
     {
-        if (ctx.Inputs.TryGetValue(key, out var v) && v != null) return Convert.ToBoolean(v);
-        if (ctx.Properties.TryGetValue(key, out v) && v != null) return Convert.ToBoolean(v);
+        if (ctx.Inputs.TryGetValue(key, out var v) && v != null)
+        {
+            return Convert.ToBoolean(v);
+        }
+
+        if (ctx.Properties.TryGetValue(key, out v) && v != null)
+        {
+            return Convert.ToBoolean(v);
+        }
+
         return null;
     }
 }

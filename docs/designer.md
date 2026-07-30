@@ -165,6 +165,12 @@ side and it's also wired from that node.
 - Leaving the body unwired keeps the classic **declarative** mode: fill in the `operations` JSON
   list and the module runs those atomically by itself, exactly as before.
 
+**Starting with a LINQ step** 🧬 — right-click the canvas → **Insert transaction skeleton (Linq
+step)** to scaffold the body with a `builtin.database.linq` node instead of a plain SQL execute.
+Author it in [Linq Studio](linq-studio.md) as usual; at run time it joins the transaction the same
+way (matching `connectionId`), running on the transaction's open connection so its reads see the
+body's uncommitted writes and its writes roll back with everything else.
+
 ## Running (S3)
 
 **▶ Run** opens an inputs dialog (JSON), starts the execution, and enters **run mode**

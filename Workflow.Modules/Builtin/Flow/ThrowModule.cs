@@ -140,9 +140,15 @@ public class ThrowModule : IWorkflowModule
     private static string? ResolveString(ModuleExecutionContext context, string key)
     {
         if (context.Inputs.TryGetValue(key, out var inputVal) && inputVal is string s1 && !string.IsNullOrEmpty(s1))
+        {
             return s1;
+        }
+
         if (context.Properties.TryGetValue(key, out var propVal) && propVal is string s2 && !string.IsNullOrEmpty(s2))
+        {
             return s2;
+        }
+
         return null;
     }
 }

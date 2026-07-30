@@ -257,6 +257,11 @@ transaction** as the owner node.
       warning in `GraphValidator`.
 - [x] **L12e — Compatibility**: declarative `operations` mode is unchanged; the structural request
       is emitted only when `operations` is empty.
+- [x] **L12f — LINQ steps in the body** (follow-up): `LinqQueryModule` enlists in the ambient
+      transaction via `DataOptions.UseTransaction(provider, ambient.Transaction)`, so the compiled
+      query's generated context shares the open connection + transaction (never disposing it).
+      Canvas menu gained **Insert transaction skeleton (Linq step)** to scaffold the body starting
+      with a `builtin.database.linq` node.
 
 ## Post-MVP (tracked, not in scope now)
 

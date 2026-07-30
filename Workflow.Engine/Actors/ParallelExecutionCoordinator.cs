@@ -458,12 +458,17 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         while (queue.Count > 0)
         {
             var nodeId = queue.Dequeue();
-            if (!scope.Add(nodeId)) continue;
+            if (!scope.Add(nodeId))
+            {
+                continue;
+            }
 
             foreach (var conn in definition.Connections.Where(c => c.SourceNodeId == nodeId))
             {
                 if (conn.TargetNodeId != parallelNodeId)
+                {
                     queue.Enqueue(conn.TargetNodeId);
+                }
             }
         }
 

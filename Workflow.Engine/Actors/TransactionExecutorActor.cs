@@ -147,7 +147,10 @@ public sealed class TransactionExecutorActor : ReceiveActor
         string ownerNodeId,
         IReadOnlyList<string> entryNodeIds)
     {
-        if (entryNodeIds.Count == 0) return Array.Empty<string>();
+        if (entryNodeIds.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
 
         var scope = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
         var queue = new Queue<string>(entryNodeIds);
@@ -155,12 +158,23 @@ public sealed class TransactionExecutorActor : ReceiveActor
         while (queue.Count > 0)
         {
             var nodeId = queue.Dequeue();
-            if (!scope.Add(nodeId)) continue;
+            if (!scope.Add(nodeId))
+            {
+                continue;
+            }
 
             foreach (var conn in definition.Connections)
             {
-                if (conn.SourceNodeId != nodeId) continue;
-                if (conn.TargetNodeId == ownerNodeId) continue;
+                if (conn.SourceNodeId != nodeId)
+                {
+                    continue;
+                }
+
+                if (conn.TargetNodeId == ownerNodeId)
+                {
+                    continue;
+                }
+
                 if (!scope.Contains(conn.TargetNodeId))
                 {
                     queue.Enqueue(conn.TargetNodeId);

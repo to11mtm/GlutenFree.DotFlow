@@ -433,6 +433,7 @@ else if (document is not null)
             new("loop-skeleton", "Insert loop skeleton", () => this.InsertLoopSkeleton(at)),
             new("trycatch-skeleton", "Insert try/catch skeleton", () => this.InsertTryCatchSkeleton(at)),
             new("transaction-skeleton", "Insert transaction skeleton", () => this.InsertTransactionSkeleton(at)),
+            new("transaction-skeleton-linq", "Insert transaction skeleton (Linq step)", () => this.InsertTransactionSkeleton(at, null, "builtin.database.linq")),
             new("fit", "Fit to screen", async () => { if (this.canvas is not null) { await this.canvas.FitAsync(); } }),
         };
         this.ShowMenu(e);
@@ -1059,7 +1060,16 @@ else if (document is not null)
     /// step wired from <c>transactionBody</c>. Nodes in that body run inside the open transaction —
     /// commit on success (<c>committed</c>), rollback on any failure (<c>rolledBack</c>)~ ✨.
     /// </summary>
-    private async Task InsertTransactionSkeleton(Point at, DesignerNode? source = null)
+    /// <param name="at">Where to place the skeleton.</param>
+    /// <param name="source">Optional node to wire the transaction from.</param>
+    /// <param name="bodyModuleId">
+    /// The first body step's module — a plain SQL execute by default, or
+    /// <c>builtin.database.linq</c> for a typed LINQ start~ 🧬.
+    /// </param>
+    private async Task InsertTransactionSkeleton(
+        Point at,
+        DesignerNode? source = null,
+        string bodyModuleId = "builtin.database.execute")
     {
         if (this.commands is null || this.document is null)
         {
@@ -1067,8 +1077,9 @@ else if (document is not null)
         }
 
         var txSchema = await this.EnsureSchema("builtin.database.transaction");
-        var bodySchema = await this.EnsureSchema("builtin.database.execute");
+        var bodySchema = await this.EnsureSchema(bodyModuleId);
         var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+        var isLinq = bodyModuleId == "builtin.database.linq";
 
         var origin = source is null ? at : new Point(source.X + CanvasGeometry.NodeWidth + 80, source.Y);
         var transaction = new DesignerNode
@@ -1084,9 +1095,9 @@ else if (document is not null)
 
         var bodyStep = new DesignerNode
         {
-            Id = NodeIdGenerator.Generate("builtin.database.execute", existing),
-            ModuleId = "builtin.database.execute",
-            Name = "Transaction step (replace me)",
+            Id = NodeIdGenerator.Generate(bodyModuleId, existing),
+            ModuleId = bodyModuleId,
+            Name = isLinq ? "Linq step (open in Linq Studio)" : "Transaction step (replace me)",
             X = origin.X + CanvasGeometry.NodeWidth + 80,
             Y = origin.Y,
             Schema = bodySchema,
@@ -1118,9 +1129,11 @@ else if (document is not null)
 
         this.commands.Execute(new CompositeCommand("Insert transaction skeleton", children));
         this.selection.SetNodes(new[] { transaction.Id, bodyStep.Id });
-        Toasts.Success(source is null
-            ? "Transaction skeleton inserted — steps in the body commit together, or all roll back"
-            : $"Transaction wired from {source.Name} — steps in the body commit together, or all roll back");
+        Toasts.Success(isLinq
+            ? "Transaction skeleton inserted with a Linq step — author it in Linq Studio; it joins the transaction via connectionId"
+            : source is null
+                ? "Transaction skeleton inserted — steps in the body commit together, or all roll back"
+                : $"Transaction wired from {source.Name} — steps in the body commit together, or all roll back");
     }
 
     /// <summary>The node's primary output port (prefers <c>success</c>, else the first)~ 🔌.</summary>

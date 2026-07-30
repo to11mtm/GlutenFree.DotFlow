@@ -55,7 +55,7 @@ public static class SqliteMigrationRunner
 
     private static async Task EnableWalModeAsync(string connectionString, CancellationToken ct)
     {
-	    return;
+        return;
         // WAL mode is not meaningful for in-memory databases, so skip those gracefully~ 🧪
         if (connectionString.Contains(":memory:", StringComparison.OrdinalIgnoreCase))
         {

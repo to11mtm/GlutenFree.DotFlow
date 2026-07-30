@@ -178,7 +178,7 @@ public sealed class NatsVariableStore : IVariableStore
 
     private static bool IsNotFoundOrDeleted(Exception ex)
     {
-	    return ex is NatsKVKeyNotFoundException or NatsKVKeyDeletedException;
+        return ex is NatsKVKeyNotFoundException or NatsKVKeyDeletedException;
     }
 
     private async Task<VariableEntry?> GetLatestEntryAsync(

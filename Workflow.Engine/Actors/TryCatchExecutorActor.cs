@@ -374,7 +374,10 @@ public sealed class TryCatchExecutorActor : ReceiveActor
     /// </summary>
     private bool ShouldCatch(Exception ex)
     {
-        if (_request.CatchTypes is not { Length: > 0 }) return true;
+        if (_request.CatchTypes is not { Length: > 0 })
+        {
+            return true;
+        }
 
         var actualType = ex.GetType().Name;
         var errorType = ex is WorkflowUserException wue ? wue.ErrorType : actualType;
@@ -414,7 +417,10 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         string ownerNodeId,
         IReadOnlyList<string> entryNodeIds)
     {
-        if (entryNodeIds.Count == 0) return Array.Empty<string>();
+        if (entryNodeIds.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
 
         var scope = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
         var queue = new Queue<string>(entryNodeIds);
@@ -422,12 +428,23 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         while (queue.Count > 0)
         {
             var nodeId = queue.Dequeue();
-            if (!scope.Add(nodeId)) continue;
+            if (!scope.Add(nodeId))
+            {
+                continue;
+            }
 
             foreach (var conn in definition.Connections)
             {
-                if (conn.SourceNodeId != nodeId) continue;
-                if (conn.TargetNodeId == ownerNodeId) continue; // avoid looping back~
+                if (conn.SourceNodeId != nodeId)
+                {
+                    continue;
+                }
+
+                if (conn.TargetNodeId == ownerNodeId)
+                {
+                    continue; // avoid looping back~
+                }
+
                 if (!scope.Contains(conn.TargetNodeId))
                 {
                     queue.Enqueue(conn.TargetNodeId);

@@ -142,11 +142,21 @@ public sealed class ForEachModule : IWorkflowModule
     /// </summary>
     private static IReadOnlyList<object?> CoerceToList(object raw)
     {
-        if (raw is IReadOnlyList<object?> readOnly) return readOnly;
+        if (raw is IReadOnlyList<object?> readOnly)
+        {
+            return readOnly;
+        }
+
         if (raw is System.Collections.IEnumerable enumerable and not string)
+        {
             return enumerable.Cast<object?>().ToList();
+        }
+
         if (raw is JsonElement je && je.ValueKind == JsonValueKind.Array)
+        {
             return je.EnumerateArray().Select(e => (object?)ConvertJsonElement(e)).ToList();
+        }
+
         if (raw is string s && s.TrimStart().StartsWith('['))
         {
             return JsonSerializer.Deserialize<List<JsonElement>>(s)
@@ -172,15 +182,31 @@ public sealed class ForEachModule : IWorkflowModule
 
     private static int? ResolveInt(ModuleExecutionContext ctx, string key)
     {
-        if (ctx.Inputs.TryGetValue(key, out var v) && v != null) return Convert.ToInt32(v);
-        if (ctx.Properties.TryGetValue(key, out v) && v != null) return Convert.ToInt32(v);
+        if (ctx.Inputs.TryGetValue(key, out var v) && v != null)
+        {
+            return Convert.ToInt32(v);
+        }
+
+        if (ctx.Properties.TryGetValue(key, out v) && v != null)
+        {
+            return Convert.ToInt32(v);
+        }
+
         return null;
     }
 
     private static bool? ResolveBool(ModuleExecutionContext ctx, string key)
     {
-        if (ctx.Inputs.TryGetValue(key, out var v) && v != null) return Convert.ToBoolean(v);
-        if (ctx.Properties.TryGetValue(key, out v) && v != null) return Convert.ToBoolean(v);
+        if (ctx.Inputs.TryGetValue(key, out var v) && v != null)
+        {
+            return Convert.ToBoolean(v);
+        }
+
+        if (ctx.Properties.TryGetValue(key, out v) && v != null)
+        {
+            return Convert.ToBoolean(v);
+        }
+
         return null;
     }
 }

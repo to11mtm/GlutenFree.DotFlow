@@ -248,10 +248,14 @@ public class SubGraphExecutor : ReceiveActor
             }
 
             if (!_nodeSuccessors[conn.SourceNodeId].Contains(conn.TargetNodeId))
+            {
                 _nodeSuccessors[conn.SourceNodeId].Add(conn.TargetNodeId);
+            }
 
             if (!_nodePredecessors[conn.TargetNodeId].Contains(conn.SourceNodeId))
+            {
                 _nodePredecessors[conn.TargetNodeId].Add(conn.SourceNodeId);
+            }
         }
 
         _log.Debug(
@@ -278,7 +282,9 @@ public class SubGraphExecutor : ReceiveActor
             checkCompletionAfterSkipPropagation: () =>
             {
                 if (IsComplete())
+                {
                     ReportSuccess();
+                }
             },
             log: _log);
     }
@@ -334,7 +340,10 @@ public class SubGraphExecutor : ReceiveActor
 
         foreach (var conn in incomingConnections)
         {
-            if (!_nodeOutputs.TryGetValue(conn.SourceNodeId, out var sourceOutputs)) continue;
+            if (!_nodeOutputs.TryGetValue(conn.SourceNodeId, out var sourceOutputs))
+            {
+                continue;
+            }
 
             if (sourceOutputs.TryGetValue(conn.SourcePortName, out var outputValue))
             {
@@ -369,8 +378,15 @@ public class SubGraphExecutor : ReceiveActor
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
         // Phase 2.2.2: detect loop break/continue sentinel keys from BreakModule/ContinueModule~ ⏹️⏭️
-        if (message.Outputs.ContainsKey("__loop_break__")) _breakRequested = true;
-        if (message.Outputs.ContainsKey("__loop_continue__")) _continueRequested = true;
+        if (message.Outputs.ContainsKey("__loop_break__"))
+        {
+            _breakRequested = true;
+        }
+
+        if (message.Outputs.ContainsKey("__loop_continue__"))
+        {
+            _continueRequested = true;
+        }
 
         // Clean up actor ref
         if (_nodeActors.TryGetValue(nodeId, out var actor))
@@ -525,7 +541,10 @@ public class SubGraphExecutor : ReceiveActor
     /// </summary>
     private void QueuePersistNode(string nodeId, TimeSpan duration, NodeExecutionState state, string? error = null)
     {
-        if (_historyRepository == null) return;
+        if (_historyRepository == null)
+        {
+            return;
+        }
 
         var inputs = _nodeInputs.TryGetValue(nodeId, out var captured)
             ? new Dictionary<string, object?>(captured)
@@ -540,11 +559,20 @@ public class SubGraphExecutor : ReceiveActor
         // so that history queries can correlate records back to their parallel branch origin~ 🌐🗂️
         var metadataDict = new Dictionary<string, object?>();
         if (_subGraphId is not null)
+        {
             metadataDict["subGraphId"] = _subGraphId;
+        }
+
         if (_inputs.TryGetValue("__parallel_node_id__", out var parallelId) && parallelId is not null)
+        {
             metadataDict["parallelId"] = parallelId;
+        }
+
         if (_inputs.TryGetValue("__parallel_branch_index__", out var branchIdx) && branchIdx is not null)
+        {
             metadataDict["branchIndex"] = branchIdx;
+        }
+
         IReadOnlyDictionary<string, object?>? metadata = metadataDict.Count > 0 ? metadataDict : null;
 
         var now = DateTimeOffset.UtcNow;

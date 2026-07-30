@@ -51,7 +51,11 @@ public sealed record ErrorBoundary(
     /// <returns><see langword="true"/> if this boundary should catch <paramref name="ex"/>.</returns>
     public bool Catches(Exception ex)
     {
-        if (CatchTypes is not { Length: > 0 }) return true;
+        if (CatchTypes is not { Length: > 0 })
+        {
+            return true;
+        }
+
         return CatchTypes.Any(t => t.IsInstanceOfType(ex));
     }
 }

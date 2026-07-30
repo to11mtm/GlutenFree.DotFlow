@@ -97,7 +97,9 @@ public sealed class LoopExecutorActor : ReceiveActor
             : new CancellationTokenSource();
 
         if (loop.Items != null)
+        {
             _itemEnumerator = loop.Items.GetEnumerator();
+        }
 
         Receive<SubGraphCompleted>(HandleIterationCompleted);
         Receive<SubGraphFailed>(HandleIterationFailed);
@@ -303,7 +305,9 @@ public sealed class LoopExecutorActor : ReceiveActor
 
         // Pop current loop scope
         if (_activeLoopContext != null)
+        {
             Context.Parent.Tell(new PopLoopScope(_activeLoopContext.LoopId));
+        }
 
         // Merge iteration outputs into running context
         foreach (var (k, v) in msg.Outputs)
@@ -341,7 +345,9 @@ public sealed class LoopExecutorActor : ReceiveActor
         Context.Unwatch(Sender);
 
         if (_activeLoopContext != null)
+        {
             Context.Parent.Tell(new PopLoopScope(_activeLoopContext.LoopId));
+        }
 
         if (_loop.ContinueOnError)
         {
@@ -406,12 +412,17 @@ public sealed class LoopExecutorActor : ReceiveActor
         while (queue.Count > 0)
         {
             var nodeId = queue.Dequeue();
-            if (!scope.Add(nodeId)) continue;
+            if (!scope.Add(nodeId))
+            {
+                continue;
+            }
 
             foreach (var conn in definition.Connections.Where(c => c.SourceNodeId == nodeId))
             {
                 if (conn.TargetNodeId != loopNodeId)
+                {
                     queue.Enqueue(conn.TargetNodeId);
+                }
             }
         }
 

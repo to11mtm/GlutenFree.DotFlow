@@ -459,7 +459,9 @@ public class WorkflowExecutor : ReceiveActor
             checkCompletionAfterSkipPropagation: () =>
             {
                 if (IsWorkflowComplete())
+                {
                     CompleteWorkflow();
+                }
             },
             log: _log);
     }
@@ -486,15 +488,24 @@ public class WorkflowExecutor : ReceiveActor
 
         foreach (var connection in _definition.Connections)
         {
-            if (!nodeModuleMap.TryGetValue(connection.SourceNodeId, out var moduleId)) continue;
+            if (!nodeModuleMap.TryGetValue(connection.SourceNodeId, out var moduleId))
+            {
+                continue;
+            }
 
             var module = registry.GetModule(moduleId);
-            if (module == null) continue; // Not registered — runtime execution will catch this
+            if (module == null)
+            {
+                continue; // Not registered — runtime execution will catch this
+            }
 
             var declaredOutputs = module.Schema.Outputs.Select(p => p.Name).ToHashSet();
 
             // Skip validation for modules with no declared outputs (dynamic-port modules like builtin.parallel)
-            if (declaredOutputs.Count == 0) continue;
+            if (declaredOutputs.Count == 0)
+            {
+                continue;
+            }
 
             // 🎚️ Merged-output nodes legitimately expose the single reserved 'output' port~
             if (connection.SourcePortName == OutputShaping.MergedPortName &&
@@ -907,7 +918,7 @@ public class WorkflowExecutor : ReceiveActor
             SpawnTryCatchExecutor(nodeId, tryCatchRequest);
             return;
         }
-        
+
         // Find and execute successor nodes whose dependencies are now satisfied.
         // Pass activePorts for port-aware routing (Phase 2.2.0a)~ 🎯
         ExecuteReadySuccessors(nodeId, message.ActivePorts);
@@ -1490,7 +1501,9 @@ public class WorkflowExecutor : ReceiveActor
         {
             // Any node we already marked skipped (pre-marked above) is in scope.
             if (_skippedNodes.Contains(conn.TargetNodeId))
+            {
                 unionScope.Add(conn.TargetNodeId);
+            }
         }
 
         var donePorts = _definition.Connections
@@ -1542,7 +1555,10 @@ public class WorkflowExecutor : ReceiveActor
                 .Select(c => c.TargetNodeId)
                 .ToList();
 
-            if (entries.Count == 0) continue;
+            if (entries.Count == 0)
+            {
+                continue;
+            }
 
             var branchScope = TryCatchExecutorActor.ComputeScope(_definition, tryCatchNodeId, entries);
             foreach (var n in branchScope)
@@ -1816,12 +1832,18 @@ public class WorkflowExecutor : ReceiveActor
     /// </remarks>
     private bool TryHandleWithBoundary(string nodeId, Exception error)
     {
-        if (_boundaryStack.Count == 0) return false;
+        if (_boundaryStack.Count == 0)
+        {
+            return false;
+        }
 
         // Walk from innermost outward
         foreach (var boundary in _boundaryStack)
         {
-            if (!boundary.Catches(error)) continue;
+            if (!boundary.Catches(error))
+            {
+                continue;
+            }
 
             _log.Warning(
                 "🛡️ Error boundary '{BoundaryId}' caught exception from node '{NodeId}': {Error}. Routing to catch handler~ ✨",
@@ -2229,7 +2251,11 @@ public class WorkflowExecutor : ReceiveActor
     private void CompleteWorkflow()
     {
         // Guard against double-completion (port-aware skip propagation may call this concurrently)~ 🛡️
-        if (_context.State == ExecutionState.Completed) return;
+        if (_context.State == ExecutionState.Completed)
+        {
+            return;
+        }
+
         var now = DateTimeOffset.UtcNow;
         _executionTimer.Stop();
 
