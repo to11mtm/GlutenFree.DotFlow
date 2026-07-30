@@ -90,6 +90,24 @@ public sealed class DatabaseTransactionModule : IWorkflowModule
                 DisplayName: "Duration (ms)",
                 DataType: typeof(long),
                 Description: "Transaction round-trip elapsed time in milliseconds~ ⏱️",
+                IsRequired: false),
+            new PortDefinition(
+                Name: "transactionBody",
+                DisplayName: "Transaction Body",
+                DataType: typeof(object),
+                Description: "Structural body to run inside the engine-managed transaction~ 💼",
+                IsRequired: false),
+            new PortDefinition(
+                Name: "committed",
+                DisplayName: "Committed",
+                DataType: typeof(object),
+                Description: "Fires when the structural body commits successfully~ ✅",
+                IsRequired: false),
+            new PortDefinition(
+                Name: "rolledBack",
+                DisplayName: "Rolled Back",
+                DataType: typeof(object),
+                Description: "Fires when the structural body rolls back after a failure~ ↩️",
                 IsRequired: false)),
         Properties: Arr.create(
             new ModulePropertyDefinition(
@@ -122,7 +140,7 @@ public sealed class DatabaseTransactionModule : IWorkflowModule
                 DisplayName: "Operations",
                 DataType: typeof(IReadOnlyList<DbOperationSpec>),
                 Description: "Ordered ops — each { sql, parameters? | parameterSets?, expectLastInsertId? }~ 💼",
-                IsRequired: true,
+                IsRequired: false,
                 DefaultValue: null,
                 EditorType: PropertyEditorType.Json),
             new ModulePropertyDefinition(
@@ -150,16 +168,9 @@ public sealed class DatabaseTransactionModule : IWorkflowModule
 
         DbModuleSupport.ValidateConnectionSource(configuration, errors);
 
-        // operations must parse (also enforces the parameters/parameterSets exclusivity + no-savepoints)~ 🧩
+        // operations parse when supplied (empty/null = structural mode)~ 🧩
         var hasOps = configuration.TryGetValue("operations", out var opsRaw) && opsRaw is not null;
-        if (!hasOps)
-        {
-            errors.Add(new ValidationError(
-                "DB_OPERATIONS_REQUIRED",
-                "'operations' is required and must be a non-empty list~ 💔",
-                PropertyName: "operations"));
-        }
-        else
+        if (hasOps)
         {
             try
             {
@@ -203,12 +214,6 @@ public sealed class DatabaseTransactionModule : IWorkflowModule
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (context.Services.GetService(typeof(IDbConnectionFactory)) is not IDbConnectionFactory factory)
-        {
-            return ModuleResult.Fail(
-                "IDbConnectionFactory not registered in DI. Call services.AddDatabaseModules() at host startup~ 💔");
-        }
-
         var validation = this.ValidateConfiguration(context.Properties);
         if (!validation.IsValid)
         {
@@ -230,19 +235,25 @@ public sealed class DatabaseTransactionModule : IWorkflowModule
 
         var sw = Stopwatch.StartNew();
 
-        // Empty ops → clean no-op success~ 🌸
+        // Empty ops → structural mode; the engine opens the transaction and runs transactionBody~ 💼
         if (operations.Count == 0)
         {
-            sw.Stop();
-            return ModuleResult.Ok(
-                new Dictionary<string, object?>
+            return ModuleResult.WithTransaction(
+                new Dictionary<string, object?>(),
+                new TransactionRequest
                 {
-                    ["success"] = true,
-                    ["results"] = Array.Empty<DbOperationResult>(),
-                    ["error"] = null,
-                    ["durationMs"] = sw.ElapsedMilliseconds,
-                },
-                ExecutionMetrics.FromDuration(sw.Elapsed));
+                    ConnectionId = DbModuleSupport.GetString(context.Properties, "connectionId"),
+                    ConnectionString = DbModuleSupport.GetString(context.Properties, "connectionString"),
+                    Provider = DbModuleSupport.GetString(context.Properties, "provider"),
+                    IsolationLevel = DbModuleSupport.GetString(context.Properties, "isolationLevel"),
+                    TimeoutSeconds = DbModuleSupport.TryParseInt(context.Properties, "timeoutSeconds"),
+                });
+        }
+
+        if (context.Services.GetService(typeof(IDbConnectionFactory)) is not IDbConnectionFactory factory)
+        {
+            return ModuleResult.Fail(
+                "IDbConnectionFactory not registered in DI. Call services.AddDatabaseModules() at host startup~ 💔");
         }
 
         DataConnection db;

@@ -280,6 +280,12 @@ else if (document is not null)
             return;
         }
 
+        if (drop.ModuleId == "builtin.database.transaction")
+        {
+            await this.InsertTransactionSkeleton(drop.CanvasPoint, DropZones.HitTestOutputSide(this.document, drop.CanvasPoint));
+            return;
+        }
+
         var schema = await this.EnsureSchema(drop.ModuleId);
         var existing = new HashSet<string>();
         foreach (var n in this.document.Nodes)
@@ -426,6 +432,7 @@ else if (document is not null)
             new("paste", "Paste", () => { this.Paste(); return Task.CompletedTask; }),
             new("loop-skeleton", "Insert loop skeleton", () => this.InsertLoopSkeleton(at)),
             new("trycatch-skeleton", "Insert try/catch skeleton", () => this.InsertTryCatchSkeleton(at)),
+            new("transaction-skeleton", "Insert transaction skeleton", () => this.InsertTransactionSkeleton(at)),
             new("fit", "Fit to screen", async () => { if (this.canvas is not null) { await this.canvas.FitAsync(); } }),
         };
         this.ShowMenu(e);
@@ -1045,6 +1052,75 @@ else if (document is not null)
         Toasts.Success(source is null
             ? "Try/catch skeleton inserted — replace the steps, then continue the flow from 'done'"
             : $"Try/catch wired from {source.Name} — replace the steps, then continue from 'done'");
+    }
+
+    /// <summary>
+    /// 💼 Scaffolds a database-transaction skeleton: the transaction node plus a placeholder body
+    /// step wired from <c>transactionBody</c>. Nodes in that body run inside the open transaction —
+    /// commit on success (<c>committed</c>), rollback on any failure (<c>rolledBack</c>)~ ✨.
+    /// </summary>
+    private async Task InsertTransactionSkeleton(Point at, DesignerNode? source = null)
+    {
+        if (this.commands is null || this.document is null)
+        {
+            return;
+        }
+
+        var txSchema = await this.EnsureSchema("builtin.database.transaction");
+        var bodySchema = await this.EnsureSchema("builtin.database.execute");
+        var existing = new HashSet<string>(this.document.Nodes.Select(n => n.Id));
+
+        var origin = source is null ? at : new Point(source.X + CanvasGeometry.NodeWidth + 80, source.Y);
+        var transaction = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate("builtin.database.transaction", existing),
+            ModuleId = "builtin.database.transaction",
+            Name = "Transaction",
+            X = origin.X,
+            Y = origin.Y,
+            Schema = txSchema,
+        };
+        existing.Add(transaction.Id);
+
+        var bodyStep = new DesignerNode
+        {
+            Id = NodeIdGenerator.Generate("builtin.database.execute", existing),
+            ModuleId = "builtin.database.execute",
+            Name = "Transaction step (replace me)",
+            X = origin.X + CanvasGeometry.NodeWidth + 80,
+            Y = origin.Y,
+            Schema = bodySchema,
+        };
+
+        var children = new List<IDesignerCommand>
+        {
+            new AddNodeCommand(transaction),
+            new AddNodeCommand(bodyStep),
+            new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = transaction.Id,
+                SourcePortName = "transactionBody",
+                TargetNodeId = bodyStep.Id,
+                TargetPortName = "input",
+            }),
+        };
+
+        if (source is not null)
+        {
+            children.Add(new AddConnectionCommand(new DesignerConnection
+            {
+                SourceNodeId = source.Id,
+                SourcePortName = PrimaryOutput(source),
+                TargetNodeId = transaction.Id,
+                TargetPortName = "input",
+            }));
+        }
+
+        this.commands.Execute(new CompositeCommand("Insert transaction skeleton", children));
+        this.selection.SetNodes(new[] { transaction.Id, bodyStep.Id });
+        Toasts.Success(source is null
+            ? "Transaction skeleton inserted — steps in the body commit together, or all roll back"
+            : $"Transaction wired from {source.Name} — steps in the body commit together, or all roll back");
     }
 
     /// <summary>The node's primary output port (prefers <c>success</c>, else the first)~ 🔌.</summary>

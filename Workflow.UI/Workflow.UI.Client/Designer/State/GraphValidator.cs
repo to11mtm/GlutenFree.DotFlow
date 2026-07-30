@@ -4,8 +4,10 @@
 
 namespace Workflow.UI.Client.Designer.State;
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 
 /// <summary>🔎 Phase 3.3.a.2 — Severity of a validation issue~ ✨.</summary>
 public enum IssueSeverity
@@ -31,6 +33,12 @@ public sealed record GraphIssue(IssueSeverity Severity, string Message, string? 
 /// </summary>
 public static class GraphValidator
 {
+    /// <summary>The structural database-transaction module id~ 💼.</summary>
+    private const string TransactionModuleId = "builtin.database.transaction";
+
+    /// <summary>The port whose sub-graph runs inside the transaction~ 💼.</summary>
+    private const string TransactionBodyPort = "transactionBody";
+
     /// <summary>Validates the document against the set of known module ids~ 🔎.</summary>
     /// <param name="doc">The document.</param>
     /// <param name="knownModuleIds">The module ids the server knows about.</param>
@@ -77,8 +85,83 @@ public static class GraphValidator
             issues.Add(new GraphIssue(IssueSeverity.Error, "The workflow contains a cycle."));
         }
 
+        issues.AddRange(ValidateTransactions(doc));
+
         return issues;
     }
+
+    /// <summary>
+    /// 💼 Transaction-body rules: nested transactions aren't supported in V1, and a database node
+    /// inside a transaction body that targets a different connection won't take part in it~ ✨.
+    /// </summary>
+    /// <param name="doc">The document.</param>
+    /// <returns>The transaction-related issues.</returns>
+    public static IReadOnlyList<GraphIssue> ValidateTransactions(DesignerDocument doc)
+    {
+        if (doc is null)
+        {
+            throw new ArgumentNullException(nameof(doc));
+        }
+
+        var issues = new List<GraphIssue>();
+        var transactions = doc.Nodes.Where(n => n.ModuleId == TransactionModuleId).ToList();
+        if (transactions.Count == 0)
+        {
+            return issues;
+        }
+
+        var byId = doc.Nodes.ToDictionary(n => n.Id, StringComparer.Ordinal);
+
+        foreach (var tx in transactions)
+        {
+            var bodyIds = StructuralRegions.BodyScope(doc, tx.Id, TransactionBodyPort);
+            var owner = ConnectionIdOf(tx);
+
+            foreach (var id in bodyIds)
+            {
+                if (!byId.TryGetValue(id, out var node))
+                {
+                    continue;
+                }
+
+                if (node.ModuleId == TransactionModuleId)
+                {
+                    issues.Add(new GraphIssue(
+                        IssueSeverity.Error,
+                        $"Nested transactions aren't supported: '{node.Name}' sits inside the body of '{tx.Name}'.",
+                        node.Id));
+                    continue;
+                }
+
+                if (!node.ModuleId.StartsWith("builtin.database.", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var nodeConnection = ConnectionIdOf(node);
+                if (string.IsNullOrEmpty(owner) || string.IsNullOrEmpty(nodeConnection))
+                {
+                    continue;
+                }
+
+                if (!string.Equals(owner, nodeConnection, StringComparison.OrdinalIgnoreCase))
+                {
+                    issues.Add(new GraphIssue(
+                        IssueSeverity.Warning,
+                        $"'{node.Name}' uses connection '{nodeConnection}' but the transaction runs on '{owner}' — "
+                        + "it will run outside the transaction and won't be rolled back.",
+                        node.Id));
+                }
+            }
+        }
+
+        return issues;
+    }
+
+    private static string? ConnectionIdOf(DesignerNode node)
+        => node.Properties.TryGetValue("connectionId", out var el) && el.ValueKind == JsonValueKind.String
+            ? el.GetString()
+            : null;
 
     /// <summary>
     /// Returns true if adding the candidate edge (source→target) would create a cycle in the

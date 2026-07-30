@@ -128,7 +128,6 @@ Worked example: `HTTP (list) → For Each · loopBody → Transform → …` wit
 `For Each · done → next step` — see [Advanced Flow Control](advanced-flow-control.md).
 
 ### Error handling (Try/Catch) 🛡️
-
 Drop **Try Catch** (`builtin.trycatch`) from the palette — the designer scaffolds the guard
 plus placeholder try/catch steps, pre-wired, in one undoable action. Drop it **on another
 node's output side** and the guard is also wired from that node's primary output into its
@@ -144,6 +143,27 @@ designer exposes the conventional routing ports — **`try`**, **`catch`**, **`f
 Like loop bodies, these routes render **dashed**, and each wired body gets a tinted region
 halo (green try / red catch / grey finally). `rethrow` re-raises the error after
 `finally`; `catchTypes` filters which error types are caught.
+
+### Database transactions 💼
+
+**Database Transaction** (`builtin.database.transaction`) is structural too. Drop it from the
+palette (or right-click the canvas → **Insert transaction skeleton**) and the designer scaffolds
+the node plus a placeholder step wired from **`transactionBody`**; drop it on a node's output
+side and it's also wired from that node.
+
+- `transactionBody →` the steps that must succeed or fail **together**. The route renders
+  **dashed** and the body gets an amber **💼 transaction** region halo.
+- Database nodes inside the body **join the transaction automatically** when their
+  `connectionId` matches the transaction's — they reuse its open connection instead of opening
+  their own. A body node pointing at a *different* connection is flagged with a warning: it runs
+  outside the transaction and won't be rolled back.
+- `committed →` continues the flow after everything committed.
+- `rolledBack →` runs when any body step failed — everything is rolled back first, and the
+  workflow continues down this branch (like `catch`) rather than failing outright.
+- **Nested transactions are rejected** by validation. Loops and try/catch inside the body are
+  fine.
+- Leaving the body unwired keeps the classic **declarative** mode: fill in the `operations` JSON
+  list and the module runs those atomically by itself, exactly as before.
 
 ## Running (S3)
 

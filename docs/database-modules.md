@@ -192,12 +192,16 @@ Runs a parameterised SELECT and returns fully-materialised rows (D8 — no open 
 
 ### 💼 `builtin.database.transaction` — atomic op sequence
 
-Runs an ordered list of operations in one transaction: commit iff **all** succeed, else rollback with the failing op's index. A SQL error returns a *clean* `success:false` (the engine routes it) — only infra failures (can't open connection) throw.
+Two modes — both give you all-or-nothing semantics:
+
+**Structural mode (designer-first).** Leave `operations` empty and wire the workflow steps that must be atomic from the node's **`transactionBody`** port. The engine opens the transaction, runs that sub-graph inside it, then commits (activating **`committed`**) or — on the first failure — rolls everything back and activates **`rolledBack`** so the workflow can react instead of dying. Database nodes inside the body **auto-enlist** when their `connectionId` matches the transaction's: they reuse its open connection rather than opening their own, which is what makes their writes part of the same transaction. Body nodes on a *different* connection run independently (the designer warns). Nested transactions are rejected by validation. See [Designer → Database transactions](designer.md).
+
+**Declarative mode (unchanged).** Provide `operations` and the module runs that ordered list itself in one transaction: commit iff **all** succeed, else rollback with the failing op's index. A SQL error returns a *clean* `success:false` (the engine routes it) — only infra failures (can't open connection) throw.
 
 | Property | Type | Default | Notes |
 |----------|------|---------|-------|
 | connection source | — | — | as above |
-| `operations` | array | — | **Required.** See op shapes below |
+| `operations` | array | — | Required for declarative mode; leave empty to use `transactionBody` |
 | `isolationLevel` | string | `"ReadCommitted"` | `ReadCommitted`/`RepeatableRead`/`Serializable`/`Snapshot`/`ReadUncommitted` |
 | `timeoutSeconds` | int | `60` | |
 
@@ -205,7 +209,7 @@ Runs an ordered list of operations in one transaction: commit iff **all** succee
 - **Single mode:** `{ "sql": "...", "parameters": { ... }, "expectLastInsertId": false }` — one round-trip.
 - **Batch mode:** `{ "sql": "...", "parameterSets": [ { ... }, { ... } ] }` — one SQL, N parameter sets. `affectedRows = 0` for a set is **not** a failure (a `WHERE`-guard no-op); only a SQL error aborts.
 
-**Outputs:** `success` (bool), `results` (`IReadOnlyList<DbOperationResult>` — per-op `affectedRows`/`lastInsertId`/`isBatchOp`/`batchExecutionCount`), `error` (`DbOperationError?` — `operationIndex`/`sqlState`/`message`/`batchRowIndex`), `durationMs` (long).
+**Outputs:** `success` (bool), `results` (`IReadOnlyList<DbOperationResult>` — per-op `affectedRows`/`lastInsertId`/`isBatchOp`/`batchExecutionCount`), `error` (`DbOperationError?` — `operationIndex`/`sqlState`/`message`/`batchRowIndex`), `durationMs` (long). Structural mode adds the **`committed`** / **`rolledBack`** activation ports.
 
 > **Conditional aborts:** there's no in-module DSL. Compose "abort if op N returns 0 rows" at the **workflow level** with `builtin.condition` + `builtin.throw` + `builtin.trycatch` (Phase 2.2.4), or use inline `WHERE` guards in batch mode. See the plan doc §2.4.a.3 Diagrams A–C.
 

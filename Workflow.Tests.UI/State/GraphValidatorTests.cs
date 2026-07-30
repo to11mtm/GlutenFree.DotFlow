@@ -111,4 +111,85 @@ public sealed class GraphValidatorTests
 
         GraphValidator.WouldCreateCycle(doc, "c", "d").Should().BeFalse();
     }
+
+    // ── 💼 Transaction bodies (L12) ───────────────────────────────────────────────────────
+
+    private static DesignerNode DbNode(string id, string moduleId, string? connectionId = null)
+    {
+        var n = new DesignerNode { Id = id, ModuleId = moduleId, Name = id };
+        if (connectionId is not null)
+        {
+            n.Properties["connectionId"] = System.Text.Json.JsonDocument.Parse($"\"{connectionId}\"").RootElement.Clone();
+        }
+
+        return n;
+    }
+
+    private static DesignerConnection BodyConn(string s, string t)
+        => new() { SourceNodeId = s, SourcePortName = "transactionBody", TargetNodeId = t, TargetPortName = "input" };
+
+    [Fact]
+    public void Transactions_NestedTransaction_IsABlockingError()
+    {
+        var doc = Doc(
+            new[]
+            {
+                DbNode("tx1", "builtin.database.transaction", "db"),
+                DbNode("tx2", "builtin.database.transaction", "db"),
+            },
+            new[] { BodyConn("tx1", "tx2") });
+
+        var issues = GraphValidator.ValidateTransactions(doc);
+
+        issues.Should().ContainSingle(i =>
+            i.Severity == IssueSeverity.Error && i.NodeId == "tx2" && i.Message.Contains("Nested transactions"));
+    }
+
+    [Fact]
+    public void Transactions_BodyNodeOnAnotherConnection_Warns()
+    {
+        var doc = Doc(
+            new[]
+            {
+                DbNode("tx", "builtin.database.transaction", "orders"),
+                DbNode("exec", "builtin.database.execute", "analytics"),
+            },
+            new[] { BodyConn("tx", "exec") });
+
+        var issues = GraphValidator.ValidateTransactions(doc);
+
+        issues.Should().ContainSingle(i =>
+            i.Severity == IssueSeverity.Warning && i.NodeId == "exec" && i.Message.Contains("outside the transaction"));
+    }
+
+    [Fact]
+    public void Transactions_MatchingConnection_IsClean()
+    {
+        var doc = Doc(
+            new[]
+            {
+                DbNode("tx", "builtin.database.transaction", "orders"),
+                DbNode("exec", "builtin.database.execute", "orders"),
+                DbNode("log", "builtin.log"),
+            },
+            new[] { BodyConn("tx", "exec"), Conn("exec", "log") });
+
+        GraphValidator.ValidateTransactions(doc).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Transactions_DeepBodyNode_IsStillChecked()
+    {
+        // The whole downstream closure of transactionBody is inside the transaction~
+        var doc = Doc(
+            new[]
+            {
+                DbNode("tx", "builtin.database.transaction", "orders"),
+                DbNode("first", "builtin.database.execute", "orders"),
+                DbNode("second", "builtin.database.execute", "other"),
+            },
+            new[] { BodyConn("tx", "first"), Conn("first", "second") });
+
+        GraphValidator.ValidateTransactions(doc).Should().ContainSingle(i => i.NodeId == "second");
+    }
 }

@@ -246,33 +246,50 @@ public sealed class DatabaseBulkInsertModule : IWorkflowModule
         }
 
         DataConnection db;
-        try
+        var ownsConnection = false;
+        var ambientConnection = DbModuleSupport.TryGetAmbientConnection(context);
+        if (ambientConnection is not null)
         {
-            db = await DbModuleSupport.CreateConnectionAsync(factory, context.Properties, cancellationToken)
-                .ConfigureAwait(false);
+            // Reuse the engine-owned ambient transaction connection; do not dispose or nest a transaction~ 💼
+            db = ambientConnection;
         }
-        catch (ConnectionNotFoundException ex)
+        else
         {
-            sw.Stop();
-            return ModuleResult.Fail($"Connection '{ex.ConnectionId}' not found~ 💔", ex);
-        }
-        catch (UnknownProviderException ex)
-        {
-            sw.Stop();
-            return ModuleResult.Fail($"Unknown provider '{ex.ProviderKey}'~ 💔", ex);
+            try
+            {
+                db = await DbModuleSupport.CreateConnectionAsync(factory, context.Properties, cancellationToken)
+                    .ConfigureAwait(false);
+                ownsConnection = true;
+            }
+            catch (ConnectionNotFoundException ex)
+            {
+                sw.Stop();
+                return ModuleResult.Fail($"Connection '{ex.ConnectionId}' not found~ 💔", ex);
+            }
+            catch (UnknownProviderException ex)
+            {
+                sw.Stop();
+                return ModuleResult.Fail($"Unknown provider '{ex.ProviderKey}'~ 💔", ex);
+            }
         }
 
         IDbTransactionScope? scope = null;
         try
         {
             db.CommandTimeout = timeoutSeconds;
-            scope = await DefaultDbTransactionScope
-                .CreateAsync(db, DefaultIsolation(db.DataProvider.Name), cancellationToken)
-                .ConfigureAwait(false);
+            if (ambientConnection is null)
+            {
+                scope = await DefaultDbTransactionScope
+                    .CreateAsync(db, DefaultIsolation(db.DataProvider.Name), cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
-            var result = BatchInsertWriter.Write(scope.Connection, tableName, data, columnMapping, batchSize, returningColumns);
+            var result = BatchInsertWriter.Write(scope?.Connection ?? db, tableName, data, columnMapping, batchSize, returningColumns);
 
-            await scope.CommitAsync(cancellationToken).ConfigureAwait(false);
+            if (scope is not null)
+            {
+                await scope.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
             sw.Stop();
 
             return ModuleResult.Ok(
@@ -303,7 +320,7 @@ public sealed class DatabaseBulkInsertModule : IWorkflowModule
             {
                 await scope.DisposeAsync().ConfigureAwait(false);
             }
-            else
+            else if (ownsConnection)
             {
                 await db.DisposeAsync().ConfigureAwait(false);
             }

@@ -67,6 +67,27 @@ public static class StructuralRegions
         return regions;
     }
 
+    /// <summary>
+    /// The nodes that make up a structural body — the downstream closure from an owner's port~ 🔎.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="ownerNodeId">The structural node.</param>
+    /// <param name="portName">The structural port (e.g. <c>transactionBody</c>).</param>
+    /// <returns>The body node ids (empty when the port has no connections).</returns>
+    public static IReadOnlyList<string> BodyScope(DesignerDocument document, string ownerNodeId, string portName)
+    {
+        if (document is null)
+        {
+            throw new ArgumentNullException(nameof(document));
+        }
+
+        var seeds = document.Connections
+            .Where(c => c.SourceNodeId == ownerNodeId && c.SourcePortName == portName)
+            .Select(c => c.TargetNodeId);
+
+        return DownstreamClosure(document, seeds, ownerNodeId);
+    }
+
     private static IReadOnlyList<string> DownstreamClosure(DesignerDocument document, IEnumerable<string> seeds, string ownerId)
     {
         var visited = new HashSet<string>(StringComparer.Ordinal);
@@ -125,6 +146,7 @@ public static class StructuralRegions
         "try" => "🛡️ try",
         "catch" => "catch",
         "finally" => "finally",
+        "transactionBody" => "💼 transaction",
         _ => port,
     };
 
@@ -134,6 +156,7 @@ public static class StructuralRegions
         "try" => "try",
         "catch" => "catch",
         "finally" => "finally",
+        "transactionBody" => "transaction",
         _ => "loop",
     };
 }

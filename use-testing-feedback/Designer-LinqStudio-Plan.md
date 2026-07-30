@@ -189,6 +189,75 @@ Oracle. `Workflow.Persistence` is untouched (DotFlow's own state never lives in 
       Password composing an EZConnect `Data Source`), plus a provider-aware column-type list in
       the table designer so Oracle users pick Oracle types.
 
+## L12 — Structural Database Transaction (stakeholder request, 2026-07-29)
+
+> **Ask:** make `builtin.database.transaction` behave like For Each / While / Try Catch in the
+> designer — drop-scaffolded skeleton, dashed body edges, and a region "box" around the nodes
+> that run inside the transaction.
+
+### What exists today (survey)
+
+| Piece | Today |
+| --- | --- |
+| `builtin.database.transaction` | **Not structural.** It has no body port; it executes an `operations` JSON array (`[{ sql, parameters?, parameterSets?, expectLastInsertId? }]`) itself, inside one scope, and returns `success/results/error/durationMs`. |
+| Loops / Try-Catch | **Engine-backed structural nodes**: `LoopExecutorActor` / `TryCatchExecutorActor` own a *sub-graph scope* (`ComputeBodyScope`/`ComputeScope`), `WorkflowExecutor` pre-marks those nodes skipped and spawns the actor, which runs them. |
+| Designer | `NodePorts.StructuralPorts` + `StructuralRegions` + `DropZones` drive dashed edges, region halos, and drop-scaffolding — all keyed off structural **port names** (`loopBody`/`try`/`catch`/`finally`). |
+| DB modules | `builtin.database.query/execute/bulkinsert` each open their **own** connection per execution; `IDbTransactionScope`/`DefaultDbTransactionScope` exist but are used only *within* the transaction module. |
+
+So the visual layer is generic and cheap to extend — the semantics are the real work: for a body
+sub-graph to be transactional, the nodes inside it must run on the **same open connection and
+transaction** as the owner node.
+
+### Options
+
+- **Option A — real structural transaction (recommended).**
+  Add `transactionBody` + `committed` / `rolledBack` ports; a `TransactionExecutorActor` (mirroring
+  `TryCatchExecutorActor`) opens an `IDbTransactionScope`, runs the body scope, then commits — or
+  rolls back on the first failure and routes to `rolledBack`. DB modules inside the body enlist via
+  a new ambient registry keyed on `(ExecutionId, connectionId)` instead of opening their own
+  connection. Designer gets scaffolding + region boxing for free once the ports exist.
+  *Touches:* engine (new actor + executor wiring), `Workflow.Modules.Database` (ambient scope
+  registry + enlistment in 3 modules), module schema, designer state/UI, validator, docs.
+  The existing `operations` property stays supported (declarative mode) so nothing breaks.
+- **Option B — designer-only boxing.** Cheap, but there are no body nodes to box: it would draw a
+  transaction "region" that has no runtime meaning. **Not recommended — actively misleading.**
+- **Option C — designer compiles the body into `operations` at save time.** No engine change, but
+  body nodes wouldn't really execute (no outputs, no per-node status, no non-SQL nodes allowed).
+  Leaky; only worth it as a stop-gap.
+
+### Questions — RESOLVED ✅ (2026-07-29)
+
+- [x] **Q1:** **Option A** — engine-backed, a real transaction spanning the body sub-graph.
+- [x] **Q2:** **Auto-enlist by matching `connectionId`.** A body node on a different connection (or
+      using a raw connection string) runs on its own connection; the designer warns that it won't
+      be rolled back.
+- [x] **Q3:** Any body failure → **rollback + route to `rolledBack`** (mirrors `catch`; the
+      workflow continues rather than failing). `TransactionFailed` is reserved for infrastructure
+      failures (opening/committing the transaction itself).
+- [x] **Q4:** **Nested transactions rejected** — blocking designer validation; loops and try/catch
+      inside a transaction body are allowed.
+
+### Implementation ✅
+
+- [x] **L12a — Core/engine contracts**: `TransactionRequest` (Core), `ModuleResult.Transaction` +
+      `WithTransaction`, `TransactionMessages` (`TransactionCompleted`/`TransactionFailed`/
+      `NodeTransactionExecutionRequested`), `NodeExecutor` forwarding (FIFO before completion).
+- [x] **L12b — `TransactionExecutorActor`**: opens the scope, registers it ambiently, runs the body
+      via `SubGraphExecutor`, commits → `committed` / rolls back → `rolledBack`, always cleans up.
+      `WorkflowExecutor` mirrors every try/catch touch-point (pending maps, body-scope pre-skip,
+      completion routing, `IsWorkflowComplete`).
+- [x] **L12c — Layering-safe enlistment**: `IAmbientDbTransactions` + `IWorkflowTransactionScopeFactory`
+      live in `Workflow.Modules.Abstractions` (object-typed, provider-neutral) so **no new
+      `Workflow.Engine` → `Workflow.Modules.Database` reference**; the database project implements
+      both. `query`/`execute`/`bulkinsert` reuse the ambient connection (and don't dispose it) when
+      their `connectionId` matches.
+- [x] **L12d — Designer**: `transactionBody`/`committed`/`rolledBack` + `input` ports, structural
+      (dashed) edges, amber 💼 region box, palette drop-scaffolding + "💼 transaction from here"
+      drop zone, canvas menu skeleton, properties hint, nested-transaction error + cross-connection
+      warning in `GraphValidator`.
+- [x] **L12e — Compatibility**: declarative `operations` mode is unchanged; the structural request
+      is emitted only when `operations` is empty.
+
 ## Post-MVP (tracked, not in scope now)
 
 - [ ] **L.P1 — Monaco completions for `db.` / columns**: a completion provider fed by the

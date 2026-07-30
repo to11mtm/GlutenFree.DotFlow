@@ -189,6 +189,8 @@ a.df-link:hover { text-decoration: underline; }
 .df-region--catch .df-region__label { color: var(--df-state-failed); }
 .df-region--finally { border-color: var(--df-text-dim); background: rgba(148,163,184,0.06); }
 .df-region--finally .df-region__label { color: var(--df-text-dim); }
+.df-region--transaction { border-color: var(--df-warning, #fbbf24); background: rgba(251,191,36,0.06); }
+.df-region--transaction .df-region__label { color: var(--df-warning, #fbbf24); }
 
 .df-rubberband { position: absolute; border: 1px dashed var(--df-accent); background: rgba(79,156,249,0.12); pointer-events: none; }
 

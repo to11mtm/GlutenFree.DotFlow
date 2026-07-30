@@ -230,12 +230,19 @@ public sealed class DatabaseQueryModule : IWorkflowModule
         }
 
         var sw = Stopwatch.StartNew();
+        DataConnection? db = null;
+        var ownsConnection = false;
         try
         {
-            // 3️⃣ Build connection via the factory (named XOR raw)~ 🔌
-            using var db = await DbModuleSupport
-                .CreateConnectionAsync(factory, context.Properties, cancellationToken)
-                .ConfigureAwait(false);
+            // 3️⃣ Reuse an ambient transaction connection when the engine opened one for this connectionId~ 💼
+            db = DbModuleSupport.TryGetAmbientConnection(context);
+            if (db is null)
+            {
+                db = await DbModuleSupport
+                    .CreateConnectionAsync(factory, context.Properties, cancellationToken)
+                    .ConfigureAwait(false);
+                ownsConnection = true;
+            }
 
             db.CommandTimeout = timeoutSeconds;
 
@@ -272,6 +279,13 @@ public sealed class DatabaseQueryModule : IWorkflowModule
             return ModuleResult.Fail($"Database query failed: {DbErrorContext.Describe(ex)}~ 💔", ex);
         }
 #pragma warning restore CA1031
+        finally
+        {
+            if (ownsConnection && db is not null)
+            {
+                await db.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>
@@ -309,4 +323,3 @@ public sealed class DatabaseQueryModule : IWorkflowModule
         return (rows, columns);
     }
 }
-

@@ -207,11 +207,19 @@ public sealed class DatabaseExecuteModule : IWorkflowModule
         }
 
         var sw = Stopwatch.StartNew();
+        DataConnection? db = null;
+        var ownsConnection = false;
         try
         {
-            using var db = await DbModuleSupport
-                .CreateConnectionAsync(factory, context.Properties, cancellationToken)
-                .ConfigureAwait(false);
+            // Reuse an ambient transaction connection when the engine opened one for this connectionId~ 💼
+            db = DbModuleSupport.TryGetAmbientConnection(context);
+            if (db is null)
+            {
+                db = await DbModuleSupport
+                    .CreateConnectionAsync(factory, context.Properties, cancellationToken)
+                    .ConfigureAwait(false);
+                ownsConnection = true;
+            }
 
             db.CommandTimeout = timeoutSeconds;
 
@@ -246,5 +254,12 @@ public sealed class DatabaseExecuteModule : IWorkflowModule
             return ModuleResult.Fail($"Database execute failed: {DbErrorContext.Describe(ex)}~ 💔", ex);
         }
 #pragma warning restore CA1031
+        finally
+        {
+            if (ownsConnection && db is not null)
+            {
+                await db.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 }

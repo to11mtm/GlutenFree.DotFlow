@@ -415,4 +415,75 @@ public sealed class DesignerPageTests : TestContext
             cut.FindAll(".df-region--catch").Should().ContainSingle();
         });
     }
+
+    [Fact]
+    public void CanvasMenu_InsertTransactionSkeleton_AddsBoxedBody()
+    {
+        // 💼 L12: the transaction node is structural — its body gets dashed edges + a region box~
+        var handler = new FakeHttpMessageHandler(req =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(req.RequestUri!.AbsolutePath == "/api/v1/modules" ? "[]" : "{}") });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, "new"));
+        cut.WaitForAssertion(() => cut.FindAll(".df-canvas-viewport").Should().NotBeEmpty());
+
+        cut.Find(".df-canvas-viewport").ContextMenu(new MouseEventArgs { OffsetX = 200, OffsetY = 200 });
+        cut.WaitForAssertion(() => cut.Markup.Should().Contain("Insert transaction skeleton"));
+        cut.FindAll(".df-ctxmenu__item").First(b => b.TextContent.Contains("Insert transaction skeleton")).Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindAll(".df-node").Should().HaveCount(2);
+            cut.Markup.Should().Contain("builtin.database.transaction");
+            cut.FindAll("path.df-edge--structural").Should().ContainSingle();
+            cut.FindAll(".df-region--transaction").Should().ContainSingle();
+        });
+    }
+
+    [Fact]
+    public void DroppingTransaction_OnNodeOutputSide_ScaffoldsAndWiresFromSource()
+    {
+        var id = Guid.NewGuid();
+        var workflow = new WorkflowDto(
+            id, "wf", null, "1.0.0",
+            new List<NodeDto>
+            {
+                new("http-1", "builtin.http.request", "HTTP", new Dictionary<string, JsonElement>(), new PositionDto(100, 100)),
+            },
+            new List<ConnectionDto>(), new Dictionary<string, JsonElement>(), null, null, null, null, new List<string>());
+
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            var body = path switch
+            {
+                "/api/v1/modules" => Json(new List<ModuleSummaryDto>()),
+                var p when p.StartsWith("/api/v1/workflows/", StringComparison.Ordinal) => Json(workflow),
+                _ => "{}",
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        });
+        this.UseHandler(handler);
+
+        var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, id.ToString()));
+        cut.WaitForAssertion(() => cut.FindAll(".df-node").Should().ContainSingle());
+
+        var transform = cut.FindComponent<Workflow.UI.Client.Designer.Components.CanvasView>().Instance.Transform;
+        var screen = Workflow.UI.Client.Designer.State.CanvasGeometry.CanvasToScreen(
+            new Workflow.UI.Client.Designer.State.Point(320, 130), transform);
+        var drag = this.Services.GetRequiredService<PaletteDragState>();
+        drag.Begin("builtin.database.transaction");
+        cut.Find(".df-canvas-viewport").Drop(new DragEventArgs { OffsetX = screen.X, OffsetY = screen.Y });
+
+        cut.WaitForAssertion(() =>
+        {
+            // http-1 + transaction + body step.
+            cut.FindAll(".df-node").Should().HaveCount(3);
+            cut.Markup.Should().Contain("builtin.database.transaction");
+            // transactionBody is structural (dashed) + the plain wire http-1 → transaction.
+            cut.FindAll("path.df-edge--structural").Should().ContainSingle();
+            cut.FindAll("path.df-edge").Should().HaveCount(2);
+            cut.FindAll(".df-region--transaction").Should().ContainSingle();
+        });
+    }
 }

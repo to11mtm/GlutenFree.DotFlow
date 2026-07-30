@@ -14,6 +14,7 @@ using Workflow.Modules.Database.Catalog;
 using Workflow.Modules.Database.Configuration;
 using Workflow.Modules.Database.Connections;
 using Workflow.Modules.Database.Providers;
+using Workflow.Modules.Database.Transactions;
 /// <summary>
 /// 🗄️✨ DI registration entry point for the database built-in module family~ 💖.
 /// </summary>
@@ -70,6 +71,8 @@ public static class DatabaseModuleServiceCollectionExtensions
 
         // 🔌 The single connection seam both module families share (D2)~
         services.TryAddSingleton<IDbConnectionFactory, DefaultDbConnectionFactory>();
+        services.TryAddSingleton<IAmbientDbTransactions, AmbientDbTransactions>();
+        services.TryAddSingleton<IWorkflowTransactionScopeFactory, WorkflowTransactionScopeFactory>();
 
         // 📚 Table catalog stub — manual registration only in V1 (Q4/D10)~
         services.TryAddSingleton<IWorkflowTableCatalog, InMemoryWorkflowTableCatalog>();
@@ -100,5 +103,4 @@ public static class DatabaseModuleServiceCollectionExtensions
         return services;
     }
 }
-
 

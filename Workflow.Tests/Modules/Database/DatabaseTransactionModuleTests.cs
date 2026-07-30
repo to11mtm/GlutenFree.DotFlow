@@ -112,14 +112,14 @@ public sealed class DatabaseTransactionModuleTests : IDisposable
     }
 
     [Fact]
-    public async Task Transaction_EmptyOperations_ReturnsSuccessNoOp()
+    public async Task Transaction_EmptyOperations_EmitsStructuralRequest()
     {
         this.Seed();
         var result = await this.Run(Array.Empty<object>());
 
         result.Success.Should().BeTrue();
-        result.Outputs["success"].Should().Be(true);
-        ((IReadOnlyList<DbOperationResult>)result.Outputs["results"]!).Should().BeEmpty();
+        result.Transaction.Should().NotBeNull();
+        result.Transaction!.ConnectionId.Should().Be("TestDb");
     }
 
     [Fact]
@@ -380,4 +380,3 @@ public sealed class DatabaseTransactionModuleTests : IDisposable
 
     #endregion
 }
-

@@ -335,6 +335,7 @@
         "builtin.loop.foreach" => "Loop: nodes connected from the loopBody port run once per item of the input collection. Their terminal output is collected into results; done fires when every iteration finishes.",
         "builtin.loop.while" => "Loop: nodes connected from the loopBody port run repeatedly while the condition holds. done fires when the loop exits.",
         "builtin.trycatch" => "Error boundary: nodes connected from try run first; if any fails, the catch branch runs. finally always runs, then done fires.",
+        "builtin.database.transaction" => "Transaction: nodes connected from transactionBody run inside one open transaction — database nodes on the same connectionId join it automatically. All commit together (committed), or any failure rolls everything back (rolledBack). Leave 'operations' empty to use the body; fill it in to run a declarative op list instead.",
         _ => null,
     };
 

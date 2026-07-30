@@ -28,6 +28,7 @@ public static class DropZones
             ["builtin.loop.foreach"] = "🔁 loop from here",
             ["builtin.loop.while"] = "🌀 loop from here",
             ["builtin.trycatch"] = "🛡️ guard from here",
+            ["builtin.database.transaction"] = "💼 transaction from here",
         };
 
     /// <summary>Returns whether a palette drag of this module activates the drop zones~ 🎯.</summary>

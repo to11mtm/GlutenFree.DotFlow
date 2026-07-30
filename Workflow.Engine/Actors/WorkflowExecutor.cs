@@ -160,6 +160,20 @@ public class WorkflowExecutor : ReceiveActor
     private readonly System.Collections.Generic.HashSet<string> _pendingTryCatchNodes = new();
 
     /// <summary>
+    /// CopilotNote: pending transaction requests received from NodeExecutor before the corresponding
+    /// <c>NodeExecutionCompleted</c> arrives. Keyed by transaction node ID~ 💼.
+    /// </summary>
+    private readonly Dictionary<string, Workflow.Core.Models.TransactionRequest> _pendingTransactions = new();
+
+    /// <summary>
+    /// CopilotNote: node IDs of transaction nodes whose <see cref="TransactionExecutorActor"/>
+    /// is still running. Prevents <see cref="IsWorkflowComplete"/> from triggering prematurely~ 💼.
+    /// </summary>
+    private readonly System.Collections.Generic.HashSet<string> _pendingTransactionNodes = new();
+
+    private readonly Dictionary<string, Workflow.Core.Models.TransactionRequest> _runningTransactions = new();
+
+    /// <summary>
     /// Stack of active error boundaries, innermost boundary at the top.
     /// Pushed by PushErrorBoundary messages (sent by TryCatch module in 2.2.4),
     /// popped by PopErrorBoundary~ 🛡️.
@@ -287,6 +301,11 @@ public class WorkflowExecutor : ReceiveActor
         Receive<NodeTryCatchExecutionRequested>(msg => _pendingTryCatches[msg.NodeId] = msg.TryCatch);
         Receive<TryCatchCompleted>(HandleTryCatchCompleted);
         Receive<TryCatchFailed>(HandleTryCatchFailed);
+
+        // Database transaction structural execution messages~ 💼✨
+        Receive<NodeTransactionExecutionRequested>(msg => _pendingTransactions[msg.NodeId] = msg.Transaction);
+        Receive<TransactionCompleted>(HandleTransactionCompleted);
+        Receive<TransactionFailed>(HandleTransactionFailed);
 
         _log.Info(
             "🎬 WorkflowExecutor created for execution {ExecutionId}, workflow '{WorkflowName}' with {NodeCount} nodes",
@@ -846,6 +865,15 @@ public class WorkflowExecutor : ReceiveActor
 
         _nodeInputs.Remove(nodeId);
 
+        // Database transaction structural nodes may have no body connections; detect them before
+        // workflow completion so the transaction actor can emit committed/no-op outputs~ 💼
+        if (_pendingTransactions.TryGetValue(nodeId, out var earlyTransactionRequest))
+        {
+            _pendingTransactions.Remove(nodeId);
+            SpawnTransactionExecutor(nodeId, earlyTransactionRequest);
+            return;
+        }
+
         // Check if workflow is complete
         if (IsWorkflowComplete())
         {
@@ -879,7 +907,7 @@ public class WorkflowExecutor : ReceiveActor
             SpawnTryCatchExecutor(nodeId, tryCatchRequest);
             return;
         }
-
+        
         // Find and execute successor nodes whose dependencies are now satisfied.
         // Pass activePorts for port-aware routing (Phase 2.2.0a)~ 🎯
         ExecuteReadySuccessors(nodeId, message.ActivePorts);
@@ -1619,6 +1647,107 @@ public class WorkflowExecutor : ReceiveActor
         HandleNodeFailure(tryCatchNodeId, message.Error);
     }
 
+    // ── Database Transaction Execution ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Spawns a <see cref="TransactionExecutorActor"/> for a transaction node and tracks it in
+    /// <c>_pendingTransactionNodes</c> so <see cref="IsWorkflowComplete"/> waits for it~ 💼✨.
+    /// </summary>
+    private void SpawnTransactionExecutor(string transactionNodeId, Workflow.Core.Models.TransactionRequest request)
+    {
+        var entries = _definition.Connections
+            .Where(c => c.SourceNodeId == transactionNodeId && c.SourcePortName == request.BodyPort)
+            .Select(c => c.TargetNodeId)
+            .ToList();
+
+        var bodyScope = TransactionExecutorActor.ComputeScope(_definition, transactionNodeId, entries);
+
+        // Pre-mark body-scope nodes as skipped (TransactionExecutorActor runs them internally)~
+        foreach (var scopeNodeId in bodyScope)
+        {
+            if (!_completedNodes.Contains(scopeNodeId)
+                && !_failedNodes.Contains(scopeNodeId)
+                && !_skippedNodes.Contains(scopeNodeId))
+            {
+                _skippedNodes = _skippedNodes.Add(scopeNodeId);
+                _log.Debug(
+                    "⏭️ Pre-marked transaction body-scope node '{NodeId}' as skipped for '{TransactionNodeId}'~ 💼",
+                    scopeNodeId, transactionNodeId);
+            }
+        }
+
+        _pendingTransactionNodes.Add(transactionNodeId);
+        _runningTransactions[transactionNodeId] = request;
+
+        var actorName = $"txn-{transactionNodeId.Replace(".", "-")}";
+        var txnActor = Context.ActorOf(
+            TransactionExecutorActor.Props(
+                transactionNodeId, request, _definition,
+                _executionId, _serviceProvider, _executionCts.Token),
+            actorName);
+
+        Context.Watch(txnActor);
+
+        _log.Info(
+            "💼 Spawned TransactionExecutorActor '{ActorName}' for node '{TransactionNodeId}' ({ScopeCount} body-scope nodes pre-marked)",
+            actorName, transactionNodeId, bodyScope.Count);
+    }
+
+    /// <summary>
+    /// Handles transaction completion — stores outputs and fires committed/rolledBack successors~ ✅💼.
+    /// </summary>
+    private void HandleTransactionCompleted(TransactionCompleted message)
+    {
+        var transactionNodeId = message.TransactionNodeId;
+        _pendingTransactionNodes.Remove(transactionNodeId);
+        Context.Unwatch(Sender);
+
+        var request = _runningTransactions.TryGetValue(transactionNodeId, out var r)
+            ? r
+            : new Workflow.Core.Models.TransactionRequest();
+        _runningTransactions.Remove(transactionNodeId);
+
+        _log.Info(
+            "✅ Transaction '{TransactionNodeId}' completed (committed={Committed}, rolledBack={RolledBack})",
+            transactionNodeId,
+            message.Outputs.TryGetValue("committed", out var c) ? c : "?",
+            message.Outputs.TryGetValue("rolledBack", out var rb) ? rb : "?");
+
+        _nodeOutputs[transactionNodeId] = message.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value);
+
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+            return;
+        }
+
+        var port = message.Outputs.TryGetValue("rolledBack", out var rolledBack)
+                   && rolledBack is bool rbBool
+                   && rbBool
+            ? request.RolledBackPort
+            : request.CommittedPort;
+
+        ExecuteReadySuccessors(transactionNodeId, new LanguageExt.Arr<string>(new[] { port }));
+    }
+
+    /// <summary>
+    /// Handles transaction infrastructure failure — routes via the shared node failure path~ ❌💼.
+    /// </summary>
+    private void HandleTransactionFailed(TransactionFailed message)
+    {
+        var transactionNodeId = message.TransactionNodeId;
+        _pendingTransactionNodes.Remove(transactionNodeId);
+        _runningTransactions.Remove(transactionNodeId);
+        Context.Unwatch(Sender);
+
+        _log.Error(
+            message.Error,
+            "❌ Transaction '{TransactionNodeId}' failed: {Error}",
+            transactionNodeId, message.Error.Message);
+
+        HandleNodeFailure(transactionNodeId, message.Error);
+    }
+
     /// <summary>
     /// Pushes a new <see cref="ErrorBoundary"/> onto the active boundary stack~ 🛡️✨
     /// </summary>
@@ -2062,6 +2191,7 @@ public class WorkflowExecutor : ReceiveActor
                _pendingLoopNodes.Count == 0 &&
                _pendingParallelNodes.Count == 0 &&
                _pendingTryCatchNodes.Count == 0 &&
+               _pendingTransactionNodes.Count == 0 &&
                _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _definition.Nodes.Count;
     }
 

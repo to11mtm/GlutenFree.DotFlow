@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using LinqToDB.Data;
 using Workflow.Core.Models;
+using Workflow.Modules.Abstractions;
 using Workflow.Modules.Database.Abstractions;
 
 /// <summary>
@@ -128,5 +129,23 @@ public static class DbModuleSupport
         return string.IsNullOrWhiteSpace(connectionId)
             ? factory.CreateAsync(GetString(props, "provider")!, GetString(props, "connectionString")!, ct)
             : factory.CreateAsync(connectionId, ct);
+    }
+
+    /// <summary>
+    /// Gets an ambient transaction connection for the named connection, when one is active~ 💼
+    /// Raw connection strings intentionally do not auto-enlist; V1 matches by connectionId only.
+    /// </summary>
+    /// <param name="context">The module execution context.</param>
+    /// <returns>The ambient <see cref="DataConnection"/>, or <see langword="null"/>.</returns>
+    public static DataConnection? TryGetAmbientConnection(ModuleExecutionContext context)
+    {
+        var connectionId = GetString(context.Properties, "connectionId");
+        if (string.IsNullOrWhiteSpace(connectionId))
+        {
+            return null;
+        }
+
+        var ambient = context.Services.GetService(typeof(IAmbientDbTransactions)) as IAmbientDbTransactions;
+        return ambient?.TryGet(context.ExecutionId, connectionId) as DataConnection;
     }
 }

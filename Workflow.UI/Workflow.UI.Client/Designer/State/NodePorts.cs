@@ -25,6 +25,7 @@ public static class NodePorts
         new Dictionary<string, IReadOnlyList<string>>(System.StringComparer.Ordinal)
         {
             ["builtin.trycatch"] = new[] { "try", "catch", "finally", "done" },
+            ["builtin.database.transaction"] = new[] { "transactionBody", "committed", "rolledBack" },
         };
 
     /// <summary>
@@ -36,14 +37,16 @@ public static class NodePorts
         new Dictionary<string, IReadOnlyList<string>>(System.StringComparer.Ordinal)
         {
             ["builtin.trycatch"] = new[] { "input" },
+            ["builtin.database.transaction"] = new[] { "input" },
         };
 
-    /// <summary>Output ports that enter a structural sub-graph (loop body / error boundary)~ 🔁.</summary>
-    private static readonly IReadOnlyList<string> StructuralPortNames = new[] { "loopBody", "try", "catch", "finally" };
+    /// <summary>Output ports that enter a structural sub-graph (loop body / error boundary / transaction)~ 🔁.</summary>
+    private static readonly IReadOnlyList<string> StructuralPortNames =
+        new[] { "loopBody", "try", "catch", "finally", "transactionBody" };
 
     /// <summary>Returns whether an edge leaving this port enters a structural sub-graph~ 🔁.</summary>
     /// <param name="sourcePortName">The edge's source port name.</param>
-    /// <returns>True for loop-body / try / catch / finally routes.</returns>
+    /// <returns>True for loop-body / try / catch / finally / transaction-body routes.</returns>
     public static bool IsStructuralPort(string sourcePortName)
         => StructuralPortNames.Contains(sourcePortName);
 

@@ -403,6 +403,17 @@ public record ModuleResult
     public TryCatchRequest? TryCatch { get; init; }
 
     /// <summary>
+    /// Gets the transaction execution request emitted by the <c>builtin.database.transaction</c> module~ 💼✨
+    /// When non-null, <c>WorkflowExecutor</c> spawns a <c>TransactionExecutorActor</c>
+    /// to orchestrate the transaction body and commit/rollback routing.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Set via <see cref="WithTransaction"/>. Engine checks this
+    /// in NodeExecutionCompleted and delegates the body to TransactionExecutorActor~ 💖.
+    /// </remarks>
+    public TransactionRequest? Transaction { get; init; }
+
+    /// <summary>
     /// Creates a successful result that requests try/catch execution by the engine~ 🛡️✨
     /// </summary>
     /// <param name="outputs">Initial outputs (typically empty for trycatch modules).</param>
@@ -414,4 +425,17 @@ public record ModuleResult
     /// </remarks>
     public static ModuleResult WithTryCatch(Dictionary<string, object?> outputs, TryCatchRequest tryCatch)
         => new() { Success = true, Outputs = outputs, TryCatch = tryCatch };
+
+    /// <summary>
+    /// Creates a successful result that requests transaction execution by the engine~ 💼✨
+    /// </summary>
+    /// <param name="outputs">Initial outputs (typically empty for transaction modules).</param>
+    /// <param name="transaction">The transaction specification (ports, connection, isolation, timeout).</param>
+    /// <returns>A ModuleResult with a TransactionRequest for the engine to process.</returns>
+    /// <remarks>
+    /// CopilotNote: Use this in DatabaseTransactionModule structural mode.
+    /// WorkflowExecutor detects Transaction != null and spawns TransactionExecutorActor~ 🌸.
+    /// </remarks>
+    public static ModuleResult WithTransaction(Dictionary<string, object?> outputs, TransactionRequest transaction)
+        => new() { Success = true, Outputs = outputs, Transaction = transaction };
 }

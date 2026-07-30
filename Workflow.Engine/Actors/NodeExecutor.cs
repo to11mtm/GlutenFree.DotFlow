@@ -304,7 +304,8 @@ public class NodeExecutor : ReceiveActor
                     enrichedResult.ActivePorts,
                     enrichedResult.Loop,
                     enrichedResult.Parallel,
-                    enrichedResult.TryCatch);
+                    enrichedResult.TryCatch,
+                    enrichedResult.Transaction);
             }
             else
             {
@@ -664,7 +665,8 @@ public class NodeExecutor : ReceiveActor
         IReadOnlyList<string>? activePorts = null,
         Workflow.Core.Models.LoopRequest? loop = null,
         Workflow.Core.Models.ParallelRequest? parallel = null,
-        Workflow.Core.Models.TryCatchRequest? tryCatch = null)
+        Workflow.Core.Models.TryCatchRequest? tryCatch = null,
+        Workflow.Core.Models.TransactionRequest? transaction = null)
     {
         _isExecuting = false;
         Context.SetReceiveTimeout(null);
@@ -688,6 +690,13 @@ public class NodeExecutor : ReceiveActor
         if (tryCatch != null)
         {
             Context.Parent.Tell(new NodeTryCatchExecutionRequested { NodeId = _nodeId, TryCatch = tryCatch });
+        }
+
+        // Same FIFO trick for TransactionRequest — sent before completion so
+        // WorkflowExecutor populates _pendingTransactions in time~ 💼
+        if (transaction != null)
+        {
+            Context.Parent.Tell(new NodeTransactionExecutionRequested { NodeId = _nodeId, Transaction = transaction });
         }
 
         // Convert variable updates to HashMap if present~
