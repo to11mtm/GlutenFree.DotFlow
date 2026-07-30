@@ -80,7 +80,7 @@ public sealed class LinqStudioTests : TestContext
 
             if (req.Method == HttpMethod.Get && path == "/api/database/catalog/pg-main")
             {
-                return Json("[{\"tableName\":\"orders\",\"schema\":\"public\",\"columns\":[{\"name\":\"id\",\"dataType\":\"integer\",\"nullable\":false},{\"name\":\"total\",\"dataType\":\"numeric\",\"nullable\":true}],\"clrTypeName\":null,\"assemblyName\":null}]");
+                return Json("[{\"tableName\":\"orders\",\"schema\":\"public\",\"columns\":[{\"name\":\"id\",\"dataType\":\"integer\",\"nullable\":false,\"isPrimaryKey\":true,\"isIdentity\":true},{\"name\":\"total\",\"dataType\":\"numeric\",\"nullable\":true}],\"clrTypeName\":null,\"assemblyName\":null}]");
             }
 
             if (path == "/api/database/linq/validate")
@@ -90,7 +90,12 @@ public sealed class LinqStudioTests : TestContext
 
             if (path == "/api/database/linq/preview")
             {
-                return Json(previewJson ?? "{\"success\":true,\"rows\":[{\"id\":1,\"total\":9.5}],\"rowCount\":1,\"durationMs\":7,\"diagnostics\":[]}");
+                return Json(previewJson ?? "{\"success\":true,\"rows\":[{\"id\":1,\"total\":9.5}],\"rowCount\":1,\"durationMs\":7,\"diagnostics\":[],\"statements\":[\"SELECT [o].[id], [o].[total] FROM [orders] [o]\"]}");
+            }
+
+            if (path == "/api/database/linq/preview-live")
+            {
+                return Json("{\"success\":true,\"rows\":[{\"id\":42,\"total\":100.0}],\"rowCount\":1,\"durationMs\":12,\"diagnostics\":[{\"id\":\"WFLINQ020\",\"severity\":\"Warning\",\"message\":\"Ran against the live connection inside a transaction that was rolled back\",\"line\":0,\"column\":0}],\"statements\":[\"SELECT \\\"o\\\".\\\"id\\\" FROM \\\"orders\\\" \\\"o\\\"\"]}");
             }
 
             if (path == "/api/database/linq/compile")
@@ -375,6 +380,86 @@ public sealed class LinqStudioTests : TestContext
         cut.Find("[data-testid=lq-newtable-name]").GetAttribute("value").Should().BeNullOrEmpty();
         cut.FindAll("[data-testid=lq-newtable-cancel]").Should().BeEmpty();
         fake.Requests.Should().NotContain(r => r.Method == HttpMethod.Put);
+    }
+
+    [Fact]
+    public void Studio_Preview_ShowsGeneratedSql()
+    {
+        // L9b: the SQL panel renders the statements the body produced~
+        this.UseDefaultHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
+
+        cut.Find("[data-testid=lq-preview]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var sql = cut.Find("[data-testid=lq-sql]");
+            sql.TextContent.Should().Contain("SELECT").And.Contain("orders");
+        });
+    }
+
+    [Fact]
+    public void Studio_LivePreview_PostsToPreviewLive_ShowsRollbackNoticeAndRows()
+    {
+        // L9c: running against the real connection, always rolled back~
+        var fake = this.UseDefaultHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
+
+        // Disabled until a connection is chosen — it targets a real database.
+        cut.Find("[data-testid=lq-preview-live]").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("[data-testid=lq-connection]").Change("pg-main");
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-preview-live]").HasAttribute("disabled").Should().BeFalse());
+
+        cut.Find("[data-testid=lq-preview-live]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            fake.Requests.Should().Contain(r => r.RequestUri!.AbsolutePath == "/api/database/linq/preview-live");
+            cut.Find("[data-testid=lq-preview-grid]").InnerHtml.Should().Contain("42");
+            cut.Find("[data-testid=lq-diags]").TextContent.Should().Contain("rolled back");
+            cut.Find("[data-testid=lq-sql]").TextContent.Should().Contain("SELECT");
+        });
+    }
+
+    [Fact]
+    public void Studio_DefineTable_IdentityColumn_ImpliesPrimaryKey_AndIsSaved()
+    {
+        // L9a: 🔑/⚡ toggles so InsertWithIdentity et al. work~
+        var fake = this.UseDefaultHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
+        cut.Find("[data-testid=lq-connection]").Change("pg-main");
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-table-orders]").Should().NotBeNull());
+
+        cut.Find("[data-testid=lq-newtable-name]").Input("items");
+        cut.Find("[data-testid=lq-col-name-0]").Input("id");
+        cut.Find("[data-testid=lq-col-type-0]").Change("integer");
+        cut.Find("[data-testid=lq-col-identity-0]").Change(true);
+
+        // Identity implies a key column~
+        cut.Find("[data-testid=lq-col-pk-0]").HasAttribute("checked").Should().BeTrue();
+
+        cut.Find("[data-testid=lq-newtable-save]").Click();
+
+        cut.WaitForAssertion(() => fake.Bodies.Should().Contain(b =>
+            b.Contains("\"isIdentity\":true") && b.Contains("\"isPrimaryKey\":true")));
+    }
+
+    [Fact]
+    public void Studio_CatalogList_MarksKeyAndIdentityColumns()
+    {
+        this.UseDefaultHandler();
+        var cut = this.RenderStudio();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=lq-connection]").InnerHtml.Should().Contain("Main PG"));
+        cut.Find("[data-testid=lq-connection]").Change("pg-main");
+
+        cut.WaitForAssertion(() =>
+        {
+            var table = cut.Find("[data-testid=lq-table-orders]");
+            table.TextContent.Should().Contain("🔑").And.Contain("⚡");
+        });
     }
 
     [Fact]

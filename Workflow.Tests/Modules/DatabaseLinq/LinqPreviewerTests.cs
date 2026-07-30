@@ -73,6 +73,69 @@ public sealed class LinqPreviewerTests
         result.Diagnostics.Should().Contain(d => d.Id == "CS1061");
     }
 
+    // ── SQL preview (L9b) ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Preview_CapturesTheExecutedSql()
+    {
+        var result = await this.Preview("return db.Orders.Where(o => o.total > 0m).ToList();");
+
+        result.Success.Should().BeTrue(Dump(result));
+        result.Statements.Should().NotBeNullOrEmpty();
+        string.Join("\n", result.Statements!).Should().Contain("SELECT").And.Contain("Orders");
+    }
+
+    [Fact]
+    public async Task Preview_UnmaterialisedQuery_RendersSqlInsteadOfFailing()
+    {
+        // No .ToList() — previously a materialisation error; now it renders the SQL with a hint~
+        var result = await this.Preview("return db.Orders.Where(o => o.total > 0m);");
+
+        result.Success.Should().BeTrue(Dump(result));
+        result.Diagnostics.Should().Contain(d => d.Id == "WFLINQ021");
+        string.Join("\n", result.Statements!).Should().Contain("SELECT");
+    }
+
+    [Fact]
+    public async Task Preview_InsertStatement_IsCaptured()
+    {
+        var result = await this.Preview(
+            "db.Insert(new Orders { id = 99, name = \"x\", total = 1m }); return db.Orders.ToList();");
+
+        result.Success.Should().BeTrue(Dump(result));
+        string.Join("\n", result.Statements!).Should().Contain("INSERT");
+        result.PostRollbackRowCount.Should().Be(3, "the insert was rolled back~ 🔒");
+    }
+
+    // ── Identity / primary key columns (L9a) ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task Preview_IdentityColumn_SupportsInsertWithIdentity()
+    {
+        var identityTable = new WorkflowTableMetadata(
+            ConnectionId: "conn",
+            TableName: "Items",
+            Columns: new[]
+            {
+                new WorkflowColumnMetadata("id", "integer", false, IsPrimaryKey: true, IsIdentity: true),
+                new WorkflowColumnMetadata("name", "text", true),
+            });
+
+        var schema = new ModuleSchema(Arr<PortDefinition>.Empty, Arr<PortDefinition>.Empty, Arr<ModulePropertyDefinition>.Empty);
+        var compile = new LinqCompileRequest(
+            "def1",
+            "node1",
+            "var id = db.InsertWithInt32Identity(new Items { name = \"new\" }); return db.Items.Where(i => i.id == id).ToList();",
+            new[] { identityTable },
+            schema);
+
+        var result = await this.previewer.PreviewAsync(new LinqPreviewRequest(compile, SampleRowsPerTable: 2));
+
+        result.Success.Should().BeTrue(Dump(result));
+        result.RowCount.Should().Be(1, "the identity-generated row is readable inside the transaction~");
+        result.PostRollbackRowCount.Should().Be(2, "…and rolled back afterwards~ 🔒");
+    }
+
     // ── Helpers 🛠️ ───────────────────────────────────────────────────────────────────────
 
     private static WorkflowTableMetadata OrdersTable() =>

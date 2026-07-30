@@ -266,6 +266,8 @@ a.df-link:hover { text-decoration: underline; }
 .df-linqstudio__modal-actions { justify-content: flex-end; margin-top: var(--df-space-3); }
 .df-linqstudio__req { color: var(--df-danger, #e06c75); margin-left: 2px; }
 .df-linqstudio__preview-cs { margin-top: var(--df-space-2); word-break: break-all; }
+.df-linqstudio__sql { display: flex; flex-direction: column; gap: var(--df-space-1); }
+.df-linqstudio__sql-stmt { margin: 0; padding: var(--df-space-2); background: var(--df-surface-2, #1b1f27); border: 1px solid var(--df-border); border-radius: var(--df-radius); font-family: var(--df-font-mono, monospace); font-size: 0.78rem; white-space: pre-wrap; overflow-x: auto; }
 .df-linqstudio__colrow { margin-bottom: var(--df-space-1); align-items: center; }
 .df-linqstudio__diags { max-height: 160px; overflow-y: auto; font-size: 0.8rem; }
 .df-linqstudio__diag { padding: 2px 0; color: #e0b341; }

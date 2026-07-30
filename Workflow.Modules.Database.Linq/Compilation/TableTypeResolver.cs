@@ -170,6 +170,16 @@ public sealed class TableTypeResolver
             }
 
             sb.AppendLine($"    [global::LinqToDB.Mapping.Column(Name = \"{CodeIdentifiers.EscapeLiteral(col.Name)}\")]");
+            if (col.IsPrimaryKey)
+            {
+                sb.AppendLine("    [global::LinqToDB.Mapping.PrimaryKey]");
+            }
+
+            if (col.IsIdentity)
+            {
+                sb.AppendLine("    [global::LinqToDB.Mapping.Identity]");
+            }
+
             sb.AppendLine($"    public {csType} {propName} {{ get; set; }} = default!;");
         }
 

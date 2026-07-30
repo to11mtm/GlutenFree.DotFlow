@@ -74,6 +74,16 @@ public sealed record WorkflowTableMetadata(
 /// <param name="Name">Column name.</param>
 /// <param name="DataType">Provider-reported data type (e.g. "integer", "text").</param>
 /// <param name="Nullable">Whether the column allows NULL.</param>
-public sealed record WorkflowColumnMetadata(string Name, string DataType, bool Nullable);
+/// <param name="IsPrimaryKey">Whether the column participates in the primary key.</param>
+/// <param name="IsIdentity">
+/// Whether the database generates the value (identity/serial/autoincrement). Identity columns are
+/// skipped on insert and enable <c>InsertWithIdentity</c>~ ⚡.
+/// </param>
+public sealed record WorkflowColumnMetadata(
+    string Name,
+    string DataType,
+    bool Nullable,
+    bool IsPrimaryKey = false,
+    bool IsIdentity = false);
 
 

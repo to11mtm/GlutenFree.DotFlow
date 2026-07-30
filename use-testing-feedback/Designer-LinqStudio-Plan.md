@@ -144,6 +144,22 @@ POCOs are emitted as `WorkflowRuntime.Gen_FooBar`, a name users never see.
       and carry the table's selection across. Removing or switching connections while editing
       resets the form. A schema field was added to the form (previously always null).
 
+## L9 — SQL preview, live preview, and key/identity columns (stakeholder request, 2026-07-29)
+
+- [x] **L9a — Primary key / identity in the table designer**: `WorkflowColumnMetadata` gains
+      `IsPrimaryKey`/`IsIdentity`; generated POCOs emit `[PrimaryKey]`/`[Identity]` so
+      `InsertWithIdentity`, `Update`, and `Delete` by key work; catalog DTOs + the designer's
+      column grid get 🔑/⚡ toggles; the schema importer fills them where the provider reports
+      them (SQLite `pk`/rowid-alias, Postgres key + `is_identity`/serial default).
+- [x] **L9b — SQL preview**: linq2db tracing captures every statement the body executes during
+      preview (dialect-correct), and a body that returns an unmaterialised `IQueryable` is no
+      longer an error — its SQL is rendered via `ToSqlQuery()` with a "add `.ToList()` to run
+      it" hint. Surfaced as a **SQL** panel in the studio.
+- [x] **L9c — Preview against the real connection**: `POST /api/database/linq/preview-live`
+      resolves the named connection, runs the body inside a transaction that is **always rolled
+      back**, and returns rows + the captured SQL. Trusted-author gated like compile; the studio
+      gets a **🗄 Run on connection** button with a clear rollback notice.
+
 ## Post-MVP (tracked, not in scope now)
 
 - [ ] **L.P1 — Monaco completions for `db.` / columns**: a completion provider fed by the

@@ -45,6 +45,23 @@ public sealed class DatabaseLinqClient
             new HttpRequestMessage(HttpMethod.Post, "api/database/linq/preview") { Content = JsonContent.Create(request, options: ApiHttp.Json) },
             ct);
 
+    /// <summary>
+    /// Compiles + runs against the <b>real</b> connection inside an always-rolled-back transaction
+    /// (<c>POST /linq/preview-live</c>)~ 🗄️.
+    /// </summary>
+    /// <param name="request">The authoring request (with input values).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The preview response (rows + SQL).</returns>
+    public Task<LinqPreviewResponseDto> PreviewLiveAsync(LinqAuthoringRequestDto request, CancellationToken ct = default)
+    {
+        var msg = new HttpRequestMessage(HttpMethod.Post, "api/database/linq/preview-live")
+        {
+            Content = JsonContent.Create(request, options: ApiHttp.Json),
+        };
+        msg.Headers.Add("X-Trusted-Author", "true");
+        return ApiHttp.SendAsync<LinqPreviewResponseDto>(this.http, msg, ct);
+    }
+
     /// <summary>Compiles + caches; returns the assembly key (<c>POST /linq/compile</c>)~ 🔑.</summary>
     /// <param name="request">The authoring request.</param>
     /// <param name="ct">Cancellation token.</param>

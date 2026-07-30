@@ -44,7 +44,14 @@ public sealed record LinqTableDto(
 /// <param name="Name">Column name.</param>
 /// <param name="DataType">Provider data type (integer/text/numeric/…).</param>
 /// <param name="Nullable">Whether NULL is allowed.</param>
-public sealed record LinqColumnDto(string Name, string DataType, bool Nullable);
+/// <param name="IsPrimaryKey">Whether the column is part of the primary key.</param>
+/// <param name="IsIdentity">Whether the database generates the value (identity/serial/autoincrement).</param>
+public sealed record LinqColumnDto(
+    string Name,
+    string DataType,
+    bool Nullable,
+    bool IsPrimaryKey = false,
+    bool IsIdentity = false);
 
 /// <summary>🧬 Typed input definition~.</summary>
 /// <param name="Name">Input name.</param>
@@ -72,12 +79,14 @@ public sealed record LinqValidateResponseDto(bool Success, List<LinqDiagnosticDt
 /// <param name="RowCount">Row count.</param>
 /// <param name="DurationMs">Elapsed ms.</param>
 /// <param name="Diagnostics">Diagnostics.</param>
+/// <param name="Statements">The SQL the body produced~ 🧾.</param>
 public sealed record LinqPreviewResponseDto(
     bool Success,
     List<Dictionary<string, object?>>? Rows,
     int? RowCount,
     long DurationMs,
-    List<LinqDiagnosticDto> Diagnostics);
+    List<LinqDiagnosticDto> Diagnostics,
+    List<string>? Statements = null);
 
 /// <summary>🔑 Compile response~.</summary>
 /// <param name="CompiledAssemblyKey">The compiled assembly blob key.</param>

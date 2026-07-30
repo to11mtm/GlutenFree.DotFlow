@@ -5,6 +5,8 @@
 namespace Workflow.Tests.Api;
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -214,6 +216,120 @@ public sealed class DatabaseLinqApiTests : IClassFixture<WebApplicationFactory<P
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("success").GetBoolean().Should().BeTrue();
+    }
+
+    // ── 🧾 L9b/L9c — SQL preview + live preview ────────────────────────────────────
+
+    [Fact]
+    public async Task Api_Preview_ReturnsTheGeneratedSql()
+    {
+        var client = this.factory.CreateClient();
+        var resp = await client.PostAsJsonAsync("/api/database/linq/preview", Body("return db.Orders.ToList();"));
+
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        var statements = body.GetProperty("statements");
+        statements.GetArrayLength().Should().BeGreaterThan(0);
+        statements[0].GetString().Should().Contain("SELECT");
+    }
+
+    [Fact]
+    public async Task Api_PreviewLive_WithoutTrustedAuthor_Returns403()
+    {
+        var client = this.factory.CreateClient();
+        var resp = await client.PostAsJsonAsync("/api/database/linq/preview-live", Body("return db.Orders.ToList();"));
+
+        resp.StatusCode.Should().Be(HttpStatusCode.Forbidden, "live preview touches real data~ 🔐");
+    }
+
+    [Fact]
+    public async Task Api_PreviewLive_UnknownConnection_Returns404()
+    {
+        var client = this.factory.CreateClient();
+        using var req = new HttpRequestMessage(HttpMethod.Post, "/api/database/linq/preview-live")
+        {
+            Content = JsonContent.Create(new
+            {
+                definitionId = "def1",
+                nodeId = "node1",
+                userCode = "return db.Orders.ToList();",
+                connectionId = $"nope-{Guid.NewGuid():N}",
+            }),
+        };
+        req.Headers.Add("X-Trusted-Author", "true");
+
+        (await client.SendAsync(req)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Api_PreviewLive_RunsAgainstTheConnection_AndRollsBack()
+    {
+        var client = this.factory.CreateClient();
+        var connId = $"live-{Guid.NewGuid():N}";
+        var dbPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), connId + ".db");
+
+        var reg = await client.PostAsJsonAsync("/api/database/connections/", new
+        {
+            id = connId,
+            providerKey = "sqlite",
+            connectionString = $"Data Source={dbPath}",
+            displayName = "live test",
+        });
+        reg.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        try
+        {
+            // The body creates + fills the table itself; SQLite DDL is transactional, so the
+            // always-rollback wrapper must discard everything~ 🔒
+            var body = Body("db.CreateTable<Orders>(); db.Insert(new Orders { id = 1, name = \"a\", total = 2m }); return db.Orders.ToList();");
+            var first = await PostLive(client, body, connId);
+            first.StatusCode.Should().Be(HttpStatusCode.OK);
+            var firstBody = await first.Content.ReadFromJsonAsync<JsonElement>();
+            firstBody.GetProperty("success").GetBoolean().Should().BeTrue(firstBody.ToString());
+            firstBody.GetProperty("rowCount").GetInt32().Should().Be(1);
+            string.Join("\n", firstBody.GetProperty("statements").EnumerateArray().Select(s => s.GetString()))
+                .Should().Contain("INSERT");
+
+            // A second run proves nothing persisted: the table has to be created again.
+            var second = await PostLive(client, body, connId);
+            var secondBody = await second.Content.ReadFromJsonAsync<JsonElement>();
+            secondBody.GetProperty("success").GetBoolean().Should().BeTrue(
+                "the table was rolled away, so re-creating it succeeds again~ 🔒");
+            secondBody.GetProperty("rowCount").GetInt32().Should().Be(1);
+        }
+        finally
+        {
+            await client.DeleteAsync($"/api/database/connections/{connId}");
+            try
+            {
+                if (System.IO.File.Exists(dbPath))
+                {
+                    System.IO.File.Delete(dbPath);
+                }
+            }
+            catch (System.IO.IOException)
+            {
+                // The pooled SQLite handle may still hold the file — the temp dir will get it~
+            }
+        }
+    }
+
+    private static async Task<HttpResponseMessage> PostLive(HttpClient client, object body, string connectionId)
+    {
+        var json = JsonSerializer.SerializeToElement(body);
+        var withConn = new Dictionary<string, object?>();
+        foreach (var p in json.EnumerateObject())
+        {
+            withConn[p.Name] = p.Value;
+        }
+
+        withConn["connectionId"] = connectionId;
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, "/api/database/linq/preview-live")
+        {
+            Content = JsonContent.Create(withConn),
+        };
+        req.Headers.Add("X-Trusted-Author", "true");
+        return await client.SendAsync(req);
     }
 
     private static object Body(string userCode) => new

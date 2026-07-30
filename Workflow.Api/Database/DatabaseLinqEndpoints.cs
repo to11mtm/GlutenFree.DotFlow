@@ -52,6 +52,14 @@ public static class DatabaseLinqEndpoints
             .WithSummary("Compile + run a typed linq body against a seeded rollback-only sandbox")
             .Produces<PreviewResponse>(StatusCodes.Status200OK);
 
+        linq.MapPost("/preview-live", PreviewLiveHandler)
+            .WithName("PreviewLinqLive")
+            .WithSummary("Compile + run a typed linq body against the real connection in an always-rolled-back transaction")
+            .Produces<PreviewResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         linq.MapPost("/compile", CompileHandler)
             .WithName("CompileLinq")
             .WithSummary("Compile + cache a typed linq body (trusted-author gated); returns the blob key")
@@ -116,7 +124,87 @@ public static class DatabaseLinqEndpoints
             result.Rows,
             result.RowCount,
             result.DurationMs,
-            ToDtos(result.Diagnostics)));
+            ToDtos(result.Diagnostics),
+            result.Statements));
+    }
+
+    /// <summary>
+    /// ⚠️ Runs the body against the real named connection inside an always-rolled-back transaction.
+    /// Trusted-author gated (same placeholder gate as compile) because it touches real data~ 🗄️.
+    /// </summary>
+    private static async Task<IResult> PreviewLiveHandler(
+        LinqAuthoringRequest request,
+        HttpContext http,
+        IWorkflowLinqPreviewer previewer,
+        IWorkflowTableCatalog catalog,
+        IDbConnectionRegistry connections,
+        IDbProviderRegistry providers,
+        IOptions<LinqEndpointsOptions> options,
+        CancellationToken ct)
+    {
+        var opts = options.Value;
+        if (opts.RequireTrustedAuthorForCompile
+            && !string.Equals(http.Request.Headers[opts.TrustedAuthorHeader], "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ConnectionId))
+        {
+            return Results.BadRequest(new { error = "A connectionId is required to preview against a live connection." });
+        }
+
+        var descriptor = await connections.GetAsync(request.ConnectionId, ct).ConfigureAwait(false);
+        return await descriptor.Match(
+            Some: async d =>
+            {
+                if (!d.Enabled)
+                {
+                    return Results.BadRequest(new { error = $"Connection '{d.Id}' is disabled." });
+                }
+
+                string providerName;
+                try
+                {
+                    providerName = providers.ResolveLinq2DbProvider(d.ProviderKey);
+                }
+                catch (UnknownProviderException ex)
+                {
+                    return Results.BadRequest(new { error = ex.Message });
+                }
+
+                var compileRequest = await BuildCompileRequest(request, catalog, ct).ConfigureAwait(false);
+                var liveRequest = new LinqLivePreviewRequest(
+                    compileRequest,
+                    providerName,
+                    d.ConnectionString,
+                    CoerceInputs(request));
+
+                try
+                {
+                    var result = await previewer.PreviewLiveAsync(liveRequest, ct).ConfigureAwait(false);
+                    return Results.Ok(new PreviewResponse(
+                        result.Success,
+                        result.Rows,
+                        result.RowCount,
+                        result.DurationMs,
+                        ToDtos(result.Diagnostics),
+                        result.Statements));
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Real databases fail in real ways — surface it as a diagnostic, not a 500~
+                    return Results.Ok(new PreviewResponse(
+                        false,
+                        null,
+                        null,
+                        0,
+                        new[] { new LinqDiagnosticDto("WFLINQ022", "Error", ex.Message, 0, 0) },
+                        null));
+                }
+            },
+            None: () => Task.FromResult(Results.NotFound(new { error = $"Connection '{request.ConnectionId}' not found." })))
+            .ConfigureAwait(false);
     }
 
     private static async Task<IResult> CompileHandler(
@@ -202,7 +290,7 @@ public static class DatabaseLinqEndpoints
             connectionId,
             tableName,
             string.IsNullOrWhiteSpace(request.Schema) ? null : request.Schema,
-            request.Columns?.Select(c => new WorkflowColumnMetadata(c.Name, c.DataType, c.Nullable)).ToList(),
+            request.Columns?.Select(c => new WorkflowColumnMetadata(c.Name, c.DataType, c.Nullable, c.IsPrimaryKey, c.IsIdentity)).ToList(),
             hasClrType ? request.ClrTypeName : null,
             hasClrType ? request.AssemblyName : null);
 
@@ -226,7 +314,7 @@ public static class DatabaseLinqEndpoints
         => new(
             t.TableName,
             t.Schema,
-            t.Columns?.Select(c => new LinqColumnDto(c.Name, c.DataType, c.Nullable)).ToList(),
+            t.Columns?.Select(c => new LinqColumnDto(c.Name, c.DataType, c.Nullable, c.IsPrimaryKey, c.IsIdentity)).ToList(),
             t.ClrTypeName,
             t.AssemblyName);
 
@@ -260,7 +348,7 @@ public static class DatabaseLinqEndpoints
                 request.ConnectionId ?? "preview",
                 t.TableName,
                 t.Schema,
-                t.Columns?.Select(c => new WorkflowColumnMetadata(c.Name, c.DataType, c.Nullable)).ToList(),
+                t.Columns?.Select(c => new WorkflowColumnMetadata(c.Name, c.DataType, c.Nullable, c.IsPrimaryKey, c.IsIdentity)).ToList(),
                 t.ClrTypeName,
                 t.AssemblyName)).ToList();
         }
@@ -411,7 +499,14 @@ public sealed record LinqTableDto(
 /// <param name="Name">Column name.</param>
 /// <param name="DataType">Provider-reported data type.</param>
 /// <param name="Nullable">Whether the column allows NULL.</param>
-public sealed record LinqColumnDto(string Name, string DataType, bool Nullable);
+/// <param name="IsPrimaryKey">Whether the column is part of the primary key.</param>
+/// <param name="IsIdentity">Whether the database generates the value (identity/serial/autoincrement).</param>
+public sealed record LinqColumnDto(
+    string Name,
+    string DataType,
+    bool Nullable,
+    bool IsPrimaryKey = false,
+    bool IsIdentity = false);
 
 /// <summary>🧬 Input property definition~.</summary>
 /// <param name="Name">Property name.</param>
@@ -439,12 +534,14 @@ public sealed record ValidateResponse(bool Success, LinqDiagnosticDto[] Errors, 
 /// <param name="RowCount">Row count.</param>
 /// <param name="DurationMs">Elapsed time.</param>
 /// <param name="Diagnostics">Diagnostics.</param>
+/// <param name="Statements">The SQL the body produced (executed statements / rendered query)~ 🧾.</param>
 public sealed record PreviewResponse(
     bool Success,
     IReadOnlyList<IReadOnlyDictionary<string, object?>>? Rows,
     int? RowCount,
     long DurationMs,
-    LinqDiagnosticDto[] Diagnostics);
+    LinqDiagnosticDto[] Diagnostics,
+    IReadOnlyList<string>? Statements = null);
 
 /// <summary>Response for compile~.</summary>
 /// <param name="CompiledAssemblyKey">The blob key of the cached compiled assembly.</param>

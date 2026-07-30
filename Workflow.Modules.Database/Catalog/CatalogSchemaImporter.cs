@@ -84,12 +84,28 @@ public sealed class CatalogSchemaImporter : ICatalogSchemaImporter
         foreach (var name in tableNames)
         {
             var columns = new List<WorkflowColumnMetadata>();
+            var pkCount = 0;
+            foreach (var col in Read(db, $"PRAGMA table_info(\"{name.Replace("\"", "\"\"", StringComparison.Ordinal)}\")"))
+            {
+                if (Convert.ToInt64(col["pk"] ?? 0L) != 0)
+                {
+                    pkCount++;
+                }
+            }
+
             foreach (var col in Read(db, $"PRAGMA table_info(\"{name.Replace("\"", "\"\"", StringComparison.Ordinal)}\")"))
             {
                 var colName = Convert.ToString(col["name"]) ?? string.Empty;
                 var dataType = Convert.ToString(col["type"]) ?? string.Empty;
                 var notNull = Convert.ToInt64(col["notnull"] ?? 0L) != 0;
-                columns.Add(new WorkflowColumnMetadata(colName, dataType, !notNull));
+                var isPk = Convert.ToInt64(col["pk"] ?? 0L) != 0;
+
+                // A single-column INTEGER PRIMARY KEY is the rowid alias → autoincrementing~ ⚡
+                var isIdentity = isPk
+                    && pkCount == 1
+                    && dataType.Trim().Equals("INTEGER", StringComparison.OrdinalIgnoreCase);
+
+                columns.Add(new WorkflowColumnMetadata(colName, dataType, !notNull, isPk, isIdentity));
             }
 
             result.Add(new TableSchema(name, null, columns));
@@ -116,15 +132,33 @@ public sealed class CatalogSchemaImporter : ICatalogSchemaImporter
         foreach (var (schema, table) in pairs)
         {
             var columns = new List<WorkflowColumnMetadata>();
+            const string pkSql =
+                "SELECT kcu.column_name FROM information_schema.table_constraints tc "
+                + "JOIN information_schema.key_column_usage kcu "
+                + "  ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema "
+                + "WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = @s AND tc.table_name = @t";
+            var pkColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in Read(db, pkSql, new DataParameter("s", schema), new DataParameter("t", table)))
+            {
+                pkColumns.Add(Convert.ToString(row["column_name"]) ?? string.Empty);
+            }
+
             const string colsSql =
-                "SELECT column_name, data_type, is_nullable FROM information_schema.columns "
+                "SELECT column_name, data_type, is_nullable, is_identity, column_default FROM information_schema.columns "
                 + "WHERE table_schema = @s AND table_name = @t ORDER BY ordinal_position";
             foreach (var col in Read(db, colsSql, new DataParameter("s", schema), new DataParameter("t", table)))
             {
                 var colName = Convert.ToString(col["column_name"]) ?? string.Empty;
                 var dataType = Convert.ToString(col["data_type"]) ?? string.Empty;
                 var nullable = string.Equals(Convert.ToString(col["is_nullable"]), "YES", StringComparison.OrdinalIgnoreCase);
-                columns.Add(new WorkflowColumnMetadata(colName, dataType, nullable));
+
+                // GENERATED … AS IDENTITY, or the classic serial (nextval default)~ ⚡
+                var isIdentity =
+                    string.Equals(Convert.ToString(col["is_identity"]), "YES", StringComparison.OrdinalIgnoreCase)
+                    || (Convert.ToString(col["column_default"]) ?? string.Empty)
+                        .StartsWith("nextval(", StringComparison.OrdinalIgnoreCase);
+
+                columns.Add(new WorkflowColumnMetadata(colName, dataType, nullable, pkColumns.Contains(colName), isIdentity));
             }
 
             result.Add(new TableSchema(table, schema, columns));

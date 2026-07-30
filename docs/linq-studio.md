@@ -20,7 +20,7 @@ publishes the compiled assembly key back onto the node.
 
 | Area | What it does |
 | --- | --- |
-| Toolbar | Connection picker, ➕ Connection (define a new named connection), ✅ Validate, 👀 Preview, 🚀 Publish to node |
+| Toolbar | Connection picker, ➕ Connection (define a new named connection), ✅ Validate, 👀 Preview, 🗄 Run on connection, 🚀 Publish to node |
 | 📚 Tables (left) | The connection's table catalog: check tables to expose them as `db.TableName`; 📥 Import from connection introspects the live schema; ➕ Define a table adds one manually (name + columns grid) |
 | Editor (center) | Monaco (textarea fallback) for the C# query body, diagnostics, preview grid |
 | 🧭 Context reference | Selected tables and inputs as click-to-insert chips (`db.orders`, `.total`, `inputs.MinTotal`) |
@@ -41,6 +41,27 @@ return db.orders.Where(o => o.total > inputs.MinTotal).ToList();
 - Referencing an unknown type produces a `WFLINQ010` hint listing the tables actually in
   scope — the usual cause is a table that isn't checked in the Tables panel.
 - End with a `return`.
+
+## Seeing the SQL 🧾
+
+Every preview shows the **SQL** the body produced — captured from linq2db as it executes, so
+it's the real thing (including `INSERT`/`UPDATE`/`DELETE`, not just the final `SELECT`).
+
+If you return a query **without materialising it** (`return db.orders.Where(…);`), that's no
+longer an error: the query is rendered via `ToSqlQuery()` and shown, with a `WFLINQ021` hint
+reminding you to add `.ToList()` (or `.First()`, `.Count()`, …) to actually run it.
+
+## Running against the real connection 🗄
+
+**👀 Preview** runs against generated sample data in an in-memory SQLite sandbox — fast and
+safe, but the dialect is SQLite.
+
+**🗄 Run on connection** runs the exact same body against the **real** named connection, so
+you get real rows and dialect-correct SQL. Everything happens inside a transaction that is
+**always rolled back** — inserts, updates, and (on providers with transactional DDL) schema
+changes are discarded, and a `WFLINQ020` notice confirms it on every run. It's gated by the
+same trusted-author check as Publish. Read queries still touch live data, so be mindful of
+long scans on production.
 - **Validate** compiles and shows diagnostics with line/column info; **Preview** runs the
   query against generated sample data; **Publish** compiles, stores the assembly, and writes
   `userCode`, `connectionId`, `tableNames`, `inputDefs`, and `compiledAssemblyKey` to the node.
@@ -54,6 +75,13 @@ The catalog is per-connection and powers the generated POCOs:
 
 Manually defined tables need a name and at least one column (type + nullability); imported
 tables come straight from the provider's schema.
+
+**Keys and generated values:** each column can be marked **🔑 pk** (primary key) and/or
+**⚡ auto** (database-generated: identity / serial / SQLite `INTEGER PRIMARY KEY`). Marking a
+column auto implies it's a key and not nullable. These become `[PrimaryKey]` / `[Identity]` on
+the generated POCO, so `InsertWithIdentity` / `InsertWithInt32Identity`, key-based `Update`,
+and `Delete` behave as linq2db expects (identity columns are skipped on insert). Imports fill
+both flags automatically where the provider reports them.
 
 **Editing a definition:** ✏️ on any catalogued table loads it into the form below (name,
 schema, and every column) — change types, add or drop columns, then **Save changes**. No need

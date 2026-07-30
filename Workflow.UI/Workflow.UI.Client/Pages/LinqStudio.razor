@@ -31,6 +31,9 @@
         <span class="df-topbar__spacer"></span>
         <button class="df-btn" data-testid="lq-validate" disabled="@busy" @onclick="Validate">✅ Validate</button>
         <button class="df-btn" data-testid="lq-preview" disabled="@busy" @onclick="Preview">👀 Preview</button>
+        <button class="df-btn" data-testid="lq-preview-live" disabled="@(busy || string.IsNullOrEmpty(connectionId))"
+                title="Run against the real connection inside a transaction that is always rolled back"
+                @onclick="PreviewLive">🗄 Run on connection</button>
         <button class="df-btn df-btn--primary" data-testid="lq-publish" disabled="@(busy || nodeId is null)"
                 title="@(nodeId is null ? "Open from a linq node in the designer to publish" : "Compile and apply to the node")"
                 @onclick="Publish">🚀 Publish to node</button>
@@ -83,7 +86,9 @@
                             <div class="df-linqstudio__cols">
                                 @foreach (var col in t.Columns)
                                 {
-                                    <span class="df-outputs-strip__port" title="@ColTitle(col)">@col.Name</span>
+                                    <span class="df-outputs-strip__port" title="@ColTitle(col)">
+                                        @(col.IsPrimaryKey ? "🔑" : string.Empty)@(col.IsIdentity ? "⚡" : string.Empty)@col.Name
+                                    </span>
                                 }
                             </div>
                         }
@@ -114,6 +119,8 @@
                         }
                     </select>
                     <label title="nullable"><input type="checkbox" checked="@row.Nullable" @onchange="e => row.Nullable = e.Value is true" /> null?</label>
+                    <label title="primary key"><input type="checkbox" data-testid="lq-col-pk-@i" checked="@row.IsPrimaryKey" @onchange="e => row.IsPrimaryKey = e.Value is true" /> 🔑 pk</label>
+                    <label title="database-generated (identity / serial / autoincrement) — enables InsertWithIdentity"><input type="checkbox" data-testid="lq-col-identity-@i" checked="@row.IsIdentity" @onchange="e => OnIdentityChanged(row, e.Value is true)" /> ⚡ auto</label>
                     <button class="df-btn df-btn--small" @onclick="() => newColumns.Remove(row)">✕</button>
                 </div>
             }
@@ -187,9 +194,22 @@
                 <div class="df-statusbar__ok" data-testid="lq-ok">✅ Compiles cleanly.</div>
             }
 
+            @if (sqlStatements is { Count: > 0 })
+            {
+                <div class="df-linqstudio__panel-title">🧾 SQL @(liveRun ? "(from the live connection)" : "(sandbox dialect — SQLite)")</div>
+                <div class="df-linqstudio__sql" data-testid="lq-sql">
+                    @foreach (var s in sqlStatements)
+                    {
+                        <pre class="df-linqstudio__sql-stmt">@s</pre>
+                    }
+                </div>
+            }
+
             @if (previewRows is not null)
             {
-                <div class="df-linqstudio__panel-title">👀 Preview (sample data · @previewDurationMs ms)</div>
+                <div class="df-linqstudio__panel-title">
+                    👀 @(liveRun ? "Live result (rolled back)" : "Preview (sample data)") · @previewDurationMs ms
+                </div>
                 <div class="df-linqstudio__preview" data-testid="lq-preview-grid">
                     @if (previewRows.Count == 0)
                     {
@@ -362,13 +382,44 @@
     private bool busy;
     private bool validateOk;
     private List<Dictionary<string, object?>>? previewRows;
+    private List<string>? sqlStatements;
+    private bool liveRun;
     private long previewDurationMs;
 
     /// <summary>Exposes the selected table names for the reference panel/tests~ 📚.</summary>
     public IReadOnlyCollection<string> SelectedTables => selectedTables;
 
     private static string ColTitle(LinqColumnDto col)
-        => col.Nullable ? $"{col.DataType} (nullable)" : col.DataType;
+    {
+        var parts = new List<string> { col.DataType };
+        if (col.Nullable)
+        {
+            parts.Add("nullable");
+        }
+
+        if (col.IsPrimaryKey)
+        {
+            parts.Add("primary key");
+        }
+
+        if (col.IsIdentity)
+        {
+            parts.Add("database-generated (identity)");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>An identity column is by definition the (or part of the) key and never null~ ⚡.</summary>
+    private static void OnIdentityChanged(ColumnRow row, bool identity)
+    {
+        row.IsIdentity = identity;
+        if (identity)
+        {
+            row.IsPrimaryKey = true;
+            row.Nullable = false;
+        }
+    }
 
     private async Task InsertSnippet(string text)
     {
@@ -597,7 +648,14 @@
         newColumns.Clear();
         foreach (var c in table.Columns ?? new List<LinqColumnDto>())
         {
-            newColumns.Add(new ColumnRow { Name = c.Name, DataType = c.DataType, Nullable = c.Nullable });
+            newColumns.Add(new ColumnRow
+            {
+                Name = c.Name,
+                DataType = c.DataType,
+                Nullable = c.Nullable,
+                IsPrimaryKey = c.IsPrimaryKey,
+                IsIdentity = c.IsIdentity,
+            });
         }
 
         if (newColumns.Count == 0)
@@ -621,7 +679,7 @@
     {
         var name = newTableName?.Trim();
         var cols = newColumns.Where(c => !string.IsNullOrWhiteSpace(c.Name))
-            .Select(c => new LinqColumnDto(c.Name.Trim(), c.DataType, c.Nullable)).ToList();
+            .Select(c => new LinqColumnDto(c.Name.Trim(), c.DataType, c.Nullable, c.IsPrimaryKey, c.IsIdentity)).ToList();
         if (string.IsNullOrEmpty(name) || cols.Count == 0)
         {
             Toasts.Warning("A table needs a name and at least one column.");
@@ -706,16 +764,28 @@
         }
     }
 
-    private async Task Preview()
+    private async Task Preview() => await RunPreview(live: false);
+
+    /// <summary>🗄 Runs the body against the real connection — always inside a rolled-back transaction~.</summary>
+    private async Task PreviewLive() => await RunPreview(live: true);
+
+    private async Task RunPreview(bool live)
     {
         busy = true;
         validateOk = false;
         previewRows = null;
+        sqlStatements = null;
+        liveRun = live;
         diagnostics.Clear();
         try
         {
-            var result = await Linq.PreviewAsync(BuildRequest(withSamples: true));
+            var request = BuildRequest(withSamples: true);
+            var result = live
+                ? await Linq.PreviewLiveAsync(request)
+                : await Linq.PreviewAsync(request);
+
             diagnostics.AddRange(result.Diagnostics);
+            sqlStatements = result.Statements;
             if (result.Success)
             {
                 previewRows = result.Rows ?? new List<Dictionary<string, object?>>();
@@ -777,6 +847,10 @@
         public string DataType { get; set; } = "text";
 
         public bool Nullable { get; set; }
+
+        public bool IsPrimaryKey { get; set; }
+
+        public bool IsIdentity { get; set; }
     }
 
     private sealed class InputRow
