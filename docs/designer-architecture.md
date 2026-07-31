@@ -95,6 +95,12 @@ port mechanically:
 The only JS-interop surface is the shared `monaco-interop.js` (editor + completion/hover provider
 registration) — swap for `@monaco-editor/react` in a port.
 
+Monaco itself ships with the app: the `monaco-editor` 0.45.0 `min/vs` payload is vendored at
+`Workflow.UI.Client/wwwroot/lib/monaco/vs` and loaded lazily on first editor use from
+`lib/monaco/vs/loader.js` (resolved against `document.baseURI`). There is no CDN dependency, so the
+designer/studio editors work in air-gapped deployments. To upgrade, replace that folder with the
+`min/vs` directory from the desired `monaco-editor` npm tarball.
+
 ## Execution Monitor state services (Phase 3.5)
 
 The Execution Monitor (`/monitor`, see [`execution-monitor.md`](execution-monitor.md)) reuses the

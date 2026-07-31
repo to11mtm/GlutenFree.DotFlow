@@ -1,5 +1,6 @@
 // 📜 Phase 3.3.b.3 (D13) + Phase 3.4.0 — Lazy Monaco loader with a graceful textarea fallback.
-// Monaco is fetched from CDN on first use so the initial WASM payload stays lean.
+// Monaco ships with the app (wwwroot/lib/monaco) and is loaded lazily on first use so the
+// initial WASM payload stays lean. No CDN / external network access is required.
 // 3.4.0 adds option/language switching, cursor insertion, and completion/hover provider seams
 // (wired by 3.4.1). Every entry point is no-op-safe when Monaco never loaded (textarea fallback).
 window.dotflowMonaco = (function () {
@@ -9,7 +10,7 @@ window.dotflowMonaco = (function () {
         if (window.monaco) { return Promise.resolve(); }
         if (loaderPromise) { return loaderPromise; }
         loaderPromise = new Promise(function (resolve, reject) {
-            const base = "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min";
+            const base = new URL("lib/monaco", document.baseURI).href.replace(/\/$/, "");
             const loader = document.createElement("script");
             loader.src = base + "/vs/loader.js";
             loader.onload = function () {
