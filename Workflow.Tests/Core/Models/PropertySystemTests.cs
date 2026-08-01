@@ -331,6 +331,71 @@ public class PropertySystemTests
         varDef.Description.Should().BeNull();
     }
 
+    [Fact]
+    public void VariableDefinition_SeedAndSecret_HaveSafeDefaults()
+    {
+        // Arrange & Act — V1.2: both are new trailing parameters.
+        var varDef = new VariableDefinition("flag", PropertyType.Boolean);
+
+        // Assert — SeedOnly never discards state a previous run persisted, and nothing is
+        // accidentally treated as a credential.
+        varDef.Seed.Should().Be(VariableSeedMode.SeedOnly);
+        varDef.IsSecret.Should().BeFalse();
+    }
+
+    [Fact]
+    public void VariableDefinition_SeedAndSecret_RoundTripThroughJson()
+    {
+        // Arrange
+        var varDef = new VariableDefinition(
+            "apiKey",
+            PropertyType.String,
+            null,
+            "The upstream API credential",
+            VariableSeedMode.AlwaysOverride,
+            IsSecret: true);
+
+        // Act
+        var json = JsonSerializer.Serialize(varDef, VariableJsonOptions);
+        var restored = JsonSerializer.Deserialize<VariableDefinition>(json, VariableJsonOptions);
+
+        // Assert
+        restored.Should().NotBeNull();
+        restored!.Seed.Should().Be(VariableSeedMode.AlwaysOverride);
+        restored.IsSecret.Should().BeTrue();
+        restored.Description.Should().Be("The upstream API credential");
+    }
+
+    [Fact]
+    public void VariableDefinition_LegacyJsonWithoutNewFields_DeserialisesWithDefaults()
+    {
+        // Arrange — exactly the shape persisted before V1.2 added Seed/IsSecret. This is the
+        // regression guard for "existing definitions deserialise unchanged"; note `type` is a
+        // number because no JsonStringEnumConverter is registered anywhere in the solution.
+        const string legacy = """
+            { "name": "counter", "type": 1, "initialValue": 42, "description": "A counter" }
+            """;
+
+        // Act
+        var restored = JsonSerializer.Deserialize<VariableDefinition>(legacy, VariableJsonOptions);
+
+        // Assert
+        restored.Should().NotBeNull();
+        restored!.Name.Should().Be("counter");
+        restored.Type.Should().Be(PropertyType.Int);
+        restored.Description.Should().Be("A counter");
+        restored.InitialValue.Should().NotBeNull();
+        restored.InitialValue!.Value.GetInt32().Should().Be(42);
+        restored.Seed.Should().Be(VariableSeedMode.SeedOnly);
+        restored.IsSecret.Should().BeFalse();
+    }
+
+    private static JsonSerializerOptions VariableJsonOptions => new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+    };
+
     #endregion
 
     #region PropertyType Tests (for VariableDefinition compatibility)

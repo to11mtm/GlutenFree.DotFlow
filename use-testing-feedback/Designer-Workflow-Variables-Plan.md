@@ -17,7 +17,7 @@
 
 | # | Feedback item | Kind | Size | Status |
 | --- | --- | --- | --- | --- |
-| V1 | No way to declare workflow variables in the designer (#1) | **Gap** | M | ☐ |
+| V1 | No way to declare workflow variables in the designer (#1) | **Gap** | M | ✅ done |
 | V2 | Declared variables' `InitialValue` never reaches a run | **Bug** | S | ☐ |
 | V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ☐ |
 | V4 | `{{…}}` expanded in inputs but not properties; no author control (#3) | **Bug** | L | ☐ |
@@ -204,27 +204,27 @@ This is a **pre-existing** defect, not one introduced by V4. It is the reason Q1
 
 **Finding.** F5 — no create/rename/delete/default-value affordance anywhere in the designer.
 
-- [ ] V1.1 `WorkflowVariables` state helper (framework-free, `Designer/State/`): parse/emit the
+- [x] V1.1 `WorkflowVariables` state helper (framework-free, `Designer/State/`): parse/emit the
       `VariableDefinition` JSON shape, name validation (`^[a-zA-Z_][a-zA-Z0-9_.]*$`, matching
       `SetVariableModule`'s runtime regex), **case-insensitive uniqueness** *(Q6)*, and
       `PropertyType` ↔ editor mapping.
-- [ ] V1.2 **Land this first, standalone.** Extend `VariableDefinition` (Workflow.Core) with
+- [x] V1.2 **Land this first, standalone.** Extend `VariableDefinition` (Workflow.Core) with
       `VariableSeedMode Seed = SeedOnly` *(Q10)* and `bool IsSecret = false` *(Q9 — declaration only
       here; behaviour in the secrets plan)*. Both are trailing optional record parameters, so
       existing JSON deserialises unchanged. V2 depends on this, so it should not be buried inside
       the panel work.
-- [ ] V1.3 `AddVariableCommand` / `EditVariableCommand` / `RemoveVariableCommand` in `Commands.cs`
+- [x] V1.3 `AddVariableCommand` / `EditVariableCommand` / `RemoveVariableCommand` in `Commands.cs`
       so variable edits are undoable and mark the document dirty like every other edit.
-- [ ] V1.4 Panel UI: list of declared variables (name · type · default · 🔒 · 🔗 usage count),
+- [x] V1.4 Panel UI: list of declared variables (name · type · default · 🔒 · 🔗 usage count),
       inline add row, edit/remove per row. Initial value uses the editor matching the declared
       `PropertyType`; seed mode is a checkbox with plain-language labelling ("keep the value saved
       by previous runs" vs "always reset to this value").
-- [ ] V1.5 **Usage awareness** — show how many nodes reference each variable; warn on rename/delete
+- [x] V1.5 **Usage awareness** — show how many nodes reference each variable; warn on rename/delete
       when references exist, offering "rename references too" (text substitution over property
       values).
-- [ ] V1.6 `VariableTokens.OptionsFor` gains type + description so picker entries read
+- [x] V1.6 `VariableTokens.OptionsFor` gains type + description so picker entries read
       `count — Int · "orders processed so far"`.
-- [ ] V1.7 Tests: command undo/redo; `ToDto`/`FromDto` round-trip preserving unknown JSON fields;
+- [x] V1.7 Tests: command undo/redo; `ToDto`/`FromDto` round-trip preserving unknown JSON fields;
       name validation incl. case-insensitive collision; rename-with-references.
 
 ## V2 — Seed declared variables into the run 🌱

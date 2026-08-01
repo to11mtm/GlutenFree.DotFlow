@@ -109,7 +109,8 @@
                     <div class="df-token-list__group">@group.Key</div>
                     @foreach (var option in group)
                     {
-                        <button type="button" class="df-token-list__item" @onclick="() => InsertToken(option)">@option.Label</button>
+                        <button type="button" class="df-token-list__item" title="@option.Detail"
+                                @onclick="() => InsertToken(option)">@option.Label</button>
                     }
                 }
             </div>

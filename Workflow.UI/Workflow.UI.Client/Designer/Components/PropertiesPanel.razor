@@ -249,6 +249,7 @@
                 <input class="df-input" @bind="wfTags" data-testid="wf-tags" />
             </div>
             <button class="df-btn df-btn--primary" data-testid="wf-apply" @onclick="ApplyWorkflowMeta">Apply</button>
+            <VariablesPanel Document="Document" Commands="Commands" />
         </div>
     }
 </div>

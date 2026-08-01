@@ -19,7 +19,8 @@ public static class VariableTokens
     /// <param name="Token">The literal token text to insert (e.g. <c>{{Variable.count}}</c>).</param>
     /// <param name="Label">The display label.</param>
     /// <param name="Category">"Variables" or "Upstream outputs".</param>
-    public sealed record TokenOption(string Token, string Label, string Category);
+    /// <param name="Detail">Optional hover detail (a variable's description).</param>
+    public sealed record TokenOption(string Token, string Label, string Category, string? Detail = null);
 
     /// <summary>Builds the variable token for a name~ 🎫.</summary>
     /// <param name="name">The variable name.</param>
@@ -49,9 +50,15 @@ public static class VariableTokens
     {
         var options = new List<TokenOption>();
 
-        foreach (var name in document.Variables.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
+        foreach (var (name, raw) in document.Variables.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
         {
-            options.Add(new TokenOption(VariableToken(name), name, "Variables"));
+            // V1.6 — surface the declared type and description so the picker teaches what the
+            // variable is, rather than listing a bare name.
+            var declared = WorkflowVariables.Parse(name, raw);
+            var label = declared.IsSecret
+                ? $"{name} — {declared.Type} 🔒"
+                : $"{name} — {declared.Type}";
+            options.Add(new TokenOption(VariableToken(name), label, "Variables", declared.Description));
         }
 
         foreach (var upstreamId in UpstreamOf(document, nodeId).OrderBy(id => id, StringComparer.OrdinalIgnoreCase))

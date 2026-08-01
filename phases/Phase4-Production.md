@@ -176,6 +176,7 @@ Phase 4 is all about production readiness:
 **Tasks:**
 - [ ] Implement Akka.NET clustering
 - [ ] Add cluster sharding for workflows
+  - We need to remember to handle the case where a workflow section is part of a database transaction via the Transaction module. For those sections they must always be executed on the same node, otherwise the transaction will fail. This means that we need to implement a way to pin those sections to a node.
 - [ ] Implement cluster singleton for scheduling
 - [ ] Add distributed locking
 - [ ] Implement graceful shutdown
@@ -207,10 +208,13 @@ Phase 4 is all about production readiness:
 
 **Tasks:**
 - [ ] Implement cron-based scheduling (Quartz.NET)
+  - Consider Akka Reminders or a non-dependency scheduling approach instead.
+  - There should be the ability to optionally prevent multiple instances of the same workflow from running concurrently if the previous instance is still running.
 - [ ] Add event-based triggers
 - [ ] Implement workflow chaining
 - [ ] Add calendar-based scheduling
 - [ ] Implement priority queues
+  - Workflows should be able to be assigned a priority level, and the scheduler should execute higher-priority workflows before lower-priority ones, unless there is a dependency that requires a lower-priority workflow to run first.
 - [ ] Add workflow dependencies
 
 **Scheduling:**

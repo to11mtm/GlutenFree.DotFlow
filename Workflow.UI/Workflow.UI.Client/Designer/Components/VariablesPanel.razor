@@ -1,0 +1,340 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using System.Text.Json
+@using Workflow.UI.Client.Designer.State
+@using Workflow.UI.Client.Designer.State.Commands
+
+@* 💾 Phase 3.5 (V1.4) — declares the workflow's variables. Until now the designer only ever
+   passed Variables through untouched, so users had no way to create the very things the {{x}}
+   picker and ƒx builder invite them to reference. *@
+<div class="df-vars" data-testid="vars-panel">
+    <div class="df-vars__title">
+        💾 Variables
+        <button class="df-btn df-btn--small" data-testid="var-add" title="Declare a new workflow variable"
+                @onclick="BeginAdd">➕ Variable</button>
+    </div>
+
+    @if (Variables.Count == 0)
+    {
+        <div class="df-empty" data-testid="vars-empty">
+            No variables declared. Declare one to reference it as <code>{{Variable.name}}</code>.
+        </div>
+    }
+    else
+    {
+        @foreach (var variable in Variables)
+        {
+            var usage = WorkflowVariables.ReferencingNodes(Document, variable.Name).Count;
+            <div class="df-vars__row" data-testid="var-row-@variable.Name">
+                <div class="df-vars__head">
+                    <strong>@variable.Name</strong>
+                    <span class="df-vars__type">@variable.Type</span>
+                    @if (variable.IsSecret)
+                    {
+                        <span class="df-token-badge" title="Masked in the designer; never put a value in the definition">🔒 secret</span>
+                    }
+                    @if (variable.Seed == VariableSeed.AlwaysOverride)
+                    {
+                        <span class="df-token-badge" title="Resets to the initial value on every run">♻️ resets</span>
+                    }
+                    <span class="df-vars__spacer"></span>
+                    <span class="df-vars__usage" data-testid="var-usage-@variable.Name"
+                          title="Nodes referencing this variable">🔗 @usage</span>
+                    <button class="df-btn df-btn--small" data-testid="var-edit-@variable.Name"
+                            title="Edit this variable" @onclick="() => BeginEdit(variable)">✏️</button>
+                    <button class="df-btn df-btn--small df-btn--danger" data-testid="var-remove-@variable.Name"
+                            title="Remove this variable" @onclick="() => Remove(variable)">✕</button>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(variable.Description))
+                {
+                    <div class="df-field-help">@variable.Description</div>
+                }
+                @if (!variable.IsSecret && variable.InitialValue is not null)
+                {
+                    <div class="df-vars__default">= @WorkflowVariables.InitialValueText(variable)</div>
+                }
+            </div>
+        }
+    }
+
+    @if (editing)
+    {
+        <div class="df-vars__form" data-testid="var-form">
+            <div class="df-vars__title">@(editingName is null ? "➕ New variable" : $"✏️ Edit '{editingName}'")</div>
+
+            <div class="df-field">
+                <label class="df-label">Name</label>
+                <input class="df-input" data-testid="var-name" placeholder="e.g. orderId"
+                       value="@formName" @oninput="e => formName = e.Value?.ToString() ?? string.Empty" />
+            </div>
+
+            <div class="df-field">
+                <label class="df-label">Type</label>
+                <select class="df-input" data-testid="var-type" @onchange="OnTypeChanged">
+                    @foreach (var type in WorkflowVariables.SelectableTypes)
+                    {
+                        <option value="@type" selected="@(type == formType)">@type</option>
+                    }
+                </select>
+            </div>
+
+            <div class="df-field">
+                <label class="df-label">Initial value</label>
+                @if (formIsSecret)
+                {
+                    @* A workflow definition is exported, diffed and version-controlled — it must
+                       never carry a credential. Secrets get their value from the variable store or
+                       a run input instead. *@
+                    <div class="df-field-help" data-testid="var-secret-novalue">
+                        🔒 Secrets can't carry an initial value here — workflow definitions are exported and
+                        version-controlled. Set the value as a global/workflow variable, or pass it as a run input.
+                    </div>
+                }
+                else if (WorkflowVariables.EditorKindFor(formType) == "boolean")
+                {
+                    <select class="df-input" data-testid="var-initial" @onchange="e => formInitial = e.Value?.ToString()">
+                        <option value="" selected="@(string.IsNullOrEmpty(formInitial))">— none —</option>
+                        <option value="true" selected="@(formInitial == "true")">true</option>
+                        <option value="false" selected="@(formInitial == "false")">false</option>
+                    </select>
+                }
+                else if (WorkflowVariables.EditorKindFor(formType) == "json")
+                {
+                    <textarea class="df-textarea" data-testid="var-initial" spellcheck="false" placeholder="{ }"
+                              value="@formInitial" @oninput="e => formInitial = e.Value?.ToString()"></textarea>
+                }
+                else
+                {
+                    <input class="df-input" data-testid="var-initial"
+                           placeholder="@(WorkflowVariables.EditorKindFor(formType) == "number" ? "e.g. 0" : "optional")"
+                           value="@formInitial" @oninput="e => formInitial = e.Value?.ToString()" />
+                }
+            </div>
+
+            <div class="df-field">
+                <label class="df-label">Description</label>
+                <input class="df-input" data-testid="var-description" placeholder="what it's for"
+                       value="@formDescription" @oninput="e => formDescription = e.Value?.ToString()" />
+            </div>
+
+            <label class="df-vars__check" title="When a previous run saved a value, keep it instead of resetting">
+                <input type="checkbox" data-testid="var-seed" checked="@(formSeed == VariableSeed.SeedOnly)"
+                       @onchange="e => formSeed = e.Value is true ? VariableSeed.SeedOnly : VariableSeed.AlwaysOverride" />
+                Keep the value saved by previous runs
+            </label>
+
+            <label class="df-vars__check" title="Masked in the designer and redacted from execution history">
+                <input type="checkbox" data-testid="var-secret" checked="@formIsSecret"
+                       @onchange="e => OnSecretChanged(e.Value is true)" />
+                🔒 Holds a credential
+            </label>
+
+            @if (error is not null)
+            {
+                <div class="df-field-error" data-testid="var-error">@error</div>
+            }
+
+            @if (renameImpact > 0)
+            {
+                <label class="df-vars__check" data-testid="var-rename-refs-row"
+                       title="Rewrites {{Variable.…}} tokens in every referencing node">
+                    <input type="checkbox" data-testid="var-rename-refs" checked="@renameReferences"
+                           @onchange="e => renameReferences = e.Value is true" />
+                    Also update @renameImpact referencing node@(renameImpact == 1 ? string.Empty : "s")
+                </label>
+            }
+
+            <div class="df-row">
+                <button class="df-btn df-btn--primary" data-testid="var-save" @onclick="Save">Save</button>
+                <button class="df-btn" data-testid="var-cancel" @onclick="Cancel">Cancel</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool editing;
+    private string? editingName;
+    private string formName = string.Empty;
+    private VariableValueType formType = VariableValueType.String;
+    private string? formInitial;
+    private string? formDescription;
+    private VariableSeed formSeed = VariableSeed.SeedOnly;
+    private bool formIsSecret;
+    private bool renameReferences = true;
+    private string? error;
+
+    /// <summary>The document being edited.</summary>
+    [Parameter, EditorRequired]
+    public DesignerDocument Document { get; set; } = default!;
+
+    /// <summary>The command stack — every edit is pushed here so it participates in undo/redo.</summary>
+    [Parameter, EditorRequired]
+    public CommandStack Commands { get; set; } = default!;
+
+    private IReadOnlyList<WorkflowVariable> Variables => WorkflowVariables.List(this.Document);
+
+    /// <summary>How many nodes would be rewritten by the pending rename (0 when not renaming)~ 🔗.</summary>
+    private int renameImpact => this.editingName is { } current
+        && !string.Equals(current, this.formName.Trim(), StringComparison.Ordinal)
+        && WorkflowVariables.IsValidName(this.formName)
+        ? WorkflowVariables.ReferencingNodes(this.Document, current).Count
+        : 0;
+
+    private void BeginAdd()
+    {
+        this.editing = true;
+        this.editingName = null;
+        this.formName = string.Empty;
+        this.formType = VariableValueType.String;
+        this.formInitial = null;
+        this.formDescription = null;
+        this.formSeed = VariableSeed.SeedOnly;
+        this.formIsSecret = false;
+        this.renameReferences = true;
+        this.error = null;
+    }
+
+    private void BeginEdit(WorkflowVariable variable)
+    {
+        this.editing = true;
+        this.editingName = variable.Name;
+        this.formName = variable.Name;
+        this.formType = variable.Type;
+        this.formInitial = WorkflowVariables.InitialValueText(variable);
+        this.formDescription = variable.Description;
+        this.formSeed = variable.Seed;
+        this.formIsSecret = variable.IsSecret;
+        this.renameReferences = true;
+        this.error = null;
+    }
+
+    private void Cancel()
+    {
+        this.editing = false;
+        this.error = null;
+    }
+
+    private void OnTypeChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<VariableValueType>(e.Value?.ToString(), out var parsed))
+        {
+            this.formType = parsed;
+        }
+    }
+
+    private void OnSecretChanged(bool isSecret)
+    {
+        this.formIsSecret = isSecret;
+        if (isSecret)
+        {
+            // Don't quietly keep a value the user can no longer see.
+            this.formInitial = null;
+        }
+    }
+
+    private void Remove(WorkflowVariable variable)
+    {
+        if (!this.Document.Variables.TryGetValue(variable.Name, out var before))
+        {
+            return;
+        }
+
+        this.Commands.Execute(new RemoveVariableCommand(variable.Name, before));
+        if (this.editingName == variable.Name)
+        {
+            this.editing = false;
+        }
+    }
+
+    private void Save()
+    {
+        var name = this.formName.Trim();
+        this.error = WorkflowVariables.ValidateName(name, this.Document.Variables.Keys, this.editingName);
+        if (this.error is not null)
+        {
+            return;
+        }
+
+        var initial = this.formIsSecret ? null : WorkflowVariables.InitialValueFrom(this.formInitial, this.formType);
+        if (!this.formIsSecret
+            && WorkflowVariables.EditorKindFor(this.formType) == "json"
+            && !string.IsNullOrWhiteSpace(this.formInitial)
+            && initial is null)
+        {
+            this.error = "The initial value isn't valid JSON.";
+            return;
+        }
+
+        var declaration = new WorkflowVariable(
+            name,
+            this.formType,
+            initial,
+            string.IsNullOrWhiteSpace(this.formDescription) ? null : this.formDescription!.Trim(),
+            this.formSeed,
+            this.formIsSecret);
+
+        if (this.editingName is null)
+        {
+            this.Commands.Execute(new AddVariableCommand(name, WorkflowVariables.ToJson(declaration)));
+        }
+        else
+        {
+            var previous = this.Document.Variables.TryGetValue(this.editingName, out var raw) ? raw : (JsonElement?)null;
+            var edit = new EditVariableCommand(
+                this.editingName,
+                previous ?? WorkflowVariables.ToJson(declaration),
+                name,
+                WorkflowVariables.ToJson(declaration, previous));
+
+            var isRename = !string.Equals(this.editingName, name, StringComparison.Ordinal);
+            if (isRename && this.renameReferences
+                && WorkflowVariables.ReferencingNodes(this.Document, this.editingName) is { Count: > 0 })
+            {
+                // One undoable unit: the declaration and every token that points at it move together,
+                // so undo can't leave references dangling.
+                this.Commands.Execute(new CompositeCommand(
+                    $"Rename variable {this.editingName} → {name}",
+                    [edit, .. this.ReferenceRewrites(this.editingName, name)]));
+            }
+            else
+            {
+                this.Commands.Execute(edit);
+            }
+        }
+
+        this.editing = false;
+    }
+
+    private List<IDesignerCommand> ReferenceRewrites(string oldName, string newName)
+    {
+        var rewrites = new List<IDesignerCommand>();
+        foreach (var nodeId in WorkflowVariables.ReferencingNodes(this.Document, oldName))
+        {
+            var node = this.Document.FindNode(nodeId);
+            if (node is null)
+            {
+                continue;
+            }
+
+            var before = new Dictionary<string, JsonElement>(node.Properties);
+            var after = new Dictionary<string, JsonElement>(node.Properties);
+            foreach (var (key, value) in before)
+            {
+                if (value.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var rewritten = WorkflowVariables.RenameReferences(value.GetString() ?? string.Empty, oldName, newName);
+                if (!string.Equals(rewritten, value.GetString(), StringComparison.Ordinal))
+                {
+                    after[key] = JsonValues.FromString(rewritten);
+                }
+            }
+
+            rewrites.Add(new EditNodePropertiesCommand(nodeId, before, after));
+        }
+
+        return rewrites;
+    }
+}

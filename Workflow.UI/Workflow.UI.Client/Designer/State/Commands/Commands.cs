@@ -300,6 +300,104 @@ public sealed class EditWorkflowMetaCommand : IDesignerCommand
     }
 }
 
+/// <summary>💾 Phase 3.5 (V1.3) — Declares a new workflow variable~ ➕.</summary>
+public sealed class AddVariableCommand : IDesignerCommand
+{
+    private readonly string name;
+    private readonly JsonElement declaration;
+
+    /// <summary>Initializes a new instance of the <see cref="AddVariableCommand"/> class~ ➕.</summary>
+    /// <param name="name">The variable name.</param>
+    /// <param name="declaration">The declaration JSON.</param>
+    public AddVariableCommand(string name, JsonElement declaration)
+    {
+        this.name = name;
+        this.declaration = declaration;
+    }
+
+    /// <inheritdoc/>
+    public string Description => $"Add variable {this.name}";
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document) => document.Variables[this.name] = this.declaration;
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document) => document.Variables.Remove(this.name);
+}
+
+/// <summary>💾 Phase 3.5 (V1.3) — Removes a variable declaration~ 🗑️.</summary>
+public sealed class RemoveVariableCommand : IDesignerCommand
+{
+    private readonly string name;
+    private readonly JsonElement before;
+
+    /// <summary>Initializes a new instance of the <see cref="RemoveVariableCommand"/> class~ 🗑️.</summary>
+    /// <param name="name">The variable name.</param>
+    /// <param name="before">The declaration being removed, kept so undo restores it exactly.</param>
+    public RemoveVariableCommand(string name, JsonElement before)
+    {
+        this.name = name;
+        this.before = before;
+    }
+
+    /// <inheritdoc/>
+    public string Description => $"Remove variable {this.name}";
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document) => document.Variables.Remove(this.name);
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document) => document.Variables[this.name] = this.before;
+}
+
+/// <summary>
+/// 💾 Phase 3.5 (V1.3) — Edits a variable declaration, including renaming it. A rename changes the
+/// map key, so this is expressed as "drop the old key, write the new one" in both directions~ ✏️.
+/// </summary>
+public sealed class EditVariableCommand : IDesignerCommand
+{
+    private readonly string beforeName;
+    private readonly JsonElement beforeDeclaration;
+    private readonly string afterName;
+    private readonly JsonElement afterDeclaration;
+
+    /// <summary>Initializes a new instance of the <see cref="EditVariableCommand"/> class~ ✏️.</summary>
+    /// <param name="beforeName">The prior name.</param>
+    /// <param name="beforeDeclaration">The prior declaration.</param>
+    /// <param name="afterName">The new name (may equal the prior name).</param>
+    /// <param name="afterDeclaration">The new declaration.</param>
+    public EditVariableCommand(
+        string beforeName,
+        JsonElement beforeDeclaration,
+        string afterName,
+        JsonElement afterDeclaration)
+    {
+        this.beforeName = beforeName;
+        this.beforeDeclaration = beforeDeclaration;
+        this.afterName = afterName;
+        this.afterDeclaration = afterDeclaration;
+    }
+
+    /// <inheritdoc/>
+    public string Description => string.Equals(this.beforeName, this.afterName, System.StringComparison.Ordinal)
+        ? $"Edit variable {this.afterName}"
+        : $"Rename variable {this.beforeName} → {this.afterName}";
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document)
+    {
+        document.Variables.Remove(this.beforeName);
+        document.Variables[this.afterName] = this.afterDeclaration;
+    }
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document)
+    {
+        document.Variables.Remove(this.afterName);
+        document.Variables[this.beforeName] = this.beforeDeclaration;
+    }
+}
+
 /// <summary>🧩 Phase 3.3.b.4 — Runs several commands as a single undoable unit (e.g. paste)~ ✨.</summary>
 public sealed class CompositeCommand : IDesignerCommand
 {
