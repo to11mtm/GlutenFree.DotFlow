@@ -9,6 +9,7 @@
 @inject Workflow.UI.Client.Api.WorkflowsClient Workflows
 @inject Workflow.UI.Client.Api.ModulesClient Modules
 @inject Workflow.UI.Client.Api.ExecutionsClient Executions
+@inject Workflow.UI.Client.Api.VariablesClient Variables
 @inject Workflow.UI.Client.Api.RealTimeClient RealTime
 @inject Workflow.UI.Client.Services.ToastService Toasts
 @inject Workflow.UI.Client.Designer.State.DesignerClipboard Clipboard
@@ -69,7 +70,8 @@ else if (document is not null)
                                 OnCanvasContextMenu="OnCanvasContextMenu" />
                 </div>
                 <div class="df-designer__props">
-                    <PropertiesPanel Document="document" Selection="selection" Commands="commands" />
+                    <PropertiesPanel Document="document" Selection="selection" Commands="commands"
+                                     GlobalVariableNames="globalVariableNames" />
                 </div>
             }
             else
@@ -139,6 +141,9 @@ else if (document is not null)
     private IReadOnlyList<GraphIssue> issues = System.Array.Empty<GraphIssue>();
     private bool loading = true;
     private string? loadError;
+
+    // 🌍 V6 — global variable names for the token picker; null when the store is unreachable.
+    private List<string>? globalVariableNames;
     private readonly string statusInfo = "editing";
     private DotNetObjectReference<Designer>? keysRef;
 
@@ -205,6 +210,7 @@ else if (document is not null)
             this.commands.Changed += this.OnDocumentChanged;
             this.selection.Changed += this.OnSelectionChanged;
             this.Revalidate();
+            await this.LoadGlobalVariables();
 
             // Deep link: /designer/{id}?execution={executionId} opens history mode.
             var query = new System.Uri(Nav.Uri).Query;
@@ -637,6 +643,25 @@ else if (document is not null)
     {
         await this.CloseRun();
         this.OpenRunDialog();
+    }
+
+    /// <summary>
+    /// 🌍 V6 — fetches the global variable names once per designer session so the token picker can
+    /// offer them. Best-effort by design: if the variables API is unreachable or the caller lacks
+    /// read access, the Globals group simply doesn't appear. The picker must not become a hard
+    /// dependency on an optional persistence provider.
+    /// </summary>
+    private async Task LoadGlobalVariables()
+    {
+        try
+        {
+            var globals = await Variables.ListAsync();
+            this.globalVariableNames = globals.Keys.ToList();
+        }
+        catch (Exception)
+        {
+            this.globalVariableNames = null;
+        }
     }
 
     private async Task StartRun(RunRequest request)

@@ -53,6 +53,63 @@ public sealed class PropertiesPanelTests : TestContext
             .Add(x => x.Selection, sel)
             .Add(x => x.Commands, cmd));
 
+    private IRenderedComponent<PropertiesPanel> Render(
+        DesignerDocument doc,
+        SelectionState sel,
+        CommandStack cmd,
+        IReadOnlyCollection<string>? globals)
+        => this.RenderComponent<PropertiesPanel>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, sel)
+            .Add(x => x.Commands, cmd)
+            .Add(x => x.GlobalVariableNames, globals));
+
+    [Fact]
+    public void TokenPicker_ShowsGlobalsGroup_WithTheInterimCredentialWarning()
+    {
+        // V6 + V3.5: globals are referenceable at run time now, so the picker lists them — and
+        // says plainly that they aren't safe for credentials yet.
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text", templates: true) });
+        var (doc, sel, cmd) = Setup(schema);
+
+        var cut = this.Render(doc, sel, cmd, new[] { "apiBaseUrl" });
+        cut.Find("[data-testid=token-btn-url]").Click();
+
+        var list = cut.Find("[data-testid=token-list-url]");
+        list.TextContent.Should().Contain("Globals").And.Contain("apiBaseUrl");
+        cut.Find("[data-testid=globals-warning-url]").TextContent.Should().Contain("Not for credentials yet");
+    }
+
+    [Fact]
+    public void TokenPicker_WithoutGlobals_StillWorksAndHidesTheGroup()
+    {
+        // The variables API is optional — an unreachable store must not break the picker.
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text", templates: true) });
+        var (doc, sel, cmd) = Setup(schema);
+        doc.Variables["local"] = El("\"x\"");
+
+        var cut = this.Render(doc, sel, cmd, globals: null);
+        cut.Find("[data-testid=token-btn-url]").Click();
+
+        var list = cut.Find("[data-testid=token-list-url]");
+        list.TextContent.Should().Contain("local");
+        list.TextContent.Should().NotContain("Globals");
+        cut.FindAll("[data-testid=globals-warning-url]").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void GlobalToken_IsInsertable()
+    {
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text", templates: true) });
+        var (doc, sel, cmd) = Setup(schema);
+
+        var cut = this.Render(doc, sel, cmd, new[] { "apiBaseUrl" });
+        cut.Find("[data-testid=token-btn-url]").Click();
+        cut.FindAll(".df-token-list__item").First(b => b.TextContent.Contains("apiBaseUrl")).Click();
+
+        cut.Find("[data-testid=editor-url]").GetAttribute("value").Should().Be("{{Variable.apiBaseUrl}}");
+    }
+
     [Theory]
     [InlineData("Text")]
     [InlineData("MultilineText")]

@@ -285,6 +285,14 @@
     [Parameter, EditorRequired]
     public CommandStack Commands { get; set; } = default!;
 
+    /// <summary>
+    /// 🌍 V6 — global variable names fetched once per designer session, offered in the token
+    /// picker as a read-only third group. Null or empty simply hides the group, so the picker
+    /// never becomes a hard dependency on the variables API being reachable.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyCollection<string>? GlobalVariableNames { get; set; }
+
     private DesignerNode? SelectedNode
         => this.Selection.Nodes.Count == 1 ? this.Document.FindNode(System.Linq.Enumerable.First(this.Selection.Nodes)) : null;
 
@@ -297,7 +305,9 @@
 
     /// <summary>🔗 G4 — the binding tokens pickable for the selected node~.</summary>
     private IReadOnlyList<VariableTokens.TokenOption>? NodeTokenOptions
-        => this.SelectedNode is { } node ? VariableTokens.OptionsFor(this.Document, node.Id) : null;
+        => this.SelectedNode is { } node
+            ? VariableTokens.OptionsFor(this.Document, node.Id, this.GlobalVariableNames)
+            : null;
 
     /// <summary>📤 G6 — the schema description for an output port (tooltip)~.</summary>
     private string? OutputDescriptionFor(string port)

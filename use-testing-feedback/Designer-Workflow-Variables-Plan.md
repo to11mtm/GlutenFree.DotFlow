@@ -19,10 +19,10 @@
 | --- | --- | --- | --- | --- |
 | V1 | No way to declare workflow variables in the designer (#1) | **Gap** | M | ✅ done |
 | V2 | Declared variables' `InitialValue` never reaches a run | **Bug** | S | ✅ done |
-| V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ✅ done (V3.5 pending V6/V8/V9) |
+| V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ✅ done (V3.5 pending V8/V9) |
 | V4 | `{{…}}` expanded in inputs but not properties; no author control (#3) | **Bug** | L | ✅ done |
 | V5 | Run dialog is a raw JSON blob, not a typed variable form (#1) | UX | M | ✅ done |
-| V6 | Globals invisible in the designer's token picker (#2) | UX | S | ☐ |
+| V6 | Globals invisible in the designer's token picker (#2) | UX | S | ✅ done |
 | V7 | No lint for unknown / misspelled variable references (#3) | UX | M | ☐ |
 | V8 | No documentation of the variable lifecycle (#1, #2, #3) | Docs | S | ☐ |
 | V9 | Admin-gated screen for editing global variables (Q7) | Feature | M | ☐ |
@@ -321,13 +321,13 @@ deserialises it. No discovery of names or types.
 
 ## V6 — Show globals in the designer 🌐
 
-- [ ] V6.1 `VariablesClient` in `Workflow.UI.Client/Api` wrapping `/api/v1/variables` — shared with V9.
-- [ ] V6.2 Fetch **global** variables once per designer session; add a third picker group
+- [x] V6.1 `VariablesClient` in `Workflow.UI.Client/Api` wrapping `/api/v1/variables` — shared with V9.
+- [x] V6.2 Fetch **global** variables once per designer session; add a third picker group
       **"Globals"**, badged as shared across workflows, carrying the V3.5 interim credential
       warning. Degrade silently (group hidden) on failure — the picker must not become a hard
       dependency on the API.
-- [ ] V6.3 **Read-only in the designer** *(Q7)*.
-- [ ] V6.4 Tests: globals group rendered; fetch failure hides the group without breaking the picker.
+- [x] V6.3 **Read-only in the designer** *(Q7)*.
+- [x] V6.4 Tests: globals group rendered; fetch failure hides the group without breaking the picker.
 
 ## V7 — Lint unknown variable references 🧭
 

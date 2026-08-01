@@ -15,6 +15,17 @@ using System.Linq;
 /// </summary>
 public static class VariableTokens
 {
+    /// <summary>The picker group name for store-backed global variables~ 🌍.</summary>
+    public const string GlobalsCategory = "Globals";
+
+    /// <summary>
+    /// The interim notice shown alongside globals until secret support ships (parent plan V3.5 /
+    /// Q16). Globals became functional in V3 but are stored and returned in plaintext until the
+    /// secrets workstream lands, so the warning is deliberately blunt~ 🔒.
+    /// </summary>
+    public const string GlobalsCredentialWarning =
+        "🔒 Not for credentials yet — global values are stored and readable in plaintext until secret support ships.";
+
     /// <summary>A pickable binding token~ 🎫.</summary>
     /// <param name="Token">The literal token text to insert (e.g. <c>{{Variable.count}}</c>).</param>
     /// <param name="Label">The display label.</param>
@@ -40,13 +51,22 @@ public static class VariableTokens
         => !string.IsNullOrEmpty(value) && value.Contains("{{", StringComparison.Ordinal) && value.Contains("}}", StringComparison.Ordinal);
 
     /// <summary>
-    /// Lists the pickable tokens for a node: all workflow variables plus every output port of
-    /// every <em>upstream</em> node (nodes with a connection path into <paramref name="nodeId"/>)~ 📚.
+    /// Lists the pickable tokens for a node: all workflow variables, any global variables, plus
+    /// every output port of every <em>upstream</em> node (nodes with a connection path into
+    /// <paramref name="nodeId"/>)~ 📚.
     /// </summary>
     /// <param name="document">The document.</param>
     /// <param name="nodeId">The node being configured.</param>
-    /// <returns>The options (variables first, then upstream outputs, both alphabetical).</returns>
-    public static IReadOnlyList<TokenOption> OptionsFor(DesignerDocument document, string nodeId)
+    /// <param name="globals">
+    /// Global variable names from the store, when available. A name already declared on the
+    /// workflow is omitted — the workflow's own declaration is what the run will resolve, since it
+    /// layers above the global (V3's precedence chain).
+    /// </param>
+    /// <returns>The options (variables, globals, then upstream outputs).</returns>
+    public static IReadOnlyList<TokenOption> OptionsFor(
+        DesignerDocument document,
+        string nodeId,
+        IReadOnlyCollection<string>? globals = null)
     {
         var options = new List<TokenOption>();
 
@@ -59,6 +79,20 @@ public static class VariableTokens
                 ? $"{name} — {declared.Type} 🔒"
                 : $"{name} — {declared.Type}";
             options.Add(new TokenOption(VariableToken(name), label, "Variables", declared.Description));
+        }
+
+        if (globals is { Count: > 0 })
+        {
+            foreach (var name in globals
+                         .Where(g => !document.Variables.Keys.Contains(g, StringComparer.OrdinalIgnoreCase))
+                         .OrderBy(g => g, StringComparer.OrdinalIgnoreCase))
+            {
+                options.Add(new TokenOption(
+                    VariableToken(name),
+                    name,
+                    GlobalsCategory,
+                    "Shared across every workflow — set outside this designer."));
+            }
         }
 
         foreach (var upstreamId in UpstreamOf(document, nodeId).OrderBy(id => id, StringComparer.OrdinalIgnoreCase))

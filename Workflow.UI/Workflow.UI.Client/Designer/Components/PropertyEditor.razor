@@ -107,6 +107,14 @@
                 @foreach (var group in TokenOptions.GroupBy(o => o.Category))
                 {
                     <div class="df-token-list__group">@group.Key</div>
+                    @if (group.Key == VariableTokens.GlobalsCategory)
+                    {
+                        @* V3.5 / Q16 — globals shipped ahead of secret support, so say so plainly
+                           right where someone is about to reach for one. *@
+                        <div class="df-field-help" data-testid="globals-warning-@Property.Name">
+                            @VariableTokens.GlobalsCredentialWarning
+                        </div>
+                    }
                     @foreach (var option in group)
                     {
                         <button type="button" class="df-token-list__item" title="@option.Detail"

@@ -126,6 +126,7 @@ public sealed class ExecutionHistoryTests : TestContext
         var client = handler.CreateClient();
         this.Services.AddSingleton(new WorkflowsClient(client));
         this.Services.AddSingleton(new ModulesClient(client));
+        this.Services.AddSingleton(new VariablesClient(client));
         this.Services.AddSingleton(new ExecutionsClient(client));
 
         var cut = this.RenderComponent<Designer>(p => p.Add(x => x.Id, WfId.ToString()));
