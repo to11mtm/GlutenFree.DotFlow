@@ -200,6 +200,13 @@ public class WorkflowExecutor : ReceiveActor
     private readonly IExecutionHistoryRepository? _executionHistoryRepository;
     private readonly IVariableStore? _variableStore;
 
+    // 🌱 V2/V3 — the variable map resolved from declarations + run inputs, and any warnings worth
+    // logging once execution actually starts. Replaced after store hydration (V3).
+    private InitialVariables.Resolution _seededVariables;
+
+    // The moment execution started, held while variable hydration is in flight (V3).
+    private DateTimeOffset _startedAt;
+
     /// <summary>
     /// Lifecycle hooks resolved from DI — allows consumers to inject custom behavior
     /// during PreStart, PostStop, PreRestart, and PostRestart~ 🌸💖.
@@ -251,13 +258,18 @@ public class WorkflowExecutor : ReceiveActor
         _lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
             ?? NullActorLifecycleHooks.Instance;
 
+        // 🌱 V2 — seed from the workflow's declared variables, not just the run inputs. Without
+        // this, declaring a variable had no runtime effect whatsoever. When a variable store is
+        // registered, V3 re-resolves this at start with the stored layers underneath.
+        _seededVariables = InitialVariables.Resolve(definition, inputs);
+
         // Initialize the immutable execution context~ 🌱
         _context = WorkflowExecutionContext.Create(
             executionId: executionId,
             workflowId: definition.Id,
             workflowName: definition.Name,
             initialNodeIds: definition.Nodes.Select(n => n.Id),
-            initialVariables: inputs.ToHashMap());
+            initialVariables: _seededVariables.Variables);
 
         // Build the execution graph from connections
         BuildExecutionGraph();
@@ -280,6 +292,7 @@ public class WorkflowExecutor : ReceiveActor
         Receive<PersistenceExecutionStatusUpdated>(HandlePersistenceExecutionStatusUpdated);
         Receive<PersistenceSnapshotSaved>(HandlePersistenceSnapshotSaved);
         Receive<PersistenceVariableUpdatesSaved>(HandlePersistenceVariableUpdatesSaved);
+        Receive<VariablesHydrated>(HandleVariablesHydrated);
 
         // Phase 2.2.0b: Scope messages for loop and error boundary infrastructure~ 🔁🛡️
         Receive<PushLoopScope>(HandlePushLoopScope);
@@ -596,8 +609,79 @@ public class WorkflowExecutor : ReceiveActor
         TransitionExecutionState(ExecutionState.Running, now, "Execution started");
         _context = _context with { StartTime = Option<DateTimeOffset>.Some(now) };
         _executionTimer.Start();
+        _startedAt = now;
 
+        // 🌍 V3 — load the global and workflow-scoped stores before any node runs, so
+        // {{Variable.x}} can finally reach a value another workflow (or a previous run) set.
+        // With no store registered this is a no-op and the start path is exactly as before.
+        if (_variableStore is not null)
+        {
+            QueueHydrateVariables();
+            return;
+        }
+
+        LogVariableWarnings();
         QueueCreateExecutionRecord(now);
+    }
+
+    /// <summary>
+    /// Reads the global and workflow-scoped variable stores, then pipes the result back to self so
+    /// the layering happens on the actor's own thread~ 🌍.
+    /// </summary>
+    private void QueueHydrateVariables()
+    {
+        var store = _variableStore!;
+        var workflowId = _definition.Id;
+
+        Task.Run(
+            async () =>
+            {
+                try
+                {
+                    var global = await store.GetAllVariablesAsync(VariableScope.Global).ConfigureAwait(false);
+                    var scoped = await store.GetAllVariablesAsync(VariableScope.ForWorkflow(workflowId)).ConfigureAwait(false);
+                    return new VariablesHydrated(global, scoped, true);
+                }
+                catch (Exception ex)
+                {
+                    return new VariablesHydrated(null, null, false, ex.Message);
+                }
+            }).PipeTo(Self);
+    }
+
+    private void HandleVariablesHydrated(VariablesHydrated message)
+    {
+        if (message.Success)
+        {
+            // Re-resolve with the stored layers underneath — a SeedOnly declaration now yields to
+            // whatever a previous run persisted, while run inputs still win outright.
+            _seededVariables = InitialVariables.Resolve(
+                _definition,
+                _workflowInputs,
+                message.Global,
+                message.WorkflowScoped);
+            _context = _context with { Variables = _seededVariables.Variables };
+        }
+        else
+        {
+            // Non-fatal — but the operator must be able to tell "the store was unreachable" from
+            // "the store was empty", because the two look identical from inside the workflow.
+            _log.Warning(
+                "⚠️ Could not load stored variables for execution {ExecutionId}: {Error}. Continuing with declared values and run inputs~",
+                _executionId,
+                message.Error ?? "unknown error");
+        }
+
+        LogVariableWarnings();
+        QueueCreateExecutionRecord(_startedAt);
+    }
+
+    private void LogVariableWarnings()
+    {
+        foreach (var warning in _seededVariables.Warnings)
+        {
+            _log.Warning("⚠️ {Warning}", warning);
+        }
     }
 
     private void HandleExecutionRecordCreated(PersistenceExecutionCreated message)
@@ -2858,6 +2942,13 @@ public class WorkflowExecutor : ReceiveActor
     private sealed record PersistenceSnapshotSaved(bool Success, string? Error = null);
 
     private sealed record PersistenceVariableUpdatesSaved(string NodeId, bool Success, string? Error = null);
+
+    /// <summary>🌍 V3 — the stored variable layers, read off-thread and piped back to self.</summary>
+    private sealed record VariablesHydrated(
+        IReadOnlyDictionary<string, object?>? Global,
+        IReadOnlyDictionary<string, object?>? WorkflowScoped,
+        bool Success,
+        string? Error = null);
 
     #endregion
 }

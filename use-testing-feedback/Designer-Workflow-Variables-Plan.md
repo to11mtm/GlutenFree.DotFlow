@@ -18,8 +18,8 @@
 | # | Feedback item | Kind | Size | Status |
 | --- | --- | --- | --- | --- |
 | V1 | No way to declare workflow variables in the designer (#1) | **Gap** | M | ✅ done |
-| V2 | Declared variables' `InitialValue` never reaches a run | **Bug** | S | ☐ |
-| V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ☐ |
+| V2 | Declared variables' `InitialValue` never reaches a run | **Bug** | S | ✅ done |
+| V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ✅ done (V3.5 pending V6/V8/V9) |
 | V4 | `{{…}}` expanded in inputs but not properties; no author control (#3) | **Bug** | L | ☐ |
 | V5 | Run dialog is a raw JSON blob, not a typed variable form (#1) | UX | M | ☐ |
 | V6 | Globals invisible in the designer's token picker (#2) | UX | S | ☐ |
@@ -231,14 +231,14 @@ This is a **pre-existing** defect, not one introduced by V4. It is the reason Q1
 
 **Finding.** F2.
 
-- [ ] V2.1 In `WorkflowExecutor`, build the initial variable map from declared variables, with run
+- [x] V2.1 In `WorkflowExecutor`, build the initial variable map from declared variables, with run
       inputs winning last. **Depends on V1.2** for `VariableSeedMode`; the mode comparison itself is
       inert until V3 supplies stored values to compare against, so it can land as a no-op and be
       exercised by V3.4. Declared-but-unset variables materialise as **null and warn, never fail**
       *(Q3/Q15)*.
-- [ ] V2.2 Convert `JsonElement` initial values via the existing `ConvertJsonElement` helper so
+- [x] V2.2 Convert `JsonElement` initial values via the existing `ConvertJsonElement` helper so
       runtime types match the declared `PropertyType`; report a mismatch as a warning.
-- [ ] V2.3 Engine tests: declared default visible to a `GetVariable` node; run input overrides it;
+- [x] V2.3 Engine tests: declared default visible to a `GetVariable` node; run input overrides it;
       both seed modes assert the right winner against a stored value; declared-but-unset warns
       rather than failing.
 
@@ -246,14 +246,14 @@ This is a **pre-existing** defect, not one introduced by V4. It is the reason Q1
 
 **Finding.** F3.
 
-- [ ] V3.1 At execution start, when `IVariableStore` is present, load `VariableScope.Global` then
+- [x] V3.1 At execution start, when `IVariableStore` is present, load `VariableScope.Global` then
       `VariableScope.ForWorkflow(definition.Id)`. **Precedence (lowest → highest):**
       `Global` → `Workflow (stored)` → `Declared InitialValue` *(only when
       `Seed = AlwaysOverride`)* → `Run inputs`.
-- [ ] V3.2 Hydration failures are non-fatal but *visible* (log + execution warning) — the store is
+- [x] V3.2 Hydration failures are non-fatal but *visible* (log + execution warning) — the store is
       an optional DI service.
-- [ ] V3.3 Snapshot at start rather than live read-through per node; document the choice.
-- [ ] V3.4 Tests: a global referenced by `{{Variable.x}}`; a workflow-scope value written by a
+- [x] V3.3 Snapshot at start rather than live read-through per node; document the choice.
+- [x] V3.4 Tests: a global referenced by `{{Variable.x}}`; a workflow-scope value written by a
       previous run with `VariableWriteMode.Workflow` visible in the next run (closing the
       round-trip); full precedence asserted in both seed modes.
 - [ ] V3.5 **Interim credential warning** *(Q16 — ship V3 first, warning-based)*. Globals become
