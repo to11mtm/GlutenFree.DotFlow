@@ -5,9 +5,9 @@
 > [`Designer-UX-Feedback-Plan-Round2.md`](Designer-UX-Feedback-Plan-Round2.md): each item records
 > what the code does today, the proposed resolution, and slices. Checkboxes tick as work lands.
 >
-> **Revision 3 (2026-08-01)** — Q1–Q15 all answered and folded in. Secret handling has been split
-> into its own document per Q13: [`Designer-Workflow-Variables-Secrets-Plan.md`](Designer-Workflow-Variables-Secrets-Plan.md).
-> One follow-up question (**Q16**, a sequencing gate) is open.
+> **Revision 4 (2026-08-01)** — Q1–Q16 all answered and folded in; **no open questions remain**.
+> Secret handling is split into its own document per Q13:
+> [`Designer-Workflow-Variables-Secrets-Plan.md`](Designer-Workflow-Variables-Secrets-Plan.md).
 >
 > ⚠️ **Read the "Structural findings" section first.** This round is *not* primarily a UX gap.
 > Four engine-level gaps mean that variables largely **do not work end-to-end today** — which is
@@ -28,8 +28,9 @@
 | V9 | Admin-gated screen for editing global variables (Q7) | Feature | M | ☐ |
 | V10 | Secret variables — **split out**, see the secrets plan (Q9/Q13) | Feature | L | ☐ (separate plan) |
 
-Recommended order: **V2 → V4 → V1 → V3 → V6 → V9 → V7 → V5 → V8**, with the secrets plan running
-alongside and **gated against V3** — see **Q16**.
+Recommended order: **V2 → V4 → V1 → V3 → V6 → V9 → V7 → V5 → V8**. Per **Q16**, V3 ships **ahead of**
+the secrets plan, carrying an interim "not for credentials yet" warning (V3.5) that the secrets plan
+removes when it lands.
 
 ---
 
@@ -235,8 +236,14 @@ This is a **pre-existing** defect, not one introduced by V4. It is the reason Q1
 - [ ] V3.4 Tests: a global referenced by `{{Variable.x}}`; a workflow-scope value written by a
       previous run with `VariableWriteMode.Workflow` visible in the next run (closing the
       round-trip); full precedence asserted in both seed modes.
-- [ ] V3.5 **Gate:** do not present globals to users as a credential store until the secrets plan
-      lands — see **Q16**.
+- [ ] V3.5 **Interim credential warning** *(Q16 — ship V3 first, warning-based)*. Globals become
+      functional here, before the secrets plan lands, so every surface that shows or accepts a
+      global carries a plain "🔒 Not for credentials yet — values are stored and returned in
+      plaintext until secret support ships" notice: `docs/variables.md` (V8.1), the designer's
+      Globals picker group (V6.2) and the admin screen (V9.2). Tracked for **removal** by the
+      secrets plan (S8) so it can't go stale.
+      *Note:* the mechanical name check offered in Q16 option 3 was **declined**, so this is
+      advisory only — see "Accepted risk" below.
 
 ## V4 — Author-controlled template expansion 🔗
 
@@ -296,8 +303,9 @@ deserialises it. No discovery of names or types.
 
 - [ ] V6.1 `VariablesClient` in `Workflow.UI.Client/Api` wrapping `/api/v1/variables` — shared with V9.
 - [ ] V6.2 Fetch **global** variables once per designer session; add a third picker group
-      **"Globals"**, badged as shared across workflows. Degrade silently (group hidden) on failure —
-      the picker must not become a hard dependency on the API.
+      **"Globals"**, badged as shared across workflows, carrying the V3.5 interim credential
+      warning. Degrade silently (group hidden) on failure — the picker must not become a hard
+      dependency on the API.
 - [ ] V6.3 **Read-only in the designer** *(Q7)*.
 - [ ] V6.4 Tests: globals group rendered; fetch failure hides the group without breaking the picker.
 
@@ -325,8 +333,8 @@ this at design time becomes materially more valuable.
       and `VariableSeedMode`; declaring variables (V1); supplying values at run time (V5);
       referencing them; **exactly which fields expand templates** and which deliberately don't, and
       why; the **`\{\{` escape**; **declaring is a contract** *(Q15)* — declared-but-unset warns,
-      undeclared fails — called out explicitly for workflow validation; and a pointer to the secrets
-      plan.
+      undeclared fails — called out explicitly for workflow validation; the **interim "not for
+      credentials yet" warning** (V3.5); and a pointer to the secrets plan.
 - [ ] V8.2 Cross-link from `docs/designer.md`, `docs/rest-api.md` (§Variables), `docs/scripting.md`
       and `docs/module-author-guide.md` (the new `SupportsTemplates` flag is module-author-facing).
 - [ ] V8.3 A worked example: a global `apiBaseUrl`, a workflow-scoped `lastRunAt` persisted with
@@ -341,7 +349,10 @@ this at design time becomes materially more valuable.
       `scope=global`; workflow/execution scope stays on `WorkflowWritePolicy`. **Breaking change
       accepted** *(Q14)* — no deprecation window.
 - [ ] V9.2 A **Global Variables** section in `Pages/Settings.razor`: list, add, edit, delete, and
-      version history (the store already versions every write).
+      version history (the store already versions every write). Carries the V3.5 interim credential
+      warning — this is the *write* surface, so it is where the notice matters most. *(Q16 named
+      the docs and the designer's Globals group; I've extended it here because warning on the
+      read-only picker but not on the screen that creates globals would be the obvious miss.)*
 - [ ] V9.3 Drive visibility from the 403 response rather than guessing client-side — `AuthState` has
       no role model today (the UI only knows whether a credential exists, `TopBar.razor:14`).
 - [ ] V9.4 Tests: endpoint policy per scope; UI renders the list; 403 degrades to a clear
@@ -357,25 +368,36 @@ exists and the panel can render it before the behaviour is complete.
 
 ---
 
-## Questions — OPEN ❓ (round 3)
+## Questions — Q16 RESOLVED ✅ (round 3)
 
-- [ ] **Q16: sequencing gate between V3 and the secrets plan.** V3 makes global variables
-      functional for the first time — which is exactly when users start putting connection strings
-      and API keys in them. The secrets plan is now a separate workstream and will land later.
-      Three options:
-      1. **Gate V3** on the secrets plan (safest; delays the fix for feedback bullet #2).
-      2. **Ship V3 first** with a prominent "not for credentials yet" warning in the docs, the
-         designer's Globals group and the V9 admin screen (fastest; relies on users heeding it).
-      3. **Ship V3 first, but block secret-shaped values** — reject a `PUT` to global scope whose
-         name matches `password|secret|token|key|credential` until the secrets plan lands (crude,
-         but it makes the gate mechanical rather than advisory).
-      *Proposed: option 2 plus the option 3 name check — cheap, reversible, and it keeps the
-      user-facing fix moving.* Which do you want?
-  - Ship V3 first, with a prominent warning in the docs and the designer's Globals group that it is not
-    for credentials yet.
+- **Q16 Sequencing between V3 and the secrets plan** → **Ship V3 first** (option 2), with a
+  prominent "not for credentials yet" warning in the docs and the designer's Globals group.
+  The Q16 option-3 mechanical name check (`password|secret|token|key|credential`) was **declined**.
+  Folded into V3.5, V6.2, V9.2 and V8.1.
+
+**No open questions remain. All of V1–V9 are ready to start.**
+
+### Accepted risk from Q16 📌
+
+Recording this plainly so it's a decision on the record rather than an oversight — it does not need
+further action unless you want it to:
+
+Between V3 shipping and the secrets plan landing, a global variable is stored **in plaintext** and
+its value is **returned by `GET /api/v1/variables`** to anyone holding `WorkflowRead` (Admin,
+Developer *and* Viewer — `docs/rest-api.md:54`). The warning is advisory, so if a tester puts an API
+key in a global during that window it will be readable by a broader audience than the admin-gated
+write path (V9.1) implies.
+
+Two consequences worth carrying forward:
+
+1. **The window should be kept short** — this argues for starting the secrets plan's cheap items
+   (S1, S2, S5) alongside V3 rather than strictly after it.
+2. **Values written during the window won't be encrypted at rest.** When S2 lands it needs to
+   migrate or re-write any pre-existing plaintext global values, not just protect new ones — now
+   tracked as **S2.4** in the secrets plan.
 
 ---
 
-*Revision 3, 2026-08-01. Findings F1–F9 verified against the code at that date. No implementation
-has started. V2/V3/V4 are engine behaviour changes and are now unblocked; V3's rollout is subject
-to Q16.*
+*Revision 4, 2026-08-01. Findings F1–F9 verified against the code at that date. No implementation
+has started. **All questions (Q1–Q16) are answered and V1–V9 are unblocked.** V3 ships ahead of the
+secrets plan under the Q16 decision, carrying the V3.5 interim warning.*

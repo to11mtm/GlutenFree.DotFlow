@@ -23,9 +23,14 @@
 | S5 | API never returns secret values | Security | S | ☐ |
 | S6 | UI masking (designer, run dialog, monitor, admin screen) | UX | M | ☐ |
 | S7 | Docs — including the honest limits | Docs | S | ☐ |
+| S8 | Retire the interim "not for credentials" warning (parent Q16) | Cleanup | S | ☐ |
 
-Recommended order: **S1 → S2 → S5 → S6 → S3 → S4 → S7**. S5/S6 are cheap and close the most obvious
-holes; S3/S4 are the hard part and depend on **S-Q1**.
+Recommended order: **S1 → S2 → S5 → S6 → S3 → S4 → S7 → S8**. S5/S6 are cheap and close the most
+obvious holes; S3/S4 are the hard part and depend on **S-Q1**.
+
+> ⏱️ **Start S1/S2/S5 alongside the parent plan's V3, not after it.** Q16 ships functional globals
+> ahead of this plan behind an advisory warning, so every day this plan lags is a day credentials
+> could be sitting in plaintext (parent plan, "Accepted risk from Q16").
 
 ---
 
@@ -102,8 +107,12 @@ used by `SqliteDbConnectionRegistry` (`:113,:122`) against a
       `SqliteDbConnectionRegistry`.
 - [ ] S2.2 Apply in each `IVariableStore` implementation; decrypt only on the engine's hydration
       path (parent V3.1) and never in a list/read API response (S5).
-- [ ] S2.3 Tests: a secret value never appears in plaintext in the underlying table; round-trip
-      through set → hydrate → use works.
+- [ ] S2.3 **Migrate values written during the interim window.** Per the parent plan's Q16, globals
+      ship *before* this plan, so plaintext global values will already exist by the time S2 lands.
+      Protect existing rows on migration rather than only new writes — otherwise the first
+      credentials anyone stored stay in the clear indefinitely.
+- [ ] S2.4 Tests: a secret value never appears in plaintext in the underlying table; round-trip
+      through set → hydrate → use works; pre-existing plaintext rows are encrypted by the migration.
 
 ## S3 — Taint tracking *(depends on S-Q1)*
 
@@ -165,6 +174,18 @@ Only needed if S-Q1 chooses a name/taint-based approach, or a hybrid.
 - [ ] S7.3 Note the interaction with **F9** (parent plan): with input templates off by default,
       untrusted upstream data can no longer reference `{{Variable.apiKey}}` at all — that's a
       meaningful part of the secret story and worth stating.
+
+## S8 — Retire the interim credential warning 🧹
+
+The parent plan's **Q16** ships globals ahead of this plan behind an advisory "not for credentials
+yet" notice (parent V3.5). It must be removed here, or it goes stale and trains users to ignore
+warnings.
+
+- [ ] S8.1 Remove the notice from `docs/variables.md`, the designer's Globals picker group
+      (parent V6.2) and the global admin screen (parent V9.2); replace it with the real guidance
+      from S7.
+- [ ] S8.2 Confirm S2.3's migration has run before the notice comes down — the warning is only
+      honestly retractable once pre-existing plaintext values are protected.
 
 ---
 
