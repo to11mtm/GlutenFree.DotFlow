@@ -31,7 +31,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["name"] = "Ami-chan" };
-        var schema = Arr.create(PortDefinition.Create<string>("name"));
+        var schema = Arr.create(PortDefinition.Create<string>("name", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -49,7 +49,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["count"] = "42" };
-        var schema = Arr.create(PortDefinition.Create<int>("count"));
+        var schema = Arr.create(PortDefinition.Create<int>("count", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -67,7 +67,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["enabled"] = "true" };
-        var schema = Arr.create(PortDefinition.Create<bool>("enabled"));
+        var schema = Arr.create(PortDefinition.Create<bool>("enabled", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -85,7 +85,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["when"] = "2026-04-09T12:00:00Z" };
-        var schema = Arr.create(PortDefinition.Create<DateTime>("when"));
+        var schema = Arr.create(PortDefinition.Create<DateTime>("when", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -104,7 +104,7 @@ public class PropertyBinderTests
         // Arrange 🎀
         var guid = Guid.NewGuid();
         var rawValues = new Dictionary<string, object?> { ["id"] = guid.ToString() };
-        var schema = Arr.create(PortDefinition.Create<Guid>("id"));
+        var schema = Arr.create(PortDefinition.Create<Guid>("id", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -122,7 +122,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["delay"] = "00:05:30" };
-        var schema = Arr.create(PortDefinition.Create<TimeSpan>("delay"));
+        var schema = Arr.create(PortDefinition.Create<TimeSpan>("delay", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -140,7 +140,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["price"] = "99.99" };
-        var schema = Arr.create(PortDefinition.Create<decimal>("price"));
+        var schema = Arr.create(PortDefinition.Create<decimal>("price", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -159,7 +159,7 @@ public class PropertyBinderTests
         // Arrange 🎀
         var json = """{"Name":"Ami","Level":99}""";
         var rawValues = new Dictionary<string, object?> { ["config"] = json };
-        var schema = Arr.create(PortDefinition.Create<TestConfig>("config"));
+        var schema = Arr.create(PortDefinition.Create<TestConfig>("config", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -179,7 +179,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["greeting"] = "{{Variable.UserName}}" };
-        var schema = Arr.create(PortDefinition.Create<string>("greeting"));
+        var schema = Arr.create(PortDefinition.Create<string>("greeting", supportsTemplates: true));
         var context = new PropertyBindingContext(
             Variables: new Dictionary<string, object?> { ["UserName"] = "Ami-chan" },
             NodeOutputs: new Dictionary<string, IReadOnlyDictionary<string, object?>>());
@@ -201,7 +201,7 @@ public class PropertyBinderTests
         // Arrange 🎀
         var userDict = new Dictionary<string, object?> { ["Name"] = "Ami-chan", ["Level"] = 99 };
         var rawValues = new Dictionary<string, object?> { ["name"] = "{{Variable.User.Name}}" };
-        var schema = Arr.create(PortDefinition.Create<string>("name"));
+        var schema = Arr.create(PortDefinition.Create<string>("name", supportsTemplates: true));
         var context = new PropertyBindingContext(
             Variables: new Dictionary<string, object?> { ["User"] = userDict },
             NodeOutputs: new Dictionary<string, IReadOnlyDictionary<string, object?>>());
@@ -222,7 +222,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["input"] = "{{node1.result}}" };
-        var schema = Arr.create(PortDefinition.Create<string>("input"));
+        var schema = Arr.create(PortDefinition.Create<string>("input", supportsTemplates: true));
         var nodeOutputs = new Dictionary<string, IReadOnlyDictionary<string, object?>>
         {
             ["node1"] = new Dictionary<string, object?> { ["result"] = "kawaii-output" },
@@ -247,7 +247,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["value"] = "{{Variable.Missing}}" };
-        var schema = Arr.create(PortDefinition.Create<string>("value"));
+        var schema = Arr.create(PortDefinition.Create<string>("value", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -266,7 +266,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["value"] = "{{unknownNode.output}}" };
-        var schema = Arr.create(PortDefinition.Create<string>("value"));
+        var schema = Arr.create(PortDefinition.Create<string>("value", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -308,7 +308,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?>(); // Empty — nothing provided!
-        var schema = Arr.create(PortDefinition.Create<string>("required_field"));
+        var schema = Arr.create(PortDefinition.Create<string>("required_field", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -327,7 +327,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["count"] = "not-a-number" };
-        var schema = Arr.create(PortDefinition.Create<int>("count"));
+        var schema = Arr.create(PortDefinition.Create<int>("count", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -347,8 +347,8 @@ public class PropertyBinderTests
         // Arrange 🎀 — Two required ports, both missing!
         var rawValues = new Dictionary<string, object?>();
         var schema = Arr.create(
-            PortDefinition.Create<string>("field1"),
-            PortDefinition.Create<int>("field2"));
+            PortDefinition.Create<string>("field1", supportsTemplates: true),
+            PortDefinition.Create<int>("field2", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -366,7 +366,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["value"] = 42 };
-        var schema = Arr.create(PortDefinition.Create<long>("value"));
+        var schema = Arr.create(PortDefinition.Create<long>("value", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -385,7 +385,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["count"] = "{{Variable.ItemCount}}" };
-        var schema = Arr.create(PortDefinition.Create<int>("count"));
+        var schema = Arr.create(PortDefinition.Create<int>("count", supportsTemplates: true));
         var context = new PropertyBindingContext(
             Variables: new Dictionary<string, object?> { ["ItemCount"] = 42 },
             NodeOutputs: new Dictionary<string, IReadOnlyDictionary<string, object?>>());
@@ -410,7 +410,7 @@ public class PropertyBinderTests
         {
             ["message"] = "Hello {{Variable.Name}}, you are level {{Variable.Level}}!",
         };
-        var schema = Arr.create(PortDefinition.Create<string>("message"));
+        var schema = Arr.create(PortDefinition.Create<string>("message", supportsTemplates: true));
         var context = new PropertyBindingContext(
             Variables: new Dictionary<string, object?>
             {
@@ -461,7 +461,7 @@ public class PropertyBinderTests
             ["defined"] = "hello",
             ["extra_key"] = "bonus_value",
         };
-        var schema = Arr.create(PortDefinition.Create<string>("defined"));
+        var schema = Arr.create(PortDefinition.Create<string>("defined", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
@@ -480,7 +480,7 @@ public class PropertyBinderTests
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["NAME"] = "Ami-chan" };
-        var schema = Arr.create(PortDefinition.Create<string>("name"));
+        var schema = Arr.create(PortDefinition.Create<string>("name", supportsTemplates: true));
 
         // Act ⚡
         var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);

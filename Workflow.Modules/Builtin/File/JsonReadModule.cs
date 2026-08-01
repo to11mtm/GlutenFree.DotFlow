@@ -51,7 +51,7 @@ public sealed class JsonReadModule : IWorkflowModule
             new PortDefinition("isArray", "Is Array", typeof(bool), "Whether the root is an array~ 🔢", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "JSON file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("path", "Path", typeof(string), "JSON file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ 🔤", false, "utf-8", PropertyEditorType.Text)));
 
     /// <inheritdoc />

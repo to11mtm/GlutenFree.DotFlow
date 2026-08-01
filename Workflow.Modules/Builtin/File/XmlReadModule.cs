@@ -58,10 +58,10 @@ public sealed class XmlReadModule : IWorkflowModule
             new PortDefinition("rootElement", "Root Element", typeof(string), "Name of the root element~ 🌳", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "XML file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("path", "Path", typeof(string), "XML file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ 🔤", false, "utf-8", PropertyEditorType.Text),
             new ModulePropertyDefinition("validateSchema", "Validate Schema", typeof(bool), "Validate against an XSD~ 🛡️", false, false, PropertyEditorType.Boolean),
-            new ModulePropertyDefinition("schemaPath", "Schema Path", typeof(string), "XSD file path (when validateSchema)~ 📐", false, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("schemaPath", "Schema Path", typeof(string), "XSD file path (when validateSchema)~ 📐", false, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("xpath", "XPath", typeof(string), "Optional XPath to pre-extract before conversion~ 🎯", false, null, PropertyEditorType.Text)));
 
     /// <inheritdoc />

@@ -54,7 +54,7 @@ public sealed class FileWriteModule : IWorkflowModule
             new PortDefinition("fullPath", "Full Path", typeof(string), "Resolved absolute path~ 📂", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the write succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "File path to write. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("path", "Path", typeof(string), "File path to write. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("content", "Content", typeof(object), "Content to write when not connected via port~ 📄", false, null, PropertyEditorType.MultilineText),
             new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding (utf-8, utf-16, ascii, latin1)~ 🔤", false, "utf-8", PropertyEditorType.Text),
             new ModulePropertyDefinition("mode", "Mode", typeof(string), "overwrite, append, or createNew~ 📝", false, "overwrite", PropertyEditorType.Dropdown, Arr.create<object>("overwrite", "append", "createNew")),

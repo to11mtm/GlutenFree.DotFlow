@@ -47,10 +47,21 @@ public class PropertyBinder : IPropertyBinder
     /// CopilotNote: The inner group captures everything between {{ and }},
     /// trimmed of whitespace during processing. Supports dots for nested access!
     /// E.g., <c>{{Variable.User.Name}}</c> → inner = "Variable.User.Name". 💫.
+    /// <para>
+    /// Phase 3.5 (V4): the negative lookbehind lets an author write a **literal** <c>{{</c> by
+    /// escaping it as <c>\{\{</c> — needed now that an unresolvable reference fails the node
+    /// rather than passing through untouched.
+    /// </para>
     /// </remarks>
     private static readonly Regex ReferencePattern = new(
-        @"\{\{\s*(.+?)\s*\}\}",
+        @"(?<!\\)\{\{\s*(.+?)\s*\}\}",
         RegexOptions.Compiled);
+
+    /// <summary>The escape sequence for a literal <c>{{</c>~ 🚪.</summary>
+    private const string EscapedOpenBrace = @"\{\{";
+
+    /// <summary>The label used in error messages for node properties (vs. "Input" for ports).</summary>
+    private const string PropertyKind = "Property";
 
     /// <summary>
     /// 🧮 Phase 3.1.7 — Matches a *pure* reference (dotted identifier path, no operators/literals),
@@ -131,18 +142,26 @@ public class PropertyBinder : IPropertyBinder
                 continue;
             }
 
-            // Step 3: Resolve references if the raw value is a string with {{...}} patterns. 🔗
+            // Step 3: Resolve references — only when the port opts in (V4). An input's value is
+            // produced by an upstream node or supplied as a run input; it is never text an author
+            // typed, so expanding it by default would let untrusted data reference workflow
+            // variables (and would mangle any payload that legitimately contains "{{"). 🔗
             var resolvedValue = rawValue;
-            if (rawValue is string stringValue && ReferencePattern.IsMatch(stringValue))
+            if (port.SupportsTemplates && rawValue is string stringValue)
             {
-                var resolution = ResolveReferences(stringValue, context, portName);
-                if (resolution.HasErrors)
+                if (ReferencePattern.IsMatch(stringValue))
                 {
-                    errors.AddRange(resolution.Errors);
-                    continue;
+                    var resolution = ResolveReferences(stringValue, context, portName);
+                    if (resolution.HasErrors)
+                    {
+                        errors.AddRange(resolution.Errors);
+                        continue;
+                    }
+
+                    resolvedValue = resolution.ResolvedValue;
                 }
 
-                resolvedValue = resolution.ResolvedValue;
+                resolvedValue = UnescapeBraces(resolvedValue);
             }
 
             // Step 4: Convert to expected data type. 🔄
@@ -179,6 +198,61 @@ public class PropertyBinder : IPropertyBinder
             ? new PropertyBindingResult(false, boundValues, errors.ToArr())
             : PropertyBindingResult.Ok(boundValues);
     }
+
+    /// <inheritdoc />
+    public PropertyBindingResult BindModuleProperties(
+        IReadOnlyDictionary<string, object?> rawValues,
+        Arr<ModulePropertyDefinition> schema,
+        PropertyBindingContext context)
+    {
+        ArgumentNullException.ThrowIfNull(rawValues);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var bound = new Dictionary<string, object?>(rawValues.Count);
+        var errors = new List<string>();
+
+        var templated = new System.Collections.Generic.HashSet<string>(
+            schema.Where(p => p.SupportsTemplates).Select(p => p.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, rawValue) in rawValues)
+        {
+            // Anything the schema doesn't mark as template-enabled passes through verbatim —
+            // SQL text, script bodies and connection strings must stay exactly as authored.
+            if (rawValue is not string stringValue || !templated.Contains(name))
+            {
+                bound[name] = rawValue;
+                continue;
+            }
+
+            object? resolvedValue = stringValue;
+            if (ReferencePattern.IsMatch(stringValue))
+            {
+                var resolution = ResolveReferences(stringValue, context, name, PropertyKind);
+                if (resolution.HasErrors)
+                {
+                    errors.AddRange(resolution.Errors);
+                    continue;
+                }
+
+                resolvedValue = resolution.ResolvedValue;
+            }
+
+            bound[name] = UnescapeBraces(resolvedValue);
+        }
+
+        return errors.Count > 0
+            ? new PropertyBindingResult(false, bound, errors.ToArr())
+            : PropertyBindingResult.Ok(bound);
+    }
+
+    /// <summary>
+    /// Turns the <c>\{\{</c> escape back into a literal <c>{{</c>, once resolution is done~ 🚪.
+    /// </summary>
+    private static object? UnescapeBraces(object? value)
+        => value is string text && text.Contains(EscapedOpenBrace, StringComparison.Ordinal)
+            ? text.Replace(EscapedOpenBrace, "{{", StringComparison.Ordinal)
+            : value;
 
     /// <summary>
     /// Attempts to find a raw value by port name (exact match, then case-insensitive fallback).
@@ -220,7 +294,8 @@ public class PropertyBinder : IPropertyBinder
     private ReferenceResolution ResolveReferences(
         string stringValue,
         PropertyBindingContext context,
-        string portName)
+        string portName,
+        string kind = "Input")
     {
         var matches = ReferencePattern.Matches(stringValue);
         if (matches.Count == 0)
@@ -233,7 +308,7 @@ public class PropertyBinder : IPropertyBinder
         {
             var innerExpr = matches[0].Groups[1].Value.Trim();
             var resolution = ResolveSingleReference(innerExpr, context, portName);
-            return resolution;
+            return Relabel(resolution, kind);
         }
 
         // Multiple references or mixed text — interpolate as string. 📝
@@ -252,8 +327,28 @@ public class PropertyBinder : IPropertyBinder
         });
 
         return errors.Count > 0
-            ? ReferenceResolution.Failed(errors)
+            ? Relabel(ReferenceResolution.Failed(errors), kind)
             : ReferenceResolution.Resolved(result);
+    }
+
+    /// <summary>
+    /// Rewrites the "Input" prefix the resolution chain produces so a node-property failure reads
+    /// as one. Done here rather than threaded through five private methods — the chain is shared
+    /// verbatim between ports and properties, and only the label differs~ 🏷️.
+    /// </summary>
+    private static ReferenceResolution Relabel(ReferenceResolution resolution, string kind)
+    {
+        if (!resolution.HasErrors || kind == "Input")
+        {
+            return resolution;
+        }
+
+        const string original = "Input '";
+        return ReferenceResolution.Failed(resolution.Errors
+            .Select(e => e.StartsWith(original, StringComparison.Ordinal)
+                ? kind + " '" + e[original.Length..]
+                : e)
+            .ToList());
     }
 
     /// <summary>

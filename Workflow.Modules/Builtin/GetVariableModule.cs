@@ -82,7 +82,8 @@ public class GetVariableModule : IWorkflowModule
                 Description: "Returned if variable not found. Supports {{Variable.Name}}~ 🔙",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "throwIfMissing",
                 DisplayName: "Throw If Missing",

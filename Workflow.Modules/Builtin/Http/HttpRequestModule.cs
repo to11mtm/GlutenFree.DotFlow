@@ -147,7 +147,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Absolute request URL. Supports {{Variable.Name}} references~ 🌐",
                 IsRequired: true,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "method",
                 DisplayName: "Method",
@@ -180,7 +181,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Optional request body media type (e.g. application/json, application/x-www-form-urlencoded, multipart/form-data, application/xml, text/plain, application/octet-stream). Auto-picks JSON for objects when omitted~ 🏷️",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "timeoutSeconds",
                 DisplayName: "Timeout (seconds)",
@@ -207,7 +209,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Basic auth — username~ 👤",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "password",
                 DisplayName: "Password",
@@ -215,7 +218,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Basic auth — password~ 🔑",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "bearerToken",
                 DisplayName: "Bearer Token",
@@ -223,7 +227,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Bearer auth — token to send in Authorization header~ 🎟️",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "apiKey",
                 DisplayName: "API Key",
@@ -231,7 +236,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "API key value~ 🗝️",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "apiKeyHeader",
                 DisplayName: "API Key Header Name",
@@ -239,7 +245,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Header (or query param) name for the API key (default X-API-Key)~ 🏷️",
                 IsRequired: false,
                 DefaultValue: "X-API-Key",
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "apiKeyLocation",
                 DisplayName: "API Key Location",
@@ -258,7 +265,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "OAuth2 token endpoint URL (e.g. https://auth.example.com/oauth/token)~ 🌐",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "oauth2ClientId",
                 DisplayName: "OAuth2 Client ID",
@@ -266,7 +274,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "OAuth2 client identifier~ 👤",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "oauth2ClientSecret",
                 DisplayName: "OAuth2 Client Secret",
@@ -274,7 +283,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "OAuth2 client secret~ 🔑",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "oauth2Scope",
                 DisplayName: "OAuth2 Scope",
@@ -282,7 +292,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Optional space-separated OAuth2 scopes~ 🎯",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "oauth2Audience",
                 DisplayName: "OAuth2 Audience",
@@ -290,7 +301,8 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Optional audience parameter (Auth0-style; not part of core RFC)~ 🎭",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "oauth2TokenCacheScope",
                 DisplayName: "OAuth2 Token Cache Scope",

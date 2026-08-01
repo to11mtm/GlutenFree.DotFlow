@@ -216,7 +216,11 @@ public class NodeExecutor : ReceiveActor
             }
 
             // Build execution context using bound inputs. ✨
-            var context = BuildExecutionContext(module, bindingResult.BoundValues);
+            var context = BuildExecutionContext(module, bindingResult.BoundValues, binder, bindingContext);
+            if (context is null)
+            {
+                return;
+            }
 
             // Execute the module asynchronously
             ExecuteModuleAsync(module, context, _cancellationTokenSource.Token);
@@ -506,8 +510,15 @@ public class NodeExecutor : ReceiveActor
     /// </remarks>
     private PropertyBindingContext BuildBindingContext()
     {
-        // Extract workflow variables (everything that's not a prefixed node output)
-        var variables = new Dictionary<string, object?>();
+        // Start from the execution's actual variables. 💾
+        // CopilotNote: Phase 3.5 (V4) — this used to build the variable map purely from _inputs,
+        // which meant {{Variable.x}} could only ever resolve against a *run input* that had been
+        // copied into every node. A variable declared on the workflow, hydrated from the store, or
+        // written mid-run by a SetVariable node was invisible to the binder. The plain _inputs keys
+        // are still overlaid below so nothing that resolved before stops resolving~ ✨
+        var variables = ConvertHashMapToDictionary(_workflowVariables) is { } seeded
+            ? new Dictionary<string, object?>(seeded)
+            : new Dictionary<string, object?>();
         var nodeOutputs = new Dictionary<string, IReadOnlyDictionary<string, object?>>();
 
         foreach (var (key, value) in _inputs)
@@ -567,9 +578,11 @@ public class NodeExecutor : ReceiveActor
     /// </summary>
     /// <param name="module">The module being executed.</param>
     /// <param name="boundInputs">The inputs after PropertyBinder processing.</param>
-    private ModuleExecutionContext BuildExecutionContext(
+    private ModuleExecutionContext? BuildExecutionContext(
         IWorkflowModule module,
-        IReadOnlyDictionary<string, object?> boundInputs)
+        IReadOnlyDictionary<string, object?> boundInputs,
+        IPropertyBinder binder,
+        PropertyBindingContext bindingContext)
     {
         // Extract and convert properties from node definition. ⚙️
         var properties = new Dictionary<string, object?>();
@@ -577,6 +590,20 @@ public class NodeExecutor : ReceiveActor
         {
             properties[prop.Key] = ConvertJsonElement(prop.Value);
         }
+
+        // 🔗 V4 — resolve {{…}} in template-enabled properties. Properties are the designer's
+        // whole editing surface, so without this every token inserted by the {{x}} picker or the
+        // ƒx builder reached the module as literal text.
+        var propertyBinding = binder.BindModuleProperties(properties, module.Schema.Properties, bindingContext);
+        if (!propertyBinding.Success)
+        {
+            var errorMessage = "Property binding failed: " + string.Join(", ", propertyBinding.Errors);
+            _log.Error("❌ {Error}", errorMessage);
+            SendFailure(new InvalidOperationException(errorMessage));
+            return null;
+        }
+
+        properties = new Dictionary<string, object?>(propertyBinding.BoundValues);
 
         // Get logger from service provider or create null logger
         var loggerFactory = _serviceProvider.GetService<ILoggerFactory>();

@@ -81,7 +81,8 @@ public class LogModule : IWorkflowModule
                 Description: "The message text to log. Supports {{Variable.Name}} references~ 💬",
                 IsRequired: true,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "level",
                 DisplayName: "Log Level",

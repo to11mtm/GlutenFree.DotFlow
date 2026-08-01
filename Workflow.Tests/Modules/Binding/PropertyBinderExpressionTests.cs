@@ -38,7 +38,7 @@ public class PropertyBinderExpressionTests
     public void Arithmetic_Evaluates()
     {
         var raw = new Dictionary<string, object?> { ["value"] = "{{1 + 2 * 3}}" };
-        var schema = Arr.create(PortDefinition.Create<int>("value"));
+        var schema = Arr.create(PortDefinition.Create<int>("value", supportsTemplates: true));
 
         var result = _binder.BindProperties(raw, schema, PropertyBindingContext.Empty);
 
@@ -51,7 +51,7 @@ public class PropertyBinderExpressionTests
     public void Comparison_Evaluates()
     {
         var raw = new Dictionary<string, object?> { ["ok"] = "{{Variable.Count > 5}}" };
-        var schema = Arr.create(PortDefinition.Create<bool>("ok"));
+        var schema = Arr.create(PortDefinition.Create<bool>("ok", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Count"] = 10 });
 
         var result = _binder.BindProperties(raw, schema, ctx);
@@ -65,7 +65,7 @@ public class PropertyBinderExpressionTests
     public void Logical_Evaluates()
     {
         var raw = new Dictionary<string, object?> { ["ok"] = "{{Variable.A && !Variable.B}}" };
-        var schema = Arr.create(PortDefinition.Create<bool>("ok"));
+        var schema = Arr.create(PortDefinition.Create<bool>("ok", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["A"] = true, ["B"] = false });
 
         var result = _binder.BindProperties(raw, schema, ctx);
@@ -79,7 +79,7 @@ public class PropertyBinderExpressionTests
     public void StringConcat_Evaluates()
     {
         var raw = new Dictionary<string, object?> { ["greeting"] = "{{Variable.Name + '!'}}" };
-        var schema = Arr.create(PortDefinition.Create<string>("greeting"));
+        var schema = Arr.create(PortDefinition.Create<string>("greeting", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Name"] = "Ami" });
 
         var result = _binder.BindProperties(raw, schema, ctx);
@@ -93,7 +93,7 @@ public class PropertyBinderExpressionTests
     public void VariableReference_InExpression_Resolves()
     {
         var raw = new Dictionary<string, object?> { ["total"] = "{{Variable.Price * Variable.Qty}}" };
-        var schema = Arr.create(PortDefinition.Create<int>("total"));
+        var schema = Arr.create(PortDefinition.Create<int>("total", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Price"] = 3, ["Qty"] = 4 });
 
         var result = _binder.BindProperties(raw, schema, ctx);
@@ -107,7 +107,7 @@ public class PropertyBinderExpressionTests
     public void NodeOutput_InExpression_Resolves()
     {
         var raw = new Dictionary<string, object?> { ["doubled"] = "{{orderNode.total * 2}}" };
-        var schema = Arr.create(PortDefinition.Create<int>("doubled"));
+        var schema = Arr.create(PortDefinition.Create<int>("doubled", supportsTemplates: true));
         var nodeOutputs = new Dictionary<string, IReadOnlyDictionary<string, object?>>
         {
             ["orderNode"] = new Dictionary<string, object?> { ["total"] = 21 },
@@ -125,7 +125,7 @@ public class PropertyBinderExpressionTests
     public void WholeTemplate_PreservesType()
     {
         var raw = new Dictionary<string, object?> { ["flag"] = "{{Variable.Count >= 5}}" };
-        var schema = Arr.create(PortDefinition.Create<object>("flag"));
+        var schema = Arr.create(PortDefinition.Create<object>("flag", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Count"] = 7 });
 
         var result = _binder.BindProperties(raw, schema, ctx);
@@ -140,7 +140,7 @@ public class PropertyBinderExpressionTests
     public void MixedTemplate_Interpolates()
     {
         var raw = new Dictionary<string, object?> { ["msg"] = "Total is {{Variable.Count + 1}}!" };
-        var schema = Arr.create(PortDefinition.Create<string>("msg"));
+        var schema = Arr.create(PortDefinition.Create<string>("msg", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Count"] = 41 });
 
         var result = _binder.BindProperties(raw, schema, ctx);
@@ -154,7 +154,7 @@ public class PropertyBinderExpressionTests
     public void InvalidExpression_BindingError()
     {
         var raw = new Dictionary<string, object?> { ["value"] = "{{1 +* 2}}" };
-        var schema = Arr.create(PortDefinition.Create<int>("value"));
+        var schema = Arr.create(PortDefinition.Create<int>("value", supportsTemplates: true));
 
         var result = _binder.BindProperties(raw, schema, PropertyBindingContext.Empty);
 
@@ -170,7 +170,7 @@ public class PropertyBinderExpressionTests
         {
             ["value"] = "{{(function(){ while(true){} return 1; })()}}",
         };
-        var schema = Arr.create(PortDefinition.Create<int>("value"));
+        var schema = Arr.create(PortDefinition.Create<int>("value", supportsTemplates: true));
 
         var result = _binder.BindProperties(raw, schema, PropertyBindingContext.Empty);
 
@@ -183,7 +183,7 @@ public class PropertyBinderExpressionTests
     public void BuiltinGlobals_NotRewrittenAsReferences()
     {
         var raw = new Dictionary<string, object?> { ["max"] = "{{Math.max(Variable.A, Variable.B)}}" };
-        var schema = Arr.create(PortDefinition.Create<int>("max"));
+        var schema = Arr.create(PortDefinition.Create<int>("max", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["A"] = 3, ["B"] = 9 });
 
         var result = _binder.BindProperties(raw, schema, ctx);
@@ -200,7 +200,7 @@ public class PropertyBinderExpressionTests
             new JintExpressionEvaluator(NullLogger<JintExpressionEvaluator>.Instance),
             enableExpressions: false);
         var raw = new Dictionary<string, object?> { ["value"] = "{{1 + 2}}" };
-        var schema = Arr.create(PortDefinition.Create<int>("value"));
+        var schema = Arr.create(PortDefinition.Create<int>("value", supportsTemplates: true));
 
         var result = binder.BindProperties(raw, schema, PropertyBindingContext.Empty);
 

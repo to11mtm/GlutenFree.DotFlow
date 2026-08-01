@@ -74,7 +74,8 @@ public class DelayModule : IWorkflowModule
                 Description: "Delay in milliseconds. Supports {{Variable.Name}} references~ ⏱️",
                 IsRequired: true,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Number),
+                EditorType: PropertyEditorType.Number,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "maxDurationMs",
                 DisplayName: "Max Duration (ms)",

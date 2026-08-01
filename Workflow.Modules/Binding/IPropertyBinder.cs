@@ -54,6 +54,34 @@ public interface IPropertyBinder
         IReadOnlyDictionary<string, object?> rawValues,
         Arr<PortDefinition> schema,
         PropertyBindingContext context);
+
+    /// <summary>
+    /// 🔗 Phase 3.5 (V4) — resolves <c>{{…}}</c> references in a node's **properties**.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Properties are the designer's entire editing surface, yet until this existed the engine only
+    /// ever expanded references in module <em>inputs</em> — so a token a user inserted through the
+    /// <c>{{x}}</c> picker or ƒx builder reached the module as the literal text
+    /// <c>"{{Variable.host}}"</c>.
+    /// </para>
+    /// <para>
+    /// Only properties whose schema sets <see cref="ModulePropertyDefinition.SupportsTemplates"/>
+    /// are resolved; everything else — SQL text, script bodies, connection strings, and any value
+    /// that isn't a string — passes through byte-for-byte. Unlike
+    /// <see cref="BindProperties(IReadOnlyDictionary{string, object}, Arr{PortDefinition}, PropertyBindingContext)"/>
+    /// this deliberately performs **no** type conversion, default application or required-ness
+    /// checking: modules parse their own properties, and changing that is a far wider concern.
+    /// </para>
+    /// </remarks>
+    /// <param name="rawValues">The node's raw property values.</param>
+    /// <param name="schema">The module's property definitions.</param>
+    /// <param name="context">Variables and upstream node outputs for resolution.</param>
+    /// <returns>The resolved values, or accumulated errors when a reference can't be resolved.</returns>
+    public PropertyBindingResult BindModuleProperties(
+        IReadOnlyDictionary<string, object?> rawValues,
+        Arr<ModulePropertyDefinition> schema,
+        PropertyBindingContext context);
 }
 
 /// <summary>

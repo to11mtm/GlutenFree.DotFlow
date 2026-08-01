@@ -66,7 +66,7 @@ public sealed class S3Module : IWorkflowModule
             new ModulePropertyDefinition("serviceUrl", "Service URL", typeof(string), "Custom endpoint (MinIO/on-prem)~ 🔌", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("bucket", "Bucket", typeof(string), "S3 bucket name~ 🪣", true, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("key", "Key", typeof(string), "Object key (required except list)~ 🔑", false, null, PropertyEditorType.Text),
-            new ModulePropertyDefinition("localPath", "Local Path", typeof(string), "Local file path (upload/download)~ 📂", false, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("localPath", "Local Path", typeof(string), "Local file path (upload/download)~ 📂", false, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("prefix", "Prefix", typeof(string), "Key prefix filter (list)~ 🏷️", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("maxKeys", "Max Keys", typeof(int), "Max objects to list~ 🔢", false, 1000, PropertyEditorType.Number),
             new ModulePropertyDefinition("contentType", "Content Type", typeof(string), "MIME type (upload)~ 📄", false, null, PropertyEditorType.Text)));

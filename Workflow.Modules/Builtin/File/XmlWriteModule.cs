@@ -51,7 +51,7 @@ public sealed class XmlWriteModule : IWorkflowModule
             new PortDefinition("bytesWritten", "Bytes Written", typeof(long), "Number of bytes written~ 📊", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the write succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "Output XML file path~ 📂", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("path", "Path", typeof(string), "Output XML file path~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("data", "Data", typeof(object), "Dictionary graph when not connected via port~ 🏷️", false, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("rootElement", "Root Element", typeof(string), "Root element name~ 🌳", false, "root", PropertyEditorType.Text),
             new ModulePropertyDefinition("indented", "Indented", typeof(bool), "Pretty-print with indentation~ 🎨", false, true, PropertyEditorType.Boolean),

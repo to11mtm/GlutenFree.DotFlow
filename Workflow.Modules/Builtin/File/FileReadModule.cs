@@ -53,7 +53,7 @@ public sealed class FileReadModule : IWorkflowModule
             new PortDefinition("lastModified", "Last Modified", typeof(DateTimeOffset), "Last write time (UTC)~ 🕒", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the read succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "File path to read. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("path", "Path", typeof(string), "File path to read. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding (utf-8, utf-16, ascii, latin1)~ 🔤", false, "utf-8", PropertyEditorType.Text),
             new ModulePropertyDefinition("readAs", "Read As", typeof(string), "text, binary, or lines~ 📄", false, "text", PropertyEditorType.Dropdown, Arr.create<object>("text", "binary", "lines")),
             new ModulePropertyDefinition("maxSize", "Max Size (bytes)", typeof(long), "Max file size; exceeding fails the read~ 🧠", false, null, PropertyEditorType.Number)));

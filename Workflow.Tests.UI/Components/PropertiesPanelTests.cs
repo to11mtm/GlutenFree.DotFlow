@@ -29,8 +29,13 @@ public sealed class PropertiesPanelTests : TestContext
 
     private static JsonElement El(string j) => JsonDocument.Parse(j).RootElement.Clone();
 
-    private static ModulePropertyDefinitionDto Prop(string name, string editor, bool required = false, List<JsonElement>? allowed = null)
-        => new(name, name, "String", null, required, null, editor, allowed);
+    private static ModulePropertyDefinitionDto Prop(
+        string name,
+        string editor,
+        bool required = false,
+        List<JsonElement>? allowed = null,
+        bool templates = false)
+        => new(name, name, "String", null, required, null, editor, allowed, templates);
 
     private static (DesignerDocument Doc, SelectionState Sel, CommandStack Cmd) Setup(ModuleSchemaDto schema)
     {
@@ -108,7 +113,7 @@ public sealed class PropertiesPanelTests : TestContext
     public void TokenPicker_InsertsVariableToken_AndShowsBoundBadge()
     {
         // G4: workflow variable + an upstream node output are pickable.
-        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text") });
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text", templates: true) });
         var (doc, sel, cmd) = Setup(schema);
         doc.Variables["baseUrl"] = El("\"https://example.com\"");
         doc.Nodes.Add(new DesignerNode { Id = "up1", ModuleId = "builtin.log", Name = "Upstream", X = 0, Y = 0 });
@@ -191,7 +196,7 @@ public sealed class PropertiesPanelTests : TestContext
     public void ExpressionBuilder_BuildsComparison_AndApplies()
     {
         // G8: the ƒx modal builds {{Variable.x > 5}} from the source/operator/value pickers.
-        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("condition", "Expression") });
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("condition", "Expression", templates: true) });
         var (doc, sel, cmd) = Setup(schema);
         doc.Variables["count"] = El("1");
 
@@ -214,15 +219,18 @@ public sealed class PropertiesPanelTests : TestContext
     }
 
     [Fact]
-    public void ExpressionBuilder_AvailableOnTemplateFields_WithHints()
+    public void ExpressionBuilder_FollowsTheSchemaFlag_NotTheEditorType()
     {
-        // Users expect the ƒx breakout on every {{…}}-supporting field (e.g. FilePath — see
-        // "CSV file path. Supports {{Variable.Name}}"), not just Expression editors.
+        // V4: the ƒx breakout and {{x}} picker are driven by the module schema's
+        // SupportsTemplates flag — the same flag the engine uses to decide what to expand.
+        // Round 2 keyed this off the editor type instead, which is how the designer ended up
+        // inviting bindings into fields the engine never resolved.
         var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto>
         {
-            Prop("condition", "Expression"),
-            Prop("path", "FilePath"),
-            Prop("url", "Text"),
+            Prop("condition", "Expression", templates: true),
+            Prop("path", "FilePath", templates: true),
+            Prop("url", "Text", templates: true),
+            Prop("sql", "Text"),
             Prop("enabled", "Boolean"),
         });
         var (doc, sel, cmd) = Setup(schema);
@@ -231,6 +239,8 @@ public sealed class PropertiesPanelTests : TestContext
 
         cut.FindAll("[data-testid=exprb-btn-path]").Should().ContainSingle();
         cut.FindAll("[data-testid=exprb-btn-url]").Should().ContainSingle();
+        cut.FindAll("[data-testid=exprb-btn-sql]").Should()
+            .BeEmpty(because: "a Text field that hasn't opted in must not advertise bindings the engine ignores~");
         cut.FindAll("[data-testid=exprb-btn-enabled]").Should().BeEmpty(because: "booleans don't take templates~");
 
         cut.Find("[data-testid=exprb-btn-path]").Click();

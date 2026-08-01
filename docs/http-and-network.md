@@ -421,7 +421,7 @@ On `401 Unauthorized`, the module automatically invalidates the cached token and
 
 | Property | Type | Default | Required | Description |
 |----------|------|---------|----------|-------------|
-| `url` | `string` | — | ✅ | Absolute request URL. Supports `{{Variable}}` references~ |
+| `url` | `string` | — | ✅ | Absolute request URL. Supports `{{Variable.x}}` / `{{nodeId.port}}` bindings~ |
 | `method` | `string` | `"GET"` | | HTTP verb: GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS~ |
 | `headers` | `Dictionary<string,string>` | — | | Custom request headers~ |
 | `body` | `object` | — | | Request body (serialisation controlled by `contentType`)~ |

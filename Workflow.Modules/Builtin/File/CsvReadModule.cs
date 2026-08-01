@@ -53,7 +53,7 @@ public sealed class CsvReadModule : IWorkflowModule
             new PortDefinition("columns", "Columns", typeof(object), "Column names~ 🏷️", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "CSV file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("path", "Path", typeof(string), "CSV file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("hasHeader", "Has Header", typeof(bool), "Whether the first row is a header~ 🏷️", false, true, PropertyEditorType.Boolean),
             new ModulePropertyDefinition("delimiter", "Delimiter", typeof(string), "Field delimiter (default ,)~ 📊", false, ",", PropertyEditorType.Text),
             new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ 🔤", false, "utf-8", PropertyEditorType.Text),

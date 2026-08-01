@@ -86,7 +86,8 @@ public sealed class DatabaseBulkInsertModule : IWorkflowModule
                 Description: "Named connection id (preferred). Mutually exclusive with connectionString~ 📇",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "connectionString",
                 DisplayName: "Connection String",
@@ -111,7 +112,8 @@ public sealed class DatabaseBulkInsertModule : IWorkflowModule
                 Description: "Target table — fully-qualified preferred (e.g. 'public.orders')~ 🎯",
                 IsRequired: true,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "data",
                 DisplayName: "Data",

@@ -20,7 +20,7 @@
 | V1 | No way to declare workflow variables in the designer (#1) | **Gap** | M | ✅ done |
 | V2 | Declared variables' `InitialValue` never reaches a run | **Bug** | S | ✅ done |
 | V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ✅ done (V3.5 pending V6/V8/V9) |
-| V4 | `{{…}}` expanded in inputs but not properties; no author control (#3) | **Bug** | L | ☐ |
+| V4 | `{{…}}` expanded in inputs but not properties; no author control (#3) | **Bug** | L | ✅ done |
 | V5 | Run dialog is a raw JSON blob, not a typed variable form (#1) | UX | M | ☐ |
 | V6 | Globals invisible in the designer's token picker (#2) | UX | S | ☐ |
 | V7 | No lint for unknown / misspelled variable references (#3) | UX | M | ☐ |
@@ -270,36 +270,36 @@ This is a **pre-existing** defect, not one introduced by V4. It is the reason Q1
 **Finding.** F4 (properties don't expand) **and** F9 (inputs expand indiscriminately). Q11 answers
 both with one mechanism: an explicit, default-off flag on each side.
 
-- [ ] V4.1 Add **`SupportsTemplates = false`** to `ModulePropertyDefinition`
+- [x] V4.1 Add **`SupportsTemplates = false`** to `ModulePropertyDefinition`
       (`ModuleSchema.cs:105-115`) and to `PortDefinition`, as trailing optional record parameters —
       source-compatible with every existing positional call site.
-- [ ] V4.2 Project the flag through `ModulePropertyDefinitionDto` → `ModulesClient` → the designer,
+- [x] V4.2 Project the flag through `ModulePropertyDefinitionDto` → `ModulesClient` → the designer,
       so the `{{x}}` picker and ƒx builder are driven by **the flag** rather than
       `PropertyEditor.SupportsTokens`' hard-coded editor-type list (`PropertyEditor.razor:195`).
       One source of truth shared by engine and UI — a field that doesn't expand shows no token
       button, so the Round-2 confusion mode becomes structurally impossible.
-- [ ] V4.3 Extend `IPropertyBinder` with a property-oriented entry point taking
+- [x] V4.3 Extend `IPropertyBinder` with a property-oriented entry point taking
       `Arr<ModulePropertyDefinition>`, reusing `ResolveReferences` verbatim; honour the flag on both
       the property and the input paths.
-- [ ] V4.4 Call it from `NodeExecutor.BuildExecutionContext` before handing `Properties` to the
+- [x] V4.4 Call it from `NodeExecutor.BuildExecutionContext` before handing `Properties` to the
       module.
-- [ ] V4.5 **Fail hard** on an unresolvable reference in a template-enabled field *(Q4)*, plus the
+- [x] V4.5 **Fail hard** on an unresolvable reference in a template-enabled field *(Q4)*, plus the
       **`\{\{` backslash escape** *(Q12)*, implemented once and applied consistently to properties,
       inputs and SQL parameter values.
-- [ ] V4.6 **Opt-in audit (the bulk of V4).** Of 218 property definitions across 174 module files —
+- [x] V4.6 **Opt-in audit (the bulk of V4).** Of 218 property definitions across 174 module files —
       158 Text, 16 Json, 16 Number, 12 Dropdown, 7 Boolean, 4 ConnectionString, 3 Code, 1 Expression
       — opt in the ones that genuinely want templating (HTTP `url`/headers, file paths, text
       fields), and explicitly leave off SQL `query`/`command` (D7), script bodies and Linq user
       code. Separately review the ~166 port definitions; **the expectation is that few or no inputs
       opt back in** (F9) — I'll report the proposed list rather than opting anything in silently.
-- [ ] V4.7 Retire or re-base `SqlParameterTemplateResolver` so there is one resolution path, not two.
-- [ ] V4.8 Tests: HTTP `url` built from `{{Variable.host}}`; whole-token type preservation on a
+- [x] V4.7 Retire or re-base `SqlParameterTemplateResolver` so there is one resolution path, not two.
+- [x] V4.8 Tests: HTTP `url` built from `{{Variable.host}}`; whole-token type preservation on a
       numeric property; SQL/Code properties provably *not* expanded; `\{\{` yields a literal;
       unresolved reference fails the node; **an input carrying `{{…}}` from upstream data is passed
       through untouched** (the F9 regression guard). Add an **integration** test — none exists today.
       Note `PropertyBinderTests` / `PropertyBinderExpressionTests` assert input expansion and must
       be updated to set the flag explicitly.
-- [ ] V4.9 Correct the docs and module descriptions that currently over-promise: module property
+- [x] V4.9 Correct the docs and module descriptions that currently over-promise: module property
       `Description` strings, `docs/http-and-network.md:424`, and — because expression evaluation
       (`{{Variable.Count > 5}}`) is documented as an *input* feature in
       `docs/module-author-guide.md:432-435` and `docs/scripting.md:180-201` — restate it as a

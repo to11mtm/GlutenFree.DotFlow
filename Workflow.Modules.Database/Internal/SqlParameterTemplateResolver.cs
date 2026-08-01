@@ -12,16 +12,24 @@ using Workflow.Modules.Database.Abstractions;
 /// <summary>
 /// 🔗 Resolves <c>{{…}}</c> binding tokens inside SQL parameter <em>values</em> so users can feed
 /// parameters from workflow variables (<c>{{Variable.name}}</c>) or upstream node outputs
-/// (<c>{{nodeId.port}}</c>). The engine's PropertyBinder only template-expands module
-/// <em>inputs</em> — node properties (where the parameter map lives) arrive verbatim — so this
-/// layer closes the gap. Values still flow through <see cref="SqlParameterBinder"/> afterwards,
+/// (<c>{{nodeId.port}}</c>). Values still flow through <see cref="SqlParameterBinder"/> afterwards,
 /// so they always bind as parameters and are never concatenated into the SQL (D7)~ ✨.
 /// </summary>
+/// <remarks>
+/// Phase 3.5 (V4) made the engine resolve templates in node <em>properties</em>, which removed the
+/// original reason this existed. It stays because the property rule only reaches <b>top-level
+/// string</b> properties: the parameter map is a <c>Json</c> property, and the tokens live one
+/// level down in its <em>values</em>. The SQL text itself is deliberately never expanded on either
+/// path. The <c>\{\{</c> escape is honoured here too, so the syntax is identical everywhere.
+/// </remarks>
 public static class SqlParameterTemplateResolver
 {
     private const string VariablePrefix = "Variable.";
 
-    private static readonly Regex TokenPattern = new(@"\{\{\s*([^{}]+?)\s*\}\}", RegexOptions.Compiled);
+    /// <summary>The escape sequence for a literal <c>{{</c>, matching <c>PropertyBinder</c>~ 🚪.</summary>
+    private const string EscapedOpenBrace = @"\{\{";
+
+    private static readonly Regex TokenPattern = new(@"(?<!\\)\{\{\s*([^{}]+?)\s*\}\}", RegexOptions.Compiled);
 
     /// <summary>
     /// Resolves tokens in every string value of a parameter map. A value that is exactly one
@@ -46,12 +54,26 @@ public static class SqlParameterTemplateResolver
         Dictionary<string, object?>? resolved = null;
         foreach (var (name, value) in parameters)
         {
-            if (value is not string text || !TokenPattern.IsMatch(text))
+            if (value is not string text)
+            {
+                continue;
+            }
+
+            var hasToken = TokenPattern.IsMatch(text);
+            var hasEscape = text.Contains(EscapedOpenBrace, StringComparison.Ordinal);
+            if (!hasToken && !hasEscape)
             {
                 continue;
             }
 
             resolved ??= new Dictionary<string, object?>(parameters, StringComparer.Ordinal);
+
+            if (!hasToken)
+            {
+                // Only an escaped literal — unescape and move on.
+                resolved[name] = Unescape(text);
+                continue;
+            }
 
             var pure = TokenPattern.Match(text);
             if (pure.Success && pure.Index == 0 && pure.Length == text.Length)
@@ -62,14 +84,19 @@ public static class SqlParameterTemplateResolver
             else
             {
                 // Embedded token(s) → string interpolation~ 🧵
-                resolved[name] = TokenPattern.Replace(
+                resolved[name] = Unescape(TokenPattern.Replace(
                     text,
-                    m => Lookup(name, m.Groups[1].Value, inputs, variables)?.ToString() ?? string.Empty);
+                    m => Lookup(name, m.Groups[1].Value, inputs, variables)?.ToString() ?? string.Empty));
             }
         }
 
         return resolved ?? parameters;
     }
+
+    private static string Unescape(string text)
+        => text.Contains(EscapedOpenBrace, StringComparison.Ordinal)
+            ? text.Replace(EscapedOpenBrace, "{{", StringComparison.Ordinal)
+            : text;
 
     private static object? Lookup(
         string paramName,

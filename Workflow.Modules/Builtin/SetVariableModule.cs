@@ -90,7 +90,8 @@ public partial class SetVariableModule : IWorkflowModule
                 Description: "Value to set. Supports {{Variable.Name}} references. Overridden by connected input~ 💬",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text)));
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true)));
 
     /// <summary>
     /// Validates the variable name format~ ✅.

@@ -66,7 +66,8 @@ public sealed class LinqQueryModule : IWorkflowModule
                 "Named connection id (required — the typed path never takes a raw connection string, C3)~ 📇",
                 IsRequired: true,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 "compiledAssemblyKey",
                 "Compiled Assembly Key",

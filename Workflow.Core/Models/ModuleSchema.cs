@@ -45,6 +45,11 @@ public record ModuleSchema(
 /// <param name="Description">A human-readable description of what this port does. 📝.</param>
 /// <param name="IsRequired">Whether this port must be connected. Default is true for inputs. ✅.</param>
 /// <param name="DefaultValue">The default value if not connected (for optional inputs). 💫.</param>
+/// <param name="SupportsTemplates">
+/// Whether <c>{{…}}</c> references are resolved in this port's value. Defaults to <b>false</b>:
+/// an input's value is data produced by an upstream node or supplied as a run input, never text an
+/// author typed, so expanding it would let untrusted data reference workflow variables. 🛡️.
+/// </param>
 /// <remarks>
 /// <para>
 /// CopilotNote: Ports are different from properties! Ports carry data between nodes,
@@ -58,7 +63,8 @@ public record PortDefinition(
     Type DataType,
     string? Description = null,
     bool IsRequired = true,
-    object? DefaultValue = null)
+    object? DefaultValue = null,
+    bool SupportsTemplates = false)
 {
     /// <summary>
     /// Creates a port definition with name as display name.
@@ -66,9 +72,10 @@ public record PortDefinition(
     /// <param name="name">The port name (also used as display name).</param>
     /// <param name="dataType">The data type.</param>
     /// <param name="isRequired">Whether the port is required.</param>
+    /// <param name="supportsTemplates">Whether <c>{{…}}</c> references are resolved in this port's value.</param>
     /// <returns>A new PortDefinition.</returns>
-    public static PortDefinition Create(string name, Type dataType, bool isRequired = true)
-        => new(name, name, dataType, null, isRequired, null);
+    public static PortDefinition Create(string name, Type dataType, bool isRequired = true, bool supportsTemplates = false)
+        => new(name, name, dataType, null, isRequired, null, supportsTemplates);
 
     /// <summary>
     /// Creates a port definition for a generic type.
@@ -76,9 +83,10 @@ public record PortDefinition(
     /// <typeparam name="T">The data type.</typeparam>
     /// <param name="name">The port name.</param>
     /// <param name="isRequired">Whether the port is required.</param>
+    /// <param name="supportsTemplates">Whether <c>{{…}}</c> references are resolved in this port's value.</param>
     /// <returns>A new PortDefinition.</returns>
-    public static PortDefinition Create<T>(string name, bool isRequired = true)
-        => new(name, name, typeof(T), null, isRequired, null);
+    public static PortDefinition Create<T>(string name, bool isRequired = true, bool supportsTemplates = false)
+        => new(name, name, typeof(T), null, isRequired, null, supportsTemplates);
 }
 
 /// <summary>
@@ -95,11 +103,23 @@ public record PortDefinition(
 /// <param name="AllowedValues">Allowed values for dropdown/enum properties. 🎭.</param>
 /// <param name="ValidationRules">Immutable array of validation rules. 🛡️.</param>
 /// <param name="DisplayMetadata">Additional metadata for UI display. 🎀.</param>
+/// <param name="SupportsTemplates">
+/// Whether <c>{{…}}</c> references (<c>{{Variable.x}}</c>, <c>{{nodeId.port}}</c>, expressions) are
+/// resolved in this property's value at run time. Defaults to <b>false</b> so nothing expands
+/// unless a module author opts in — fields that must stay literal, like SQL text, script bodies and
+/// connection strings, are safe by default. 🔗.
+/// </param>
 /// <remarks>
 /// <para>
 /// CopilotNote: Properties are different from ports! Properties configure the node's
 /// behavior, while ports carry data between nodes. Properties are set at design time,
 /// while port values flow at runtime~ 💖.
+/// </para>
+/// <para>
+/// Phase 3.5 (V4): <paramref name="SupportsTemplates"/> is the single source of truth for template
+/// expansion — the engine uses it to decide what to resolve, and the designer uses it to decide
+/// where to offer the <c>{{x}}</c> picker and ƒx builder. Keeping both on one flag means the UI
+/// can never invite a binding into a field the engine ignores~ ✨.
 /// </para>
 /// </remarks>
 public record ModulePropertyDefinition(
@@ -112,7 +132,8 @@ public record ModulePropertyDefinition(
     PropertyEditorType EditorType = PropertyEditorType.Text,
     Arr<object>? AllowedValues = null,
     Arr<ValidationRule>? ValidationRules = null,
-    HashMap<string, string>? DisplayMetadata = null)
+    HashMap<string, string>? DisplayMetadata = null,
+    bool SupportsTemplates = false)
 {
     /// <summary>
     /// Creates a property definition with name as display name.

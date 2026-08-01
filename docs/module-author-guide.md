@@ -429,11 +429,15 @@ disable / uninstall).
 
 ## Property binding expressions 🧮
 
-Input values may embed `{{ ... }}` templates. Beyond plain `{{Variable.X}}` /
+Property values may embed `{{ ... }}` templates — but only where the module's schema opts in with
+`SupportsTemplates: true`. Fields that must stay literal (SQL text, script bodies, connection
+strings) leave the flag off and are never rewritten, and **input ports default to off** so data
+arriving from an upstream node can't reference workflow variables. Beyond plain `{{Variable.X}}` /
 `{{NodeId.Output}}` references, a template that contains operators, literals, or calls is
 evaluated as a sandboxed JavaScript expression (e.g. `{{Variable.Count > 5}}`,
 `{{Variable.Name + '!'}}`). Whole-template expressions preserve the evaluated type; mixed
-text interpolates to a string; failures surface as binding errors. Full semantics live in
+text interpolates to a string; failures surface as binding errors and fail the node. Write `\{\{`
+for a literal `{{`. Full semantics live in
 [`scripting.md` › Inline expressions in property bindings](scripting.md#inline-expressions-in-property-bindings).
 
 ---

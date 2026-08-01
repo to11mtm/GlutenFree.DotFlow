@@ -49,7 +49,7 @@ public sealed class JsonWriteModule : IWorkflowModule
             new PortDefinition("bytesWritten", "Bytes Written", typeof(long), "Number of bytes written~ 📊", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the write succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "Output JSON file path~ 📂", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("path", "Path", typeof(string), "Output JSON file path~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("data", "Data", typeof(object), "Object graph when not connected via port~ 📄", false, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("indented", "Indented", typeof(bool), "Pretty-print with indentation~ 🎨", false, true, PropertyEditorType.Boolean),
             new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ 🔤", false, "utf-8", PropertyEditorType.Text)));

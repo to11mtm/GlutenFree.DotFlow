@@ -193,7 +193,16 @@
     [Parameter]
     public IReadOnlyList<VariableTokens.TokenOption>? TokenOptions { get; set; }
 
-    private bool SupportsTokens => this.Property.EditorType is "Text" or "Expression" or "MultilineText" or "FilePath" or "DirectoryPath";
+    /// <summary>
+    /// Whether to offer the <c>{{x}}</c> picker and ƒx builder on this field.
+    /// </summary>
+    /// <remarks>
+    /// V4: driven by the module schema's <c>SupportsTemplates</c> flag rather than a hard-coded
+    /// editor-type list. Engine and UI now share one source of truth, so the designer can never
+    /// invite a binding into a field the engine leaves literal — which is exactly what Round 2
+    /// shipped by accident.
+    /// </remarks>
+    private bool SupportsTokens => this.Property.SupportsTemplates;
 
     // ƒx G8 — expression builder modal state.
     private bool builderOpen;

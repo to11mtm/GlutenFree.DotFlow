@@ -62,7 +62,7 @@ public sealed class AzureBlobModule : IWorkflowModule
             new ModulePropertyDefinition("connectionString", "Connection String", typeof(string), "Inline connection string (dev escape hatch)~ 🔐", false, null, PropertyEditorType.ConnectionString),
             new ModulePropertyDefinition("containerName", "Container", typeof(string), "Blob container name~ 🪣", true, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("blobName", "Blob Name", typeof(string), "Blob name (required except list)~ 🏷️", false, null, PropertyEditorType.Text),
-            new ModulePropertyDefinition("localPath", "Local Path", typeof(string), "Local file path (upload/download)~ 📂", false, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("localPath", "Local Path", typeof(string), "Local file path (upload/download)~ 📂", false, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("prefix", "Prefix", typeof(string), "Name prefix filter (list)~ 🏷️", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("createContainer", "Create Container", typeof(bool), "Create the container on upload if missing~ 📁", false, false, PropertyEditorType.Boolean)));
 

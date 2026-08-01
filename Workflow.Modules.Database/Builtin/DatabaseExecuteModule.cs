@@ -83,7 +83,8 @@ public sealed class DatabaseExecuteModule : IWorkflowModule
                 Description: "Named connection id (preferred). Mutually exclusive with connectionString~ 📇",
                 IsRequired: false,
                 DefaultValue: null,
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "connectionString",
                 DisplayName: "Connection String",

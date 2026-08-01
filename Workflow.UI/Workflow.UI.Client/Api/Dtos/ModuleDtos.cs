@@ -84,4 +84,5 @@ public sealed record ModulePropertyDefinitionDto(
     bool IsRequired,
     JsonElement? DefaultValue,
     string EditorType,
-    List<JsonElement>? AllowedValues);
+    List<JsonElement>? AllowedValues,
+    bool SupportsTemplates = false);

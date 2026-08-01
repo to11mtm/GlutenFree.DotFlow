@@ -51,6 +51,11 @@ public sealed record PortDefinitionDto(
 /// <param name="DefaultValue">Optional default value, as JSON.</param>
 /// <param name="EditorType">The UI editor type rendered as a string.</param>
 /// <param name="AllowedValues">Optional allowed values (dropdown/enum), as JSON.</param>
+/// <param name="SupportsTemplates">
+/// Whether <c>{{…}}</c> bindings are resolved in this property at run time. The designer uses this
+/// to decide where to offer the token picker and ƒx builder, so the affordance can never appear on
+/// a field the engine leaves literal~ 🔗.
+/// </param>
 public sealed record ModulePropertyDefinitionDto(
     string Name,
     string DisplayName,
@@ -59,7 +64,8 @@ public sealed record ModulePropertyDefinitionDto(
     bool IsRequired,
     JsonElement? DefaultValue,
     string EditorType,
-    IReadOnlyList<JsonElement>? AllowedValues)
+    IReadOnlyList<JsonElement>? AllowedValues,
+    bool SupportsTemplates = false)
 {
     /// <summary>Projects a <see cref="ModulePropertyDefinition"/> into its DTO~ ⚙️.</summary>
     /// <param name="property">The domain property definition.</param>
@@ -75,7 +81,8 @@ public sealed record ModulePropertyDefinitionDto(
             property.EditorType.ToString(),
             property.AllowedValues is { } allowed
                 ? allowed.Select(v => ModuleJson.ToElement(v) ?? default).ToList()
-                : null);
+                : null,
+            property.SupportsTemplates);
 }
 
 /// <summary>

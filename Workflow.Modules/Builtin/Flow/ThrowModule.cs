@@ -81,7 +81,8 @@ public class ThrowModule : IWorkflowModule
                 Description: "Classification string for the error~ 🏷️",
                 IsRequired: false,
                 DefaultValue: "WorkflowError",
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "message",
                 DisplayName: "Error Message",
@@ -89,7 +90,8 @@ public class ThrowModule : IWorkflowModule
                 Description: "Human-readable error message~ 💬",
                 IsRequired: false,
                 DefaultValue: "An error occurred",
-                EditorType: PropertyEditorType.Text),
+                EditorType: PropertyEditorType.Text,
+                SupportsTemplates: true),
             new ModulePropertyDefinition(
                 Name: "data",
                 DisplayName: "Data",

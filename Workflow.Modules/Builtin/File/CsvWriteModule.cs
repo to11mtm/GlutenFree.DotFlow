@@ -53,7 +53,7 @@ public sealed class CsvWriteModule : IWorkflowModule
             new PortDefinition("rowsWritten", "Rows Written", typeof(int), "Number of data rows written~ 🔢", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the write succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "Output CSV file path~ 📂", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("path", "Path", typeof(string), "Output CSV file path~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("data", "Data", typeof(object), "Array of row dictionaries when not connected via port~ 📄", false, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("includeHeader", "Include Header", typeof(bool), "Write a header row~ 🏷️", false, true, PropertyEditorType.Boolean),
             new ModulePropertyDefinition("delimiter", "Delimiter", typeof(string), "Field delimiter (default ,)~ 📊", false, ",", PropertyEditorType.Text),

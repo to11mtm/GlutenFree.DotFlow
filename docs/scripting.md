@@ -191,6 +191,11 @@ JavaScript expression through the same sandboxed `IExpressionEvaluator` (Jint, 2
 
 Semantics:
 
+- **Where they apply** — templates are resolved in node **properties** whose module schema sets
+  `SupportsTemplates: true`, and in input ports that opt in the same way. Everything else is left
+  byte-for-byte as authored, which is what keeps SQL text, script bodies and connection strings
+  safe. Input ports default to **off**: an input's value is upstream data, not authored text, so
+  expanding it would let a database row or an HTTP response reference your workflow variables.
 - **Pure references keep their fast path** — `{{Variable.User.Name}}` and
   `{{nodeId.output}}` resolve exactly as before (no evaluator involved), so existing
   bindings are unchanged.
@@ -200,8 +205,9 @@ Semantics:
 - **Whole-template** expressions preserve the raw evaluated **type** (a `bool` stays a
   `bool`); **mixed** templates like `Total is {{Variable.Count + 1}}!` interpolate to a
   string.
-- **Failure is never silent** — a parse error, runtime error, or timeout becomes a
-  binding error that names the offending expression.
+- **Failure is never silent** — a parse error, runtime error, unresolvable reference, or timeout
+  becomes a binding error that names the offending expression and **fails the node**. Write
+  `\{\{` when you want a literal `{{` in a template-enabled field.
 - Expression evaluation can be disabled per binder (`enableExpressions: false`), and a
   binder constructed without an evaluator falls back to reference-only (pre-3.1) behavior.
 

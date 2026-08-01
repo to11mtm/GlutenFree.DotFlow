@@ -55,7 +55,7 @@ public sealed class CompressModule : IWorkflowModule
             new PortDefinition("success", "Success", typeof(bool), "Whether compression succeeded~ ✅", false)),
         Properties: Arr.create(
             new ModulePropertyDefinition("sourcePath", "Source Path(s)", typeof(object), "File/dir path or array of paths~ 📂", true, null, PropertyEditorType.Text),
-            new ModulePropertyDefinition("outputPath", "Output Path", typeof(string), "Archive output path~ 📦", true, null, PropertyEditorType.FilePath),
+            new ModulePropertyDefinition("outputPath", "Output Path", typeof(string), "Archive output path~ 📦", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("format", "Format", typeof(string), "zip, gzip, tar, or targz~ 🗜️", true, "zip", PropertyEditorType.Dropdown, Arr.create<object>("zip", "gzip", "tar", "targz")),
             new ModulePropertyDefinition("compressionLevel", "Compression Level", typeof(string), "optimal, fastest, smallestSize, noCompression~ 📐", false, "optimal", PropertyEditorType.Dropdown, Arr.create<object>("optimal", "fastest", "smallestSize", "noCompression")),
             new ModulePropertyDefinition("includeBaseDirectory", "Include Base Directory", typeof(bool), "Prefix entries with the base dir name~ 📁", false, false, PropertyEditorType.Boolean)));

@@ -54,8 +54,8 @@ public sealed class DecompressModule : IWorkflowModule
             new PortDefinition("fileCount", "File Count", typeof(int), "Number of files extracted~ 🔢", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether extraction succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("archivePath", "Archive Path", typeof(string), "Archive file path~ 📦", true, null, PropertyEditorType.FilePath),
-            new ModulePropertyDefinition("outputDirectory", "Output Directory", typeof(string), "Destination directory~ 📂", true, null, PropertyEditorType.DirectoryPath),
+            new ModulePropertyDefinition("archivePath", "Archive Path", typeof(string), "Archive file path~ 📦", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
+            new ModulePropertyDefinition("outputDirectory", "Output Directory", typeof(string), "Destination directory~ 📂", true, null, PropertyEditorType.DirectoryPath, SupportsTemplates: true),
             new ModulePropertyDefinition("format", "Format", typeof(string), "zip, gzip, tar, targz (inferred if omitted)~ 🗜️", false, null, PropertyEditorType.Dropdown, Arr.create<object>("zip", "gzip", "tar", "targz")),
             new ModulePropertyDefinition("overwrite", "Overwrite", typeof(bool), "Overwrite existing files~ ♻️", false, false, PropertyEditorType.Boolean)));
 
