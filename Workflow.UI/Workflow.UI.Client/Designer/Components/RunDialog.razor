@@ -1,0 +1,192 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using System.Text.Json
+@using Workflow.UI.Client.Designer.State
+@inject Workflow.UI.Client.Services.ToastService Toasts
+
+@* ▶️ Phase 3.5 (V5) — the run dialog. It used to be a bare JSON textarea, so starting a run meant
+   already knowing every variable name and its shape. Now it's a form generated from the workflow's
+   declarations, with the raw JSON kept behind a toggle for undeclared inputs. *@
+<div class="df-modal-backdrop" @onclick="Cancel">
+    <div class="df-modal df-rundialog" @onclick:stopPropagation="true" data-testid="run-dialog">
+        <div class="df-rundialog__head">
+            <strong>▶️ Run workflow</strong>
+            <span class="df-vars__spacer"></span>
+            <button class="df-btn df-btn--small @(jsonMode ? string.Empty : "df-btn--primary")"
+                    data-testid="run-mode-form" @onclick="() => SetJsonMode(false)">Form</button>
+            <button class="df-btn df-btn--small @(jsonMode ? "df-btn--primary" : string.Empty)"
+                    data-testid="run-mode-json" title="Supply raw JSON, including inputs the workflow doesn't declare"
+                    @onclick="() => SetJsonMode(true)">JSON</button>
+        </div>
+
+        @if (jsonMode)
+        {
+            <div class="df-label">Run inputs (JSON)</div>
+            <textarea class="df-textarea" @bind="runInputs" data-testid="run-inputs"></textarea>
+            <div class="df-field-help">
+                Anything here wins over the declared defaults. Use this for inputs the workflow doesn't declare.
+            </div>
+        }
+        else if (Variables.Count == 0)
+        {
+            <div class="df-empty" data-testid="run-novars">
+                This workflow declares no variables. Switch to <strong>JSON</strong> to pass ad-hoc inputs.
+            </div>
+        }
+        else
+        {
+            @foreach (var variable in Variables)
+            {
+                <div class="df-field">
+                    <label class="df-label" title="@variable.Description">
+                        @variable.Name
+                        <span class="df-vars__type">@variable.Type</span>
+                        @if (variable.IsSecret)
+                        {
+                            <span class="df-token-badge">🔒</span>
+                        }
+                    </label>
+                    @if (variable.IsSecret)
+                    {
+                        <input class="df-input" type="password" autocomplete="off" data-testid="run-var-@variable.Name"
+                               value="@Value(variable.Name)" @oninput="e => Set(variable.Name, e.Value?.ToString())" />
+                    }
+                    else if (WorkflowVariables.EditorKindFor(variable.Type) == "boolean")
+                    {
+                        <select class="df-input" data-testid="run-var-@variable.Name"
+                                @onchange="e => Set(variable.Name, e.Value?.ToString())">
+                            <option value="" selected="@string.IsNullOrEmpty(Value(variable.Name))">— use default —</option>
+                            <option value="true" selected="@(Value(variable.Name) == "true")">true</option>
+                            <option value="false" selected="@(Value(variable.Name) == "false")">false</option>
+                        </select>
+                    }
+                    else if (WorkflowVariables.EditorKindFor(variable.Type) == "json")
+                    {
+                        <textarea class="df-textarea" spellcheck="false" data-testid="run-var-@variable.Name"
+                                  value="@Value(variable.Name)" @oninput="e => Set(variable.Name, e.Value?.ToString())"></textarea>
+                    }
+                    else
+                    {
+                        <input class="df-input" data-testid="run-var-@variable.Name"
+                               value="@Value(variable.Name)" @oninput="e => Set(variable.Name, e.Value?.ToString())" />
+                    }
+                    @if (!string.IsNullOrWhiteSpace(variable.Description))
+                    {
+                        <div class="df-field-help">@variable.Description</div>
+                    }
+                </div>
+            }
+            <div class="df-field-help" data-testid="run-blank-hint">
+                Leave a field blank to use the value the workflow already has.
+            </div>
+        }
+
+        <div class="df-field">
+            <label class="df-label">Variable writes</label>
+            <select class="df-input" data-testid="run-writemode" @onchange="e => writeMode = e.Value?.ToString() ?? ExecutionScope">
+                <option value="@ExecutionScope" selected="@(writeMode == ExecutionScope)">This run only</option>
+                <option value="workflow" selected="@(writeMode == "workflow")">Save for future runs of this workflow</option>
+                <option value="dual" selected="@(writeMode == "dual")">Both</option>
+            </select>
+            <div class="df-field-help">
+                Controls what happens to variables this run writes — whether they vanish with the run
+                or persist for the next one.
+            </div>
+        </div>
+
+        <div class="df-row" style="margin-top: var(--df-space-3);">
+            <button class="df-btn df-btn--primary" data-testid="run-start" @onclick="Start">Start</button>
+            <button class="df-btn" data-testid="run-cancel" @onclick="Cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const string ExecutionScope = "execution";
+
+    private readonly Dictionary<string, string?> values = new(StringComparer.Ordinal);
+    private bool jsonMode;
+    private bool seeded;
+    private string runInputs = string.Empty;
+    private string writeMode = ExecutionScope;
+
+    /// <summary>The document whose declarations shape the form.</summary>
+    [Parameter, EditorRequired]
+    public DesignerDocument Document { get; set; } = default!;
+
+    /// <summary>Raised with the composed inputs when the user starts the run.</summary>
+    [Parameter]
+    public EventCallback<RunRequest> OnStart { get; set; }
+
+    /// <summary>Raised when the dialog is dismissed.</summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private IReadOnlyList<WorkflowVariable> Variables => WorkflowVariables.List(this.Document);
+
+    protected override void OnParametersSet()
+    {
+        if (this.seeded)
+        {
+            return;
+        }
+
+        this.seeded = true;
+
+        // Pre-fill from the declared initial values so the form shows what the run will actually
+        // use — but never pre-fill a secret, which has no business being displayed.
+        foreach (var variable in this.Variables.Where(v => !v.IsSecret))
+        {
+            this.values[variable.Name] = WorkflowVariables.InitialValueText(variable);
+        }
+    }
+
+    private string? Value(string name) => this.values.TryGetValue(name, out var v) ? v : null;
+
+    private void Set(string name, string? value) => this.values[name] = value;
+
+    private void SetJsonMode(bool json) => this.jsonMode = json;
+
+    private Task Cancel() => this.OnCancel.InvokeAsync();
+
+    private async Task Start()
+    {
+        Dictionary<string, JsonElement> inputs;
+
+        if (this.jsonMode)
+        {
+            try
+            {
+                inputs = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
+                    string.IsNullOrWhiteSpace(this.runInputs) ? "{}" : this.runInputs) ?? new();
+            }
+            catch (JsonException)
+            {
+                Toasts.Error("Run inputs must be a valid JSON object.");
+                return;
+            }
+        }
+        else
+        {
+            inputs = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var variable in this.Variables)
+            {
+                var text = this.Value(variable.Name);
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    // Blank means "don't send it" — the declared default or a stored value applies.
+                    continue;
+                }
+
+                if (WorkflowVariables.InitialValueFrom(text, variable.Type) is not { } element)
+                {
+                    Toasts.Error($"'{variable.Name}' isn't valid {variable.Type}.");
+                    return;
+                }
+
+                inputs[variable.Name] = element;
+            }
+        }
+
+        await this.OnStart.InvokeAsync(new RunRequest(inputs, this.writeMode));
+    }
+}

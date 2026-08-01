@@ -147,9 +147,54 @@ public sealed class RunFlowTests : TestContext
         var toasts = this.Services.GetRequiredService<ToastService>();
         var cut = this.RenderLoaded();
         cut.Find("[data-testid=run]").Click();
+        cut.Find("[data-testid=run-mode-json]").Click();
         cut.Find("[data-testid=run-inputs]").Change("{ not json");
         cut.Find("[data-testid=run-start]").Click();
 
         cut.WaitForAssertion(() => toasts.Toasts.Should().Contain(t => t.Message.Contains("valid JSON")));
+    }
+
+    [Fact]
+    public void Run_SendsTheChosenVariableWriteMode()
+    {
+        // V5.3: the API has always accepted variableWriteMode; the designer never sent it, so
+        // "do this run's writes persist?" had no answer in the UI.
+        string? posted = null;
+        var started = new ExecutionStartedDto(Guid.NewGuid(), "accepted");
+        var modules = new List<ModuleSummaryDto> { new("builtin.http.request", "HTTP", "HTTP", "d", "🌐", "1.0.0") };
+        var details = new ModuleDetailsDto("builtin.http.request", "HTTP", "HTTP", "d", "🌐", "1.0.0",
+            new ModuleSchemaDto(new(), new(), new()), new List<string>());
+
+        var handler = new FakeHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/execute", StringComparison.Ordinal))
+            {
+                posted = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            }
+
+            string body = path switch
+            {
+                "/api/v1/modules" => J(modules),
+                var p when p.StartsWith("/api/v1/modules/", StringComparison.Ordinal) => J(details),
+                var p when p.EndsWith("/execute", StringComparison.Ordinal) => J(started),
+                var p when p.StartsWith("/api/v1/workflows/", StringComparison.Ordinal) => J(Workflow()),
+                _ => "{}",
+            };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };
+        });
+
+        var client = handler.CreateClient();
+        this.Services.AddSingleton(new WorkflowsClient(client));
+        this.Services.AddSingleton(new ModulesClient(client));
+        this.Services.AddSingleton(new ExecutionsClient(client));
+
+        var cut = this.RenderLoaded();
+        cut.Find("[data-testid=run]").Click();
+        cut.Find("[data-testid=run-writemode]").Change("dual");
+        cut.Find("[data-testid=run-start]").Click();
+
+        cut.WaitForAssertion(() => posted.Should().NotBeNull());
+        posted.Should().Contain("dual");
     }
 }

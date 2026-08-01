@@ -21,7 +21,7 @@
 | V2 | Declared variables' `InitialValue` never reaches a run | **Bug** | S | ✅ done |
 | V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ✅ done (V3.5 pending V6/V8/V9) |
 | V4 | `{{…}}` expanded in inputs but not properties; no author control (#3) | **Bug** | L | ✅ done |
-| V5 | Run dialog is a raw JSON blob, not a typed variable form (#1) | UX | M | ☐ |
+| V5 | Run dialog is a raw JSON blob, not a typed variable form (#1) | UX | M | ✅ done |
 | V6 | Globals invisible in the designer's token picker (#2) | UX | S | ☐ |
 | V7 | No lint for unknown / misspelled variable references (#3) | UX | M | ☐ |
 | V8 | No documentation of the variable lifecycle (#1, #2, #3) | Docs | S | ☐ |
@@ -310,13 +310,13 @@ both with one mechanism: an explicit, default-off flag on each side.
 **Finding.** `Designer.razor:88-99` renders a bare `<textarea>`; `StartRun` (`:651-687`) just
 deserialises it. No discovery of names or types.
 
-- [ ] V5.1 Generate a **form** from the declared variables (V1): one field per variable, editor by
+- [x] V5.1 Generate a **form** from the declared variables (V1): one field per variable, editor by
       `PropertyType`, pre-filled with `InitialValue`, description as helper text.
-- [ ] V5.2 Keep a **raw JSON toggle** *(Q5)* for undeclared inputs.
-- [ ] V5.3 Surface `VariableWriteMode` (`execution`/`workflow`/`dual`) as an explicit choice — the
+- [x] V5.2 Keep a **raw JSON toggle** *(Q5)* for undeclared inputs.
+- [x] V5.3 Surface `VariableWriteMode` (`execution`/`workflow`/`dual`) as an explicit choice — the
       API already accepts it (`ExecutionContracts.cs:15-18`) and the UI never sends it. The natural
       place to teach "do this run's writes persist for later runs?".
-- [ ] V5.4 Tests: form generated from declared variables; values serialise into `Inputs`; raw JSON
+- [x] V5.4 Tests: form generated from declared variables; values serialise into `Inputs`; raw JSON
       still works; write-mode round-trips; invalid input surfaces the existing toast.
 
 ## V6 — Show globals in the designer 🌐

@@ -28,11 +28,19 @@ public sealed class ExecutionsClient
     /// <summary>Starts an execution of a workflow~ ▶️.</summary>
     /// <param name="workflowId">The workflow id.</param>
     /// <param name="inputs">Optional initial inputs.</param>
+    /// <param name="variableWriteMode">
+    /// Optional <c>execution</c> (default) / <c>workflow</c> / <c>dual</c> — controls whether
+    /// variables this run writes persist beyond it.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The started-execution result.</returns>
-    public Task<ExecutionStartedDto> ExecuteAsync(Guid workflowId, Dictionary<string, JsonElement>? inputs = null, CancellationToken ct = default)
+    public Task<ExecutionStartedDto> ExecuteAsync(
+        Guid workflowId,
+        Dictionary<string, JsonElement>? inputs = null,
+        string? variableWriteMode = null,
+        CancellationToken ct = default)
     {
-        var body = new StartExecutionRequest(inputs, null);
+        var body = new StartExecutionRequest(inputs, variableWriteMode);
         var request = new HttpRequestMessage(HttpMethod.Post, $"api/v1/workflows/{workflowId}/execute")
         {
             Content = JsonContent.Create(body, options: ApiHttp.Json),

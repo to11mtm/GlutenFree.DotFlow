@@ -87,16 +87,7 @@ else if (document is not null)
 
     @if (showRunDialog)
     {
-        <div class="df-modal-backdrop" @onclick="() => showRunDialog = false">
-            <div class="df-modal" @onclick:stopPropagation="true" data-testid="run-dialog">
-                <div class="df-label">Run inputs (JSON)</div>
-                <textarea class="df-textarea" @bind="runInputs" data-testid="run-inputs"></textarea>
-                <div class="df-row" style="margin-top: var(--df-space-3);">
-                    <button class="df-btn df-btn--primary" data-testid="run-start" @onclick="StartRun">Start</button>
-                    <button class="df-btn" @onclick="() => showRunDialog = false">Cancel</button>
-                </div>
-            </div>
-        </div>
+        <RunDialog Document="document" OnStart="StartRun" OnCancel="() => showRunDialog = false" />
     }
 
     <ContextMenu Visible="menuVisible" X="menuX" Y="menuY" Items="menuItems" OnClose="() => menuVisible = false" />
@@ -648,7 +639,7 @@ else if (document is not null)
         this.OpenRunDialog();
     }
 
-    private async Task StartRun()
+    private async Task StartRun(RunRequest request)
     {
         if (this.document is null)
         {
@@ -657,21 +648,9 @@ else if (document is not null)
 
         this.showRunDialog = false;
 
-        Dictionary<string, JsonElement> inputs;
         try
         {
-            inputs = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
-                string.IsNullOrWhiteSpace(this.runInputs) ? "{}" : this.runInputs) ?? new();
-        }
-        catch (JsonException)
-        {
-            Toasts.Error("Run inputs must be a valid JSON object.");
-            return;
-        }
-
-        try
-        {
-            var started = await Executions.ExecuteAsync(this.document.Id, inputs);
+            var started = await Executions.ExecuteAsync(this.document.Id, request.Inputs, request.VariableWriteMode);
             this.runState = new RunState { ExecutionId = started.ExecutionId };
             this.runState.SetTotalNodes(this.document.Nodes.Count);
             this.runState.Changed += this.OnRunChanged;
