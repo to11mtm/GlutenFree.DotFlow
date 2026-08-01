@@ -53,9 +53,14 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
   the Monaco editor (with a plain-textarea fallback). **Apply** commits your edits.
   Each property label carries a **tooltip** (description + default; ⓘ marker), tall editors
   show a helper line, and an **Outputs** strip lists the node's current output ports.
-  **⤢ Expand** opens the same editor in a larger modal. The `{{x}}` button on text
-  properties inserts a **binding token** — a workflow variable (`{{Variable.name}}`) or an
-  upstream node output (`{{nodeId.port}}`) resolved at run time; bound values show a 🔗 badge.
+  **⤢ Expand** opens the same editor in a larger modal. The `{{x}}` button on
+  template-enabled properties inserts a **binding token** — a workflow variable
+  (`{{Variable.name}}`), a **global** shared across workflows, or an
+  upstream node output (`{{nodeId.port}}`) resolved at run time; bound values show a 🔗 badge,
+  and a binding that can't resolve shows ⚠️ **unresolved** instead. Which fields offer bindings
+  is driven by the module schema's `SupportsTemplates` flag — the same flag the engine uses — so
+  the picker never appears on a field that stays literal. See
+  [Workflow Variables](variables.md) for scopes, precedence and the `\{\{` escape.
   Expression fields — and every other template-supporting field (text, paths, multiline) —
   additionally get an **ƒx builder** modal: pick a source (variable or
   upstream input), an optional comparison operator and value (strings auto-quoted), insert the
@@ -173,7 +178,11 @@ body's uncommitted writes and its writes roll back with everything else.
 
 ## Running (S3)
 
-**▶ Run** opens an inputs dialog (JSON), starts the execution, and enters **run mode**
+**▶ Run** opens an inputs dialog — a form generated from the workflow's declared
+[variables](variables.md) (typed fields, pre-filled with their initial values; leave one blank to
+keep the value the workflow already has), a **JSON** toggle for ad-hoc inputs, and a **Variable
+writes** choice controlling whether variables this run writes persist for future runs. It then
+starts the execution and enters **run mode**
 (editing disabled). Nodes light up live via the SignalR hub: pending → running (pulse) →
 completed/failed, with a progress bar and a run log. **⏹ Cancel** stops it; **✖ Close**
 returns to editing. If the hub can't connect, the designer falls back to polling.

@@ -6,6 +6,7 @@
 @inject Workflow.UI.Client.Api.ApiClientOptions ApiOptions
 @inject Workflow.UI.Client.Services.ILocalStorage Storage
 @inject Workflow.UI.Client.Services.ToastService Toasts
+@using Workflow.UI.Client.Settings.Components
 
 <PageTitle>Settings · DotFlow</PageTitle>
 
@@ -45,6 +46,8 @@
             </div>
         }
     </div>
+
+    <GlobalVariablesPanel />
 </div>
 
 @code {

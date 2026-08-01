@@ -1,0 +1,240 @@
+@namespace Workflow.UI.Client.Settings.Components
+@using System.Text.Json
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Designer.State
+@inject VariablesClient Variables
+@inject Workflow.UI.Client.Services.ToastService Toasts
+
+@* 🌍 Phase 3.5 (V9) — the write surface for global variables. The designer deliberately shows
+   them read-only (Q7); changing a value every workflow can see is an environment action, so it
+   lives here and requires the Admin role. *@
+<div class="df-card df-field" data-testid="gv-panel">
+    <div class="df-vars__title">
+        🌍 Global variables
+        <span class="df-vars__spacer"></span>
+        <button class="df-btn df-btn--small" data-testid="gv-add" disabled="@adminOnly" @onclick="BeginAdd">➕ Variable</button>
+    </div>
+
+    <div class="df-field-help" data-testid="gv-warning">@VariableTokens.GlobalsCredentialWarning</div>
+
+    @if (adminOnly)
+    {
+        <div class="df-field-error" data-testid="gv-admin-only">
+            🔐 Changing global variables requires the Admin role. You can view them, but not edit them.
+        </div>
+    }
+
+    @if (loadError is not null)
+    {
+        <div class="df-field-error" data-testid="gv-load-error">@loadError</div>
+    }
+    else if (loading)
+    {
+        <div class="df-empty">Loading…</div>
+    }
+    else if (variables.Count == 0)
+    {
+        <div class="df-empty" data-testid="gv-empty">No global variables yet.</div>
+    }
+    else
+    {
+        @foreach (var (name, value) in variables.OrderBy(v => v.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            <div class="df-vars__row" data-testid="gv-row-@name">
+                <div class="df-vars__head">
+                    <strong>@name</strong>
+                    <span class="df-vars__spacer"></span>
+                    <button class="df-btn df-btn--small" data-testid="gv-history-@name"
+                            title="Show every stored version" @onclick="() => ShowHistory(name)">🕘</button>
+                    <button class="df-btn df-btn--small" data-testid="gv-edit-@name" disabled="@adminOnly"
+                            title="Edit this value" @onclick="() => BeginEdit(name, value)">✏️</button>
+                    <button class="df-btn df-btn--small df-btn--danger" data-testid="gv-delete-@name" disabled="@adminOnly"
+                            title="Delete this variable and all its history" @onclick="() => Delete(name)">✕</button>
+                </div>
+                <div class="df-vars__default">= @value.GetRawText()</div>
+                @if (historyFor == name)
+                {
+                    <div class="df-token-list" data-testid="gv-history-list">
+                        @foreach (var entry in history)
+                        {
+                            <div class="df-field-help">
+                                v@entry.Version · @entry.UpdatedAt.ToString("u") · @(entry.Value?.GetRawText() ?? "null")
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @if (editing)
+    {
+        <div class="df-vars__form" data-testid="gv-form">
+            <div class="df-field">
+                <label class="df-label">Name</label>
+                <input class="df-input" data-testid="gv-name" readonly="@(editingName is not null)"
+                       value="@formName" @oninput="e => formName = e.Value?.ToString() ?? string.Empty" />
+            </div>
+            <div class="df-field">
+                <label class="df-label">Value (JSON)</label>
+                <textarea class="df-textarea" data-testid="gv-value" spellcheck="false"
+                          value="@formValue" @oninput="e => formValue = e.Value?.ToString()"></textarea>
+                <div class="df-field-help">
+                    A JSON value — <code>"text"</code>, <code>42</code>, <code>true</code>, or an object.
+                </div>
+            </div>
+            @if (formError is not null)
+            {
+                <div class="df-field-error" data-testid="gv-error">@formError</div>
+            }
+            <div class="df-row">
+                <button class="df-btn df-btn--primary" data-testid="gv-save" @onclick="Save">Save</button>
+                <button class="df-btn" data-testid="gv-cancel" @onclick="() => editing = false">Cancel</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly Dictionary<string, JsonElement> variables = new(StringComparer.Ordinal);
+    private List<VariableDto> history = new();
+
+    private bool loading = true;
+    private string? loadError;
+    private bool adminOnly;
+
+    private bool editing;
+    private string? editingName;
+    private string formName = string.Empty;
+    private string? formValue;
+    private string? formError;
+    private string? historyFor;
+
+    protected override Task OnInitializedAsync() => this.Reload();
+
+    private async Task Reload()
+    {
+        this.loading = true;
+        this.loadError = null;
+        try
+        {
+            var all = await Variables.ListAsync();
+            this.variables.Clear();
+            foreach (var (name, value) in all)
+            {
+                this.variables[name] = value;
+            }
+        }
+        catch (ApiException ex)
+        {
+            this.loadError = ex.Error.StatusCode is 401 or 403
+                ? "You don't have permission to view global variables."
+                : ex.Error.Summarize();
+        }
+        catch (Exception)
+        {
+            this.loadError = "The variables service is unavailable.";
+        }
+        finally
+        {
+            this.loading = false;
+        }
+    }
+
+    private void BeginAdd()
+    {
+        this.editing = true;
+        this.editingName = null;
+        this.formName = string.Empty;
+        this.formValue = null;
+        this.formError = null;
+    }
+
+    private void BeginEdit(string name, JsonElement value)
+    {
+        this.editing = true;
+        this.editingName = name;
+        this.formName = name;
+        this.formValue = value.GetRawText();
+        this.formError = null;
+    }
+
+    private async Task Save()
+    {
+        var name = this.formName.Trim();
+        if (!WorkflowVariables.IsValidName(name))
+        {
+            this.formError = "Use a letter or underscore first, then letters, numbers, underscores or dots.";
+            return;
+        }
+
+        if (JsonValues.TryParseJson(this.formValue) is not { } element)
+        {
+            this.formError = "The value isn't valid JSON.";
+            return;
+        }
+
+        try
+        {
+            await Variables.SetAsync(name, element);
+            this.editing = false;
+            Toasts.Success($"Saved '{name}'");
+            await this.Reload();
+        }
+        catch (ApiException ex)
+        {
+            this.HandleWriteFailure(ex);
+        }
+    }
+
+    private async Task Delete(string name)
+    {
+        try
+        {
+            await Variables.DeleteAsync(name);
+            Toasts.Info($"Deleted '{name}'");
+            await this.Reload();
+        }
+        catch (ApiException ex)
+        {
+            this.HandleWriteFailure(ex);
+        }
+    }
+
+    private async Task ShowHistory(string name)
+    {
+        if (this.historyFor == name)
+        {
+            this.historyFor = null;
+            return;
+        }
+
+        try
+        {
+            this.history = await Variables.HistoryAsync(name);
+            this.historyFor = name;
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+    }
+
+    /// <summary>
+    /// V9.3 — react to the server's answer rather than guessing at roles client-side.
+    /// <c>AuthState</c> only knows whether a credential exists, not what it can do, so a 403 is the
+    /// authoritative signal that this credential can read globals but not change them.
+    /// </summary>
+    private void HandleWriteFailure(ApiException ex)
+    {
+        if (ex.Error.StatusCode == 403)
+        {
+            this.adminOnly = true;
+            this.editing = false;
+            return;
+        }
+
+        this.formError = ex.Error.Summarize();
+    }
+}

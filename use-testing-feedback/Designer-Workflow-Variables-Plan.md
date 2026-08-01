@@ -19,13 +19,13 @@
 | --- | --- | --- | --- | --- |
 | V1 | No way to declare workflow variables in the designer (#1) | **Gap** | M | ✅ done |
 | V2 | Declared variables' `InitialValue` never reaches a run | **Bug** | S | ✅ done |
-| V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ✅ done (V3.5 pending V8/V9) |
+| V3 | Global / workflow-scoped stored variables never hydrate into a run (#2) | **Bug** | M | ✅ done |
 | V4 | `{{…}}` expanded in inputs but not properties; no author control (#3) | **Bug** | L | ✅ done |
 | V5 | Run dialog is a raw JSON blob, not a typed variable form (#1) | UX | M | ✅ done |
 | V6 | Globals invisible in the designer's token picker (#2) | UX | S | ✅ done |
-| V7 | No lint for unknown / misspelled variable references (#3) | UX | M | ☐ |
-| V8 | No documentation of the variable lifecycle (#1, #2, #3) | Docs | S | ☐ |
-| V9 | Admin-gated screen for editing global variables (Q7) | Feature | M | ☐ |
+| V7 | No lint for unknown / misspelled variable references (#3) | UX | M | ✅ done |
+| V8 | No documentation of the variable lifecycle (#1, #2, #3) | Docs | S | ✅ done |
+| V9 | Admin-gated screen for editing global variables (Q7) | Feature | M | ✅ done |
 | V10 | Secret variables — **split out**, see the secrets plan (Q9/Q13) | Feature | L | ☐ (separate plan) |
 
 Recommended order: **V1.2 → V1 → V2 → V4 → V3 → V6 → V9 → V7 → V5 → V8**. Per **Q16**, V3 ships
@@ -256,7 +256,7 @@ This is a **pre-existing** defect, not one introduced by V4. It is the reason Q1
 - [x] V3.4 Tests: a global referenced by `{{Variable.x}}`; a workflow-scope value written by a
       previous run with `VariableWriteMode.Workflow` visible in the next run (closing the
       round-trip); full precedence asserted in both seed modes.
-- [ ] V3.5 **Interim credential warning** *(Q16 — ship V3 first, warning-based)*. Globals become
+- [x] V3.5 **Interim credential warning** *(Q16 — ship V3 first, warning-based)*. Globals become
       functional here, before the secrets plan lands, so every surface that shows or accepts a
       global carries a plain "🔒 Not for credentials yet — values are stored and returned in
       plaintext until secret support ships" notice: `docs/variables.md` (V8.1), the designer's
@@ -334,30 +334,30 @@ deserialises it. No discovery of names or types.
 **Finding.** `GraphValidator` has no notion of variables or tokens. With V4 failing hard, catching
 this at design time becomes materially more valuable.
 
-- [ ] V7.1 Scan template-enabled property values for `{{Variable.X}}`; report when `X` is neither
+- [x] V7.1 Scan template-enabled property values for `{{Variable.X}}`; report when `X` is neither
       declared (V1) nor a known global (V6). Also warn on **declared-but-never-assigned** *(Q3)*.
-- [ ] V7.2 Suppress the unknown-name report when an upstream node is a `builtin.setvariable` writing
+- [x] V7.2 Suppress the unknown-name report when an upstream node is a `builtin.setvariable` writing
       that name.
-- [ ] V7.3 Severity: **error** when nothing declares or writes the name (V4 will fail the node);
+- [x] V7.3 Severity: **error** when nothing declares or writes the name (V4 will fail the node);
       **warning** for the ambiguous cases above.
-- [ ] V7.4 **Migration lint** — flag existing property values containing a literal `{{` that no
+- [x] V7.4 **Migration lint** — flag existing property values containing a literal `{{` that no
       longer parses as a valid reference and offer to escape them as `\{\{` *(Q12)*, so V4's
       fail-hard switch doesn't break saved work.
-- [ ] V7.5 Differentiate the 🔗 bound badge: known = neutral, unknown = ⚠️.
-- [ ] V7.6 Tests: unknown name errors; declared name doesn't; upstream `SetVariable` suppresses;
+- [x] V7.5 Differentiate the 🔗 bound badge: known = neutral, unknown = ⚠️.
+- [x] V7.6 Tests: unknown name errors; declared name doesn't; upstream `SetVariable` suppresses;
       declared-but-unassigned warns; literal `{{` offered an escape.
 
 ## V8 — Document the variable lifecycle 📚
 
-- [ ] V8.1 New `docs/variables.md`: the three scopes and when to use each; the **precedence chain**
+- [x] V8.1 New `docs/variables.md`: the three scopes and when to use each; the **precedence chain**
       and `VariableSeedMode`; declaring variables (V1); supplying values at run time (V5);
       referencing them; **exactly which fields expand templates** and which deliberately don't, and
       why; the **`\{\{` escape**; **declaring is a contract** *(Q15)* — declared-but-unset warns,
       undeclared fails — called out explicitly for workflow validation; the **interim "not for
       credentials yet" warning** (V3.5); and a pointer to the secrets plan.
-- [ ] V8.2 Cross-link from `docs/designer.md`, `docs/rest-api.md` (§Variables), `docs/scripting.md`
+- [x] V8.2 Cross-link from `docs/designer.md`, `docs/rest-api.md` (§Variables), `docs/scripting.md`
       and `docs/module-author-guide.md` (the new `SupportsTemplates` flag is module-author-facing).
-- [ ] V8.3 A worked example: a global `apiBaseUrl`, a workflow-scoped `lastRunAt` persisted with
+- [x] V8.3 A worked example: a global `apiBaseUrl`, a workflow-scoped `lastRunAt` persisted with
       `VariableWriteMode.Workflow`, and a per-run `orderId` — one page answering all three feedback
       bullets.
 
@@ -365,19 +365,19 @@ this at design time becomes materially more valuable.
 
 **Finding.** F7.
 
-- [ ] V9.1 Tighten the API: `PUT`/`DELETE /api/v1/variables/{name}` require **`AdminPolicy`** when
+- [x] V9.1 Tighten the API: `PUT`/`DELETE /api/v1/variables/{name}` require **`AdminPolicy`** when
       `scope=global`; workflow/execution scope stays on `WorkflowWritePolicy`. **Breaking change
       accepted** *(Q14)* — no deprecation window.
-- [ ] V9.2 A **Global Variables** section in `Pages/Settings.razor`: list, add, edit, delete, and
+- [x] V9.2 A **Global Variables** section in `Pages/Settings.razor`: list, add, edit, delete, and
       version history (the store already versions every write). Carries the V3.5 interim credential
       warning — this is the *write* surface, so it is where the notice matters most. *(Q16 named
       the docs and the designer's Globals group; I've extended it here because warning on the
       read-only picker but not on the screen that creates globals would be the obvious miss.)*
-- [ ] V9.3 Drive visibility from the 403 response rather than guessing client-side — `AuthState` has
+- [x] V9.3 Drive visibility from the 403 response rather than guessing client-side — `AuthState` has
       no role model today (the UI only knows whether a credential exists, `TopBar.razor:14`).
-- [ ] V9.4 Tests: endpoint policy per scope; UI renders the list; 403 degrades to a clear
+- [x] V9.4 Tests: endpoint policy per scope; UI renders the list; 403 degrades to a clear
       "admin only" message rather than an error toast.
-- [ ] V9.5 Update `docs/rest-api.md:54-55` (the policy table) for the new per-scope rule.
+- [x] V9.5 Update `docs/rest-api.md:54-55` (the policy table) for the new per-scope rule.
 
 ## V10 — Secret variables 🔒 → separate plan
 
@@ -418,6 +418,7 @@ Two consequences worth carrying forward:
 
 ---
 
-*Revision 4, 2026-08-01. Findings F1–F9 verified against the code at that date. No implementation
-has started. **All questions (Q1–Q16) are answered and V1–V9 are unblocked.** V3 ships ahead of the
-secrets plan under the Q16 decision, carrying the V3.5 interim warning.*
+*Revision 5, 2026-08-01. Findings F1–F9 verified against the code. **V1–V9 all complete**; every
+slice ticked. The secrets workstream continues in
+[`Designer-Workflow-Variables-Secrets-Plan.md`](Designer-Workflow-Variables-Secrets-Plan.md), which
+also owns removing the interim "not for credentials yet" warning (S8) once values are protected.*

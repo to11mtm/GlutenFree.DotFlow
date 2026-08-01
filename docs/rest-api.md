@@ -52,9 +52,9 @@ Send `Authorization: Bearer <token>`. Configure validation under `Api:Auth:Jwt`:
 | Policy             | Roles allowed                     | Applied to                                   |
 | ------------------ | --------------------------------- | -------------------------------------------- |
 | `WorkflowRead`     | Admin, Developer, Viewer          | GET workflows/executions/modules/variables   |
-| `WorkflowWrite`    | Admin, Developer                  | POST/PUT workflows, PUT/DELETE variables     |
+| `WorkflowWrite`    | Admin, Developer                  | POST/PUT workflows, PUT/DELETE variables (workflow/execution scope) |
 | `WorkflowExecute`  | Admin, Developer                  | execute / cancel                             |
-| `Admin`            | Admin                             | DELETE workflow                              |
+| `Admin`            | Admin                             | DELETE workflow, PUT/DELETE **global** variables |
 
 When auth is disabled every policy is a no-op. The authenticated caller id flows into execution
 audit (`TriggeredBy`); an unauthenticated request may still set `X-Caller-Id` for dev.
@@ -164,6 +164,16 @@ Scoped by `?scope=global|workflow|execution` (+ `?scopeId=` for workflow/executi
 | `GET /variables/{name}/history`       | All versions                             |
 
 A `null` value is stored as a *present null* entry, distinct from a missing variable (`404`).
+
+See [Workflow Variables](variables.md) for how these scopes layer at run time.
+
+**Writing a `global` variable requires the `Admin` role** — a global is shared by every workflow, so
+changing one is an environment action rather than ordinary authoring. Reads stay on `WorkflowRead`
+(the designer's binding picker depends on them), and `workflow`/`execution` scope writes stay on
+`WorkflowWrite`. Global values are managed from **Settings → Global variables** in the designer.
+
+> 🔒 **Not for credentials yet.** Global values are stored and returned in plaintext until secret
+> support ships. See the secrets plan before putting an API key in one.
 
 ## Scripts 📜 (`/api/v1/scripts`)
 

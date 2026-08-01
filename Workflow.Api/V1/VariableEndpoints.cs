@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -36,6 +37,36 @@ public static class VariableEndpoints
         group.MapDelete("/{name}", DeleteHandler).WithName("DeleteVariable").RequireAuthorization(AuthConstants.WorkflowWritePolicy);
 
         return app;
+    }
+
+    /// <summary>
+    /// 🔐 Phase 3.5 (V9.1) — global-scope writes additionally require <see cref="AuthConstants.AdminPolicy"/>.
+    /// </summary>
+    /// <remarks>
+    /// The route-level policy is <c>WorkflowWrite</c>, which Developers hold — fine for
+    /// workflow/execution scope, but a global variable is environment configuration with blast
+    /// radius across every workflow. The check is done in-handler because the scope arrives as a
+    /// query parameter, and it goes through <see cref="IAuthorizationService"/> rather than a raw
+    /// role test so it honours the same <c>Api:Auth:Require</c> escape hatch as every other policy.
+    /// <para>
+    /// This is a deliberate breaking change (plan Q14): Developer-token automation that manages
+    /// globals will now get a 403.
+    /// </para>
+    /// </remarks>
+    private static async Task<IResult?> RequireAdminForGlobalScope(HttpContext http, VariableScope scope)
+    {
+        if (scope.Kind != VariableScopeKind.Global)
+        {
+            return null;
+        }
+
+        var authorization = http.RequestServices.GetRequiredService<IAuthorizationService>();
+        var result = await authorization.AuthorizeAsync(http.User, AuthConstants.AdminPolicy).ConfigureAwait(false);
+
+        return result.Succeeded
+            ? null
+            : ApiResults.ForbiddenProblem(
+                "Global variables are shared by every workflow, so changing them requires the Admin role.");
     }
 
     private static async Task<IResult> ListHandler(
@@ -131,6 +162,11 @@ public static class VariableEndpoints
             return ApiResults.BadRequestProblem(error);
         }
 
+        if (await RequireAdminForGlobalScope(http, variableScope).ConfigureAwait(false) is { } forbidden)
+        {
+            return forbidden;
+        }
+
         await store.SetVariableAsync(variableScope, name, request?.ToClrValue(), ct).ConfigureAwait(false);
         var entry = await store.GetVariableAsync(variableScope, name, null, ct).ConfigureAwait(false);
         return entry is null
@@ -154,6 +190,11 @@ public static class VariableEndpoints
         if (!TryBuildScope(scope, scopeId, out var variableScope, out var error))
         {
             return ApiResults.BadRequestProblem(error);
+        }
+
+        if (await RequireAdminForGlobalScope(http, variableScope).ConfigureAwait(false) is { } forbidden)
+        {
+            return forbidden;
         }
 
         var deleted = await store.DeleteVariableAsync(variableScope, name, ct).ConfigureAwait(false);

@@ -432,7 +432,8 @@ disable / uninstall).
 Property values may embed `{{ ... }}` templates — but only where the module's schema opts in with
 `SupportsTemplates: true`. Fields that must stay literal (SQL text, script bodies, connection
 strings) leave the flag off and are never rewritten, and **input ports default to off** so data
-arriving from an upstream node can't reference workflow variables. Beyond plain `{{Variable.X}}` /
+arriving from an upstream node can't reference workflow variables. See
+[Workflow Variables](variables.md) for the full picture. Beyond plain `{{Variable.X}}` /
 `{{NodeId.Output}}` references, a template that contains operators, literals, or calls is
 evaluated as a sandboxed JavaScript expression (e.g. `{{Variable.Count > 5}}`,
 `{{Variable.Name + '!'}}`). Whole-template expressions preserve the evaluated type; mixed

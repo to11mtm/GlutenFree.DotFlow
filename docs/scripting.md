@@ -176,6 +176,9 @@ See [REST API › Scripts](rest-api.md#scripts--apiv1scripts) for the full contr
 
 ## Inline expressions in property bindings
 
+> See [Workflow Variables](variables.md) for where values come from and which fields expand
+> templates; this section covers the expression semantics.
+
 Phase 3.1.7 extends the property binder beyond plain references. Any `{{ ... }}` template
 that is **not** a pure `Variable.X` / `NodeId.Output` reference is evaluated as a
 JavaScript expression through the same sandboxed `IExpressionEvaluator` (Jint, 250 ms /

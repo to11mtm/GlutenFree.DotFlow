@@ -45,6 +45,7 @@ public sealed class ShellAndListTests : TestContext
         this.Services.AddSingleton(new WorkflowsClient(client));
         this.Services.AddSingleton(new ExecutionsClient(client));
         this.Services.AddSingleton(new SystemClient(client));
+        this.Services.AddSingleton(new VariablesClient(client));
     }
 
     [Fact]
