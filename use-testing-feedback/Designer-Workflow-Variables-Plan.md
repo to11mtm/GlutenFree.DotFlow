@@ -28,9 +28,25 @@
 | V9 | Admin-gated screen for editing global variables (Q7) | Feature | M | ☐ |
 | V10 | Secret variables — **split out**, see the secrets plan (Q9/Q13) | Feature | L | ☐ (separate plan) |
 
-Recommended order: **V2 → V4 → V1 → V3 → V6 → V9 → V7 → V5 → V8**. Per **Q16**, V3 ships **ahead of**
-the secrets plan, carrying an interim "not for credentials yet" warning (V3.5) that the secrets plan
-removes when it lands.
+Recommended order: **V1.2 → V1 → V2 → V4 → V3 → V6 → V9 → V7 → V5 → V8**. Per **Q16**, V3 ships
+**ahead of** the secrets plan, carrying an interim "not for credentials yet" warning (V3.5) that the
+secrets plan removes when it lands.
+
+### Sequencing notes 🧭
+
+- **V1.2 (the model change) comes first and is tiny.** V2.1 honours `VariableSeedMode`, which V1.2
+  introduces — so V2 cannot be completed before it. Land `VariableSeedMode` + `IsSecret` on
+  `VariableDefinition` as a standalone change, then everything else can proceed in parallel.
+- **Build order ≠ ship order.** V1's panel must not reach users before V2 lands: a UI that lets you
+  declare variables which then silently do nothing is a worse lie than today's absence of UI.
+  Building V1 first is fine and preferable; *releasing* it is gated on V2.
+- **V2's seed-mode logic is inert until V3.** With no store hydration there is no stored value to
+  override, so `SeedOnly` vs `AlwaysOverride` cannot differ. V2 minus the mode comparison is a very
+  small change ("declared `InitialValue` reaches the run"); the mode only becomes meaningful once
+  V3 exists, and its tests belong with V3.4.
+- **V4 is independent of V1–V3** and can run in parallel. Worth knowing: V4 alone revives
+  `{{nodeId.port}}` upstream-output tokens, which involve no variables at all — so a meaningful
+  slice of the dead Round-2 ƒx/token UX starts working without waiting for the variable work.
 
 ---
 
@@ -192,9 +208,11 @@ This is a **pre-existing** defect, not one introduced by V4. It is the reason Q1
       `VariableDefinition` JSON shape, name validation (`^[a-zA-Z_][a-zA-Z0-9_.]*$`, matching
       `SetVariableModule`'s runtime regex), **case-insensitive uniqueness** *(Q6)*, and
       `PropertyType` ↔ editor mapping.
-- [ ] V1.2 Extend `VariableDefinition` (Workflow.Core) with `VariableSeedMode Seed = SeedOnly`
-      *(Q10)* and `bool IsSecret = false` *(Q9 — declaration only here; behaviour in the secrets
-      plan)*. Both are trailing optional record parameters, so existing JSON deserialises unchanged.
+- [ ] V1.2 **Land this first, standalone.** Extend `VariableDefinition` (Workflow.Core) with
+      `VariableSeedMode Seed = SeedOnly` *(Q10)* and `bool IsSecret = false` *(Q9 — declaration only
+      here; behaviour in the secrets plan)*. Both are trailing optional record parameters, so
+      existing JSON deserialises unchanged. V2 depends on this, so it should not be buried inside
+      the panel work.
 - [ ] V1.3 `AddVariableCommand` / `EditVariableCommand` / `RemoveVariableCommand` in `Commands.cs`
       so variable edits are undoable and mark the document dirty like every other edit.
 - [ ] V1.4 Panel UI: list of declared variables (name · type · default · 🔒 · 🔗 usage count),
@@ -213,9 +231,11 @@ This is a **pre-existing** defect, not one introduced by V4. It is the reason Q1
 
 **Finding.** F2.
 
-- [ ] V2.1 In `WorkflowExecutor`, build the initial variable map from declared variables, honouring
-      each variable's `VariableSeedMode` against the values hydrated in V3, with run inputs winning
-      last. Declared-but-unset variables materialise as **null and warn, never fail** *(Q3/Q15)*.
+- [ ] V2.1 In `WorkflowExecutor`, build the initial variable map from declared variables, with run
+      inputs winning last. **Depends on V1.2** for `VariableSeedMode`; the mode comparison itself is
+      inert until V3 supplies stored values to compare against, so it can land as a no-op and be
+      exercised by V3.4. Declared-but-unset variables materialise as **null and warn, never fail**
+      *(Q3/Q15)*.
 - [ ] V2.2 Convert `JsonElement` initial values via the existing `ConvertJsonElement` helper so
       runtime types match the declared `PropertyType`; report a mismatch as a warning.
 - [ ] V2.3 Engine tests: declared default visible to a `GetVariable` node; run input overrides it;
