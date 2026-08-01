@@ -662,6 +662,9 @@ else if (document is not null)
         {
             this.globalVariableNames = null;
         }
+
+        // Globals participate in the binding lint, so re-run it once they're known.
+        this.Revalidate();
     }
 
     private async Task StartRun(RunRequest request)
@@ -1178,7 +1181,11 @@ else if (document is not null)
     {
         if (this.document is not null)
         {
-            this.issues = GraphValidator.Validate(this.document, this.knownModuleIds);
+            // 🧭 V7 — structural issues plus binding issues. Since V4 an unresolvable {{…}} fails
+            // the node, so catching it here turns a run-time failure into a design-time squiggle.
+            this.issues = GraphValidator.Validate(this.document, this.knownModuleIds)
+                .Concat(VariableLint.Validate(this.document, this.globalVariableNames))
+                .ToList();
         }
     }
 

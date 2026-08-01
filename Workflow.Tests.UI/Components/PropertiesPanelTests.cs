@@ -65,6 +65,65 @@ public sealed class PropertiesPanelTests : TestContext
             .Add(x => x.GlobalVariableNames, globals));
 
     [Fact]
+    public void BoundBadge_BecomesAWarningWhenTheBindingCannotResolve()
+    {
+        // V7.5 — a neutral "🔗 bound" badge on a token that will fail the node is worse than no
+        // badge, because it implies everything is wired up.
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text", templates: true) });
+        var (doc, sel, cmd) = Setup(schema);
+        doc.FindNode("n1")!.Properties["url"] = El("\"{{Variable.typo}}\"");
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.FindAll("[data-testid=bound-url]").Should().BeEmpty();
+        cut.Find("[data-testid=unbound-url]").TextContent.Should().Contain("unresolved");
+    }
+
+    [Fact]
+    public void BoundBadge_StaysNeutralWhenTheVariableIsDeclared()
+    {
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text", templates: true) });
+        var (doc, sel, cmd) = Setup(schema);
+        doc.Variables["host"] = El("""{ "name": "host", "type": 0, "initialValue": "x" }""");
+        doc.FindNode("n1")!.Properties["url"] = El("\"{{Variable.host}}\"");
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.Find("[data-testid=bound-url]").Should().NotBeNull();
+        cut.FindAll("[data-testid=unbound-url]").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EscapeQuickFix_IsOfferedWhenNothingInTheValueResolves()
+    {
+        // V7.4 — the migration case: a Mustache template pasted into a templated field would now
+        // fail the node, so offer the escape.
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text", templates: true) });
+        var (doc, sel, cmd) = Setup(schema);
+        doc.FindNode("n1")!.Properties["url"] = El("\"Dear {{customer.name}}\"");
+
+        var cut = this.Render(doc, sel, cmd);
+        cut.Find("[data-testid=escape-braces-url]").Click();
+
+        cut.Find("[data-testid=editor-url]").GetAttribute("value").Should().Be(@"Dear \{\{customer.name}}");
+    }
+
+    [Fact]
+    public void EscapeQuickFix_IsWithheldWhenAnyBindingResolves()
+    {
+        // Escaping a value that also holds a working binding would silently break it.
+        var schema = new ModuleSchemaDto(new(), new(), new List<ModulePropertyDefinitionDto> { Prop("url", "Text", templates: true) });
+        var (doc, sel, cmd) = Setup(schema);
+        doc.Variables["host"] = El("""{ "name": "host", "type": 0, "initialValue": "x" }""");
+        doc.FindNode("n1")!.Properties["url"] = El("\"{{Variable.host}}/{{customer.name}}\"");
+
+        var cut = this.Render(doc, sel, cmd);
+
+        cut.Find("[data-testid=unbound-url]").Should().NotBeNull(because: "one reference still can't resolve");
+        cut.FindAll("[data-testid=escape-braces-url]").Should().BeEmpty();
+    }
+
+    [Fact]
     public void TokenPicker_ShowsGlobalsGroup_WithTheInterimCredentialWarning()
     {
         // V6 + V3.5: globals are referenceable at run time now, so the picker lists them — and

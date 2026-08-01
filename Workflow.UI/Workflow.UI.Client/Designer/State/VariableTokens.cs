@@ -112,7 +112,13 @@ public static class VariableTokens
         return options;
     }
 
-    private static HashSet<string> UpstreamOf(DesignerDocument document, string nodeId)
+    /// <summary>
+    /// Returns every node with a connection path into <paramref name="nodeId"/>~ ⬆️.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="nodeId">The node to walk back from.</param>
+    /// <returns>The transitive upstream node ids.</returns>
+    public static HashSet<string> UpstreamOf(DesignerDocument document, string nodeId)
     {
         var upstream = new HashSet<string>(StringComparer.Ordinal);
         var queue = new Queue<string>();

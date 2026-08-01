@@ -88,7 +88,21 @@
         <div class="df-token-row">
             @if (VariableTokens.ContainsToken(JsonValues.ToText(Value)))
             {
-                <span class="df-token-badge" data-testid="bound-@Property.Name" title="Contains a {{…}} binding resolved at run time">🔗 bound</span>
+                @if (UnresolvableBinding)
+                {
+                    <span class="df-token-badge df-token-badge--bad" data-testid="unbound-@Property.Name"
+                          title="This binding can't resolve — the node will fail at run time">⚠️ unresolved</span>
+                    @if (CanEscapeLiteral)
+                    {
+                        <button type="button" class="df-btn df-btn--small" data-testid="escape-braces-@Property.Name"
+                                title="Treat these braces as literal text instead of a binding"
+                                @onclick="EscapeLiteralBraces">escape as literal</button>
+                    }
+                }
+                else
+                {
+                    <span class="df-token-badge" data-testid="bound-@Property.Name" title="Contains a {{…}} binding resolved at run time">🔗 bound</span>
+                }
             }
             @if (TokenOptions is { Count: > 0 })
             {
@@ -200,6 +214,24 @@
     /// <summary>Pickable binding tokens (variables + upstream outputs); null hides the picker.</summary>
     [Parameter]
     public IReadOnlyList<VariableTokens.TokenOption>? TokenOptions { get; set; }
+
+    /// <summary>
+    /// 🧭 V7 — whether this value contains a <c>{{…}}</c> reference that can't resolve, so the
+    /// badge can say "unresolved" instead of implying everything is wired up.
+    /// </summary>
+    [Parameter]
+    public bool UnresolvableBinding { get; set; }
+
+    /// <summary>
+    /// 🧹 V7.4 — whether the migration quick-fix is safe to offer. Only true when *every* reference
+    /// in the value is unresolvable, so escaping can't silently break a working binding.
+    /// </summary>
+    [Parameter]
+    public bool CanEscapeLiteral { get; set; }
+
+    private Task EscapeLiteralBraces()
+        => this.ValueChanged.InvokeAsync(
+            JsonValues.FromString(VariableLint.EscapeBraces(JsonValues.ToText(this.Value))));
 
     /// <summary>
     /// Whether to offer the <c>{{x}}</c> picker and ƒx builder on this field.

@@ -57,6 +57,8 @@
                                 CodeLanguage="@CodeLanguageFor()"
                                 Error="@ErrorFor(prop)"
                                 TokenOptions="@NodeTokenOptions"
+                                UnresolvableBinding="@IsUnresolvable(prop.Name)"
+                                CanEscapeLiteral="@CanEscapeLiteral(prop.Name)"
                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
             }
         }
@@ -186,6 +188,8 @@
                                                 CodeLanguage="@CodeLanguageFor()"
                                                 Error="@ErrorFor(prop)"
                                                 TokenOptions="@NodeTokenOptions"
+                                UnresolvableBinding="@IsUnresolvable(prop.Name)"
+                                CanEscapeLiteral="@CanEscapeLiteral(prop.Name)"
                                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
                             }
                         }
@@ -308,6 +312,26 @@
         => this.SelectedNode is { } node
             ? VariableTokens.OptionsFor(this.Document, node.Id, this.GlobalVariableNames)
             : null;
+
+    /// <summary>🧭 V7 — whether a property's current value holds a binding that can't resolve~.</summary>
+    private bool IsUnresolvable(string propertyName)
+        => this.SelectedNode is { } node
+           && VariableLint.HasUnresolvableReference(
+               this.Document,
+               node,
+               propertyName,
+               JsonValues.ToText(this.ValueFor(propertyName)),
+               this.GlobalVariableNames);
+
+    /// <summary>🧹 V7.4 — whether escaping the whole value is safe (nothing in it resolves)~.</summary>
+    private bool CanEscapeLiteral(string propertyName)
+        => this.SelectedNode is { } node
+           && VariableLint.AllReferencesUnresolvable(
+               this.Document,
+               node,
+               propertyName,
+               JsonValues.ToText(this.ValueFor(propertyName)),
+               this.GlobalVariableNames);
 
     /// <summary>📤 G6 — the schema description for an output port (tooltip)~.</summary>
     private string? OutputDescriptionFor(string port)
