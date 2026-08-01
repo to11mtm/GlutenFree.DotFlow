@@ -5,11 +5,55 @@
 window.dotflowMonaco = (function () {
     let loaderPromise = null;
 
+    // 🛡️ Monaco injects all of its CSS as <style> elements in <head>, exactly once, when the
+    // AMD module loads. Blazor's enhanced navigation calls synchronizeDomContent(document, ...)
+    // which deletes any <head> child that isn't in the server's response — so those styles are
+    // wiped on the first client-side navigation and Monaco never re-creates them (window.monaco
+    // is already defined, so the loader short-circuits). The result is an unstyled editor until
+    // a full page refresh. We track what Monaco adds to <head> and re-attach it when it is
+    // detached. This also protects any other head-injecting library from the same fate.
+    const trackedHeadNodes = [];
+    let headObserver = null;
+
+    function isStyleNode(node) {
+        return node instanceof Element
+            && (node.tagName === "STYLE" || (node.tagName === "LINK" && node.getAttribute("rel") === "stylesheet"));
+    }
+
+    function reattachDetachedHeadNodes() {
+        for (const node of trackedHeadNodes) {
+            if (!node.isConnected) { document.head.appendChild(node); }
+        }
+    }
+
+    function observeHeadStyles() {
+        if (headObserver || typeof MutationObserver === "undefined") { return; }
+        headObserver = new MutationObserver(function (records) {
+            let needsReattach = false;
+            for (const record of records) {
+                for (const node of record.addedNodes) {
+                    if (isStyleNode(node) && trackedHeadNodes.indexOf(node) < 0) {
+                        trackedHeadNodes.push(node);
+                    }
+                }
+
+                for (const node of record.removedNodes) {
+                    if (trackedHeadNodes.indexOf(node) >= 0) { needsReattach = true; }
+                }
+            }
+
+            // Deferred so we re-attach after Blazor's DOM sync has finished its edit script.
+            if (needsReattach) { queueMicrotask(reattachDetachedHeadNodes); }
+        });
+        headObserver.observe(document.head, { childList: true });
+    }
+
     function loadMonaco() {
-        if (window.monaco) { return Promise.resolve(); }
+        if (window.monaco) { reattachDetachedHeadNodes(); return Promise.resolve(); }
         if (loaderPromise) { return loaderPromise; }
+        observeHeadStyles();
         loaderPromise = new Promise(function (resolve, reject) {
-            const base = "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min";
+            const base = "https://cdn.jsdelivr.net/npm/monaco-editor@0.56.0/min";
             const loader = document.createElement("script");
             loader.src = base + "/vs/loader.js";
             loader.onload = function () {
@@ -38,6 +82,7 @@ window.dotflowMonaco = (function () {
     }
 
     function makeEditor(element, id, value, language, opts, dotnetRef) {
+        reattachDetachedHeadNodes();
         const applied = applyMonacoOptions(opts);
         const editor = window.monaco.editor.create(element, {
             value: value || "",

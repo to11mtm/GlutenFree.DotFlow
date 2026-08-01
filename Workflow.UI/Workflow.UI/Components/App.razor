@@ -8,11 +8,20 @@
     <link rel="stylesheet" href="app.css"/>
     <link rel="stylesheet" href="css/tokens.css"/>
     <link rel="stylesheet" href="Workflow.UI.styles.css"/>
-    <HeadOutlet/>
+    <HeadOutlet @rendermode="RenderModes.InteractiveWasm"/>
 </head>
 
 <body>
-<Routes/>
+@* 🚑 /Error is server-only (it reads HttpContext), so it renders statically outside the
+   interactive router, which only knows about the client assembly's routable pages. *@
+@if (this.IsErrorPage)
+{
+    <Workflow.UI.Components.Pages.Error/>
+}
+else
+{
+    <Routes @rendermode="RenderModes.InteractiveWasm"/>
+}
 <script src="_framework/blazor.web.js"></script>
 <script src="js/canvas.js"></script>
 <script src="js/monaco-interop.js"></script>
@@ -20,3 +29,11 @@
 </body>
 
 </html>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private bool IsErrorPage =>
+        this.HttpContext?.Request.Path.StartsWithSegments("/Error", StringComparison.OrdinalIgnoreCase) == true;
+}
