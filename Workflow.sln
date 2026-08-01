@@ -189,6 +189,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "use-testing-feedback", "use
 		use-testing-feedback\Designer-module-option-editor-concerns.md = use-testing-feedback\Designer-module-option-editor-concerns.md
 		use-testing-feedback\Designer-UX-Feedback-Plan-Round2.md = use-testing-feedback\Designer-UX-Feedback-Plan-Round2.md
 		use-testing-feedback\Designer-LinqStudio-Plan.md = use-testing-feedback\Designer-LinqStudio-Plan.md
+		use-testing-feedback\Designer-F4-F5-SubGraph-Regions.md = use-testing-feedback\Designer-F4-F5-SubGraph-Regions.md
+		use-testing-feedback\Designer-Workflow-Variables.md = use-testing-feedback\Designer-Workflow-Variables.md
+		use-testing-feedback\Designer-Workflow-Variables-Plan.md = use-testing-feedback\Designer-Workflow-Variables-Plan.md
+		use-testing-feedback\Designer-Save-And-Import.md = use-testing-feedback\Designer-Save-And-Import.md
 	EndProjectSection
 EndProject
 Global
