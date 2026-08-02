@@ -82,13 +82,21 @@ Phase 4 is all about production readiness:
 
 ### 4.2 Observability & Monitoring (Week 24)
 
+> **📋 Detailed breakdown:** [`Phase4-2-Observability.md`](Phase4-2-Observability.md) — slices,
+> design decisions, and open questions. Note the reality-check there: **Serilog is already
+> referenced by `Workflow.Api`/`Workflow.Engine` but never wired** (0 usages), `IWorkflowMetrics`
+> and the health/metrics endpoints already exist from Phase 2.7.5, and there is **no** correlation-id
+> handling anywhere yet. The load-bearing decision is **D3** — trace context must travel *in the
+> Akka message*, because `Activity.Current` does not survive `Tell` and naive instrumentation
+> produces traces that silently stop at the engine boundary~ 🔭
+
 **Tasks:**
-- [ ] Implement structured logging (Serilog)
-- [ ] Add OpenTelemetry tracing
-- [ ] Implement Prometheus metrics
-- [ ] Create Grafana dashboards
-- [ ] Add health check endpoints
-- [ ] Implement alerting
+- [ ] Implement structured logging (Serilog) — *wire the existing unused package reference*
+- [ ] Add OpenTelemetry tracing — *context propagated on the message envelope (D3)*
+- [ ] Implement Prometheus metrics — *back the existing `IWorkflowMetrics` seam with a `Meter`*
+- [ ] Create Grafana dashboards — *committed as code under `ops/`*
+- [ ] Add health check endpoints — *exist; audit the liveness/readiness split (D8)*
+- [ ] Implement alerting — *rules + a runbook per alert*
 
 **Metrics:**
 ```
@@ -173,14 +181,28 @@ Phase 4 is all about production readiness:
 
 ### 4.4 High Availability & Clustering (Week 25-26)
 
+> **📋 Detailed breakdown:** [`Phase4-4-Clustering.md`](Phase4-4-Clustering.md) — findings, design
+> decisions, and open questions. Reality check: **`Akka.Cluster` is already referenced with 0
+> usages**, `Akka.Cluster.Sharding` isn't referenced at all, and `ActorSystem.Create("dotflow")` has
+> **no HOCON, remoting or serializer config** (a prepared `MsgPack2Setup` helper with LanguageExt
+> resolvers sits unused). Two blockers dominate the phase: messages carry **arbitrary `object?`
+> payloads** that have never been serialised (F3), and **`LoadSnapshotAsync` is called only from
+> tests** — there is no rehydrate path, so a migrated entity currently has nothing to restore
+> from (F4). See **Q2**: what should happen to an in-flight execution when its node dies defines
+> the HA guarantee we can advertise~ 🏗️
+
 **Tasks:**
-- [ ] Implement Akka.NET clustering
-- [ ] Add cluster sharding for workflows
+- [ ] Implement Akka.NET clustering — *config first: HOCON, remoting, serializers (D1)*
+- [ ] Add cluster sharding for workflows — *entity = **execution**, keyed by `executionId` (D2)*
   - We need to remember to handle the case where a workflow section is part of a database transaction via the Transaction module. For those sections they must always be executed on the same node, otherwise the transaction will fail. This means that we need to implement a way to pin those sections to a node.
-- [ ] Implement cluster singleton for scheduling
-- [ ] Add distributed locking
-- [ ] Implement graceful shutdown
-- [ ] Add health-based routing
+  - **Resolved by D3:** pinning *sections* isn't needed — an execution's whole actor tree is one
+    shard entity, so transaction locality comes for free. Note the current failure mode is
+    **silent** (`AmbientDbTransactions.TryGet` returns null and the node quietly runs outside the
+    transaction), so D10 adds a loud guard regardless.
+- [ ] Implement cluster singleton for scheduling — *webhook dispatch already double-fires on N nodes (F7)*
+- [ ] Add distributed locking — *DB-backed lease, not DistributedData (D7); audit call sites first (Q5)*
+- [ ] Implement graceful shutdown — *drain, don't dump (D8)*
+- [ ] Add health-based routing — *reuses the 4.2.4 readiness check (D9)*
 
 **Clustering:**
 ```csharp
