@@ -113,8 +113,12 @@ public static class WorkflowVariables
         RemoveKnown(fields);
 
         fields["name"] = JsonValues.FromString(variable.Name);
-        fields["type"] = JsonSerializer.SerializeToElement((int)variable.Type);
-        fields["seed"] = JsonSerializer.SerializeToElement((int)variable.Seed);
+
+        // E3 — enum *names*, not ordinals. Workflow definitions are exported to files and reviewed
+        // in pull requests, where `"type": 1` tells a reader nothing. Parsing accepts both forms
+        // (see ReadEnum), so definitions written before this change still load.
+        fields["type"] = JsonValues.FromString(variable.Type.ToString());
+        fields["seed"] = JsonValues.FromString(variable.Seed.ToString());
         fields["isSecret"] = JsonValues.FromBool(variable.IsSecret);
 
         if (!string.IsNullOrWhiteSpace(variable.Description))

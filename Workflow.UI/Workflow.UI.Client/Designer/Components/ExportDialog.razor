@@ -1,0 +1,89 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Designer.State
+
+@* 📤 Phase 3.6 (E1/E6) — export confirmation. Only shown when there's something worth saying:
+   unsaved edits, or credential-shaped property values about to leave the building. *@
+<div class="df-modal-backdrop" @onclick="Cancel">
+    <div class="df-modal df-import" @onclick:stopPropagation="true" data-testid="export-dialog">
+        <div class="df-rundialog__head">
+            <strong>⬇ Export workflow</strong>
+        </div>
+
+        <div class="df-field-help" data-testid="export-filename">
+            Saving as <code>@FileName</code>
+        </div>
+
+        @if (IsDirty)
+        {
+            <div class="df-field-help" data-testid="export-dirty-note">
+                ℹ️ This includes your unsaved changes — the file matches what's on the canvas now.
+            </div>
+        }
+
+        @if (credentials.Count > 0)
+        {
+            <div class="df-field-error" data-testid="export-credential-warning">
+                🔒 @credentials.Count propert@(credentials.Count == 1 ? "y looks" : "ies look")
+                like credentials and would be written to the file in plain text:
+                <ul style="margin: var(--df-space-1) 0 0; padding-left: var(--df-space-4);">
+                    @foreach (var (nodeName, propertyName) in credentials)
+                    {
+                        <li>@nodeName → <code>@propertyName</code></li>
+                    }
+                </ul>
+            </div>
+            <label class="df-vars__check">
+                <input type="checkbox" data-testid="export-redact" checked="@redact"
+                       @onchange="e => redact = e.Value is true" />
+                Blank these values in the exported file
+            </label>
+            <div class="df-field-help">
+                Tip: reference a variable (<code>{{Variable.apiKey}}</code>) instead of typing a
+                secret into a node — bindings export safely.
+            </div>
+        }
+
+        <div class="df-row" style="margin-top: var(--df-space-3);">
+            <button class="df-btn df-btn--primary" data-testid="export-confirm" @onclick="Confirm">Download</button>
+            <button class="df-btn" data-testid="export-cancel" @onclick="Cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<(string NodeName, string PropertyName)> credentials = new();
+    private bool redact = true;
+
+    /// <summary>The workflow about to be exported.</summary>
+    [Parameter, EditorRequired]
+    public WorkflowDto Workflow { get; set; } = default!;
+
+    /// <summary>Whether the document has unsaved edits (shown as a note).</summary>
+    [Parameter]
+    public bool IsDirty { get; set; }
+
+    /// <summary>Raised with the workflow to write (redacted if the user asked).</summary>
+    [Parameter]
+    public EventCallback<WorkflowDto> OnConfirm { get; set; }
+
+    /// <summary>Raised when the dialog is dismissed.</summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private string FileName => WorkflowExport.FileNameFor(this.Workflow?.Name, this.Workflow?.Version);
+
+    protected override void OnParametersSet()
+        => this.credentials = WorkflowExport.FindCredentialProperties(this.Workflow).ToList();
+
+    private Task Cancel() => this.OnCancel.InvokeAsync();
+
+    private Task Confirm()
+    {
+        var payload = this.redact && this.credentials.Count > 0
+            ? WorkflowExport.Redact(this.Workflow)
+            : this.Workflow;
+
+        return this.OnConfirm.InvokeAsync(payload);
+    }
+}

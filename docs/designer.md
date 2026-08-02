@@ -14,6 +14,7 @@ through the public REST endpoints + the SignalR hub — no server-side designer 
 - [Running (S3)](#running-s3)
 - [Execution history (S5)](#execution-history-s5)
 - [Keyboard shortcuts](#keyboard-shortcuts)
+- [Import & export](import-export.md)
 - [Troubleshooting](#troubleshooting)
 
 ---

@@ -162,6 +162,7 @@ phases/                  the phased build roadmap (design breakdowns + status)
 **The web UI**
 - [Visual Designer](designer.md) — building workflows on the canvas
 - [Workflow Variables](variables.md) — scopes, precedence, bindings, and what expands templates
+- [Import & Export](import-export.md) — saving workflows to files and loading them back
 - [Designer Architecture & React-Port Guide](designer-architecture.md) — the framework-free boundary
 - [Script Studio](script-studio.md) — writing/testing/managing scripts
 - [Linq Studio](linq-studio.md) — typed LINQ query authoring with a table catalog

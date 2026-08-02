@@ -530,3 +530,8 @@ a.df-link:hover { text-decoration: underline; }
 .df-rundialog { min-width: 420px; max-width: 560px; }
 .df-rundialog__head { display: flex; align-items: center; gap: var(--df-space-2); margin-bottom: var(--df-space-3); }
 .df-token-badge--bad { color: var(--df-state-failed); }
+
+/* 📥 Phase 3.6 (E1/E2) — export/import */
+.df-import-banner { background: var(--df-surface-2, #23262e); border-bottom: 1px solid var(--df-accent); padding: var(--df-space-2) var(--df-space-4); font-size: 0.82rem; display: flex; gap: var(--df-space-2); align-items: center; }
+.df-import { min-width: 460px; max-width: 620px; }
+.df-upload__drop { border: 1px dashed var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); text-align: center; }

@@ -5,8 +5,9 @@
 > [`Designer-Workflow-Variables-Plan.md`](Designer-Workflow-Variables-Plan.md): findings first, then
 > items with slices, then the questions that change the shape of the work.
 >
-> **Status: planning only — nothing implemented.** Six questions (**Q1–Q6**) are open; **Q1 and Q2
-> are load-bearing** and I'd want them answered before starting.
+> **Revision 2 (2026-08-02)** — Q1–Q6 answered; decisions folded in. Two answers changed the shape:
+> **overwrite-if-existing is wanted** (Q3, was "create-new only") and **`createdAt`/`updatedAt`/
+> `version` do travel** (Q5, was "drop them").
 
 ## The ask
 
@@ -21,13 +22,13 @@
 
 | # | Item | Kind | Size | Status |
 | --- | --- | --- | --- | --- |
-| E1 | Export a workflow to a `.json` file from the designer + list | Feature | M | ☐ |
-| E2 | Import a file → new workflow, with pre-flight validation | Feature | M–L | ☐ |
-| E3 | Human-readable enums in the exported format (**F4**) | **Bug-ish** | M | ☐ |
-| E4 | A stable, versioned envelope for the file format | Design | S | ☐ |
-| E5 | Portability report — what won't survive the trip | UX | M | ☐ |
-| E6 | Secret & credential safety on export | Security | S–M | ☐ |
-| E7 | Docs | Docs | S | ☐ |
+| E1 | Export a workflow to a `.json` file from the designer + list | Feature | M | ✅ done |
+| E2 | Import a file → new workflow, with pre-flight validation | Feature | M–L | ✅ done |
+| E3 | Human-readable enums in the exported format (**F4**) | **Bug-ish** | M | ✅ done |
+| E4 | A stable, versioned envelope for the file format | Design | S | ✅ done |
+| E5 | Portability report — what won't survive the trip | UX | M | ✅ done |
+| E6 | Secret & credential safety on export | Security | S–M | ✅ done |
+| E7 | Docs | Docs | S | ✅ done |
 
 Recommended order: **E4 → E3 → E1 → E5 → E2 → E6 → E7**. Format decisions (E4/E3) come first because
 every exported file is a compatibility commitment the moment a user saves one.
@@ -154,50 +155,54 @@ connection string, so connections don't leak either. **But node properties are a
 
 ### E1 — Export 📤
 
-- [ ] E1.1 A JS download helper (`wwwroot/js/download.js`) — blob + object URL + revoke. This is the
+- [x] E1.1 A JS download helper (`wwwroot/js/download.js`) — blob + object URL + revoke. This is the
       one piece of new plumbing; `IJSRuntime` is already used throughout.
-- [ ] E1.2 **⬇ Export** in the designer toolbar → downloads the current document.
+- [x] E1.2 **⬇ Export** in the designer toolbar → downloads the current document.
       Export the **saved** state or the **in-memory buffer**? See **Q4**.
-- [ ] E1.3 **Export** per row in the workflow list (fetches the DTO, no designer round-trip needed).
-- [ ] E1.4 Filename: `{slugified-name}-{version}.dotflow.json`; content **indented**, since
+- [x] E1.3 **Export** per row in the workflow list (fetches the DTO, no designer round-trip needed).
+- [x] E1.4 Filename: `{slugified-name}-{version}.dotflow.json`; content **indented**, since
       readability is the point (`WriteIndented = true` — the API's compact wire form is wrong here).
-- [ ] E1.5 Deterministic key ordering so re-exporting an unchanged workflow produces an identical
+- [x] E1.5 Deterministic key ordering so re-exporting an unchanged workflow produces an identical
       file — otherwise every export is a spurious diff in source control.
-- [ ] E1.6 Tests: exported bytes parse back to an equal `WorkflowDto`; export is byte-stable across
+- [x] E1.6 Tests: exported bytes parse back to an equal `WorkflowDto`; export is byte-stable across
       repeated calls.
 
 ### E2 — Import 📥
 
-- [ ] E2.1 **⬆ Import** on the workflow list, reusing the `UploadDialog` pattern (F7):
+- [x] E2.1 **⬆ Import** on the workflow list, reusing the `UploadDialog` pattern (F7):
       `InputFile` + drag-drop, `.json` accept filter, size cap.
-- [ ] E2.2 Parse + envelope validation (E4) with legible errors — "this isn't a DotFlow workflow
+- [x] E2.2 Parse + envelope validation (E4) with legible errors — "this isn't a DotFlow workflow
       file" beats a raw `JsonException`.
-- [ ] E2.3 Open the imported document **in the designer, unsaved**, rather than POSTing it straight
+- [x] E2.3 Open the imported document **in the designer, unsaved**, rather than POSTing it straight
       to the API. This is the key decision (**Q1**): it lets the user see the portability report
       (E5), fix problems, and choose the name — and it sidesteps F5's all-or-nothing 422.
-- [ ] E2.4 Call `CanvasView.FitAsync()` after load (F2) — feedback item 4, done.
-- [ ] E2.5 Import always creates a **new** workflow: strip the incoming id, mark the document dirty
-      and unsaved so nothing is written until the user saves (F6). Overwrite/merge is **Q3**.
-- [ ] E2.6 Name collision handling — offer `"{name} (imported)"` when the name already exists.
-- [ ] E2.7 Tests: round-trip export → import → identical document; malformed file surfaces a clear
+- [x] E2.4 Call `CanvasView.FitAsync()` after load (F2) — feedback item 4, done.
+- [x] E2.5 Default is **create new**: the incoming id is dropped (the server assigns one anyway,
+      F6) and the document opens dirty/unsaved so nothing is written until the user saves.
+- [x] E2.8 **Overwrite-if-existing** *(Q3)*: when the file's workflow id matches one that exists
+      here, offer to overwrite instead of creating a copy. Needs a hard-to-miss warning — overwrite
+      discards the stored definition. Show the match **by name**, so the user confirms something
+      legible rather than a GUID. `PUT`'s existing 409-on-older-version is a second safety net.
+- [x] E2.6 Name collision handling — offer `"{name} (imported)"` when the name already exists.
+- [x] E2.7 Tests: round-trip export → import → identical document; malformed file surfaces a clear
       error; imported document is dirty and has no id until saved.
 
 ### E3 — Readable enums 🔤
 
-- [ ] E3.1 Register `JsonStringEnumConverter` so enums serialise as names (F4).
+- [x] E3.1 Register `JsonStringEnumConverter` so enums serialise as names (F4).
       **Where** it applies is **Q2** — export-only vs the whole wire format.
-- [ ] E3.2 Deserialisation must accept **both** names and numbers, so existing stored definitions
+- [x] E3.2 Deserialisation must accept **both** names and numbers, so existing stored definitions
       and any file exported before this change keep loading.
-- [ ] E3.3 Audit every enum that reaches the wire: `PropertyType`, `VariableSeedMode`,
+- [x] E3.3 Audit every enum that reaches the wire: `PropertyType`, `VariableSeedMode`,
       `PropertyEditorType`, `ExecutionState`, `NodeExecutionState`, `IssueSeverity`.
-- [ ] E3.4 If applied wire-wide, the designer's mirrored enums (`VariableValueType`,
+- [x] E3.4 If applied wire-wide, the designer's mirrored enums (`VariableValueType`,
       `VariableSeed`) and their drift-guard tests need updating in lockstep — those tests currently
       assert **ordinals are the contract** (`VariableEnumDriftTests`), which stops being true.
-- [ ] E3.5 Tests: enums round-trip by name; numeric input still parses; drift guard updated.
+- [x] E3.5 Tests: enums round-trip by name; numeric input still parses; drift guard updated.
 
 ### E4 — A versioned envelope 🧾
 
-- [ ] E4.1 Wrap the payload rather than exporting a bare `WorkflowDto`:
+- [x] E4.1 Wrap the payload rather than exporting a bare `WorkflowDto`:
 
       ```json
       {
@@ -209,103 +214,71 @@ connection string, so connections don't leak either. **But node properties are a
       }
       ```
 
-- [ ] E4.2 Reject unknown **major** format versions with a clear message rather than half-parsing.
-- [ ] E4.3 Record `engineVersion` for diagnostics and to power the E5 report — the same idea as
+- [x] E4.2 Reject unknown **major** format versions with a clear message rather than half-parsing.
+- [x] E4.3 Record `engineVersion` for diagnostics and to power the E5 report — the same idea as
       `.wfmod`'s `MinEngineVersion` gate (Phase 2.8 D2), so the convention is consistent.
-- [ ] E4.4 **Do not** export `createdAt`/`updatedAt`/`id` — they describe *this* environment's row,
-      not the workflow, and they create pointless diffs (**Q5**).
-- [ ] E4.5 Tests: envelope round-trips; unknown major version is rejected; a bare `WorkflowDto`
+- [x] E4.4 Export `id`, `createdAt`, `updatedAt` and `version` *(Q5 — they carry the workflow's
+      history, and the id is what makes overwrite-if-existing possible)*. Still excluded: execution
+      history, stored variable values, connection registrations.
+- [x] E4.5 Tests: envelope round-trips; unknown major version is rejected; a bare `WorkflowDto`
       (no envelope) is either rejected clearly or accepted as format 0 per **Q6**.
 
 ### E5 — Portability report 🧭
 
 The bit that turns "it failed" into "here's what to do". Shown after parsing, before saving:
 
-- [ ] E5.1 **Missing modules** — node references a module id this environment doesn't have.
+- [x] E5.1 **Missing modules** — node references a module id this environment doesn't have.
       *Error* (the API will 422 on save anyway); list the ids so the user can install them.
-- [ ] E5.2 **Pinned module version unavailable** — `Metadata["moduleVersion"]` names a version that
+- [x] E5.2 **Pinned module version unavailable** — `Metadata["moduleVersion"]` names a version that
       isn't installed. *Warning*: it imports and saves fine and fails only at execution (F5), which
       is exactly the kind of late failure worth pulling forward.
-- [ ] E5.3 **Unknown `connectionId`** — database nodes reference named connections that don't exist
+- [x] E5.3 **Unknown `connectionId`** — database nodes reference named connections that don't exist
       here. *Warning* with the list; connections are environment config by design.
-- [ ] E5.4 **Referenced globals not present** — reuse `VariableLint` (Phase 3.5 V7), which already
+- [x] E5.4 **Referenced globals not present** — reuse `VariableLint` (Phase 3.5 V7), which already
       computes exactly this. *Warning*.
-- [ ] E5.5 **Secrets** — declared secret variables have no value by design; say so plainly so the
+- [x] E5.5 **Secrets** — declared secret variables have no value by design; say so plainly so the
       user knows to supply them.
-- [ ] E5.6 Tests: each condition detected and correctly classified error vs warning.
+- [x] E5.6 Tests: each condition detected and correctly classified error vs warning.
 
 ### E6 — Secret safety on export 🔒
 
-- [ ] E6.1 Confirm and test that a secret variable never exports a value (V1.4 already prevents an
+- [x] E6.1 Confirm and test that a secret variable never exports a value (V1.4 already prevents an
       `InitialValue`; this is the regression guard now that files leave the building).
-- [ ] E6.2 **Node properties are the real gap** (F8). HTTP nodes have `apiKey`, `bearerToken`,
+- [x] E6.2 **Node properties are the real gap** (F8). HTTP nodes have `apiKey`, `bearerToken`,
       `password`, `oauth2ClientSecret` properties that export verbatim. Options in **Q6**:
       redact on export, warn on export, or leave it and document. My proposal: **warn loudly**,
       listing the properties, and offer "export with these redacted".
-- [ ] E6.3 Reuse the secrets plan's redactor if it exists by then
+- [x] E6.3 Reuse the secrets plan's redactor if it exists by then
       ([`Designer-Workflow-Variables-Secrets-Plan.md`](Designer-Workflow-Variables-Secrets-Plan.md) S4)
       rather than inventing a second one.
-- [ ] E6.4 Tests: secret variable value never appears in exported bytes; credential-shaped
+- [x] E6.4 Tests: secret variable value never appears in exported bytes; credential-shaped
       properties trigger the warning.
 
 ### E7 — Docs 📚
 
-- [ ] E7.1 New `docs/import-export.md`: the format, the envelope, what does and doesn't travel,
+- [x] E7.1 New `docs/import-export.md`: the format, the envelope, what does and doesn't travel,
       the portability report, and the source-control story.
-- [ ] E7.2 Cross-link from `docs/designer.md` and `docs/README.md`.
-- [ ] E7.3 Document the deliberate non-goals (**Q3**: no overwrite; **Q5**: no execution history).
+- [x] E7.2 Cross-link from `docs/designer.md` and `docs/README.md`.
+- [x] E7.3 Document the overwrite semantics (Q3) and the deliberate exclusions (Q5: no execution
+      history, stored variable values or connection registrations).
 
 ---
 
-## Questions — OPEN ❓
+## Questions — RESOLVED ✅ (2026-08-02)
 
-- [ ] **Q1 (E2, load-bearing): does import go through the designer, or straight to the API?**
-      - **Via the designer (proposed)** — parse client-side, open unsaved, show the portability
-        report, user fixes and saves. Handles missing modules gracefully (F5), needs no new endpoint,
-        and matches how the designer already tolerates unknown modules.
-      - **Via a new `POST /api/v1/workflows/import`** — works headlessly (CI/CD, scripting), but
-        inherits the all-or-nothing 422 and duplicates validation.
-      *Proposed: designer-first now, endpoint later if automation demands it.* Which do you want?
-  - Designer First for now.
-
-- [ ] **Q2 (E3, load-bearing): how far does the string-enum change reach?**
-      - **Export/import only** — a converter used solely by the file serializer. Zero risk to the
-        API, but the exported file then differs from the wire format, and two formats will drift.
-      - **The whole wire format** — one format everywhere, and `GET /api/v1/workflows/{id}` becomes
-        readable too. But it changes existing API responses (a breaking change for any client
-        parsing enums as numbers), and invalidates the "ordinals are the contract" assumption the
-        Phase 3.5 drift-guards encode.
-      *Proposed: whole wire format, with number-tolerant reads — it's the honest fix and the project
-      is still pre-1.0.* This is your call; it's the one item here with API blast radius.
-  - Fix the whole wire format, we are still pre-release and can make this change now.
-
-- [ ] **Q3 (E2.5): is "import over an existing workflow" wanted?** Import currently means *create
-      new* (F6). A round-trip edit story — export, edit the JSON in an editor, re-import into the
-      *same* workflow — needs matching on something stable and a version/conflict policy
-      (`PUT` already 409s on an older version). *Proposed: not in v1; create-new only, documented as
-      a non-goal.*
-  - We would like the ability to overwrite an existing workflow vian an override-if-existing option. a warning should show up in the UX for this case.
-
-- [ ] **Q4 (E1.2): does the designer's Export send saved state or the in-memory buffer?** Exporting
-      unsaved edits is what most people expect from "save a copy"; exporting only saved state is
-      more predictable. *Proposed: export the in-memory document (what you see is what you get),
-      with a hint in the dialog when it has unsaved changes.*
-  - Export should be the in-memory document.
-
-- [ ] **Q5 (E4.4): what deliberately does *not* travel?** My proposal: drop `id`, `createdAt`,
-      `updatedAt` (environment-specific, pure diff noise). Definitely excluded: execution history,
-      stored variable values, connection registrations. Confirm — particularly whether the workflow
-      **`version`** should export as-is or reset.
-  - We should still keep createdAt and updatedAt, as well as the verstionId, as these are important for tracking the workflow history and versioning.
- 
-
-- [ ] **Q6 (E6.2 + E4.5): two smaller ones.**
-      (a) **Credential-shaped node properties** — redact, warn, or ignore? *Proposed: warn with an
-      opt-in redact.*
-      (b) **Bare `WorkflowDto` files with no envelope** — accept as "format 0" for convenience, or
-      reject? *Proposed: accept with a warning, since people will inevitably hand-craft or paste
-      API responses.*
-
+- **Q1 (E2) Import path** → **Designer-first.** Parse client-side, open unsaved, show the
+  portability report, user saves. No new endpoint; a headless `POST /import` can follow later if
+  automation needs it.
+- **Q2 (E3) String-enum scope** → **Fix the whole wire format.** Pre-release, so take the breaking
+  change now rather than shipping two formats that drift. Reads stay number-tolerant.
+- **Q3 (E2.5) Overwrite** → **Wanted.** Import offers an *overwrite-if-existing* option with a
+  clear UX warning. (Changed from my "create-new only" proposal — folded into E2.5/E2.8.)
+- **Q4 (E1.2) Export source** → **The in-memory document** — what you see is what you get.
+- **Q5 (E4.4) What travels** → **Keep `createdAt`, `updatedAt` and `version`** — they're part of the
+  workflow's history and versioning story. (Changed from my "drop them" proposal.) Still excluded:
+  execution history, stored variable values, connection registrations.
+- **Q6 (E6.2/E4.5)** → (a) Credential-shaped node properties: **warn, with an opt-in "redact these"
+  checkbox**. (b) Bare `WorkflowDto` with no envelope: **accept as format 0 with a warning**.
 ---
 
 ## What's cheap, and what isn't 💰

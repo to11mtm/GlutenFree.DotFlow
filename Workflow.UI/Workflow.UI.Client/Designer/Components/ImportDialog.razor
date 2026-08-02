@@ -1,0 +1,231 @@
+@namespace Workflow.UI.Client.Designer.Components
+@using System.Text.Json
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Designer.State
+@inject ModulesClient Modules
+@inject WorkflowsClient Workflows
+@inject Workflow.UI.Client.Api.VariablesClient Variables
+
+@* 📥 Phase 3.6 (E2/E5) — import a workflow file. Parses client-side and shows a portability report
+   *before* anything is written, because the API's validator would otherwise refuse the whole
+   workflow with a 422 and no explanation of which module is missing. *@
+<div class="df-modal-backdrop" @onclick="Cancel">
+    <div class="df-modal df-import" @onclick:stopPropagation="true" data-testid="import-dialog">
+        <div class="df-rundialog__head">
+            <strong>📥 Import workflow</strong>
+        </div>
+
+        @if (workflow is null)
+        {
+            <div class="df-upload__drop" data-testid="import-drop">
+                <InputFile OnChange="OnFileSelected" accept=".json" data-testid="import-file" />
+                <div class="df-field-help">
+                    Choose a <code>.dotflow.json</code> file exported from DotFlow.
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="df-field">
+                <label class="df-label">Name</label>
+                <input class="df-input" data-testid="import-name"
+                       value="@name" @oninput="e => name = e.Value?.ToString() ?? string.Empty" />
+            </div>
+
+            <div class="df-field-help" data-testid="import-summary">
+                @workflow.Nodes.Count node@(workflow.Nodes.Count == 1 ? "" : "s") ·
+                @workflow.Connections.Count connection@(workflow.Connections.Count == 1 ? "" : "s") ·
+                @(workflow.Variables?.Count ?? 0) variable@((workflow.Variables?.Count ?? 0) == 1 ? "" : "s")
+            </div>
+
+            @if (existing is not null)
+            {
+                @* E2.8 / Q3 — overwrite is destructive, so it is opt-in and loudly labelled. *@
+                <div class="df-field-error" data-testid="import-overwrite-warning">
+                    ⚠️ A workflow with this id already exists here: <strong>@existing.Name</strong>.
+                    @if (overwrite)
+                    {
+                        <span> Importing will <strong>replace its saved definition</strong>. This can't be undone.</span>
+                    }
+                    else
+                    {
+                        <span> A separate copy will be created.</span>
+                    }
+                </div>
+                <label class="df-vars__check">
+                    <input type="checkbox" data-testid="import-overwrite" checked="@overwrite"
+                           @onchange="e => overwrite = e.Value is true" />
+                    Overwrite '@existing.Name' instead of creating a copy
+                </label>
+            }
+
+            @foreach (var warning in fileWarnings)
+            {
+                <div class="df-field-help" data-testid="import-file-warning">ℹ️ @warning</div>
+            }
+
+            @if (report.Count > 0)
+            {
+                <div class="df-label" style="margin-top: var(--df-space-3);">Before you import</div>
+                <div class="df-token-list" data-testid="import-report">
+                    @foreach (var issue in report)
+                    {
+                        <div class="@(issue.Severity == IssueSeverity.Error ? "df-field-error" : "df-field-help")">
+                            @(issue.Severity == IssueSeverity.Error ? "❌" : "⚠️") @issue.Message
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (blocked)
+            {
+                <div class="df-field-help" data-testid="import-blocked-note">
+                    You can still open it in the designer to look around — you just won't be able to
+                    save until the missing modules are installed.
+                </div>
+            }
+        }
+
+        @if (error is not null)
+        {
+            <div class="df-field-error" data-testid="import-error">@error</div>
+        }
+
+        <div class="df-row" style="margin-top: var(--df-space-3);">
+            <button class="df-btn df-btn--primary" data-testid="import-open"
+                    disabled="@(workflow is null)" @onclick="Open">Open in designer</button>
+            <button class="df-btn" data-testid="import-cancel" @onclick="Cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const long MaxBytes = 10 * 1024 * 1024;
+
+    private WorkflowDto? workflow;
+    private WorkflowSummaryDto? existing;
+    private IReadOnlyList<GraphIssue> report = Array.Empty<GraphIssue>();
+    private IReadOnlyList<string> fileWarnings = Array.Empty<string>();
+    private string name = string.Empty;
+    private bool overwrite;
+    private bool blocked;
+    private string? error;
+
+    /// <summary>Raised with the parsed workflow when the user opens it.</summary>
+    [Parameter]
+    public EventCallback<WorkflowImportRequest> OnImport { get; set; }
+
+    /// <summary>Raised when the dialog is dismissed.</summary>
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private Task Cancel() => this.OnCancel.InvokeAsync();
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        this.error = null;
+        var file = e.File;
+        if (file is null)
+        {
+            return;
+        }
+
+        if (file.Size > MaxBytes)
+        {
+            this.error = $"That file is {file.Size / 1024 / 1024} MB — the limit is {MaxBytes / 1024 / 1024} MB.";
+            return;
+        }
+
+        string json;
+        try
+        {
+            using var reader = new StreamReader(file.OpenReadStream(MaxBytes));
+            json = await reader.ReadToEndAsync();
+        }
+        catch (Exception ex)
+        {
+            this.error = $"Couldn't read the file — {ex.Message}";
+            return;
+        }
+
+        var result = WorkflowExport.Read(json);
+        if (!result.Success)
+        {
+            this.error = result.Error;
+            return;
+        }
+
+        this.workflow = result.Workflow;
+        this.fileWarnings = result.Warnings;
+        this.name = this.workflow!.Name;
+        await this.BuildReport();
+    }
+
+    private async Task BuildReport()
+    {
+        if (this.workflow is null)
+        {
+            return;
+        }
+
+        var knownModuleIds = new HashSet<string>(StringComparer.Ordinal);
+        var versions = new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var module in await Modules.ListAsync())
+            {
+                knownModuleIds.Add(module.Id);
+                versions[module.Id] = new[] { module.Version };
+            }
+        }
+        catch (Exception)
+        {
+            // Can't reach the registry — report what we can rather than blocking the import.
+        }
+
+        IReadOnlyCollection<string>? globals = null;
+        try
+        {
+            globals = (await Variables.ListAsync()).Keys.ToList();
+        }
+        catch (Exception)
+        {
+            // Globals unknown — ImportReport treats null as "couldn't check", not "none exist".
+        }
+
+        this.report = ImportReport.Build(this.workflow, knownModuleIds, versions, null, globals);
+        this.blocked = ImportReport.HasBlockers(this.report);
+
+        await this.FindExisting();
+    }
+
+    private async Task FindExisting()
+    {
+        if (this.workflow is null || this.workflow.Id == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            var page = await Workflows.ListAsync(page: 1, pageSize: 200);
+            this.existing = page.Items.FirstOrDefault(w => w.Id == this.workflow.Id);
+        }
+        catch (Exception)
+        {
+            this.existing = null;
+        }
+    }
+
+    private Task Open()
+    {
+        if (this.workflow is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var named = this.workflow with { Name = string.IsNullOrWhiteSpace(this.name) ? this.workflow.Name : this.name.Trim() };
+        return this.OnImport.InvokeAsync(new WorkflowImportRequest(named, this.overwrite && this.existing is not null));
+    }
+}

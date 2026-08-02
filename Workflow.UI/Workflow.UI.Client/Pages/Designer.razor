@@ -10,6 +10,8 @@
 @inject Workflow.UI.Client.Api.ModulesClient Modules
 @inject Workflow.UI.Client.Api.ExecutionsClient Executions
 @inject Workflow.UI.Client.Api.VariablesClient Variables
+@inject Workflow.UI.Client.Services.IFileDownloader Downloader
+@inject Workflow.UI.Client.Designer.State.WorkflowImportHandoff ImportHandoff
 @inject Workflow.UI.Client.Api.RealTimeClient RealTime
 @inject Workflow.UI.Client.Services.ToastService Toasts
 @inject Workflow.UI.Client.Designer.State.DesignerClipboard Clipboard
@@ -25,6 +27,8 @@
         <button class="df-btn" data-testid="undo" disabled="@(!commands.CanUndo)" title="@commands.UndoDescription" @onclick="() => commands.Undo()">↩</button>
         <button class="df-btn" data-testid="redo" disabled="@(!commands.CanRedo)" title="@commands.RedoDescription" @onclick="() => commands.Redo()">↪</button>
         <button class="df-btn" data-testid="run" @onclick="OpenRunDialog">▶ Run</button>
+        <button class="df-btn" data-testid="export" title="Download this workflow as a file"
+                @onclick="ExportAsync">⬇ Export</button>
         <button class="df-btn" data-testid="history" @onclick="ToggleHistory">🕘 History</button>
         <span class="df-topbar__dirty" data-testid="dirty">@(commands.IsDirty ? "●unsaved" : "")</span>
     }
@@ -34,6 +38,21 @@
     }
 </TopBar>
 <ToastHost />
+
+@if (importedUnsaved)
+{
+    <div class="df-import-banner" data-testid="imported-banner">
+        📥 Imported — nothing is saved yet.
+        @if (importOverwrite)
+        {
+            <strong>Saving will replace the existing workflow.</strong>
+        }
+        else
+        {
+            <span>Saving will create a new workflow.</span>
+        }
+    </div>
+}
 
 @if (loading)
 {
@@ -92,6 +111,12 @@ else if (document is not null)
         <RunDialog Document="document" OnStart="StartRun" OnCancel="() => showRunDialog = false" />
     }
 
+    @if (exportDto is not null)
+    {
+        <ExportDialog Workflow="exportDto" IsDirty="@(commands?.IsDirty ?? false)"
+                      OnConfirm="ConfirmExport" OnCancel="() => exportDto = null" />
+    }
+
     <ContextMenu Visible="menuVisible" X="menuX" Y="menuY" Items="menuItems" OnClose="() => menuVisible = false" />
 
     @if (renameNodeId is not null)
@@ -142,6 +167,13 @@ else if (document is not null)
     private bool loading = true;
     private string? loadError;
 
+    // 📥 E2 — set when the open document came from an import and hasn't been saved yet.
+    private bool importedUnsaved;
+    private bool importOverwrite;
+
+    // 📤 E1 — non-null while the export dialog is open.
+    private Workflow.UI.Client.Api.Dtos.WorkflowDto? exportDto;
+
     // 🌍 V6 — global variable names for the token picker; null when the store is unreachable.
     private List<string>? globalVariableNames;
     private readonly string statusInfo = "editing";
@@ -189,6 +221,35 @@ else if (document is not null)
             if (string.Equals(this.Id, "new", System.StringComparison.OrdinalIgnoreCase))
             {
                 this.document = DesignerDocument.NewBlank("Untitled workflow");
+            }
+            else if (string.Equals(this.Id, WorkflowImportHandoff.RouteId, System.StringComparison.OrdinalIgnoreCase))
+            {
+                // 📥 E2 — an imported workflow. Opened unsaved: the user reviews it (and any
+                // portability warnings they already saw) and commits with Save.
+                if (ImportHandoff.Take() is not { } imported)
+                {
+                    this.loadError = "That import has already been opened. Import the file again.";
+                    return;
+                }
+
+                foreach (var node in imported.Workflow.Nodes)
+                {
+                    await this.EnsureSchema(node.ModuleId);
+                }
+
+                this.document = DesignerDocument.FromDto(
+                    imported.Workflow,
+                    mid => this.schemaCache.TryGetValue(mid, out var s) ? s : null);
+
+                // Create-new drops the id so the server assigns one; overwrite keeps it so the
+                // save targets the existing workflow (Q3).
+                this.importOverwrite = imported.Overwrite;
+                if (!imported.Overwrite)
+                {
+                    this.document.Id = System.Guid.Empty;
+                }
+
+                this.importedUnsaved = true;
             }
             else if (System.Guid.TryParse(this.Id, out var guid))
             {
@@ -639,6 +700,34 @@ else if (document is not null)
         }
     }
 
+    /// <summary>
+    /// ⬇ E1 — opens the export dialog for the **in-memory** document (Q4), so what you see on the
+    /// canvas is what lands in the file, unsaved edits included.
+    /// </summary>
+    private void ExportAsync()
+    {
+        if (this.document is not null)
+        {
+            this.exportDto = this.document.ToDto();
+        }
+    }
+
+    /// <summary>Writes the (possibly redacted) workflow to a file~ 📤.</summary>
+    private async Task ConfirmExport(WorkflowDto payload)
+    {
+        this.exportDto = null;
+        try
+        {
+            var json = WorkflowExport.Write(payload);
+            await Downloader.DownloadAsync(WorkflowExport.FileNameFor(payload.Name, payload.Version), json);
+            Toasts.Success("Exported.");
+        }
+        catch (Exception ex)
+        {
+            Toasts.Error($"Export failed: {ex.Message}");
+        }
+    }
+
     private async Task Rerun()
     {
         await this.CloseRun();
@@ -886,6 +975,7 @@ else if (document is not null)
             {
                 var created = await Workflows.CreateAsync(this.document.ToDto());
                 this.commands.MarkSaved();
+                this.importedUnsaved = false;
                 Toasts.Success("Workflow created");
                 Nav.NavigateTo($"/designer/{created.Id}");
             }
@@ -893,6 +983,7 @@ else if (document is not null)
             {
                 await Workflows.UpdateAsync(this.document.ToDto());
                 this.commands.MarkSaved();
+                this.importedUnsaved = false;
                 Toasts.Success("Workflow saved");
             }
         }

@@ -44,6 +44,12 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 {
     o.SerializerOptions.Converters.Add(new Workflow.Persistence.Sqlite.Serialization.ArrJsonConverterFactory());
     o.SerializerOptions.Converters.Add(new Workflow.Persistence.Sqlite.Serialization.HashMapStringJsonConverterFactory());
+
+    // 🔤 Phase 3.6 (E3) — enums cross the wire as *names*, not ordinals. Definitions are exported
+    // to files and reviewed in diffs, where `"type": 1` is unreadable; it also stops enum ordinals
+    // being a load-bearing contract. Reads accept both names and numbers, so stored definitions
+    // written before this change still deserialize~
+    o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
 // 🛡️ Phase 2.7.1 — Module-aware workflow validator (validates POST/PUT definitions → 422)~

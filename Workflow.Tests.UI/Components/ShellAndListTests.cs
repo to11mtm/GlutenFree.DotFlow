@@ -46,6 +46,8 @@ public sealed class ShellAndListTests : TestContext
         this.Services.AddSingleton(new ExecutionsClient(client));
         this.Services.AddSingleton(new SystemClient(client));
         this.Services.AddSingleton(new VariablesClient(client));
+        this.Services.AddSingleton(new Workflow.UI.Client.Designer.State.WorkflowImportHandoff());
+        this.Services.AddSingleton<Workflow.UI.Client.Services.IFileDownloader>(new NoopFileDownloader());
     }
 
     [Fact]

@@ -4,6 +4,10 @@
 @inject Workflow.UI.Client.Api.WorkflowsClient Workflows
 @inject Workflow.UI.Client.Api.ExecutionsClient Executions
 @inject Workflow.UI.Client.Services.ToastService Toasts
+@inject Workflow.UI.Client.Designer.State.WorkflowImportHandoff ImportHandoff
+@inject Workflow.UI.Client.Services.IFileDownloader Downloader
+@using Workflow.UI.Client.Designer.Components
+@using Workflow.UI.Client.Designer.State
 @inject NavigationManager Nav
 
 <PageTitle>Workflows · DotFlow</PageTitle>
@@ -14,8 +18,16 @@
 <div class="df-page">
     <div class="df-row" style="justify-content: space-between; margin-bottom: var(--df-space-4);">
         <h1 style="margin:0;">Workflows</h1>
-        <button class="df-btn df-btn--primary" @onclick="StartNew">＋ New Workflow</button>
+        <div class="df-row">
+            <button class="df-btn" data-testid="import" @onclick="() => showImport = true">📥 Import</button>
+            <button class="df-btn df-btn--primary" @onclick="StartNew">＋ New Workflow</button>
+        </div>
     </div>
+
+    @if (showImport)
+    {
+        <ImportDialog OnImport="OnImported" OnCancel="() => showImport = false" />
+    }
 
     <div class="df-field">
         <input class="df-input" placeholder="🔍 Search workflows…" @bind="search" @bind:event="oninput" @onkeyup="OnSearchKey" />
@@ -59,7 +71,9 @@
                             }
                             else
                             {
-                                <button class="df-btn df-btn--danger" data-testid="delete" @onclick="() => confirmDeleteId = wf.Id">🗑</button>
+                                <button class="df-btn" data-testid="export-row" title="Download as a file"
+                                @onclick="() => ExportRow(wf.Id)">⬇</button>
+                        <button class="df-btn df-btn--danger" data-testid="delete" @onclick="() => confirmDeleteId = wf.Id">🗑</button>
                             }
                         </td>
                     </tr>
@@ -72,6 +86,7 @@
 @code {
     private readonly List<WorkflowSummaryDto> items = new();
     private string search = string.Empty;
+    private bool showImport;
     private bool loading = true;
     private string? loadError;
     private Guid? confirmDeleteId;
@@ -107,6 +122,36 @@
     }
 
     private void StartNew() => Nav.NavigateTo("/designer/new");
+
+    /// <summary>
+    /// ⬇ E1.3 — exports a workflow straight from the list, without opening the designer. Fetches
+    /// the stored definition, so this is always the *saved* state.
+    /// </summary>
+    private async Task ExportRow(Guid id)
+    {
+        try
+        {
+            var dto = await Workflows.GetAsync(id);
+            var json = WorkflowExport.Write(dto);
+            await Downloader.DownloadAsync(WorkflowExport.FileNameFor(dto.Name, dto.Version), json);
+            Toasts.Success("Exported.");
+        }
+        catch (Exception ex)
+        {
+            Toasts.Error($"Export failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 📥 E2 — stages the imported workflow and hands it to the designer, which opens it unsaved.
+    /// Nothing is written until the user saves, so a bad import costs nothing.
+    /// </summary>
+    private void OnImported(WorkflowImportRequest request)
+    {
+        this.showImport = false;
+        ImportHandoff.Stage(request);
+        Nav.NavigateTo($"/designer/{WorkflowImportHandoff.RouteId}");
+    }
 
     private void Open(Guid id) => Nav.NavigateTo($"/designer/{id}");
 

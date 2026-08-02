@@ -47,6 +47,8 @@ public sealed class DesignerPageTests : TestContext
         this.Services.AddSingleton(new WorkflowsClient(client));
         this.Services.AddSingleton(new ModulesClient(client));
         this.Services.AddSingleton(new VariablesClient(client));
+        this.Services.AddSingleton(new Workflow.UI.Client.Designer.State.WorkflowImportHandoff());
+        this.Services.AddSingleton<Workflow.UI.Client.Services.IFileDownloader>(new NoopFileDownloader());
         this.Services.AddSingleton(new ExecutionsClient(client));
     }
 

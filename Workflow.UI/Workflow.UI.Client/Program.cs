@@ -46,10 +46,12 @@ builder.Services.AddScoped(sp =>
 // 🔔 App services: toasts + localStorage~
 builder.Services.AddScoped<Workflow.UI.Client.Services.ToastService>();
 builder.Services.AddScoped<Workflow.UI.Client.Services.ILocalStorage, Workflow.UI.Client.Services.BrowserLocalStorage>();
+builder.Services.AddScoped<Workflow.UI.Client.Services.IFileDownloader, Workflow.UI.Client.Services.BrowserFileDownloader>();
 builder.Services.AddScoped<Workflow.UI.Client.Services.PaletteDragState>();
 builder.Services.AddScoped<Workflow.UI.Client.Designer.State.DesignerClipboard>();
 builder.Services.AddScoped<Workflow.UI.Client.Scripts.State.ScriptStudioHandoff>();
 builder.Services.AddScoped<Workflow.UI.Client.Linq.State.LinqStudioHandoff>();
+builder.Services.AddScoped<Workflow.UI.Client.Designer.State.WorkflowImportHandoff>();
 builder.Services.AddScoped<Workflow.UI.Client.Execution.State.MonitorState>();
 
 // 📡 Real-time hub client (SignalR)~

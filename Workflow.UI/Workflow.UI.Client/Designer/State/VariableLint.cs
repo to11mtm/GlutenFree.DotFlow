@@ -137,6 +137,21 @@ public static class VariableLint
         return references.All(r => Judge(doc, node, r, globals, writers).Any(i => i.Severity == IssueSeverity.Error));
     }
 
+    /// <summary>
+    /// Lists the distinct <c>{{Variable.x}}</c> names referenced in a value~ 🔗.
+    /// </summary>
+    /// <remarks>
+    /// Exposed for the import report (E5), which needs to know which variables a workflow expects
+    /// its environment to supply. Uses the same parsing as the lint, so the two can't disagree.
+    /// </remarks>
+    /// <param name="value">The property value text.</param>
+    /// <returns>The referenced variable names.</returns>
+    public static IEnumerable<string> ReferencedVariableNames(string? value)
+        => ParseReferences(string.Empty, value)
+            .Where(r => r.Kind == ReferenceKind.Variable)
+            .Select(r => r.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>A single <c>{{…}}</c> reference found in a property~ 🔗.</summary>
     /// <param name="PropertyName">The property it was found in.</param>
     /// <param name="Token">The literal token text.</param>
