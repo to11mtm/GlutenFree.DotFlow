@@ -43,6 +43,9 @@ using Workflow.Modules.Builtin.Transform;
 /// <para>
 /// Phase 2.3.6: Added webhook trigger module — <c>builtin.http.webhook</c>~ 🪝
 /// </para>
+/// <para>
+/// Added explicit graph endpoint modules — <c>builtin.start</c> and <c>builtin.end</c>~ 🚀🏁
+/// </para>
 /// </remarks>
 public static class BuiltinModules
 {
@@ -51,6 +54,10 @@ public static class BuiltinModules
     /// </summary>
     public static IReadOnlyList<IWorkflowModule> GetAll() => new IWorkflowModule[]
     {
+        // Explicit graph endpoints — make where a workflow starts and ends legible~ 🚀🏁
+        new StartModule(),
+        new EndModule(),
+
         // Core utility modules~ 🛠️
         new PassThroughModule(),
         new LogModule(),

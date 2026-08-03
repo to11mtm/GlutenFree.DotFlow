@@ -104,7 +104,9 @@ public sealed class BuiltinModuleIntegrationTests
         registry.HasModule("builtin.transform.validate").Should().BeTrue("Phase 2.6.a.4 transform.validate must register~ ✅");
         registry.HasModule("builtin.transform.string").Should().BeTrue("Phase 2.6.a.5 transform.string must register~ 📝");
         registry.HasModule("builtin.script").Should().BeTrue("Phase 3.1.4 script module must register~ 📜");
-        registry.GetAllModules().Should().HaveCount(38, because: "38 builtin modules after Phase 3.1.4~ 💖");
+        registry.HasModule("builtin.start").Should().BeTrue("the Start marker module must register~ 🚀");
+        registry.HasModule("builtin.end").Should().BeTrue("the End marker module must register~ 🏁");
+        registry.GetAllModules().Should().HaveCount(40, because: "40 builtin modules after adding Start/End~ 💖");
     }
 
     /// <summary>
@@ -121,8 +123,9 @@ public sealed class BuiltinModuleIntegrationTests
     public void GetAll_ShouldReturnFiveModules()
     {
         var modules = BuiltinModules.GetAll();
-        modules.Should().HaveCount(38, because: "38 builtin modules after Phase 3.1.4~ 💖");
+        modules.Should().HaveCount(40, because: "40 builtin modules after adding Start/End~ 💖");
         modules.Select(m => m.ModuleId).Should().BeEquivalentTo(
+            "builtin.start", "builtin.end",
             "builtin.passthrough", "builtin.log", "builtin.delay",
             "builtin.setvariable", "builtin.getvariable",
             "builtin.condition", "builtin.switch",
@@ -179,6 +182,8 @@ public sealed class BuiltinModuleIntegrationTests
         types.Should().Contain(typeof(ThrowModule), "Phase 2.2.4 throw module must be discovered~ 💥");
         types.Should().Contain(typeof(HttpRequestModule), "Phase 2.3.0 http.request must be discovered~ 🌐");
         types.Should().Contain(typeof(WebhookTriggerModule), "Phase 2.3.6 http.webhook must be discovered~ 🪝");
+        types.Should().Contain(typeof(StartModule), "the Start marker module must be discovered~ 🚀");
+        types.Should().Contain(typeof(EndModule), "the End marker module must be discovered~ 🏁");
     }
 
     #endregion

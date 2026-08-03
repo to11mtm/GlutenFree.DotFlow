@@ -18,23 +18,26 @@ This guide covers every control-flow primitive shipped in **Phase 2.2** of DotFl
 ## Table of Contents
 
 1. [Core Concepts](#-core-concepts)
-2. [Conditional Branching](#-conditional-branching)
+2. [Start & End Markers](#-start--end-markers)
+   - [`builtin.start`](#builtinstart---where-the-workflow-begins)
+   - [`builtin.end`](#builtinend---where-the-workflow-ends)
+3. [Conditional Branching](#-conditional-branching)
    - [`builtin.condition`](#builtincondition---ifelse)
    - [`builtin.switch`](#builtinswitch---multi-way)
-3. [Loops](#-loops)
+4. [Loops](#-loops)
    - [`builtin.loop.foreach`](#builtinloopforeach---iterate-a-collection)
    - [`builtin.loop.while`](#builtinloopwhile---iterate-while-condition)
    - [`builtin.break` / `builtin.continue`](#builtinbreak--builtincontinue)
-4. [Parallelism & Fan-Shaped Patterns](#-parallelism--fan-shaped-patterns)
+5. [Parallelism & Fan-Shaped Patterns](#-parallelism--fan-shaped-patterns)
    - [`builtin.parallel`](#builtinparallel---static-n-branch-fan-out)
    - [`builtin.fanout`](#builtinfanout---per-item-fan-out)
    - [`builtin.fanin`](#builtinfanin---barrier-aggregation)
-5. [Error Handling](#-error-handling)
+6. [Error Handling](#-error-handling)
    - [`builtin.trycatch`](#builtintrycatch---error-boundary)
    - [`builtin.throw`](#builtinthrow---structured-failure)
-6. [Expression Cheatsheet (Jint / JavaScript)](#-expression-cheatsheet-jint--javascript)
-7. [Common Patterns & Recipes](#-common-patterns--recipes)
-8. [Further Reading](#-further-reading)
+7. [Expression Cheatsheet (Jint / JavaScript)](#-expression-cheatsheet-jint--javascript)
+8. [Common Patterns & Recipes](#-common-patterns--recipes)
+9. [Further Reading](#-further-reading)
 
 ---
 
@@ -71,6 +74,75 @@ Each loop iteration gets a fresh **variable subscope** (`loop:{loopId}:{iter}`) 
 ### 5. Hierarchical Cancellation 🛑
 
 Every sub-graph receives a `CancellationToken` linked to its parent's CTS. Cancel the parent → siblings observe the token cooperatively and wind down. **No hard-abort of in-flight nodes** — modules are expected to honour `CancellationToken`~ ✨
+
+---
+
+## 🚀 Start & End Markers
+
+These two modules add **no** capability the engine lacks — they add *legibility*. A DotFlow graph
+already starts at every node with no incoming connections and produces its result from every node
+with no successors, but neither fact is visible on the canvas. `builtin.start` and `builtin.end` make
+them visible~ ✨
+
+Both are entirely optional and additive: existing workflows behave exactly as before.
+
+### `builtin.start` — Where the Workflow Begins
+
+Takes **no inputs** (so it can never be wired downstream of anything, which is what makes a Start node
+unconditionally a start node) and emits a single `value` output.
+
+| Property | Editor | Default | Notes |
+|---|---|---|---|
+| `value` | Text | *(blank)* | Supports `{{…}}` templates. Blank → a `null` output. |
+| `valueType` | Dropdown | `text` | `text`, `number`, `boolean`, or `json`. |
+
+```json
+{
+  "id": "start-1",
+  "moduleId": "builtin.start",
+  "properties": { "value": "{{Variable.orderId}}", "valueType": "text" }
+}
+```
+
+The template support is the useful part: a Start node can surface a run input or workflow variable as
+the graph's opening value, so "what does this workflow start from?" has a visible answer. Leave
+`value` blank for a pure marker that emits nothing.
+
+`valueType` is applied after templates resolve. A value that doesn't parse as the chosen type falls
+back to its text form rather than failing the run — malformed JSON is caught earlier, when the
+workflow is saved.
+
+> ⚠️ The engine fires **every** in-degree-0 node, so two Start nodes means two parallel entry points.
+> That's legal, and the designer warns about it, because it's rarely what someone drawing a "start"
+> intends.
+
+### `builtin.end` — Where the Workflow Ends
+
+Takes an optional `result` input and **always** echoes it to a `result` output.
+
+| Property | Editor | Default | Notes |
+|---|---|---|---|
+| `mode` | Dropdown | `log` | `log` writes the final result; `silent` does nothing. |
+| `level` | Dropdown | `Information` | Level used when `mode` is `log`. |
+| `label` | Text | *(blank)* | Optional log prefix. Supports `{{…}}` templates. |
+
+**Why it always echoes — and what that means for your output shape.** A workflow's outputs are
+collected from its terminal nodes, keyed `{nodeId}.{key}`. If End emitted nothing, appending it to a
+workflow would make the previously-terminal node non-terminal and replace the workflow's result with
+*nothing* — successfully, and with no clue why. So `silent` means "no side effect", never "no
+output".
+
+The happy consequence is a **predictable result shape**. A workflow ending in `end-1` produces:
+
+```json
+{ "outputs": { "end-1.result": "…" } }
+```
+
+instead of the union of whatever its terminal nodes happened to emit. Routing everything through an
+End node is the simplest way to give a workflow one named result~ 🎁
+
+> ⚠️ Connecting anything *after* an End node means those nodes become the workflow's result instead.
+> The designer warns about this too.
 
 ---
 
@@ -533,6 +605,8 @@ Just use `builtin.loop.foreach` or `while` — the engine threads a linked `Canc
 | Utilities | `builtin.setvariable` / `builtin.getvariable` | Variable I/O |
 | Utilities | `builtin.delay` | Pause execution |
 | Utilities | `builtin.passthrough` | Identity / pipeline glue |
+| Markers | `builtin.start` | Explicit workflow entry point |
+| Markers | `builtin.end` | Explicit workflow result |
 
 > 💖 **Ami's tip:** Build complex flows from these primitives bottom-up. If you find yourself wanting a new control-flow module, check whether composition (e.g. `trycatch` inside `foreach`) does the job first — most useful patterns are already expressible~ UwU 🎀
 

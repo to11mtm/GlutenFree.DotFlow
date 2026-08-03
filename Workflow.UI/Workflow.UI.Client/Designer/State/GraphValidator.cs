@@ -39,6 +39,12 @@ public static class GraphValidator
     /// <summary>The port whose sub-graph runs inside the transaction~ 💼.</summary>
     private const string TransactionBodyPort = "transactionBody";
 
+    /// <summary>The explicit graph-start marker module id~ 🚀.</summary>
+    private const string StartModuleId = "builtin.start";
+
+    /// <summary>The explicit graph-end marker module id~ 🏁.</summary>
+    private const string EndModuleId = "builtin.end";
+
     /// <summary>Validates the document against the set of known module ids~ 🔎.</summary>
     /// <param name="doc">The document.</param>
     /// <param name="knownModuleIds">The module ids the server knows about.</param>
@@ -86,6 +92,60 @@ public static class GraphValidator
         }
 
         issues.AddRange(ValidateTransactions(doc));
+        issues.AddRange(ValidateStartAndEnd(doc));
+
+        return issues;
+    }
+
+    /// <summary>
+    /// 🚀🏁 Start/End legibility rules — all <b>warnings</b>, never errors.
+    /// </summary>
+    /// <param name="doc">The document.</param>
+    /// <returns>The issues found.</returns>
+    /// <remarks>
+    /// CopilotNote: every situation flagged here is perfectly legal to the engine — it will run
+    /// these workflows without complaint. That's exactly the problem: Start and End exist to make a
+    /// graph's shape obvious, so a Start that isn't the start (or an End that isn't the end) is a
+    /// diagram that lies. Warn while editing; never block the save (D5)~ 🌸.
+    /// </remarks>
+    public static IReadOnlyList<GraphIssue> ValidateStartAndEnd(DesignerDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        var issues = new List<GraphIssue>();
+
+        var startNodes = doc.Nodes.Where(n => n.ModuleId == StartModuleId).ToList();
+        if (startNodes.Count > 1)
+        {
+            issues.Add(new GraphIssue(
+                IssueSeverity.Warning,
+                $"This workflow has {startNodes.Count} Start nodes. All of them run, in parallel — "
+                    + "if you meant a single entry point, keep one.",
+                startNodes[1].Id));
+        }
+
+        foreach (var node in doc.Nodes)
+        {
+            if (node.ModuleId == StartModuleId
+                && doc.Connections.Any(c => c.TargetNodeId == node.Id))
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Warning,
+                    "A Start node has an incoming connection, so it isn't a start. Remove the "
+                        + "connection, or use a different module here.",
+                    node.Id));
+            }
+
+            if (node.ModuleId == EndModuleId
+                && doc.Connections.Any(c => c.SourceNodeId == node.Id))
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Warning,
+                    "An End node has outgoing connections, so the nodes after it become the "
+                        + "workflow's result instead of this one.",
+                    node.Id));
+            }
+        }
 
         return issues;
     }
