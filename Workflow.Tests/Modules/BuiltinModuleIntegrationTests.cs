@@ -109,7 +109,8 @@ public sealed class BuiltinModuleIntegrationTests
         registry.HasModule("builtin.script").Should().BeTrue("Phase 3.1.4 script module must register~ 📜");
         registry.HasModule("builtin.start").Should().BeTrue("the Start marker module must register~ 🚀");
         registry.HasModule("builtin.end").Should().BeTrue("the End marker module must register~ 🏁");
-        registry.GetAllModules().Should().HaveCount(42, because: "42 builtin modules after adding Partition/Split~ 💖");
+        registry.HasModule("builtin.json.value").Should().BeTrue("the JSON value module must register~ 🧾");
+        registry.GetAllModules().Should().HaveCount(43, because: "43 builtin modules after adding JsonValue~ 💖");
     }
 
     /// <summary>
@@ -126,11 +127,11 @@ public sealed class BuiltinModuleIntegrationTests
     public void GetAll_ShouldReturnFiveModules()
     {
         var modules = BuiltinModules.GetAll();
-        modules.Should().HaveCount(42, because: "42 builtin modules after adding Partition/Split~ 💖");
+        modules.Should().HaveCount(43, because: "43 builtin modules after adding JsonValue~ 💖");
         modules.Select(m => m.ModuleId).Should().BeEquivalentTo(
             "builtin.start", "builtin.end",
             "builtin.passthrough", "builtin.log", "builtin.delay",
-            "builtin.setvariable", "builtin.getvariable",
+            "builtin.setvariable", "builtin.getvariable", "builtin.json.value",
             "builtin.condition", "builtin.switch", "builtin.partition",
             "builtin.loop.foreach", "builtin.loop.while",
             "builtin.break", "builtin.continue",
@@ -189,6 +190,7 @@ public sealed class BuiltinModuleIntegrationTests
         types.Should().Contain(typeof(SplitModule), "split module must be discovered~ 🧩");
         types.Should().Contain(typeof(StartModule), "the Start marker module must be discovered~ 🚀");
         types.Should().Contain(typeof(EndModule), "the End marker module must be discovered~ 🏁");
+        types.Should().Contain(typeof(JsonValueModule), "the JSON value module must be discovered~ 🧾");
     }
 
     #endregion

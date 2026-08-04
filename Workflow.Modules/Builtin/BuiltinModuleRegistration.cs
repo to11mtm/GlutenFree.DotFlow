@@ -64,6 +64,7 @@ public static class BuiltinModules
         new DelayModule(),
         new SetVariableModule(),
         new GetVariableModule(),
+        new JsonValueModule(),
 
         // Phase 2.2.1 — Conditional branching modules~ 🔀
         new ConditionalModule(),

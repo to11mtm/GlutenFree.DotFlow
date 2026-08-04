@@ -756,6 +756,7 @@ Just use `builtin.loop.foreach` or `while` — the engine threads a linked `Canc
 | Utilities | `builtin.setvariable` / `builtin.getvariable` | Variable I/O |
 | Utilities | `builtin.delay` | Pause execution |
 | Utilities | `builtin.passthrough` | Identity / pipeline glue |
+| Utilities | `builtin.json.value` | Emit a configured JSON body (demos / tests / stubs) |
 | Markers | `builtin.start` | Explicit workflow entry point |
 | Markers | `builtin.end` | Explicit workflow result |
 
