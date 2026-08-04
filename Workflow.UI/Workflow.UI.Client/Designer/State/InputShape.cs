@@ -139,6 +139,20 @@ public static class InputShape
                 .ToList();
         }
 
+        // Split's rest port: the remaining keys of a derivable upstream shape (Q1b of the
+        // split-preview plan) — merged upstream minus the configured keys.
+        if (source.ModuleId == "builtin.split"
+            && SplitPreview.RestPortFor(source) is { } restPort
+            && string.Equals(sourcePort, restPort, StringComparison.Ordinal)
+            && SplitPreview.UpstreamShapeKeys(document, source) is { } shapeKeys)
+        {
+            var configured = SplitPreview.KeysFor(source).ToHashSet(StringComparer.Ordinal);
+            return shapeKeys
+                .Where(k => !configured.Contains(k))
+                .Select(k => new Key($"{{{{{prefix}.{k}}}}}", $"{prefix}.{k}", null, "Remaining property from the split's input"))
+                .ToList();
+        }
+
         return Array.Empty<Key>();
     }
 

@@ -23,6 +23,17 @@ using Workflow.Modules.Abstractions;
 /// CopilotNote: Outputs are intentionally EMPTY — ports are dynamic (one per key + optional restPort).
 /// <c>ValidateConnectionPorts</c> skips validation for modules with no declared outputs~ 🎗️
 /// </para>
+/// <para>
+/// ⚠️ <b>Semantics are mirrored in the designer.</b> The client-side
+/// <c>Workflow.UI.Client\Designer\State\SplitPreview.cs</c> replays these exact rules
+/// (missing key → <c>null</c>, rest = unlisted properties, empty rest object still emits) to show
+/// a live preview without a server round-trip; shared fixtures in
+/// <c>SplitPreviewDriftGuardTests</c> / <c>SplitPreviewTests</c> pin both sides. If this module's
+/// behaviour changes, update the mirror and both fixture sets together — and if a preview API is
+/// ever added (<c>POST /api/builtin/split/preview</c> was considered and deferred, see
+/// <c>use-testing-feedback\Designer-Split-Preview-Plan.md</c> Q1), implement it by calling this
+/// module so there is exactly one source of truth~ 🛡️
+/// </para>
 /// </remarks>
 public sealed class SplitModule : IWorkflowModule
 {

@@ -110,6 +110,70 @@
             </div>
         }
 
+        @* 🧩 Split preview (V2) — which keys land on which port, before any run. *@
+        @if (SelectedNode.ModuleId == "builtin.split")
+        {
+            <div class="df-field df-splitpreview" data-testid="split-preview">
+                <label class="df-label">Split preview</label>
+                @if (SplitUpstreamShapeKeys is { } shapeKeys)
+                {
+                    <div class="df-field-help" data-testid="split-shape-source">Shape derived from the merged upstream node — no sample needed.</div>
+                    @foreach (var row in Workflow.UI.Client.Designer.State.SplitPreview.ComputeFromShape(shapeKeys, SplitKeys, SplitRestPort).Rows)
+                    {
+                        <div class="df-incoming__row" data-testid="split-row-@row.Port">
+                            <code>@row.Port</code>
+                            <span>→</span>
+                            <span class="@(row.IsMissing ? "df-splitpreview__missing" : "")">@row.ValuePreview</span>
+                            @if (row.IsMissing)
+                            {
+                                <span class="df-splitpreview__missing" title="This key isn't on the arriving object — the port emits null at run time">⚠ not present</span>
+                            }
+                        </div>
+                    }
+                }
+                else
+                {
+                    <textarea class="df-textarea df-splitpreview__sample" data-testid="split-sample"
+                              placeholder='{ "Foo": 1, "Bar": "hello" }'
+                              value="@sampleBuffer" @onchange="OnSampleChanged"></textarea>
+                    <label class="df-splitpreview__persist">
+                        <input type="checkbox" data-testid="split-persist" checked="@SamplePersisted" @onchange="OnPersistToggled" />
+                        keep this sample in the workflow (shared with the team)
+                    </label>
+                    @if (persistConfirmOpen)
+                    {
+                        <div class="df-splitpreview__confirm" data-testid="split-persist-confirm">
+                            <span>A sample is stored in the workflow — what should happen to it?</span>
+                            <button type="button" class="df-btn df-btn--small df-btn--primary" data-testid="split-persist-remove"
+                                    @onclick="RemoveStoredSample">Remove stored sample</button>
+                            <button type="button" class="df-btn df-btn--small" data-testid="split-persist-keep"
+                                    @onclick="() => persistConfirmOpen = false">Keep it (edits stay session-only)</button>
+                        </div>
+                    }
+                    var preview = Workflow.UI.Client.Designer.State.SplitPreview.Compute(sampleBuffer, SplitKeys, SplitRestPort);
+                    if (!preview.Success)
+                    {
+                        <div class="df-field-help" data-testid="split-preview-empty">@preview.Error</div>
+                    }
+                    else
+                    {
+                        @foreach (var row in preview.Rows)
+                        {
+                            <div class="df-incoming__row" data-testid="split-row-@row.Port">
+                                <code>@row.Port</code>
+                                <span>→</span>
+                                <span class="@(row.IsMissing ? "df-splitpreview__missing" : "")">@row.ValuePreview</span>
+                                @if (row.IsMissing)
+                                {
+                                    <span class="df-splitpreview__missing" title="This key isn't in the sample — the port emits null at run time">⚠ not in sample</span>
+                                }
+                            </div>
+                        }
+                    }
+                }
+            </div>
+        }
+
         @if (SelectedNode.Schema is { Properties.Count: > 0 } schema)
         {
             @foreach (var prop in schema.Properties)
@@ -331,6 +395,11 @@
     // can insert there; clipboard is the fallback when nothing was focused yet.
     private string? lastFocusedProperty;
 
+    // 🧩 Split preview (V2/V3) — session sample text, persist preference, and the toggle-off confirm.
+    private string sampleBuffer = string.Empty;
+    private bool samplePersistPreference;
+    private bool persistConfirmOpen;
+
     // 🛡️ G9 — SQL parameter builder state.
     private bool sqlParamsOpen;
     private string? sqlParamName;
@@ -436,6 +505,80 @@
         => this.SelectedNode is { } node
             ? InputShape.IncomingFor(this.Document, node.Id)
             : System.Array.Empty<InputShape.Incoming>();
+
+    // ── 🧩 Split preview (V2/V3) ──────────────────────────────────────────────────
+
+    /// <summary>The split's configured keys, read from the live edit buffer~.</summary>
+    private IReadOnlyList<string> SplitKeys => SplitPreview.ParseKeys(this.ValueFor("keys"));
+
+    /// <summary>The split's configured rest port, read from the live edit buffer~.</summary>
+    private string? SplitRestPort
+        => JsonValues.ToText(this.ValueFor("restPort")) is { Length: > 0 } s && !string.IsNullOrWhiteSpace(s) ? s.Trim() : null;
+
+    /// <summary>Q1a — upstream shape keys when the split's value comes from a merged node~.</summary>
+    private IReadOnlyList<string>? SplitUpstreamShapeKeys
+        => this.SelectedNode is { } node ? SplitPreview.UpstreamShapeKeys(this.Document, node) : null;
+
+    /// <summary>Whether the sample is currently persisted (or set to persist)~.</summary>
+    private bool SamplePersisted => this.samplePersistPreference;
+
+    /// <summary>Sample text edited — update the session buffer, and the metadata when persisting~.</summary>
+    private void OnSampleChanged(ChangeEventArgs e)
+    {
+        this.sampleBuffer = e.Value?.ToString() ?? string.Empty;
+        if (this.samplePersistPreference && this.SelectedNode is { } node)
+        {
+            this.PersistSample(node, string.IsNullOrWhiteSpace(this.sampleBuffer) ? null : this.sampleBuffer);
+        }
+    }
+
+    /// <summary>The persist toggle changed (Q2): ON stores the sample; OFF with a stored sample asks first~.</summary>
+    private void OnPersistToggled(ChangeEventArgs e)
+    {
+        var on = e.Value is bool b && b;
+        if (this.SelectedNode is not { } node)
+        {
+            return;
+        }
+
+        if (on)
+        {
+            this.samplePersistPreference = true;
+            this.persistConfirmOpen = false;
+            if (!string.IsNullOrWhiteSpace(this.sampleBuffer))
+            {
+                this.PersistSample(node, this.sampleBuffer);
+            }
+
+            return;
+        }
+
+        this.samplePersistPreference = false;
+        if (SplitPreview.PersistedSample(node) is not null)
+        {
+            // Q2 follow-up — confirm what happens to the stored sample (primary: remove).
+            this.persistConfirmOpen = true;
+        }
+    }
+
+    /// <summary>Confirm choice: remove the stored sample from the workflow (undoable)~.</summary>
+    private void RemoveStoredSample()
+    {
+        this.persistConfirmOpen = false;
+        if (this.SelectedNode is { } node)
+        {
+            this.PersistSample(node, null);
+        }
+    }
+
+    private void PersistSample(DesignerNode node, string? value)
+    {
+        var before = SplitPreview.PersistedSample(node);
+        if (before != value)
+        {
+            this.Commands.Execute(new EditNodeMetadataCommand(node.Id, SplitPreview.SampleMetadataKey, before, value));
+        }
+    }
 
     /// <summary>
     /// ⚠ Q7 — an honest note about known FanIn runtime gaps, shown under the branch list. The J2
@@ -609,6 +752,11 @@
         {
             this.buffer[k] = v;
         }
+
+        // 🧩 V2/V3 — seed the split-preview sample from persisted metadata; persist mirrors presence.
+        this.sampleBuffer = SplitPreview.PersistedSample(node) ?? string.Empty;
+        this.samplePersistPreference = SplitPreview.PersistedSample(node) is not null;
+        this.persistConfirmOpen = false;
     }
 
     private void SeedWorkflow()

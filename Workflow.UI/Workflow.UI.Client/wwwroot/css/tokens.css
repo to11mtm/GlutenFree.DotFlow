@@ -200,6 +200,12 @@ a.df-link:hover { text-decoration: underline; }
 .df-incoming__key { font-size: 0.72rem; }
 .df-incoming__warn { color: #e0b341; }
 
+/* 🧩 Split preview (V2) */
+.df-splitpreview__sample { min-height: 60px; font-family: var(--df-mono); font-size: 0.75rem; }
+.df-splitpreview__persist { display: flex; align-items: center; gap: var(--df-space-2); font-size: 0.75rem; color: var(--df-text-dim); padding: 2px 0; }
+.df-splitpreview__confirm { display: flex; align-items: center; gap: var(--df-space-2); flex-wrap: wrap; font-size: 0.75rem; padding: var(--df-space-2); border: 1px solid #e0b341; border-radius: var(--df-radius); }
+.df-splitpreview__missing { color: #e0b341; font-size: 0.72rem; }
+
 /* 📦 Palette + editing layout */
 .df-designer__body { display: flex; flex: 1; min-height: 0; }
 .df-designer__palette { width: 240px; border-right: 1px solid var(--df-border); overflow-y: auto; background: var(--df-surface); }

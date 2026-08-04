@@ -481,6 +481,13 @@ Takes an **object** apart: each listed property comes out its own port. The inve
 `{ "Foo": 1, "Bar": 2, "Baz": 3 }` → port `Foo` = `1`, port `Bar` = `2`, port `rest` =
 `{ "Baz": 3 }`. All ports always fire.
 
+> 🔍 **Live preview in the designer.** Select a Split node and the properties panel shows a
+> **Split preview**: which keys land on which port, what falls into the rest port, and which keys
+> would emit `null`. When the input comes from a **merged** upstream node the preview derives the
+> shape automatically; otherwise paste a sample object — a toggle chooses whether the sample is
+> stored with the workflow (shared with the team) or stays session-only. *(Previewing against a
+> previous run's real values is planned as a follow-up alongside the input-hinting round.)*
+
 ---
 
 ### `builtin.fanin` — Barrier Aggregation

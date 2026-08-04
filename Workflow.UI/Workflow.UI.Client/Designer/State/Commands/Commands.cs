@@ -489,3 +489,54 @@ public sealed class ReorderIncomingConnectionCommand : IDesignerCommand
         (document.Connections[a], document.Connections[b]) = (document.Connections[b], document.Connections[a]);
     }
 }
+
+/// <summary>
+/// 💾 Split preview V3 — sets or removes one node metadata entry (e.g. the designer-only
+/// <c>ui.sampleInput</c> sample). Null means absent on either side; undo restores exactly~ ✨.
+/// </summary>
+public sealed class EditNodeMetadataCommand : IDesignerCommand
+{
+    private readonly string nodeId;
+    private readonly string key;
+    private readonly string? before;
+    private readonly string? after;
+
+    /// <summary>Initializes a new instance of the <see cref="EditNodeMetadataCommand"/> class~ 💾.</summary>
+    /// <param name="nodeId">The node.</param>
+    /// <param name="key">The metadata key.</param>
+    /// <param name="before">The previous value (null = absent).</param>
+    /// <param name="after">The new value (null = remove).</param>
+    public EditNodeMetadataCommand(string nodeId, string key, string? before, string? after)
+    {
+        this.nodeId = nodeId;
+        this.key = key;
+        this.before = before;
+        this.after = after;
+    }
+
+    /// <inheritdoc/>
+    public string Description => "Edit node metadata";
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document) => Apply(document, this.after);
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document) => Apply(document, this.before);
+
+    private void Apply(DesignerDocument document, string? value)
+    {
+        if (document.FindNode(this.nodeId) is not { } node)
+        {
+            return;
+        }
+
+        if (value is null)
+        {
+            node.Metadata.Remove(this.key);
+        }
+        else
+        {
+            node.Metadata[this.key] = value;
+        }
+    }
+}
