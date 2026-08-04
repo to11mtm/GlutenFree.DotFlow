@@ -1,4 +1,4 @@
-﻿// <copyright file="ApiClientTests.cs" company="GlutenFree">
+// <copyright file="ApiClientTests.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -19,8 +19,8 @@ using Workflow.UI.Client.Api.Dtos;
 using Xunit;
 
 /// <summary>
-/// ðŸ§ª Phase 3.3.a.0 â€” Tests for the typed API clients + DTO wire fidelity. The round-trip specs
-/// double as the React-port contract spec (D2)~ âœ¨.
+/// 🧪 Phase 3.3.a.0 — Tests for the typed API clients + DTO wire fidelity. The round-trip specs
+/// double as the React-port contract spec (D2)~ ✨.
 /// </summary>
 public sealed class ApiClientTests
 {
@@ -61,7 +61,7 @@ public sealed class ApiClientTests
     {
         var original = SampleDefinition();
 
-        // Serialize with the server's exact converters â†’ wire JSON.
+        // Serialize with the server's exact converters → wire JSON.
         var serverJson = JsonSerializer.Serialize(original, WireJson.ServerOptions);
 
         // Deserialize into the CLIENT DTO mirror, then re-serialize with plain Web options.
@@ -157,7 +157,7 @@ public sealed class ApiClientTests
     {
         var modules = new List<ModuleSummaryDto>
         {
-            new("builtin.http.request", "HTTP Request", "HTTP", "makes requests", "ðŸŒ", "1.0.0"),
+            new("builtin.http.request", "HTTP Request", "HTTP", "makes requests", "🌐", "1.0.0"),
         };
         var handler = FakeHttpMessageHandler.Json(JsonSerializer.Serialize(modules, ApiHttp.Json));
         var client = new ModulesClient(handler.CreateClient());
@@ -173,7 +173,7 @@ public sealed class ApiClientTests
     public async Task ModulesClient_Get_ParsesEditorTypes()
     {
         var details = new ModuleDetailsDto(
-            "builtin.script", "Script", "Scripting", "runs scripts", "ðŸ“œ", "1.0.0",
+            "builtin.script", "Script", "Scripting", "runs scripts", "📜", "1.0.0",
             new ModuleSchemaDto(
                 new List<PortDefinitionDto>(),
                 new List<PortDefinitionDto>(),

@@ -1,4 +1,4 @@
-﻿// <copyright file="Commands.cs" company="GlutenFree">
+// <copyright file="Commands.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -8,7 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
-/// <summary>âž• Phase 3.3.b.0 â€” Adds a node to the document~ âœ¨.</summary>
+/// <summary>➕ Phase 3.3.b.0 — Adds a node to the document~ ✨.</summary>
 public sealed class AddNodeCommand : IDesignerCommand
 {
     private readonly DesignerNode node;
@@ -27,14 +27,14 @@ public sealed class AddNodeCommand : IDesignerCommand
     public void Undo(DesignerDocument document) => document.Nodes.RemoveAll(n => n.Id == this.node.Id);
 }
 
-/// <summary>ðŸ—‘ï¸ Phase 3.3.b.1 â€” Removes nodes and their attached connections (restored on undo)~ âœ¨.</summary>
+/// <summary>🗑️ Phase 3.3.b.1 — Removes nodes and their attached connections (restored on undo)~ ✨.</summary>
 public sealed class RemoveNodesCommand : IDesignerCommand
 {
     private readonly HashSet<string> nodeIds;
     private List<DesignerNode> removedNodes = new();
     private List<DesignerConnection> removedConnections = new();
 
-    /// <summary>Initializes a new instance of the <see cref="RemoveNodesCommand"/> class~ ðŸ—‘ï¸.</summary>
+    /// <summary>Initializes a new instance of the <see cref="RemoveNodesCommand"/> class~ 🗑️.</summary>
     /// <param name="nodeIds">The node ids to remove.</param>
     public RemoveNodesCommand(IEnumerable<string> nodeIds)
         => this.nodeIds = new HashSet<string>(nodeIds);
@@ -62,15 +62,15 @@ public sealed class RemoveNodesCommand : IDesignerCommand
     }
 }
 
-/// <summary>â†”ï¸ Phase 3.3.b.1 â€” Moves one or more nodes by absolute before/after positions (one per drag)~ âœ¨.</summary>
+/// <summary>↔️ Phase 3.3.b.1 — Moves one or more nodes by absolute before/after positions (one per drag)~ ✨.</summary>
 public sealed class MoveNodesCommand : IDesignerCommand
 {
     private readonly Dictionary<string, (double X, double Y)> before;
     private readonly Dictionary<string, (double X, double Y)> after;
 
-    /// <summary>Initializes a new instance of the <see cref="MoveNodesCommand"/> class~ â†”ï¸.</summary>
-    /// <param name="before">Node id â†’ original position.</param>
-    /// <param name="after">Node id â†’ new position.</param>
+    /// <summary>Initializes a new instance of the <see cref="MoveNodesCommand"/> class~ ↔️.</summary>
+    /// <param name="before">Node id → original position.</param>
+    /// <param name="after">Node id → new position.</param>
     public MoveNodesCommand(Dictionary<string, (double X, double Y)> before, Dictionary<string, (double X, double Y)> after)
     {
         this.before = before;
@@ -100,14 +100,14 @@ public sealed class MoveNodesCommand : IDesignerCommand
     }
 }
 
-/// <summary>âœï¸ Phase 3.3.b.3 â€” Replaces a node's property bag (before/after)~ âœ¨.</summary>
+/// <summary>✏️ Phase 3.3.b.3 — Replaces a node's property bag (before/after)~ ✨.</summary>
 public sealed class EditNodePropertiesCommand : IDesignerCommand
 {
     private readonly string nodeId;
     private readonly Dictionary<string, JsonElement> before;
     private readonly Dictionary<string, JsonElement> after;
 
-    /// <summary>Initializes a new instance of the <see cref="EditNodePropertiesCommand"/> class~ âœï¸.</summary>
+    /// <summary>Initializes a new instance of the <see cref="EditNodePropertiesCommand"/> class~ ✏️.</summary>
     /// <param name="nodeId">The node id.</param>
     /// <param name="before">The prior property bag.</param>
     /// <param name="after">The new property bag.</param>
@@ -143,14 +143,14 @@ public sealed class EditNodePropertiesCommand : IDesignerCommand
     }
 }
 
-/// <summary>ðŸ·ï¸ Phase 3.3.b.1 â€” Renames a node~ âœ¨.</summary>
+/// <summary>🏷️ Phase 3.3.b.1 — Renames a node~ ✨.</summary>
 public sealed class RenameNodeCommand : IDesignerCommand
 {
     private readonly string nodeId;
     private readonly string before;
     private readonly string after;
 
-    /// <summary>Initializes a new instance of the <see cref="RenameNodeCommand"/> class~ ðŸ·ï¸.</summary>
+    /// <summary>Initializes a new instance of the <see cref="RenameNodeCommand"/> class~ 🏷️.</summary>
     /// <param name="nodeId">The node id.</param>
     /// <param name="before">The old name.</param>
     /// <param name="after">The new name.</param>
@@ -185,12 +185,12 @@ public sealed class RenameNodeCommand : IDesignerCommand
     }
 }
 
-/// <summary>ðŸ”— Phase 3.3.b.2 â€” Adds a connection~ âœ¨.</summary>
+/// <summary>🔗 Phase 3.3.b.2 — Adds a connection~ ✨.</summary>
 public sealed class AddConnectionCommand : IDesignerCommand
 {
     private readonly DesignerConnection connection;
 
-    /// <summary>Initializes a new instance of the <see cref="AddConnectionCommand"/> class~ ðŸ”—.</summary>
+    /// <summary>Initializes a new instance of the <see cref="AddConnectionCommand"/> class~ 🔗.</summary>
     /// <param name="connection">The connection to add.</param>
     public AddConnectionCommand(DesignerConnection connection) => this.connection = connection;
 
@@ -204,13 +204,13 @@ public sealed class AddConnectionCommand : IDesignerCommand
     public void Undo(DesignerDocument document) => document.Connections.RemoveAll(c => c.Key == this.connection.Key);
 }
 
-/// <summary>ðŸ—‘ï¸ Phase 3.3.b.1 â€” Removes connections by key (restored on undo)~ âœ¨.</summary>
+/// <summary>🗑️ Phase 3.3.b.1 — Removes connections by key (restored on undo)~ ✨.</summary>
 public sealed class RemoveConnectionsCommand : IDesignerCommand
 {
     private readonly HashSet<string> keys;
     private List<DesignerConnection> removed = new();
 
-    /// <summary>Initializes a new instance of the <see cref="RemoveConnectionsCommand"/> class~ ðŸ—‘ï¸.</summary>
+    /// <summary>Initializes a new instance of the <see cref="RemoveConnectionsCommand"/> class~ 🗑️.</summary>
     /// <param name="keys">The connection keys to remove.</param>
     public RemoveConnectionsCommand(IEnumerable<string> keys) => this.keys = new HashSet<string>(keys);
 
@@ -228,14 +228,14 @@ public sealed class RemoveConnectionsCommand : IDesignerCommand
     public void Undo(DesignerDocument document) => document.Connections.AddRange(this.removed);
 }
 
-/// <summary>âœï¸ Phase 3.3.b.1 â€” Edits a connection's condition/priority~ âœ¨.</summary>
+/// <summary>✏️ Phase 3.3.b.1 — Edits a connection's condition/priority~ ✨.</summary>
 public sealed class EditConnectionCommand : IDesignerCommand
 {
     private readonly string key;
     private readonly string? beforeCondition;
     private readonly string? afterCondition;
 
-    /// <summary>Initializes a new instance of the <see cref="EditConnectionCommand"/> class~ âœï¸.</summary>
+    /// <summary>Initializes a new instance of the <see cref="EditConnectionCommand"/> class~ ✏️.</summary>
     /// <param name="key">The connection key.</param>
     /// <param name="beforeCondition">The old condition.</param>
     /// <param name="afterCondition">The new condition.</param>
@@ -265,13 +265,13 @@ public sealed class EditConnectionCommand : IDesignerCommand
     }
 }
 
-/// <summary>ðŸ“ Phase 3.3.b.3 â€” Edits workflow-level metadata (name/description/tags)~ âœ¨.</summary>
+/// <summary>📝 Phase 3.3.b.3 — Edits workflow-level metadata (name/description/tags)~ ✨.</summary>
 public sealed class EditWorkflowMetaCommand : IDesignerCommand
 {
     private readonly (string Name, string? Description, List<string> Tags) before;
     private readonly (string Name, string? Description, List<string> Tags) after;
 
-    /// <summary>Initializes a new instance of the <see cref="EditWorkflowMetaCommand"/> class~ ðŸ“.</summary>
+    /// <summary>Initializes a new instance of the <see cref="EditWorkflowMetaCommand"/> class~ 📝.</summary>
     /// <param name="before">The prior meta.</param>
     /// <param name="after">The new meta.</param>
     public EditWorkflowMetaCommand(
@@ -300,7 +300,7 @@ public sealed class EditWorkflowMetaCommand : IDesignerCommand
     }
 }
 
-/// <summary>ðŸ’¾ Phase 3.5 (V1.3) â€” Declares a new workflow variable~ âž•.</summary>
+/// <summary>💾 Phase 3.5 (V1.3) — Declares a new workflow variable~ ➕.</summary>
 public sealed class AddVariableCommand : IDesignerCommand
 {
     private readonly string name;
@@ -325,13 +325,13 @@ public sealed class AddVariableCommand : IDesignerCommand
     public void Undo(DesignerDocument document) => document.Variables.Remove(this.name);
 }
 
-/// <summary>ðŸ’¾ Phase 3.5 (V1.3) â€” Removes a variable declaration~ ðŸ—‘ï¸.</summary>
+/// <summary>💾 Phase 3.5 (V1.3) — Removes a variable declaration~ 🗑️.</summary>
 public sealed class RemoveVariableCommand : IDesignerCommand
 {
     private readonly string name;
     private readonly JsonElement before;
 
-    /// <summary>Initializes a new instance of the <see cref="RemoveVariableCommand"/> class~ ðŸ—‘ï¸.</summary>
+    /// <summary>Initializes a new instance of the <see cref="RemoveVariableCommand"/> class~ 🗑️.</summary>
     /// <param name="name">The variable name.</param>
     /// <param name="before">The declaration being removed, kept so undo restores it exactly.</param>
     public RemoveVariableCommand(string name, JsonElement before)
@@ -351,8 +351,8 @@ public sealed class RemoveVariableCommand : IDesignerCommand
 }
 
 /// <summary>
-/// ðŸ’¾ Phase 3.5 (V1.3) â€” Edits a variable declaration, including renaming it. A rename changes the
-/// map key, so this is expressed as "drop the old key, write the new one" in both directions~ âœï¸.
+/// 💾 Phase 3.5 (V1.3) — Edits a variable declaration, including renaming it. A rename changes the
+/// map key, so this is expressed as "drop the old key, write the new one" in both directions~ ✏️.
 /// </summary>
 public sealed class EditVariableCommand : IDesignerCommand
 {
@@ -361,7 +361,7 @@ public sealed class EditVariableCommand : IDesignerCommand
     private readonly string afterName;
     private readonly JsonElement afterDeclaration;
 
-    /// <summary>Initializes a new instance of the <see cref="EditVariableCommand"/> class~ âœï¸.</summary>
+    /// <summary>Initializes a new instance of the <see cref="EditVariableCommand"/> class~ ✏️.</summary>
     /// <param name="beforeName">The prior name.</param>
     /// <param name="beforeDeclaration">The prior declaration.</param>
     /// <param name="afterName">The new name (may equal the prior name).</param>
@@ -381,7 +381,7 @@ public sealed class EditVariableCommand : IDesignerCommand
     /// <inheritdoc/>
     public string Description => string.Equals(this.beforeName, this.afterName, System.StringComparison.Ordinal)
         ? $"Edit variable {this.afterName}"
-        : $"Rename variable {this.beforeName} â†’ {this.afterName}";
+        : $"Rename variable {this.beforeName} → {this.afterName}";
 
     /// <inheritdoc/>
     public void Do(DesignerDocument document)
@@ -398,12 +398,12 @@ public sealed class EditVariableCommand : IDesignerCommand
     }
 }
 
-/// <summary>ðŸ§© Phase 3.3.b.4 â€” Runs several commands as a single undoable unit (e.g. paste)~ âœ¨.</summary>
+/// <summary>🧩 Phase 3.3.b.4 — Runs several commands as a single undoable unit (e.g. paste)~ ✨.</summary>
 public sealed class CompositeCommand : IDesignerCommand
 {
     private readonly IReadOnlyList<IDesignerCommand> commands;
 
-    /// <summary>Initializes a new instance of the <see cref="CompositeCommand"/> class~ ðŸ§©.</summary>
+    /// <summary>Initializes a new instance of the <see cref="CompositeCommand"/> class~ 🧩.</summary>
     /// <param name="description">The combined description.</param>
     /// <param name="commands">The child commands (applied in order; undone in reverse).</param>
     public CompositeCommand(string description, IReadOnlyList<IDesignerCommand> commands)
@@ -435,9 +435,9 @@ public sealed class CompositeCommand : IDesignerCommand
 }
 
 /// <summary>
-/// ðŸ”€ Input-shape hinting T8 â€” moves one of a node's incoming connections up or down among that
+/// 🔀 Input-shape hinting T8 — moves one of a node's incoming connections up or down among that
 /// node's branches. Branch order is connection <em>declaration</em> order and drives FanIn's
-/// merge/first/last modes, so reordering is a real semantic edit and therefore undoable~ âœ¨.
+/// merge/first/last modes, so reordering is a real semantic edit and therefore undoable~ ✨.
 /// </summary>
 public sealed class ReorderIncomingConnectionCommand : IDesignerCommand
 {
@@ -445,7 +445,7 @@ public sealed class ReorderIncomingConnectionCommand : IDesignerCommand
     private readonly int fromBranchIndex;
     private readonly int toBranchIndex;
 
-    /// <summary>Initializes a new instance of the <see cref="ReorderIncomingConnectionCommand"/> class~ ðŸ”€.</summary>
+    /// <summary>Initializes a new instance of the <see cref="ReorderIncomingConnectionCommand"/> class~ 🔀.</summary>
     /// <param name="nodeId">The target node whose incoming branches are reordered.</param>
     /// <param name="fromBranchIndex">The branch's current position (0-based, connection order).</param>
     /// <param name="toBranchIndex">The branch's new position.</param>
@@ -482,7 +482,7 @@ public sealed class ReorderIncomingConnectionCommand : IDesignerCommand
             return;
         }
 
-        // Swap the connections occupying the two branch slots â€” sibling connections keep their
+        // Swap the connections occupying the two branch slots — sibling connections keep their
         // document positions, so unrelated ordering is untouched~
         var a = positions[from];
         var b = positions[to];

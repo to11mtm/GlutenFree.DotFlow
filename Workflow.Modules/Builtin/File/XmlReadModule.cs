@@ -1,4 +1,4 @@
-﻿// <copyright file="XmlReadModule.cs" company="GlutenFree">
+// <copyright file="XmlReadModule.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -23,12 +23,12 @@ using Workflow.Modules.Builtin.File.Internal;
 using Workflow.Modules.Internal;
 
 /// <summary>
-/// ðŸ·ï¸ Built-in XML Read module (<c>builtin.file.xml.read</c>) â€” parses an XML file into a
-/// dictionary graph, with optional XSD validation and XPath pre-extraction~ ðŸ“âœ¨.
+/// 🏷️ Built-in XML Read module (<c>builtin.file.xml.read</c>) — parses an XML file into a
+/// dictionary graph, with optional XSD validation and XPath pre-extraction~ 📁✨.
 /// </summary>
 /// <remarks>
 /// CopilotNote: Phase 2.5.a.2. DTD processing is prohibited and the resolver is disabled to
-/// prevent XXE attacks~ ðŸ›¡ï¸.
+/// prevent XXE attacks~ 🛡️.
 /// </remarks>
 public sealed class XmlReadModule : IWorkflowModule
 {
@@ -42,10 +42,10 @@ public sealed class XmlReadModule : IWorkflowModule
     public string Category => "File System";
 
     /// <inheritdoc />
-    public string Description => "Parses an XML file into a dictionary graph~ ðŸ·ï¸âœ¨";
+    public string Description => "Parses an XML file into a dictionary graph~ 🏷️✨";
 
     /// <inheritdoc />
-    public string Icon => "ðŸ·ï¸";
+    public string Icon => "🏷️";
 
     /// <inheritdoc />
     public Version Version => new(1, 0, 0);
@@ -60,22 +60,22 @@ public sealed class XmlReadModule : IWorkflowModule
                 Description: "Optional. Connect a previous step to run this one after it; the value is available to templates as {{input}}~ 🔌",
                 IsRequired: false)),
         Outputs: Arr.create(
-            new PortDefinition("data", "Data", typeof(object), "Parsed XML as a dictionary graph~ ðŸ·ï¸", false),
-            new PortDefinition("rootElement", "Root Element", typeof(string), "Name of the root element~ ðŸŒ³", false),
-            new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ âœ…", false)),
+            new PortDefinition("data", "Data", typeof(object), "Parsed XML as a dictionary graph~ 🏷️", false),
+            new PortDefinition("rootElement", "Root Element", typeof(string), "Name of the root element~ 🌳", false),
+            new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "XML file path. Supports {{Variable.Name}}~ ðŸ“‚", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
-            new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ ðŸ”¤", false, "utf-8", PropertyEditorType.Text),
-            new ModulePropertyDefinition("validateSchema", "Validate Schema", typeof(bool), "Validate against an XSD~ ðŸ›¡ï¸", false, false, PropertyEditorType.Boolean),
-            new ModulePropertyDefinition("schemaPath", "Schema Path", typeof(string), "XSD file path (when validateSchema)~ ðŸ“", false, null, PropertyEditorType.FilePath, SupportsTemplates: true),
-            new ModulePropertyDefinition("xpath", "XPath", typeof(string), "Optional XPath to pre-extract before conversion~ ðŸŽ¯", false, null, PropertyEditorType.Text)));
+            new ModulePropertyDefinition("path", "Path", typeof(string), "XML file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
+            new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ 🔤", false, "utf-8", PropertyEditorType.Text),
+            new ModulePropertyDefinition("validateSchema", "Validate Schema", typeof(bool), "Validate against an XSD~ 🛡️", false, false, PropertyEditorType.Boolean),
+            new ModulePropertyDefinition("schemaPath", "Schema Path", typeof(string), "XSD file path (when validateSchema)~ 📐", false, null, PropertyEditorType.FilePath, SupportsTemplates: true),
+            new ModulePropertyDefinition("xpath", "XPath", typeof(string), "Optional XPath to pre-extract before conversion~ 🎯", false, null, PropertyEditorType.Text)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
     {
         if (FileModuleSupport.GetString(configuration, "path") is null)
         {
-            return ValidationResult.Failure(new ValidationError("PATH_REQUIRED", "path is required~ ðŸ’”", PropertyName: "path"));
+            return ValidationResult.Failure(new ValidationError("PATH_REQUIRED", "path is required~ 💔", PropertyName: "path"));
         }
 
         return ValidationResult.Success();
@@ -89,7 +89,7 @@ public sealed class XmlReadModule : IWorkflowModule
         var rawPath = FileModuleSupport.GetString(context.Properties, "path");
         if (rawPath is null)
         {
-            return ModuleResult.Fail("path is required~ ðŸ’”");
+            return ModuleResult.Fail("path is required~ 💔");
         }
 
         if (!FileModuleSupport.TryValidatePath(context, rawPath, PathAccessIntent.Read, out var path, out var failure))
@@ -99,12 +99,12 @@ public sealed class XmlReadModule : IWorkflowModule
 
         if (!System.IO.File.Exists(path))
         {
-            return ModuleResult.Fail($"ðŸ·ï¸ File not found: '{rawPath}'~ ðŸ’”");
+            return ModuleResult.Fail($"🏷️ File not found: '{rawPath}'~ 💔");
         }
 
         if (!EncodingResolver.TryResolve(FileModuleSupport.GetString(context.Properties, "encoding"), out var encoding, out var encErr))
         {
-            return ModuleResult.Fail($"ðŸ”¤ {encErr}~ ðŸ’”");
+            return ModuleResult.Fail($"🔤 {encErr}~ 💔");
         }
 
         var sw = Stopwatch.StartNew();
@@ -112,7 +112,7 @@ public sealed class XmlReadModule : IWorkflowModule
         {
             var text = await System.IO.File.ReadAllTextAsync(path, encoding, cancellationToken).ConfigureAwait(false);
 
-            // ðŸ›¡ï¸ XXE-safe: no DTD, no external resolver
+            // 🛡️ XXE-safe: no DTD, no external resolver
             var settings = new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
@@ -128,16 +128,16 @@ public sealed class XmlReadModule : IWorkflowModule
 
             if (doc.Root is null)
             {
-                return ModuleResult.Fail($"ðŸ·ï¸ XML '{rawPath}' has no root element~ ðŸ’”");
+                return ModuleResult.Fail($"🏷️ XML '{rawPath}' has no root element~ 💔");
             }
 
-            // Optional XSD validation~ ðŸ›¡ï¸
+            // Optional XSD validation~ 🛡️
             if (FileModuleSupport.GetBool(context.Properties, "validateSchema", false))
             {
                 var schemaRaw = FileModuleSupport.GetString(context.Properties, "schemaPath");
                 if (schemaRaw is null)
                 {
-                    return ModuleResult.Fail("ðŸ·ï¸ validateSchema is true but schemaPath is not set~ ðŸ’”");
+                    return ModuleResult.Fail("🏷️ validateSchema is true but schemaPath is not set~ 💔");
                 }
 
                 if (!FileModuleSupport.TryValidatePath(context, schemaRaw, PathAccessIntent.Read, out var schemaPath, out var schemaFail))
@@ -148,7 +148,7 @@ public sealed class XmlReadModule : IWorkflowModule
                 var violations = ValidateAgainstSchema(doc, schemaPath);
                 if (violations.Count > 0)
                 {
-                    return ModuleResult.Fail($"ðŸ·ï¸ Schema validation failed: {string.Join("; ", violations)}~ ðŸ’”");
+                    return ModuleResult.Fail($"🏷️ Schema validation failed: {string.Join("; ", violations)}~ 💔");
                 }
             }
 
@@ -159,7 +159,7 @@ public sealed class XmlReadModule : IWorkflowModule
                 var extracted = doc.XPathSelectElement(xpath);
                 if (extracted is null)
                 {
-                    return ModuleResult.Fail($"ðŸ·ï¸ XPath '{xpath}' matched no element~ ðŸ’”");
+                    return ModuleResult.Fail($"🏷️ XPath '{xpath}' matched no element~ 💔");
                 }
 
                 target = extracted;
@@ -179,11 +179,11 @@ public sealed class XmlReadModule : IWorkflowModule
         }
         catch (XmlException ex)
         {
-            return ModuleResult.Fail($"ðŸ·ï¸ Invalid XML in '{rawPath}': {ex.Message}~ ðŸ’”", ex);
+            return ModuleResult.Fail($"🏷️ Invalid XML in '{rawPath}': {ex.Message}~ 💔", ex);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return ModuleResult.Fail($"ðŸ·ï¸ Failed to read XML '{rawPath}': {ex.Message}~ ðŸ’”", ex);
+            return ModuleResult.Fail($"🏷️ Failed to read XML '{rawPath}': {ex.Message}~ 💔", ex);
         }
     }
 

@@ -1,7 +1,7 @@
-﻿// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Copyright Â© GlutenFree 2025. Made with love by Ami-Chan! UwU ðŸ’–
+// ────────────────────────────────────────────────────────────────────────────────
+// Copyright © GlutenFree 2025. Made with love by Ami-Chan! UwU 💖
 // Licensed under the MIT License.
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ────────────────────────────────────────────────────────────────────────────────
 
 namespace Workflow.Tests.Modules.Binding;
 
@@ -15,10 +15,10 @@ using Workflow.Modules.Binding;
 using Xunit;
 
 /// <summary>
-/// ðŸ”Œ HTTP-input plan D4/D5 â€” Tests for the <c>{{input}}</c> / <c>{{input.path}}</c> template
+/// 🔌 HTTP-input plan D4/D5 — Tests for the <c>{{input}}</c> / <c>{{input.path}}</c> template
 /// root: resolves the executing node's own <c>input</c> port from
 /// <see cref="PropertyBindingContext.SelfInputs"/>, dot-path traversal below it, reserved-root
-/// precedence over a node id named 'input', and inert behaviour without SelfInputs~ âœ¨ðŸ’–.
+/// precedence over a node id named 'input', and inert behaviour without SelfInputs~ ✨💖.
 /// </summary>
 public class PropertyBinderSelfInputTests
 {
@@ -106,7 +106,7 @@ public class PropertyBinderSelfInputTests
     [Fact]
     public void WithoutSelfInputs_InputRootStaysInert()
     {
-        // No SelfInputs on the context (standalone binding) â€” 'input.x' falls through to the
+        // No SelfInputs on the context (standalone binding) — 'input.x' falls through to the
         // NodeId.Output path and reports the node as missing, exactly as before this feature.
         var raw = new Dictionary<string, object?> { ["url"] = "{{input.x}}" };
 
@@ -119,7 +119,7 @@ public class PropertyBinderSelfInputTests
     [Fact]
     public void ReservedRoot_WinsOverNodeNamedInput()
     {
-        // D5 â€” a (legal-but-exotic) node with id 'input' is shadowed by the reserved root.
+        // D5 — a (legal-but-exotic) node with id 'input' is shadowed by the reserved root.
         var context = new PropertyBindingContext(
             new Dictionary<string, object?>(),
             new Dictionary<string, IReadOnlyDictionary<string, object?>>

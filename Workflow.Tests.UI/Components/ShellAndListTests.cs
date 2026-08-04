@@ -1,4 +1,4 @@
-﻿// <copyright file="ShellAndListTests.cs" company="GlutenFree">
+// <copyright file="ShellAndListTests.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -22,7 +22,7 @@ using Workflow.UI.Client.Services;
 using Xunit;
 
 /// <summary>
-/// ðŸ§ª Phase 3.3.a.1 â€” bUnit tests for the app shell, auth pane, and workflow list~ âœ¨.
+/// 🧪 Phase 3.3.a.1 — bUnit tests for the app shell, auth pane, and workflow list~ ✨.
 /// </summary>
 public sealed class ShellAndListTests : TestContext
 {
@@ -117,11 +117,11 @@ public sealed class ShellAndListTests : TestContext
         var cut = this.RenderComponent<WorkflowList>();
         cut.WaitForAssertion(() => cut.Markup.Should().Contain("wf"));
 
-        // First click â†’ asks to confirm (no DELETE yet).
+        // First click → asks to confirm (no DELETE yet).
         cut.Find("[data-testid=delete]").Click();
         handler.Requests.Should().NotContain(r => r.Method == HttpMethod.Delete);
 
-        // Confirm â†’ DELETE is sent.
+        // Confirm → DELETE is sent.
         cut.Find("[data-testid=confirm-delete]").Click();
         cut.WaitForAssertion(() => handler.Requests.Should().Contain(r => r.Method == HttpMethod.Delete));
     }

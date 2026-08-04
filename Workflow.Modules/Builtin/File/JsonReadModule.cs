@@ -1,4 +1,4 @@
-﻿// <copyright file="JsonReadModule.cs" company="GlutenFree">
+// <copyright file="JsonReadModule.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -20,8 +20,8 @@ using Workflow.Modules.Builtin.File.Internal;
 using Workflow.Modules.Internal;
 
 /// <summary>
-/// ðŸ“„ Built-in JSON Read module (<c>builtin.file.json.read</c>) â€” parses a JSON file into a
-/// plain CLR object graph~ ðŸ“âœ¨.
+/// 📄 Built-in JSON Read module (<c>builtin.file.json.read</c>) — parses a JSON file into a
+/// plain CLR object graph~ 📁✨.
 /// </summary>
 public sealed class JsonReadModule : IWorkflowModule
 {
@@ -35,10 +35,10 @@ public sealed class JsonReadModule : IWorkflowModule
     public string Category => "File System";
 
     /// <inheritdoc />
-    public string Description => "Parses a JSON file into an object graph~ ðŸ“„âœ¨";
+    public string Description => "Parses a JSON file into an object graph~ 📄✨";
 
     /// <inheritdoc />
-    public string Icon => "ðŸ“„";
+    public string Icon => "📄";
 
     /// <inheritdoc />
     public Version Version => new(1, 0, 0);
@@ -53,19 +53,19 @@ public sealed class JsonReadModule : IWorkflowModule
                 Description: "Optional. Connect a previous step to run this one after it; the value is available to templates as {{input}}~ 🔌",
                 IsRequired: false)),
         Outputs: Arr.create(
-            new PortDefinition("data", "Data", typeof(object), "Parsed JSON as dict/list/scalar~ ðŸ“„", false),
-            new PortDefinition("isArray", "Is Array", typeof(bool), "Whether the root is an array~ ðŸ”¢", false),
-            new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ âœ…", false)),
+            new PortDefinition("data", "Data", typeof(object), "Parsed JSON as dict/list/scalar~ 📄", false),
+            new PortDefinition("isArray", "Is Array", typeof(bool), "Whether the root is an array~ 🔢", false),
+            new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "JSON file path. Supports {{Variable.Name}}~ ðŸ“‚", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
-            new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ ðŸ”¤", false, "utf-8", PropertyEditorType.Text)));
+            new ModulePropertyDefinition("path", "Path", typeof(string), "JSON file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
+            new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ 🔤", false, "utf-8", PropertyEditorType.Text)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
     {
         if (FileModuleSupport.GetString(configuration, "path") is null)
         {
-            return ValidationResult.Failure(new ValidationError("PATH_REQUIRED", "path is required~ ðŸ’”", PropertyName: "path"));
+            return ValidationResult.Failure(new ValidationError("PATH_REQUIRED", "path is required~ 💔", PropertyName: "path"));
         }
 
         return ValidationResult.Success();
@@ -79,7 +79,7 @@ public sealed class JsonReadModule : IWorkflowModule
         var rawPath = FileModuleSupport.GetString(context.Properties, "path");
         if (rawPath is null)
         {
-            return ModuleResult.Fail("path is required~ ðŸ’”");
+            return ModuleResult.Fail("path is required~ 💔");
         }
 
         if (!FileModuleSupport.TryValidatePath(context, rawPath, PathAccessIntent.Read, out var path, out var failure))
@@ -89,12 +89,12 @@ public sealed class JsonReadModule : IWorkflowModule
 
         if (!System.IO.File.Exists(path))
         {
-            return ModuleResult.Fail($"ðŸ“„ File not found: '{rawPath}'~ ðŸ’”");
+            return ModuleResult.Fail($"📄 File not found: '{rawPath}'~ 💔");
         }
 
         if (!EncodingResolver.TryResolve(FileModuleSupport.GetString(context.Properties, "encoding"), out var encoding, out var encErr))
         {
-            return ModuleResult.Fail($"ðŸ”¤ {encErr}~ ðŸ’”");
+            return ModuleResult.Fail($"🔤 {encErr}~ 💔");
         }
 
         var sw = Stopwatch.StartNew();
@@ -117,11 +117,11 @@ public sealed class JsonReadModule : IWorkflowModule
         }
         catch (JsonException ex)
         {
-            return ModuleResult.Fail($"ðŸ“„ Invalid JSON in '{rawPath}' at line {ex.LineNumber}, pos {ex.BytePositionInLine}: {ex.Message}~ ðŸ’”", ex);
+            return ModuleResult.Fail($"📄 Invalid JSON in '{rawPath}' at line {ex.LineNumber}, pos {ex.BytePositionInLine}: {ex.Message}~ 💔", ex);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return ModuleResult.Fail($"ðŸ“„ Failed to read JSON '{rawPath}': {ex.Message}~ ðŸ’”", ex);
+            return ModuleResult.Fail($"📄 Failed to read JSON '{rawPath}': {ex.Message}~ 💔", ex);
         }
     }
 }

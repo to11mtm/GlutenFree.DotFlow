@@ -1,107 +1,107 @@
-﻿# Designer Split Preview â€” Plan
+# Designer Split Preview — Plan
 
-> ðŸ“‹ Response to user feedback (2026-08-04): *"somewhat related to the [input hinting ask] as far
+> 📋 Response to user feedback (2026-08-04): *"somewhat related to the [input hinting ask] as far
 > as the split module, is that it would be nice to have a preview of what items would be included
 > in the output split."*
 >
-> **Revision 1 â€” proposal.** Q1â€“Q2 below shape the scope; recommended answers are baked into the
+> **Revision 1 — proposal.** Q1–Q2 below shape the scope; recommended answers are baked into the
 > items. Related plans from the same feedback round:
 > [Designer-Http-Input-Port-Plan.md](Designer-Http-Input-Port-Plan.md) and
-> [Designer-Input-Shape-Hinting-Plan.md](Designer-Input-Shape-Hinting-Plan.md) â€” the hinting plan
+> [Designer-Input-Shape-Hinting-Plan.md](Designer-Input-Shape-Hinting-Plan.md) — the hinting plan
 > is the general mechanism; this one is a module-specific, sample-driven refinement of it.
 
 ## The ask
 
 | # | Feedback | Reading |
 | --- | --- | --- |
-| 1 | "Preview of what items would be included in the output split" | Given a sample object, show **which keys land on which port** â€” including what falls into `restPort` and which keys would be `null` â€” *before* running the workflow |
+| 1 | "Preview of what items would be included in the output split" | Given a sample object, show **which keys land on which port** — including what falls into `restPort` and which keys would be `null` — *before* running the workflow |
 
-## Findings ðŸ”¬
+## Findings 🔬
 
-### F1 â€” Split's semantics are trivially replayable client-side
+### F1 — Split's semantics are trivially replayable client-side
 
 `SplitModule.ExecuteAsync` is pure data-shaping: resolve object (input port wins over the `value`
 property), emit `outputs[key] = obj[key] ?? null` per key, remainder to `restPort`
-(`SplitModule.cs:105-149`). No I/O, no engine services. **A preview does not need the server** â€”
+(`SplitModule.cs:105-149`). No I/O, no engine services. **A preview does not need the server** —
 the designer can replay the same rules on a sample JSON object in a few lines of client code, with
-zero drift risk as long as it mirrors the published semantics (missing key â†’ `null`, rest =
+zero drift risk as long as it mirrors the published semantics (missing key → `null`, rest =
 unlisted properties).
 
-### F2 â€” Preview precedent exists, but it's heavyweight by comparison
+### F2 — Preview precedent exists, but it's heavyweight by comparison
 
 Script Studio and Linq Studio both have real preview machinery (`TransformScriptPreviewer`,
-`WorkflowLinqPreviewer`, `POST /api/transform/script/preview`, `POST /api/database/linq/preview`) â€”
+`WorkflowLinqPreviewer`, `POST /api/transform/script/preview`, `POST /api/database/linq/preview`) —
 compile-and-execute against sample inputs, sandboxed. That pattern is right for *code*; it's
 overkill for Split, whose entire behaviour is a dictionary comprehension. A server round-trip per
 keystroke would make the feature feel worse, not better.
 
-### F3 â€” Where does the sample object come from?
+### F3 — Where does the sample object come from?
 
 Three candidate sources, in decreasing availability:
 
-1. **The `value` property** â€” when the user configured a static object, the preview input already
+1. **The `value` property** — when the user configured a static object, the preview input already
    exists in the node.
-2. **A pasted sample** â€” when `value` comes from an upstream connection (the common case), the
+2. **A pasted sample** — when `value` comes from an upstream connection (the common case), the
    designer cannot know the runtime shape; a "sample input" scratch box (not persisted to the
-   workflowâ€¦ or persisted as a designer-only metadata entry?) lets the user paste one
+   workflow… or persisted as a designer-only metadata entry?) lets the user paste one
    representative object.
-3. **Last-run outputs** â€” `GET /api/v1/executions/{id}/nodes` returns per-node `Inputs`/`Outputs`
+3. **Last-run outputs** — `GET /api/v1/executions/{id}/nodes` returns per-node `Inputs`/`Outputs`
    (`NodeExecutionRecord`), so after at least one run the *actual* upstream value is retrievable.
    Strictly better data, but requires an execution to exist and plumbing to fetch/select it.
 
-### F4 â€” There is no per-module UI slot yet, but there are precedents for special-casing
+### F4 — There is no per-module UI slot yet, but there are precedents for special-casing
 
 `PropertiesPanel` renders generic editors per `EditorType`, with per-module extras already
-precedented: Script nodes get an "Edit in Script Studio â†’" button, SQL modules get a
-"ðŸ›¡ï¸ SQL parameters" modal. A "Split preview" section that appears only for `builtin.split` follows
-the existing pattern â€” no new architecture needed.
+precedented: Script nodes get an "Edit in Script Studio →" button, SQL modules get a
+"🛡️ SQL parameters" modal. A "Split preview" section that appears only for `builtin.split` follows
+the existing pattern — no new architecture needed.
 
-### F5 â€” `DesignerNode.Metadata` can hold a designer-only sample
+### F5 — `DesignerNode.Metadata` can hold a designer-only sample
 
 Nodes carry a `Metadata` dictionary (already used for `moduleVersion`, `ui.*` keys). A pasted
-sample can persist as e.g. `ui.sampleInput` without touching engine behaviour â€” it round-trips
+sample can persist as e.g. `ui.sampleInput` without touching engine behaviour — it round-trips
 with the workflow file, which is exactly what you want for a team sharing a draft. (Q2 decides.)
 
-## Proposed design ðŸŽ¨
+## Proposed design 🎨
 
 A **preview section in the PropertiesPanel**, shown only for `builtin.split`:
 
 ```
-â”Œâ”€ Split preview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚ Sample input   [ paste JSONâ€¦ / from value ]â”‚
-â”‚                                            â”‚
-â”‚  Foo   â†’ 1                                 â”‚
-â”‚  Bar   â†’ "hello"                           â”‚
-â”‚  Qux   â†’ null  âš  not present in sample     â”‚
-â”‚  rest  â†’ { "Baz": 3, "Extra": true }       â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌─ Split preview ────────────────────────────┐
+│ Sample input   [ paste JSON… / from value ]│
+│                                            │
+│  Foo   → 1                                 │
+│  Bar   → "hello"                           │
+│  Qux   → null  ⚠ not present in sample     │
+│  rest  → { "Baz": 3, "Extra": true }       │
+└────────────────────────────────────────────┘
 ```
 
-- Sample source resolution: the `value` property when it parses as an object â†’ otherwise the
-  `ui.sampleInput` metadata (paste box) â†’ otherwise an empty-state hint ("paste a sample object to
+- Sample source resolution: the `value` property when it parses as an object → otherwise the
+  `ui.sampleInput` metadata (paste box) → otherwise an empty-state hint ("paste a sample object to
   preview the split").
-- Recomputes live as `keys` / `restPort` / sample change â€” pure client-side (F1).
-- Keys missing from the sample render with a soft warning (they'll emit `null` at runtime) â€”
+- Recomputes live as `keys` / `restPort` / sample change — pure client-side (F1).
+- Keys missing from the sample render with a soft warning (they'll emit `null` at runtime) —
   that's the "what would be included" question answered at a glance.
 - Values render truncated (single line, expandable is out of scope).
 
-## Open questions â“ â€” all decided 2026-08-04 âœ…
+## Open questions ❓ — all decided 2026-08-04 ✅
 
-- [x] **Q1 â€” Client-side replay or server endpoint?** âœ… **Client-side**, with a semantics note
+- [x] **Q1 — Client-side replay or server endpoint?** ✅ **Client-side**, with a semantics note
       left in `SplitModule.cs` so a future preview endpoint keeps the same rules. Two additions
       from review: **(a)** when Split's `value` input is wired from a **merged** upstream node,
-      the preview derives the sample shape from schema alone â€” no paste, no replay (the merged
+      the preview derives the sample shape from schema alone — no paste, no replay (the merged
       object's keys are the upstream node's schema ports); **(b)** the previewed output must be
-      usable downstream â€” Split's key/rest ports already flow into wiring and the token picker
+      usable downstream — Split's key/rest ports already flow into wiring and the token picker
       (P2 of the fanout round + T2 of the hinting round), and the rest port now expands into its
       remaining keys when the upstream shape is derivable.
-- [x] **Q2 â€” Should the pasted sample persist?** âœ… **Toggle in the UI.** Persist ON â†’ sample
+- [x] **Q2 — Should the pasted sample persist?** ✅ **Toggle in the UI.** Persist ON → sample
       stored as `ui.sampleInput` node metadata (undoable edit, survives reload, shares with the
       team). Turning the toggle OFF while a sample is stored asks via a **confirm**: primary =
       *remove the stored sample from the workflow* (undoable); secondary = *keep it* (stored value
       stays in the file; further edits are session-only).
-- [x] **Q3 â€” "Last run" values as the sample?** âœ… Deferred, with notes here and in the hinting
-      plan â€” both features want the same execution-history plumbing
+- [x] **Q3 — "Last run" values as the sample?** ✅ Deferred, with notes here and in the hinting
+      plan — both features want the same execution-history plumbing
       (`GET /api/v1/executions/{id}/nodes` per-node `Outputs`); do them together as the follow-up
       round.
 
@@ -109,30 +109,30 @@ A **preview section in the PropertiesPanel**, shown only for `builtin.split`:
 
 | # | Item | Kind | Size | Status |
 | --- | --- | --- | --- | --- |
-| V1 | `SplitPreview` state helper â€” pure function: (sample JSON, keys, restPort) â†’ per-port preview rows | Infra | S | â¬œ |
-| V2 | PropertiesPanel section for `builtin.split` (sample box + live result table, empty state) | UX | M | â¬œ |
-| V3 | Persist pasted sample as `ui.sampleInput` metadata (Q2) | UX | S | â¬œ |
-| V4 | Drift guard: fixture tests asserting `SplitPreview` matches `SplitModule` outputs for the same inputs | Tests | S | â¬œ |
-| V5 | UI tests (bUnit: section renders per config, null-key warning, rest bucket, malformed sample) | Tests | S | â¬œ |
-| V6 | Docs note under `builtin.split` | Docs | S | â¬œ |
+| V1 | `SplitPreview` state helper — pure function: (sample JSON, keys, restPort) → per-port preview rows | Infra | S | ⬜ |
+| V2 | PropertiesPanel section for `builtin.split` (sample box + live result table, empty state) | UX | M | ⬜ |
+| V3 | Persist pasted sample as `ui.sampleInput` metadata (Q2) | UX | S | ⬜ |
+| V4 | Drift guard: fixture tests asserting `SplitPreview` matches `SplitModule` outputs for the same inputs | Tests | S | ⬜ |
+| V5 | UI tests (bUnit: section renders per config, null-key warning, rest bucket, malformed sample) | Tests | S | ⬜ |
+| V6 | Docs note under `builtin.split` | Docs | S | ⬜ |
 
-### V1 â€” Preview computation ðŸ§®
+### V1 — Preview computation 🧮
 
-- [x] V1.1 `SplitPreview.Compute(sampleJson, keys, restPort)` â†’ list of `(port, valuePreview,
-      isMissing)` + rest row; mirrors SplitModule: missing key â†’ `null` + flag, rest = unlisted
-      properties, invalid/non-object sample â†’ error result.
+- [x] V1.1 `SplitPreview.Compute(sampleJson, keys, restPort)` → list of `(port, valuePreview,
+      isMissing)` + rest row; mirrors SplitModule: missing key → `null` + flag, rest = unlisted
+      properties, invalid/non-object sample → error result.
 - [x] V1.2 Value rendering: compact single-line JSON, truncated at ~60 chars.
 
-### V2 â€” Panel section ðŸ–¥ï¸
+### V2 — Panel section 🖥️
 
 - [x] V2.1 Rendered only when `SelectedNode.ModuleId == "builtin.split"` (F4 precedent).
 - [x] V2.2 Sample source: `value` property when object-parseable, else metadata sample, else empty
       state; a small "sample" text area with JSON validation.
 - [x] V2.3 Live recompute on property buffer changes (same change pipeline the panel already uses).
 
-### V4 â€” Drift guard ðŸ§ª
+### V4 — Drift guard 🧪
 
-- [x] V4.1 Shared fixtures (sample object + keys + restPort â†’ expected port map) asserted against
+- [x] V4.1 Shared fixtures (sample object + keys + restPort → expected port map) asserted against
       `SplitModule.ExecuteAsync` in `Workflow.Tests` and `SplitPreview.Compute` in
       `Workflow.Tests.UI`. A change to either side that diverges breaks a test by construction.
 
