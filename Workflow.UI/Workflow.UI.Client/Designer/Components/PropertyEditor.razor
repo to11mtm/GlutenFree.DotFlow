@@ -5,7 +5,7 @@
 @using Workflow.UI.Client.Designer.State
 
 @* ⚙️ Phase 3.3.b.3 — Renders the correct control for a property's EditorType (D6). *@
-<div class="df-field" data-prop="@Property.Name">
+<div class="df-field" data-prop="@Property.Name" @onfocusin="() => Focused.InvokeAsync(Property.Name)">
     <label class="df-label" title="@Tooltip">
         @Property.DisplayName
         @if (Property.IsRequired)
@@ -132,7 +132,13 @@
                     @foreach (var option in group)
                     {
                         <button type="button" class="df-token-list__item" title="@option.Detail"
-                                @onclick="() => InsertToken(option)">@option.Label</button>
+                                @onclick="() => InsertToken(option)">
+                            @option.Label
+                            @if (!string.IsNullOrWhiteSpace(option.Detail))
+                            {
+                                <span class="df-token-list__detail">@option.Detail</span>
+                            }
+                        </button>
                     }
                 }
             </div>
@@ -300,6 +306,13 @@
     /// <summary>An inline validation error to show, if any.</summary>
     [Parameter]
     public string? Error { get; set; }
+
+    /// <summary>
+    /// 🔎 Input-shape hinting (T4/Q2) — raised with the property name when any editor inside this
+    /// field gains focus, so the panel's "Incoming data" section knows where to insert tokens.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> Focused { get; set; }
 
     private string JsonText => Value.ValueKind == JsonValueKind.Undefined ? string.Empty : Value.GetRawText();
 

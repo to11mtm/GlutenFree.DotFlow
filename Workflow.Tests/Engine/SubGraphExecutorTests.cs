@@ -19,6 +19,7 @@ using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
 using Workflow.Modules;
 using Workflow.Modules.Abstractions;
+using Workflow.Modules.Builtin.Flow;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 using Xunit;
@@ -403,6 +404,172 @@ public class SubGraphExecutorTests : TestKit
             .Should().NotBeNull("port-aware routing inside sub-graph should complete normally");
     }
 
+    /// <summary>
+    /// J2 regression: a <c>builtin.fanin</c> inside a sub-graph receives scoped
+    /// <c>__incomingBranches__</c> and does not silently aggregate zero branches~ 🪄✅
+    /// </summary>
+    [Fact]
+    public void SubGraph_FanInConcat_AggregatesBothScopedIncomingBranches()
+    {
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(new StubOutputModule("sg.srcA", new Dictionary<string, object?> { ["value"] = "A" }));
+        registry.RegisterModule(new StubOutputModule("sg.srcB", new Dictionary<string, object?> { ["value"] = "B" }));
+        registry.RegisterModule(new FanInModule());
+
+        var sp = BuildServiceProvider(registry);
+        var fanInProps = new Dictionary<string, System.Text.Json.JsonElement>
+        {
+            ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("concat"),
+        }.ToHashMap();
+
+        var definition = new WorkflowDefinition(
+            Id: Guid.NewGuid(),
+            Name: "sg-fanin-concat",
+            Description: null,
+            Version: new Version(1, 0),
+            Nodes: new[]
+            {
+                new NodeDefinition("srcA", "sg.srcA", "Source A", HashMap<string, System.Text.Json.JsonElement>.Empty),
+                new NodeDefinition("srcB", "sg.srcB", "Source B", HashMap<string, System.Text.Json.JsonElement>.Empty),
+                new NodeDefinition("fanin", "builtin.fanin", "FanIn", fanInProps),
+            }.ToArr(),
+            Connections: new[]
+            {
+                new ConnectionDefinition("srcA", "value", "fanin", "branches"),
+                new ConnectionDefinition("srcB", "value", "fanin", "branches"),
+            }.ToArr(),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        var parentProbe = CreateTestProbe("sg-fanin-concat-parent");
+        parentProbe.ChildActorOf(SubGraphExecutor.Props(
+            Guid.NewGuid(),
+            definition,
+            scopeNodeIds: new[] { "srcA", "srcB", "fanin" },
+            entryNodeIds: new[] { "srcA", "srcB" },
+            inputs: new Dictionary<string, object?>(),
+            serviceProvider: sp,
+            subGraphId: "sg-fanin-concat"), "sg-fanin-concat");
+
+        var completed = parentProbe.ExpectMsg<SubGraphCompleted>(TimeSpan.FromSeconds(5));
+
+        completed.Outputs["fanin.count"].Should().Be(2);
+        var result = completed.Outputs["fanin.result"].Should().BeAssignableTo<List<object?>>().Which;
+        result.Should().HaveCount(2);
+        result[0].Should().BeAssignableTo<Dictionary<string, object?>>().Which["value"].Should().Be("A");
+        result[1].Should().BeAssignableTo<Dictionary<string, object?>>().Which["value"].Should().Be("B");
+    }
+
+    /// <summary>
+    /// J2 regression: scoped FanIn named mode receives index-aligned source port metadata~ 🏷️✅
+    /// </summary>
+    [Fact]
+    public void SubGraph_FanInNamed_UsesScopedSourcePortNames()
+    {
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(new StubOutputModule("sg.twoPort", new Dictionary<string, object?>
+        {
+            ["foo"] = "F",
+            ["bar"] = "B",
+        }));
+        registry.RegisterModule(new FanInModule());
+
+        var sp = BuildServiceProvider(registry);
+        var fanInProps = new Dictionary<string, System.Text.Json.JsonElement>
+        {
+            ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("named"),
+        }.ToHashMap();
+
+        var definition = new WorkflowDefinition(
+            Id: Guid.NewGuid(),
+            Name: "sg-fanin-named",
+            Description: null,
+            Version: new Version(1, 0),
+            Nodes: new[]
+            {
+                new NodeDefinition("src", "sg.twoPort", "Source", HashMap<string, System.Text.Json.JsonElement>.Empty),
+                new NodeDefinition("fanin", "builtin.fanin", "FanIn", fanInProps),
+            }.ToArr(),
+            Connections: new[]
+            {
+                new ConnectionDefinition("src", "foo", "fanin", "branches"),
+                new ConnectionDefinition("src", "bar", "fanin", "branches"),
+            }.ToArr(),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        var parentProbe = CreateTestProbe("sg-fanin-named-parent");
+        parentProbe.ChildActorOf(SubGraphExecutor.Props(
+            Guid.NewGuid(),
+            definition,
+            scopeNodeIds: new[] { "src", "fanin" },
+            entryNodeIds: new[] { "src" },
+            inputs: new Dictionary<string, object?>(),
+            serviceProvider: sp,
+            subGraphId: "sg-fanin-named"), "sg-fanin-named");
+
+        var completed = parentProbe.ExpectMsg<SubGraphCompleted>(TimeSpan.FromSeconds(5));
+
+        completed.Outputs["fanin.count"].Should().Be(2);
+        var named = completed.Outputs["fanin.result"].Should().BeAssignableTo<Dictionary<string, object?>>().Which;
+        named.Keys.Should().BeEquivalentTo(new[] { "foo", "bar" });
+        named["foo"].Should().Be("F");
+        named["bar"].Should().Be("B");
+    }
+
+    /// <summary>
+    /// Guard: top-level <c>WorkflowExecutor</c> FanIn still provides the same ordered branch payloads~ 🛡️
+    /// </summary>
+    [Fact]
+    public void TopLevel_FanInConcat_StillAggregatesIncomingBranches()
+    {
+        var capture = new StubCaptureModule("tl.capture");
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(new StubOutputModule("tl.srcA", new Dictionary<string, object?> { ["value"] = "A" }));
+        registry.RegisterModule(new StubOutputModule("tl.srcB", new Dictionary<string, object?> { ["value"] = "B" }));
+        registry.RegisterModule(new FanInModule());
+        registry.RegisterModule(capture);
+
+        var sp = BuildServiceProvider(registry);
+        var fanInProps = new Dictionary<string, System.Text.Json.JsonElement>
+        {
+            ["mode"] = System.Text.Json.JsonSerializer.SerializeToElement("concat"),
+        }.ToHashMap();
+
+        var definition = new WorkflowDefinition(
+            Id: Guid.NewGuid(),
+            Name: "top-level-fanin-concat",
+            Description: null,
+            Version: new Version(1, 0),
+            Nodes: new[]
+            {
+                new NodeDefinition("srcA", "tl.srcA", "Source A", HashMap<string, System.Text.Json.JsonElement>.Empty),
+                new NodeDefinition("srcB", "tl.srcB", "Source B", HashMap<string, System.Text.Json.JsonElement>.Empty),
+                new NodeDefinition("fanin", "builtin.fanin", "FanIn", fanInProps),
+                new NodeDefinition("cap", "tl.capture", "Capture", HashMap<string, System.Text.Json.JsonElement>.Empty),
+            }.ToArr(),
+            Connections: new[]
+            {
+                new ConnectionDefinition("srcA", "value", "fanin", "branches"),
+                new ConnectionDefinition("srcB", "value", "fanin", "branches"),
+                new ConnectionDefinition("fanin", "result", "cap", "input"),
+            }.ToArr(),
+            Variables: HashMap<string, VariableDefinition>.Empty);
+
+        var parentProbe = CreateTestProbe("top-level-fanin-parent");
+        var executor = parentProbe.ChildActorOf(
+            WorkflowExecutor.Props(Guid.NewGuid(), definition, new Dictionary<string, object?>(), sp),
+            "top-level-fanin");
+
+        executor.Tell(new StartExecution(Guid.NewGuid()));
+
+        var completed = parentProbe.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, TimeSpan.FromSeconds(5));
+        completed.Should().BeOfType<WorkflowCompleted>();
+
+        var result = capture.Received.Should().BeAssignableTo<List<object?>>().Which;
+        result.Should().HaveCount(2);
+        result[0].Should().BeAssignableTo<Dictionary<string, object?>>().Which["value"].Should().Be("A");
+        result[1].Should().BeAssignableTo<Dictionary<string, object?>>().Which["value"].Should().Be("B");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────────
 
     private static IModuleRegistry RegisterModules(params string[] moduleIds)
@@ -499,6 +666,57 @@ public class SubGraphExecutorTests : TestKit
                 _activePorts));
     }
 
+    private sealed class StubOutputModule : IWorkflowModule
+    {
+        private readonly Dictionary<string, object?> _outputs;
+
+        public StubOutputModule(string moduleId, Dictionary<string, object?> outputs)
+        {
+            ModuleId = moduleId;
+            _outputs = outputs;
+        }
+
+        public string ModuleId { get; }
+        public string DisplayName => ModuleId;
+        public string Category => "Test";
+        public string Description => "Emits configured outputs";
+        public string Icon => "🎁";
+        public Version Version => new(1, 0);
+
+        public ModuleSchema Schema => new(
+            Inputs: Arr<PortDefinition>.Empty,
+            Outputs: _outputs.Keys.Select(k => PortDefinition.Create<object>(k, isRequired: false)).ToArr(),
+            Properties: Arr<ModulePropertyDefinition>.Empty);
+
+        public Task<ModuleResult> ExecuteAsync(ModuleExecutionContext ctx, CancellationToken ct = default)
+            => Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?>(_outputs)));
+    }
+
+    private sealed class StubCaptureModule : IWorkflowModule
+    {
+        public StubCaptureModule(string moduleId) => ModuleId = moduleId;
+
+        public object? Received { get; private set; }
+
+        public string ModuleId { get; }
+        public string DisplayName => ModuleId;
+        public string Category => "Test";
+        public string Description => "Captures input";
+        public string Icon => "🎁";
+        public Version Version => new(1, 0);
+
+        public ModuleSchema Schema => new(
+            Inputs: Arr.create(PortDefinition.Create<object>("input", isRequired: false)),
+            Outputs: Arr.create(PortDefinition.Create<object>("output", isRequired: false)),
+            Properties: Arr<ModulePropertyDefinition>.Empty);
+
+        public Task<ModuleResult> ExecuteAsync(ModuleExecutionContext ctx, CancellationToken ct = default)
+        {
+            Received = ctx.Inputs.TryGetValue("input", out var value) ? value : null;
+            return Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?> { ["output"] = Received }));
+        }
+    }
+
     /// <summary>Thread-safe capturing history repository for persistence tests~ 💾</summary>
     private sealed class CapturingHistoryRepository : IExecutionHistoryRepository
     {
@@ -534,8 +752,6 @@ public class SubGraphExecutorTests : TestKit
             => Task.FromResult(new PagedResult<ExecutionRecord>(new List<ExecutionRecord>(), 0, pagination.Page, pagination.PageSize));
     }
 }
-
-
 
 
 

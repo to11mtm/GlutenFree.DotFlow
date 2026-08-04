@@ -329,6 +329,8 @@ public class SubGraphExecutor : ReceiveActor
     /// <summary>
     /// Gathers inputs for a node from workflow inputs and predecessor outputs,
     /// following connection port mappings~ .
+    /// Mirrors <see cref="WorkflowExecutor"/> FanIn branch snapshots so scoped FanIn nodes
+    /// do not silently aggregate zero branches (J2)~ 🪄.
     /// </summary>
     private Dictionary<string, object?> GatherNodeInputs(string nodeId)
     {
@@ -338,10 +340,24 @@ public class SubGraphExecutor : ReceiveActor
             .Where(c => c.TargetNodeId == nodeId && _nodeSuccessors.ContainsKey(c.SourceNodeId))
             .ToList();
 
+        // Phase 2.2.3b/J2: collect ordered per-branch payloads for barrier nodes (FanInModule)~ 🪄
+        // Each entry is the full source-node output dictionary, in declaration-order of scoped connections.
+        var incomingBranches = new List<Dictionary<string, object?>>(incomingConnections.Count);
+
+        // UX-F2/J2: parallel per-branch metadata, index-aligned with __incomingBranches__~ 🏷️
+        var incomingBranchMeta = new List<Dictionary<string, object?>>(incomingConnections.Count);
+
         foreach (var conn in incomingConnections)
         {
             if (!_nodeOutputs.TryGetValue(conn.SourceNodeId, out var sourceOutputs))
             {
+                // Predecessor was skipped — record an empty payload to preserve branch positions.
+                incomingBranches.Add(new Dictionary<string, object?>());
+                incomingBranchMeta.Add(new Dictionary<string, object?>
+                {
+                    ["sourceNodeId"] = conn.SourceNodeId,
+                    ["sourcePortName"] = conn.SourcePortName,
+                });
                 continue;
             }
 
@@ -355,7 +371,17 @@ public class SubGraphExecutor : ReceiveActor
             {
                 inputs[$"{conn.SourceNodeId}.{key}"] = value;
             }
+
+            incomingBranches.Add(new Dictionary<string, object?>(sourceOutputs));
+            incomingBranchMeta.Add(new Dictionary<string, object?>
+            {
+                ["sourceNodeId"] = conn.SourceNodeId,
+                ["sourcePortName"] = conn.SourcePortName,
+            });
         }
+
+        inputs["__incomingBranches__"] = incomingBranches;
+        inputs["__incomingBranchMeta__"] = incomingBranchMeta;
 
         return inputs;
     }
@@ -604,6 +630,5 @@ public class SubGraphExecutor : ReceiveActor
 
     #endregion
 }
-
 
 

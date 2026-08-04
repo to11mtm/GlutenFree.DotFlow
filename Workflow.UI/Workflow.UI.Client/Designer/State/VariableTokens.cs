@@ -26,6 +26,12 @@ public static class VariableTokens
     public const string GlobalsCredentialWarning =
         "🔒 Not for credentials yet — global values are stored and readable in plaintext until secret support ships.";
 
+    /// <summary>The picker group name for the node's own incoming value~ 🔌.</summary>
+    public const string SelfInputCategory = "This node's input";
+
+    /// <summary>The literal token for the node's own input~ 🔌.</summary>
+    public const string SelfInputToken = "{{input}}";
+
     /// <summary>A pickable binding token~ 🎫.</summary>
     /// <param name="Token">The literal token text to insert (e.g. <c>{{Variable.count}}</c>).</param>
     /// <param name="Label">The display label.</param>
@@ -70,6 +76,25 @@ public static class VariableTokens
     {
         var options = new List<TokenOption>();
 
+        // 🔌 D-I (input-shape hinting) — the node's own incoming value first: it's the
+        // beginner-friendliest token, and it only appears when it will actually resolve.
+        if (InputShape.SelfInputWired(document, nodeId))
+        {
+            var wired = InputShape.IncomingFor(document, nodeId)
+                .FirstOrDefault(i => string.Equals(i.PortName, "input", StringComparison.OrdinalIgnoreCase));
+            options.Add(new TokenOption(
+                SelfInputToken,
+                "input — the value coming in",
+                SelfInputCategory,
+                wired is null ? null : $"From {wired.SourceNodeName} · {wired.SourcePortName}"));
+
+            // The arriving value's derivable sub-keys (merged upstream, named FanIn)~
+            foreach (var key in wired?.Keys ?? System.Array.Empty<InputShape.Key>())
+            {
+                options.Add(new TokenOption(key.Token, key.Label, SelfInputCategory, Detail(key)));
+            }
+        }
+
         foreach (var (name, raw) in document.Variables.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
         {
             // V1.6 — surface the declared type and description so the picker teaches what the
@@ -103,14 +128,28 @@ public static class VariableTokens
                 continue;
             }
 
-            foreach (var port in NodePorts.Outputs(node))
+            // T2 — merged nodes and named FanIns expand one level deeper, with schema
+            // type/description detail on every row (InputShape owns the derivation).
+            foreach (var key in InputShape.AddressableKeys(document, node))
             {
-                options.Add(new TokenOption(OutputToken(upstreamId, port), $"{node.Name} · {port}", "Upstream outputs"));
+                options.Add(new TokenOption(key.Token, key.Label, "Upstream outputs", Detail(key)));
             }
         }
 
         return options;
     }
+
+    /// <summary>Formats a key's hover detail: <c>type — description</c> (either half optional)~ 💬.</summary>
+    /// <param name="key">The addressable key.</param>
+    /// <returns>The detail text, or null.</returns>
+    private static string? Detail(InputShape.Key key)
+        => (key.DataType, key.Description) switch
+        {
+            (null or "", null or "") => null,
+            (null or "", var d) => d,
+            (var t, null or "") => t,
+            var (t, d) => $"{t} — {d}",
+        };
 
     /// <summary>
     /// Returns every node with a connection path into <paramref name="nodeId"/>~ ⬆️.

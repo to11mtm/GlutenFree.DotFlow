@@ -190,6 +190,16 @@ a.df-link:hover { text-decoration: underline; }
 .df-statusbar__role--end { color: var(--df-role-end); }
 .df-statusbar__role:hover { text-decoration: underline; }
 
+/* 🔎 Input-shape hinting (T3/T4/T7) */
+.df-token-list__detail { display: block; color: var(--df-text-dim); font-size: 0.68rem; }
+.df-incoming__row { display: flex; align-items: center; gap: var(--df-space-2); padding: 2px 0; font-size: 0.8rem; flex-wrap: wrap; }
+.df-incoming__index { color: var(--df-text-dim); }
+.df-incoming__order-note { color: var(--df-text-dim); font-weight: 400; font-size: 0.7rem; }
+.df-incoming__reorder { margin-left: auto; display: flex; gap: 2px; }
+.df-incoming__keys { display: flex; gap: var(--df-space-2); flex-wrap: wrap; padding-left: var(--df-space-4); }
+.df-incoming__key { font-size: 0.72rem; }
+.df-incoming__warn { color: #e0b341; }
+
 /* 📦 Palette + editing layout */
 .df-designer__body { display: flex; flex: 1; min-height: 0; }
 .df-designer__palette { width: 240px; border-right: 1px solid var(--df-border); overflow-y: auto; background: var(--df-surface); }

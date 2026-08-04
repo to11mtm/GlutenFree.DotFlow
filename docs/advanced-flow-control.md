@@ -493,11 +493,20 @@ The convergence point downstream from a `parallel` or `fanout`. Holds until *all
 | `meta` | `string` enum | optional | `"separate"` | Where `count` goes: `separate` (own output port), `embedded` (`result = { value, count }` — one item), `hidden` (result only) |
 
 **Modes:**
-- `Concat` — collects payloads into an array in branch-completion order
-- `Merge` — last-writer-wins shallow merge across branches
+- `Concat` — collects payloads into an array in **branch order** (see below)
+- `Merge` — last-writer-wins shallow merge across branches, in branch order
 - `Named` — one object keyed by each branch's **source port name** — e.g. a node with outputs `foo, bar, baz` fanned in yields `{ "foo": …, "bar": …, "baz": … }`. Port-name collisions (same port from different nodes) fall back to `nodeId.port` keys
 - `First` — only the first branch's payload
 - `Last` — only the last branch's payload
+
+> 📐 **Branch order is connection *declaration* order** — the order the edges appear in the saved
+> workflow (i.e. the order they were drawn), not the order branches finish at runtime. It's
+> deterministic, and it's what `Merge`/`First`/`Last` precedence follows. The designer's
+> **Incoming branches** panel shows the numbered order for any FanIn node and lets you move
+> branches up/down (an undoable edit).
+>
+> 🪄 FanIn works inside loop bodies, try/catch, transaction bodies, and parallel/fanout branches
+> too — sub-graph runs deliver branches the same way the top level does.
 
 | Output | Description |
 |---|---|

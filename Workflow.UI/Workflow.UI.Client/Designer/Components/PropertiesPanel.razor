@@ -7,6 +7,7 @@
 @inject NavigationManager Nav
 @inject ScriptStudioHandoff Handoff
 @inject Workflow.UI.Client.Linq.State.LinqStudioHandoff LinqHandoff
+@inject IJSRuntime JS
 
 <div class="df-props">
     @if (SelectedNode is not null)
@@ -48,6 +49,67 @@
             </div>
         </div>
 
+        @* 🔎 Input-shape hinting (T4/T7) — what's arriving at this node, and how to address it. *@
+        @if (IncomingRows.Count > 0)
+        {
+            <div class="df-field df-incoming" data-testid="incoming-data">
+                @if (FanInShape.IsFanIn(SelectedNode))
+                {
+                    var branches = FanInShape.Branches(Document, SelectedNode.Id);
+                    <label class="df-label">Incoming branches <span class="df-incoming__order-note">(order matters for merge/first/last)</span></label>
+                    @for (var i = 0; i < branches.Count; i++)
+                    {
+                        var branch = branches[i];
+                        var idx = i;
+                        <div class="df-incoming__row" data-testid="fanin-branch-@idx">
+                            <span class="df-incoming__index">@(idx + 1).</span>
+                            <span>@branch.SourceNodeName · @branch.SourcePortName</span>
+                            <span class="df-incoming__reorder">
+                                <button type="button" class="df-btn df-btn--small" data-testid="branch-up-@idx"
+                                        disabled="@(idx == 0)" title="Move this branch earlier"
+                                        @onclick="() => ReorderBranch(idx, idx - 1)">↑</button>
+                                <button type="button" class="df-btn df-btn--small" data-testid="branch-down-@idx"
+                                        disabled="@(idx == branches.Count - 1)" title="Move this branch later"
+                                        @onclick="() => ReorderBranch(idx, idx + 1)">↓</button>
+                            </span>
+                        </div>
+                    }
+                    <div class="df-field-help" data-testid="fanin-shape">@FanInShape.ShapeSummary(Document, SelectedNode)</div>
+                    @if (FanInKnownIssueNote is { } fanInNote)
+                    {
+                        <div class="df-field-help df-incoming__warn" data-testid="fanin-note">⚠ @fanInNote</div>
+                    }
+                }
+                else
+                {
+                    <label class="df-label">Incoming data</label>
+                    @foreach (var row in IncomingRows)
+                    {
+                        var rowToken = string.Equals(row.PortName, "input", StringComparison.OrdinalIgnoreCase)
+                            ? VariableTokens.SelfInputToken
+                            : VariableTokens.OutputToken(row.SourceNodeId, row.SourcePortName);
+                        <div class="df-incoming__row" data-testid="incoming-@row.PortName">
+                            <code>@row.PortName</code>
+                            <span>←</span>
+                            <button type="button" class="df-link" title="Insert @rowToken"
+                                    @onclick="() => InsertHintToken(rowToken)">@row.SourceNodeName · @row.SourcePortName</button>
+                            @if (row.Keys.Count > 0)
+                            {
+                                <span class="df-incoming__keys">
+                                    @foreach (var key in row.Keys)
+                                    {
+                                        <button type="button" class="df-link df-incoming__key" title="Insert @key.Token"
+                                                @onclick="() => InsertHintToken(key.Token)">@KeyLeaf(key.Label)</button>
+                                    }
+                                </span>
+                            }
+                        </div>
+                    }
+                    <div class="df-field-help">Click to insert the token into the focused field (copied to the clipboard otherwise).</div>
+                }
+            </div>
+        }
+
         @if (SelectedNode.Schema is { Properties.Count: > 0 } schema)
         {
             @foreach (var prop in schema.Properties)
@@ -59,6 +121,7 @@
                                 TokenOptions="@NodeTokenOptions"
                                 UnresolvableBinding="@IsUnresolvable(prop.Name)"
                                 CanEscapeLiteral="@CanEscapeLiteral(prop.Name)"
+                                Focused="name => lastFocusedProperty = name"
                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
             }
         }
@@ -264,6 +327,10 @@
     private string nameBuffer = string.Empty;
     private bool modalOpen;
 
+    // 🔎 Input-shape hinting (T4/Q2) — the property editor that last had focus, so hint tokens
+    // can insert there; clipboard is the fallback when nothing was focused yet.
+    private string? lastFocusedProperty;
+
     // 🛡️ G9 — SQL parameter builder state.
     private bool sqlParamsOpen;
     private string? sqlParamName;
@@ -363,6 +430,56 @@
 
         this.Commands.Execute(new EditNodePropertiesCommand(node.Id, before, after));
     }
+
+    /// <summary>🔎 T4 — the selected node's wired inputs (empty when nothing selected/wired)~.</summary>
+    private IReadOnlyList<InputShape.Incoming> IncomingRows
+        => this.SelectedNode is { } node
+            ? InputShape.IncomingFor(this.Document, node.Id)
+            : System.Array.Empty<InputShape.Incoming>();
+
+    /// <summary>
+    /// ⚠ Q7 — an honest note about known FanIn runtime gaps, shown under the branch list. The J2
+    /// zero-branches-in-sub-graphs bug is fixed, so this currently returns null — the slot stays
+    /// so future known gaps surface here instead of letting the hint mislead~ 🧭.
+    /// </summary>
+    private string? FanInKnownIssueNote => null;
+
+    /// <summary>🔀 T8 — moves a FanIn branch up/down as one undoable command~.</summary>
+    private void ReorderBranch(int from, int to)
+    {
+        if (this.SelectedNode is { } node)
+        {
+            this.Commands.Execute(new ReorderIncomingConnectionCommand(node.Id, from, to));
+        }
+    }
+
+    /// <summary>
+    /// 🔎 T4/Q2 — inserts a hint token into the last-focused property editor's buffer; falls back
+    /// to the clipboard when no editor has had focus yet~.
+    /// </summary>
+    private async Task InsertHintToken(string token)
+    {
+        if (this.lastFocusedProperty is { } prop
+            && this.SelectedNode?.Schema?.Properties.Any(p => p.Name == prop && p.SupportsTemplates) == true)
+        {
+            var current = JsonValues.ToText(this.ValueFor(prop));
+            this.OnValueChanged(prop, JsonValues.FromString(string.IsNullOrEmpty(current) ? token : current + token));
+            return;
+        }
+
+        try
+        {
+            await this.JS.InvokeVoidAsync("navigator.clipboard.writeText", token);
+        }
+        catch (Microsoft.JSInterop.JSException)
+        {
+            // Clipboard unavailable (permissions/context) — nothing sensible to do~
+        }
+    }
+
+    /// <summary>The last path segment of a key label (compact display in the keys row)~.</summary>
+    private static string KeyLeaf(string label)
+        => label.LastIndexOf('.') is var i && i >= 0 && i < label.Length - 1 ? label[(i + 1) ..] : label;
 
     /// <summary>A how-it-works callout for structural (loop / error-boundary) modules (UX-F4/F5)~ 💡.</summary>
     private string? StructuralHint => this.SelectedNode?.ModuleId switch

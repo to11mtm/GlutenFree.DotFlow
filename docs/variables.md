@@ -119,8 +119,13 @@ the upstream node's id. (`{{nodeId.port}}` still works when you want to be expli
 only way to reach nodes further upstream.) `{{input}}` requires a connection into the node's
 `input` port — without one it fails the node, per the rule below.
 
-The designer's `{{x}}` button lists everything referenceable from the selected node — workflow
-variables, globals, and upstream node outputs — and the **ƒx builder** composes comparisons for you.
+The designer's `{{x}}` button lists everything referenceable from the selected node — this node's
+own input (`{{input}}`, first in the list when wired), workflow variables, globals, and upstream
+node outputs — with each entry's type and description. **Merged** upstream nodes expand one level
+deeper (`{{http-1.output.statusCode}}`…), and a `named`-mode FanIn expands into its computed
+branch keys. The **Incoming data** section of the properties panel shows the same shape at a
+glance — click any key to insert its token into the field you're editing (it lands on the
+clipboard when no field has focus). The **ƒx builder** composes comparisons for you.
 
 ### Failure is not silent
 
