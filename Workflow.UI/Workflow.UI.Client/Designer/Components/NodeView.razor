@@ -2,17 +2,36 @@
 @using Workflow.UI.Client.Designer.State
 @using Workflow.UI.Client.Api.Dtos
 
-<div class="df-node @StateClass @(Selected ? "df-node--selected" : "")"
+<div class="df-node @StateClass @RoleClass @IssueClass @(Selected ? "df-node--selected" : "")"
      style="left:@(Node.X.ToString(Inv))px; top:@(Node.Y.ToString(Inv))px; width:@(CanvasGeometry.NodeWidth.ToString(Inv))px;"
      data-node-id="@Node.Id"
      @onpointerdown="OnPointerDown" @onpointerdown:stopPropagation="true"
      @oncontextmenu="OnContextMenu" @oncontextmenu:preventDefault="true" @oncontextmenu:stopPropagation="true">
+    @if (Role is { IsIsolated: false } role && (role.IsStart || role.IsEnd))
+    {
+        <div class="df-node__rolebadges">
+            @if (role.IsStart)
+            {
+                <span class="df-badge df-badge--start @(role.StartCount > 1 ? "df-badge--plural" : "")"
+                      title="@(role.StartCount > 1 ? $"One of {role.StartCount} starting points — they all run, in parallel" : "The workflow begins here (no incoming connections)")">▶ @BadgeText("Start", role.StartIndex, role.StartCount)</span>
+            }
+            @if (role.IsEnd)
+            {
+                <span class="df-badge df-badge--end @(role.EndCount > 1 ? "df-badge--plural" : "")"
+                      title="@(role.EndCount > 1 ? $"One of {role.EndCount} end points — each contributes to the workflow's result" : "The workflow ends here (no outgoing connections) — its outputs become the result")">⏹ @BadgeText("End", role.EndIndex, role.EndCount)</span>
+            }
+        </div>
+    }
     <div class="df-node__header" style="height:@(CanvasGeometry.HeaderHeight.ToString(Inv))px;">
         <span class="df-node__icon">@Icon</span>
         <span class="df-node__titles">
             <span class="df-node__name" title="@Node.Name">@Node.Name</span>
             <span class="df-node__module" title="@Node.ModuleId">@Node.ModuleId</span>
         </span>
+        @if (IssueTitle is not null)
+        {
+            <span class="df-node__issue df-node__issue--@IssueSeverityClass" title="@IssueTitle">⚠</span>
+        }
         @if (!Node.IsModuleKnown)
         {
             <span class="df-node__warn" title="unknown module">⚠</span>
@@ -26,6 +45,7 @@
                 <div class="df-port df-port--in @(InputCompatible?.Invoke(port) == true ? "df-port--compatible" : "") @(InputEndpoint?.Invoke(port) == true ? "df-port--endpoint" : "")"
                      style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
                      data-port-in="@port"
+                     title="@PortTitle(port, isOutput: false)"
                      @onpointerup="() => OnInputPointerUp(port)" @onpointerup:stopPropagation="true">
                     <span class="df-port__dot" data-port-anchor="in:@port"></span>
                     <span class="df-port__label">@port</span>
@@ -38,6 +58,7 @@
                 <div class="df-port df-port--out @(port == ActiveSourcePort ? "df-port--source" : "") @(OutputEndpoint?.Invoke(port) == true ? "df-port--endpoint" : "")"
                      style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
                      data-port-out="@port"
+                     title="@PortTitle(port, isOutput: true)"
                      @onpointerdown="() => OnOutputPointerDown(port)" @onpointerdown:stopPropagation="true">
                     <span class="df-port__label">@port</span>
                     <span class="df-port__dot" data-port-anchor="out:@port"></span>
@@ -94,12 +115,54 @@
     [Parameter]
     public Func<string, bool>? OutputEndpoint { get; set; }
 
+    /// <summary>The node's derived start/end role (null hides the role affordances)~ 🧭.</summary>
+    [Parameter]
+    public GraphTopology.NodeRole? Role { get; set; }
+
+    /// <summary>Module-declared icon (from the module catalog); falls back to the built-in table when null~ 🎨.</summary>
+    [Parameter]
+    public string? IconOverride { get; set; }
+
+    /// <summary>Tooltip text for validation issues pointing at this node (null when clean)~ 📍.</summary>
+    [Parameter]
+    public string? IssueTitle { get; set; }
+
+    /// <summary>The worst issue severity for this node: <c>error</c>, <c>warning</c>, or empty~ 📍.</summary>
+    [Parameter]
+    public string IssueSeverityClass { get; set; } = string.Empty;
+
     private IReadOnlyList<string> Inputs => NodePorts.Inputs(Node);
 
     private IReadOnlyList<string> Outputs => NodePorts.Outputs(Node);
 
-    private string Icon => Node.ModuleId switch
+    private string RoleClass => Role switch
     {
+        null => string.Empty,
+        { IsIsolated: true } => "df-node--unwired",
+        { IsStart: true, StartCount: > 1 } => "df-node--role-start df-node--role-ambiguous",
+        { IsStart: true } => "df-node--role-start",
+        { IsEnd: true, EndCount: > 1 } => "df-node--role-end df-node--role-ambiguous",
+        { IsEnd: true } => "df-node--role-end",
+        _ => string.Empty,
+    };
+
+    private string IssueClass => string.IsNullOrEmpty(IssueSeverityClass) ? string.Empty : $"df-node--issue-{IssueSeverityClass}";
+
+    private static string BadgeText(string label, int index, int count)
+        => count > 1 ? $"{label} {index + 1} of {count}" : label;
+
+    /// <summary>Port tooltip from the schema's port description (K2) — null keeps the attribute off~ 🔌.</summary>
+    private string? PortTitle(string port, bool isOutput)
+    {
+        var ports = isOutput ? Node.Schema?.Outputs : Node.Schema?.Inputs;
+        var description = ports?.FirstOrDefault(p => p.Name == port)?.Description;
+        return string.IsNullOrWhiteSpace(description) ? null : description;
+    }
+
+    private string Icon => !string.IsNullOrWhiteSpace(IconOverride) ? IconOverride! : Node.ModuleId switch
+    {
+        "builtin.start" => "🚀",
+        "builtin.end" => "🏁",
         var m when m.Contains("trycatch") => "🛡️",
         var m when m.Contains("loop") => "🔁",
         var m when m.Contains("http") => "🌐",

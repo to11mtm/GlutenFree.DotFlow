@@ -419,9 +419,13 @@ On `401 Unauthorized`, the module automatically invalidates the cached token and
 
 ### `builtin.http.request` Properties
 
+> 🔌 The module also declares one optional **`input`** port: wire any previous step into it to
+> sequence the request mid-workflow, and reference the incoming value from `url`, `body`, headers
+> etc. as `{{input}}` or `{{input.path.to.value}}` — e.g. `https://api/orders/{{input.orderId}}`.
+
 | Property | Type | Default | Required | Description |
 |----------|------|---------|----------|-------------|
-| `url` | `string` | — | ✅ | Absolute request URL. Supports `{{Variable.x}}` / `{{nodeId.port}}` bindings~ |
+| `url` | `string` | — | ✅ | Absolute request URL. Supports `{{Variable.x}}` / `{{nodeId.port}}` / `{{input.x}}` bindings~ |
 | `method` | `string` | `"GET"` | | HTTP verb: GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS~ |
 | `headers` | `Dictionary<string,string>` | — | | Custom request headers~ |
 | `body` | `object` | — | | Request body (serialisation controlled by `contentType`)~ |

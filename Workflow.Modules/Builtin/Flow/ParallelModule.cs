@@ -64,7 +64,13 @@ public class ParallelModule : IWorkflowModule
     /// CopilotNote: Outputs intentionally EMPTY — branch ports are dynamic + "done" port.
     /// </remarks>
     public ModuleSchema Schema => new(
-        Inputs: Arr<PortDefinition>.Empty,
+        Inputs: Arr.create(
+            new PortDefinition(
+                Name: "input",
+                DisplayName: "Input",
+                DataType: typeof(object),
+                Description: "Optional. Connect a previous step to run this one after it; the value is available to templates as {{input}}~ 🔌",
+                IsRequired: false)),
         Outputs: Arr<PortDefinition>.Empty,
         Properties: Arr.create(
             new ModulePropertyDefinition(

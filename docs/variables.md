@@ -103,6 +103,8 @@ pre-filled with the declared initial value, with the description as help text.
 {{Variable.apiBaseUrl}}             a workflow, global or run-supplied variable
 {{Variable.user.name}}              a path into an object value (the root name is the variable)
 {{nodeId.portName}}                 an upstream node's output
+{{input}}                           the value arriving on this node's own 'input' port
+{{input.Thing.Id}}                  a path into that incoming value
 Order {{Variable.id}} shipped       tokens embed inside plain text
 {{Variable.count > 5}}              expressions evaluate (sandboxed JavaScript)
 \{\{not a token}}                   an escaped literal — renders as {{not a token}}
@@ -110,6 +112,12 @@ Order {{Variable.id}} shipped       tokens embed inside plain text
 
 A token that is the **entire** value keeps its resolved type (a number stays a number). A token
 embedded in longer text interpolates to a string.
+
+`input` is a **reserved root**: it always means *this node's own incoming value*, so you can wire
+any step into (say) an HTTP Request and use `{{input.orderId}}` in the URL or body without knowing
+the upstream node's id. (`{{nodeId.port}}` still works when you want to be explicit, and it's the
+only way to reach nodes further upstream.) `{{input}}` requires a connection into the node's
+`input` port — without one it fails the node, per the rule below.
 
 The designer's `{{x}}` button lists everything referenceable from the selected node — workflow
 variables, globals, and upstream node outputs — and the **ƒx builder** composes comparisons for you.

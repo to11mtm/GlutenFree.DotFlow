@@ -1,4 +1,4 @@
-// <copyright file="FileReadModule.cs" company="GlutenFree">
+﻿// <copyright file="FileReadModule.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -17,12 +17,12 @@ using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.File.Internal;
 
 /// <summary>
-/// 📖 Built-in File Read module (<c>builtin.file.read</c>) — reads a local file as text,
-/// binary, or an array of lines, with encoding + size-limit support~ 📁✨.
+/// ðŸ“– Built-in File Read module (<c>builtin.file.read</c>) â€” reads a local file as text,
+/// binary, or an array of lines, with encoding + size-limit support~ ðŸ“âœ¨.
 /// </summary>
 /// <remarks>
 /// CopilotNote: Phase 2.5.a.1. All paths go through <see cref="IWorkflowPathValidator"/>
-/// (resolved from <c>context.Services</c>) — never touch the raw path directly~ 🛡️.
+/// (resolved from <c>context.Services</c>) â€” never touch the raw path directly~ ðŸ›¡ï¸.
 /// </remarks>
 public sealed class FileReadModule : IWorkflowModule
 {
@@ -36,27 +36,33 @@ public sealed class FileReadModule : IWorkflowModule
     public string Category => "File System";
 
     /// <inheritdoc />
-    public string Description => "Reads a local file as text, binary, or lines~ 📖✨";
+    public string Description => "Reads a local file as text, binary, or lines~ ðŸ“–âœ¨";
 
     /// <inheritdoc />
-    public string Icon => "📖";
+    public string Icon => "ðŸ“–";
 
     /// <inheritdoc />
     public Version Version => new(1, 0, 0);
 
     /// <inheritdoc />
     public ModuleSchema Schema => new(
-        Inputs: Arr<PortDefinition>.Empty,
+        Inputs: Arr.create(
+            new PortDefinition(
+                Name: "input",
+                DisplayName: "Input",
+                DataType: typeof(object),
+                Description: "Optional. Connect a previous step to run this one after it; the value is available to templates as {{input}}~ 🔌",
+                IsRequired: false)),
         Outputs: Arr.create(
-            new PortDefinition("content", "Content", typeof(object), "File content (string, byte[], or string[])~ 📄", false),
-            new PortDefinition("size", "Size (bytes)", typeof(long), "File size in bytes~ 📊", false),
-            new PortDefinition("lastModified", "Last Modified", typeof(DateTimeOffset), "Last write time (UTC)~ 🕒", false),
-            new PortDefinition("success", "Success", typeof(bool), "Whether the read succeeded~ ✅", false)),
+            new PortDefinition("content", "Content", typeof(object), "File content (string, byte[], or string[])~ ðŸ“„", false),
+            new PortDefinition("size", "Size (bytes)", typeof(long), "File size in bytes~ ðŸ“Š", false),
+            new PortDefinition("lastModified", "Last Modified", typeof(DateTimeOffset), "Last write time (UTC)~ ðŸ•’", false),
+            new PortDefinition("success", "Success", typeof(bool), "Whether the read succeeded~ âœ…", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "File path to read. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
-            new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding (utf-8, utf-16, ascii, latin1)~ 🔤", false, "utf-8", PropertyEditorType.Text),
-            new ModulePropertyDefinition("readAs", "Read As", typeof(string), "text, binary, or lines~ 📄", false, "text", PropertyEditorType.Dropdown, Arr.create<object>("text", "binary", "lines")),
-            new ModulePropertyDefinition("maxSize", "Max Size (bytes)", typeof(long), "Max file size; exceeding fails the read~ 🧠", false, null, PropertyEditorType.Number)));
+            new ModulePropertyDefinition("path", "Path", typeof(string), "File path to read. Supports {{Variable.Name}}~ ðŸ“‚", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
+            new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding (utf-8, utf-16, ascii, latin1)~ ðŸ”¤", false, "utf-8", PropertyEditorType.Text),
+            new ModulePropertyDefinition("readAs", "Read As", typeof(string), "text, binary, or lines~ ðŸ“„", false, "text", PropertyEditorType.Dropdown, Arr.create<object>("text", "binary", "lines")),
+            new ModulePropertyDefinition("maxSize", "Max Size (bytes)", typeof(long), "Max file size; exceeding fails the read~ ðŸ§ ", false, null, PropertyEditorType.Number)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -65,25 +71,25 @@ public sealed class FileReadModule : IWorkflowModule
 
         if (FileModuleSupport.GetString(configuration, "path") is null)
         {
-            errors.Add(new ValidationError("PATH_REQUIRED", "path is required~ 💔", PropertyName: "path"));
+            errors.Add(new ValidationError("PATH_REQUIRED", "path is required~ ðŸ’”", PropertyName: "path"));
         }
 
         var readAs = FileModuleSupport.GetString(configuration, "readAs") ?? "text";
         if (readAs is not ("text" or "binary" or "lines"))
         {
-            errors.Add(new ValidationError("INVALID_READ_AS", $"readAs '{readAs}' must be text, binary, or lines~ 💔", PropertyName: "readAs"));
+            errors.Add(new ValidationError("INVALID_READ_AS", $"readAs '{readAs}' must be text, binary, or lines~ ðŸ’”", PropertyName: "readAs"));
         }
 
         var encoding = FileModuleSupport.GetString(configuration, "encoding");
         if (encoding is not null && !EncodingResolver.TryResolve(encoding, out _, out var encErr))
         {
-            errors.Add(new ValidationError("INVALID_ENCODING", $"{encErr}~ 💔", PropertyName: "encoding"));
+            errors.Add(new ValidationError("INVALID_ENCODING", $"{encErr}~ ðŸ’”", PropertyName: "encoding"));
         }
 
         var maxSize = FileModuleSupport.TryGetLong(configuration, "maxSize");
         if (maxSize is <= 0)
         {
-            errors.Add(new ValidationError("INVALID_MAX_SIZE", "maxSize must be positive~ 💔", PropertyName: "maxSize"));
+            errors.Add(new ValidationError("INVALID_MAX_SIZE", "maxSize must be positive~ ðŸ’”", PropertyName: "maxSize"));
         }
 
         return errors.Count > 0 ? ValidationResult.Failure(errors.ToArray()) : ValidationResult.Success();
@@ -97,7 +103,7 @@ public sealed class FileReadModule : IWorkflowModule
         var rawPath = FileModuleSupport.GetString(context.Properties, "path");
         if (rawPath is null)
         {
-            return ModuleResult.Fail("path is required~ 💔");
+            return ModuleResult.Fail("path is required~ ðŸ’”");
         }
 
         if (!FileModuleSupport.TryValidatePath(context, rawPath, PathAccessIntent.Read, out var path, out var failure))
@@ -107,13 +113,13 @@ public sealed class FileReadModule : IWorkflowModule
 
         if (!System.IO.File.Exists(path))
         {
-            return ModuleResult.Fail($"📖 File not found: '{rawPath}'~ 💔");
+            return ModuleResult.Fail($"ðŸ“– File not found: '{rawPath}'~ ðŸ’”");
         }
 
         var readAs = FileModuleSupport.GetString(context.Properties, "readAs") ?? "text";
         if (!EncodingResolver.TryResolve(FileModuleSupport.GetString(context.Properties, "encoding"), out var encoding, out var encErr))
         {
-            return ModuleResult.Fail($"🔤 {encErr}~ 💔");
+            return ModuleResult.Fail($"ðŸ”¤ {encErr}~ ðŸ’”");
         }
 
         var options = context.Services.GetFileSystemOptions();
@@ -126,7 +132,7 @@ public sealed class FileReadModule : IWorkflowModule
             if (info.Length > maxSize)
             {
                 return ModuleResult.Fail(
-                    $"🧠 File is {info.Length} bytes, exceeds maxSize {maxSize}~ 📏",
+                    $"ðŸ§  File is {info.Length} bytes, exceeds maxSize {maxSize}~ ðŸ“",
                     new FileTooLargeException(info.Length, maxSize));
             }
 
@@ -147,12 +153,12 @@ public sealed class FileReadModule : IWorkflowModule
                 ["success"] = true,
             };
 
-            context.Logger.LogDebug("📖 Read {Bytes} bytes from {Path}", info.Length, path);
+            context.Logger.LogDebug("ðŸ“– Read {Bytes} bytes from {Path}", info.Length, path);
             return ModuleResult.Ok(outputs, ExecutionMetrics.FromDuration(sw.Elapsed));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return ModuleResult.Fail($"📖 Failed to read '{rawPath}': {ex.Message}~ 💔", ex);
+            return ModuleResult.Fail($"ðŸ“– Failed to read '{rawPath}': {ex.Message}~ ðŸ’”", ex);
         }
     }
 }

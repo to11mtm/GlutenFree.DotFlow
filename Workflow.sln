@@ -199,6 +199,12 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "use-testing-feedback", "use
 		use-testing-feedback\Designer-Save-And-Import-Plan.md = use-testing-feedback\Designer-Save-And-Import-Plan.md
 		use-testing-feedback\Designer-Start-End-Modules-Plan.md = use-testing-feedback\Designer-Start-End-Modules-Plan.md
 		use-testing-feedback\Designer-Multi-Input-Join-Plan.md = use-testing-feedback\Designer-Multi-Input-Join-Plan.md
+		use-testing-feedback\Designer-Start-And-End-Clarity.md = use-testing-feedback\Designer-Start-And-End-Clarity.md
+		use-testing-feedback\Designer-Start-And-End-Clarity-Plan.md = use-testing-feedback\Designer-Start-And-End-Clarity-Plan.md
+		use-testing-feedback\Designer-FanOut-Clarity-Plan.md = use-testing-feedback\Designer-FanOut-Clarity-Plan.md
+		use-testing-feedback\Designer-Input-Shape-Hinting-Plan.md = use-testing-feedback\Designer-Input-Shape-Hinting-Plan.md
+		use-testing-feedback\Designer-Http-Input-Port-Plan.md = use-testing-feedback\Designer-Http-Input-Port-Plan.md
+		use-testing-feedback\Designer-Split-Preview-Plan.md = use-testing-feedback\Designer-Split-Preview-Plan.md
 	EndProjectSection
 EndProject
 Global

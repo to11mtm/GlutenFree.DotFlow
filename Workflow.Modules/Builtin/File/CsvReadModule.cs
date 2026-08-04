@@ -1,4 +1,4 @@
-// <copyright file="CsvReadModule.cs" company="GlutenFree">
+﻿// <copyright file="CsvReadModule.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -21,8 +21,8 @@ using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.File.Internal;
 
 /// <summary>
-/// 📊 Built-in CSV Read module (<c>builtin.file.csv.read</c>) — parses a delimited file into
-/// an array of row dictionaries via CsvHelper~ 📁✨.
+/// ðŸ“Š Built-in CSV Read module (<c>builtin.file.csv.read</c>) â€” parses a delimited file into
+/// an array of row dictionaries via CsvHelper~ ðŸ“âœ¨.
 /// </summary>
 public sealed class CsvReadModule : IWorkflowModule
 {
@@ -36,35 +36,41 @@ public sealed class CsvReadModule : IWorkflowModule
     public string Category => "File System";
 
     /// <inheritdoc />
-    public string Description => "Parses a CSV/delimited file into row dictionaries~ 📊✨";
+    public string Description => "Parses a CSV/delimited file into row dictionaries~ ðŸ“Šâœ¨";
 
     /// <inheritdoc />
-    public string Icon => "📊";
+    public string Icon => "ðŸ“Š";
 
     /// <inheritdoc />
     public Version Version => new(1, 0, 0);
 
     /// <inheritdoc />
     public ModuleSchema Schema => new(
-        Inputs: Arr<PortDefinition>.Empty,
+        Inputs: Arr.create(
+            new PortDefinition(
+                Name: "input",
+                DisplayName: "Input",
+                DataType: typeof(object),
+                Description: "Optional. Connect a previous step to run this one after it; the value is available to templates as {{input}}~ 🔌",
+                IsRequired: false)),
         Outputs: Arr.create(
-            new PortDefinition("rows", "Rows", typeof(object), "Array of row dictionaries~ 📄", false),
-            new PortDefinition("rowCount", "Row Count", typeof(int), "Number of data rows~ 🔢", false),
-            new PortDefinition("columns", "Columns", typeof(object), "Column names~ 🏷️", false),
-            new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ ✅", false)),
+            new PortDefinition("rows", "Rows", typeof(object), "Array of row dictionaries~ ðŸ“„", false),
+            new PortDefinition("rowCount", "Row Count", typeof(int), "Number of data rows~ ðŸ”¢", false),
+            new PortDefinition("columns", "Columns", typeof(object), "Column names~ ðŸ·ï¸", false),
+            new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ âœ…", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("path", "Path", typeof(string), "CSV file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
-            new ModulePropertyDefinition("hasHeader", "Has Header", typeof(bool), "Whether the first row is a header~ 🏷️", false, true, PropertyEditorType.Boolean),
-            new ModulePropertyDefinition("delimiter", "Delimiter", typeof(string), "Field delimiter (default ,)~ 📊", false, ",", PropertyEditorType.Text),
-            new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ 🔤", false, "utf-8", PropertyEditorType.Text),
-            new ModulePropertyDefinition("skipEmptyRows", "Skip Empty Rows", typeof(bool), "Skip fully-empty rows~ 🧹", false, true, PropertyEditorType.Boolean)));
+            new ModulePropertyDefinition("path", "Path", typeof(string), "CSV file path. Supports {{Variable.Name}}~ ðŸ“‚", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
+            new ModulePropertyDefinition("hasHeader", "Has Header", typeof(bool), "Whether the first row is a header~ ðŸ·ï¸", false, true, PropertyEditorType.Boolean),
+            new ModulePropertyDefinition("delimiter", "Delimiter", typeof(string), "Field delimiter (default ,)~ ðŸ“Š", false, ",", PropertyEditorType.Text),
+            new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ ðŸ”¤", false, "utf-8", PropertyEditorType.Text),
+            new ModulePropertyDefinition("skipEmptyRows", "Skip Empty Rows", typeof(bool), "Skip fully-empty rows~ ðŸ§¹", false, true, PropertyEditorType.Boolean)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
     {
         if (FileModuleSupport.GetString(configuration, "path") is null)
         {
-            return ValidationResult.Failure(new ValidationError("PATH_REQUIRED", "path is required~ 💔", PropertyName: "path"));
+            return ValidationResult.Failure(new ValidationError("PATH_REQUIRED", "path is required~ ðŸ’”", PropertyName: "path"));
         }
 
         return ValidationResult.Success();
@@ -78,7 +84,7 @@ public sealed class CsvReadModule : IWorkflowModule
         var rawPath = FileModuleSupport.GetString(context.Properties, "path");
         if (rawPath is null)
         {
-            return Task.FromResult(ModuleResult.Fail("path is required~ 💔"));
+            return Task.FromResult(ModuleResult.Fail("path is required~ ðŸ’”"));
         }
 
         if (!FileModuleSupport.TryValidatePath(context, rawPath, PathAccessIntent.Read, out var path, out var failure))
@@ -88,12 +94,12 @@ public sealed class CsvReadModule : IWorkflowModule
 
         if (!System.IO.File.Exists(path))
         {
-            return Task.FromResult(ModuleResult.Fail($"📊 File not found: '{rawPath}'~ 💔"));
+            return Task.FromResult(ModuleResult.Fail($"ðŸ“Š File not found: '{rawPath}'~ ðŸ’”"));
         }
 
         if (!EncodingResolver.TryResolve(FileModuleSupport.GetString(context.Properties, "encoding"), out var encoding, out var encErr))
         {
-            return Task.FromResult(ModuleResult.Fail($"🔤 {encErr}~ 💔"));
+            return Task.FromResult(ModuleResult.Fail($"ðŸ”¤ {encErr}~ ðŸ’”"));
         }
 
         var hasHeader = FileModuleSupport.GetBool(context.Properties, "hasHeader", true);
@@ -161,12 +167,12 @@ public sealed class CsvReadModule : IWorkflowModule
                 ["success"] = true,
             };
 
-            context.Logger.LogDebug("📊 Parsed {Rows} CSV rows from {Path}", rows.Count, path);
+            context.Logger.LogDebug("ðŸ“Š Parsed {Rows} CSV rows from {Path}", rows.Count, path);
             return Task.FromResult(ModuleResult.Ok(outputs, ExecutionMetrics.FromDuration(sw.Elapsed)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CsvHelperException)
         {
-            return Task.FromResult(ModuleResult.Fail($"📊 Failed to parse CSV '{rawPath}': {ex.Message}~ 💔", ex));
+            return Task.FromResult(ModuleResult.Fail($"ðŸ“Š Failed to parse CSV '{rawPath}': {ex.Message}~ ðŸ’”", ex));
         }
     }
 }

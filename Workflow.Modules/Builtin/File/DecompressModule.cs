@@ -1,4 +1,4 @@
-// <copyright file="DecompressModule.cs" company="GlutenFree">
+﻿// <copyright file="DecompressModule.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -19,12 +19,12 @@ using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.File.Internal;
 
 /// <summary>
-/// 📦 Built-in Decompress module (<c>builtin.file.decompress</c>) — extracts a Zip / GZip / Tar /
-/// TarGz archive to a directory, with zip-slip protection~ 📁✨.
+/// ðŸ“¦ Built-in Decompress module (<c>builtin.file.decompress</c>) â€” extracts a Zip / GZip / Tar /
+/// TarGz archive to a directory, with zip-slip protection~ ðŸ“âœ¨.
 /// </summary>
 /// <remarks>
 /// CopilotNote: Phase 2.5.a.4. Every entry is validated against the output directory
-/// <b>before any bytes land</b> — a hostile entry (<c>../escape</c>) fails the whole extraction~ 🛡️.
+/// <b>before any bytes land</b> â€” a hostile entry (<c>../escape</c>) fails the whole extraction~ ðŸ›¡ï¸.
 /// </remarks>
 public sealed class DecompressModule : IWorkflowModule
 {
@@ -38,26 +38,32 @@ public sealed class DecompressModule : IWorkflowModule
     public string Category => "File System";
 
     /// <inheritdoc />
-    public string Description => "Extracts a Zip/GZip/Tar/TarGz archive~ 📦✨";
+    public string Description => "Extracts a Zip/GZip/Tar/TarGz archive~ ðŸ“¦âœ¨";
 
     /// <inheritdoc />
-    public string Icon => "📦";
+    public string Icon => "ðŸ“¦";
 
     /// <inheritdoc />
     public Version Version => new(1, 0, 0);
 
     /// <inheritdoc />
     public ModuleSchema Schema => new(
-        Inputs: Arr<PortDefinition>.Empty,
+        Inputs: Arr.create(
+            new PortDefinition(
+                Name: "input",
+                DisplayName: "Input",
+                DataType: typeof(object),
+                Description: "Optional. Connect a previous step to run this one after it; the value is available to templates as {{input}}~ 🔌",
+                IsRequired: false)),
         Outputs: Arr.create(
-            new PortDefinition("extractedFiles", "Extracted Files", typeof(object), "Absolute paths of extracted files~ 📄", false),
-            new PortDefinition("fileCount", "File Count", typeof(int), "Number of files extracted~ 🔢", false),
-            new PortDefinition("success", "Success", typeof(bool), "Whether extraction succeeded~ ✅", false)),
+            new PortDefinition("extractedFiles", "Extracted Files", typeof(object), "Absolute paths of extracted files~ ðŸ“„", false),
+            new PortDefinition("fileCount", "File Count", typeof(int), "Number of files extracted~ ðŸ”¢", false),
+            new PortDefinition("success", "Success", typeof(bool), "Whether extraction succeeded~ âœ…", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("archivePath", "Archive Path", typeof(string), "Archive file path~ 📦", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
-            new ModulePropertyDefinition("outputDirectory", "Output Directory", typeof(string), "Destination directory~ 📂", true, null, PropertyEditorType.DirectoryPath, SupportsTemplates: true),
-            new ModulePropertyDefinition("format", "Format", typeof(string), "zip, gzip, tar, targz (inferred if omitted)~ 🗜️", false, null, PropertyEditorType.Dropdown, Arr.create<object>("zip", "gzip", "tar", "targz")),
-            new ModulePropertyDefinition("overwrite", "Overwrite", typeof(bool), "Overwrite existing files~ ♻️", false, false, PropertyEditorType.Boolean)));
+            new ModulePropertyDefinition("archivePath", "Archive Path", typeof(string), "Archive file path~ ðŸ“¦", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
+            new ModulePropertyDefinition("outputDirectory", "Output Directory", typeof(string), "Destination directory~ ðŸ“‚", true, null, PropertyEditorType.DirectoryPath, SupportsTemplates: true),
+            new ModulePropertyDefinition("format", "Format", typeof(string), "zip, gzip, tar, targz (inferred if omitted)~ ðŸ—œï¸", false, null, PropertyEditorType.Dropdown, Arr.create<object>("zip", "gzip", "tar", "targz")),
+            new ModulePropertyDefinition("overwrite", "Overwrite", typeof(bool), "Overwrite existing files~ â™»ï¸", false, false, PropertyEditorType.Boolean)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -66,12 +72,12 @@ public sealed class DecompressModule : IWorkflowModule
 
         if (FileModuleSupport.GetString(configuration, "archivePath") is null)
         {
-            errors.Add(new ValidationError("ARCHIVE_REQUIRED", "archivePath is required~ 💔", PropertyName: "archivePath"));
+            errors.Add(new ValidationError("ARCHIVE_REQUIRED", "archivePath is required~ ðŸ’”", PropertyName: "archivePath"));
         }
 
         if (FileModuleSupport.GetString(configuration, "outputDirectory") is null)
         {
-            errors.Add(new ValidationError("OUTPUT_REQUIRED", "outputDirectory is required~ 💔", PropertyName: "outputDirectory"));
+            errors.Add(new ValidationError("OUTPUT_REQUIRED", "outputDirectory is required~ ðŸ’”", PropertyName: "outputDirectory"));
         }
 
         return errors.Count > 0 ? ValidationResult.Failure(errors.ToArray()) : ValidationResult.Success();
@@ -86,7 +92,7 @@ public sealed class DecompressModule : IWorkflowModule
         var rawOutDir = FileModuleSupport.GetString(context.Properties, "outputDirectory");
         if (rawArchive is null || rawOutDir is null)
         {
-            return ModuleResult.Fail("archivePath and outputDirectory are required~ 💔");
+            return ModuleResult.Fail("archivePath and outputDirectory are required~ ðŸ’”");
         }
 
         if (!FileModuleSupport.TryValidatePath(context, rawArchive, PathAccessIntent.Read, out var archivePath, out var aFail))
@@ -101,7 +107,7 @@ public sealed class DecompressModule : IWorkflowModule
 
         if (!System.IO.File.Exists(archivePath))
         {
-            return ModuleResult.Fail($"📦 Archive not found: '{rawArchive}'~ 💔");
+            return ModuleResult.Fail($"ðŸ“¦ Archive not found: '{rawArchive}'~ ðŸ’”");
         }
 
         var format = (FileModuleSupport.GetString(context.Properties, "format") ?? InferFormat(archivePath)).ToLowerInvariant();
@@ -124,7 +130,7 @@ public sealed class DecompressModule : IWorkflowModule
 
             if (extracted is null)
             {
-                return ModuleResult.Fail($"📦 Unknown archive format '{format}'~ 💔");
+                return ModuleResult.Fail($"ðŸ“¦ Unknown archive format '{format}'~ ðŸ’”");
             }
 
             sw.Stop();
@@ -136,16 +142,16 @@ public sealed class DecompressModule : IWorkflowModule
                 ["success"] = true,
             };
 
-            context.Logger.LogDebug("📦 Extracted {Count} files from {Path}", extracted.Count, archivePath);
+            context.Logger.LogDebug("ðŸ“¦ Extracted {Count} files from {Path}", extracted.Count, archivePath);
             return ModuleResult.Ok(outputs, ExecutionMetrics.FromDuration(sw.Elapsed));
         }
         catch (PathSecurityException ex)
         {
-            return ModuleResult.Fail($"🛡️ {ex.Message}", ex);
+            return ModuleResult.Fail($"ðŸ›¡ï¸ {ex.Message}", ex);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            return ModuleResult.Fail($"📦 Extraction failed: {ex.Message}~ 💔", ex);
+            return ModuleResult.Fail($"ðŸ“¦ Extraction failed: {ex.Message}~ ðŸ’”", ex);
         }
     }
 
@@ -172,7 +178,7 @@ public sealed class DecompressModule : IWorkflowModule
 
     private static string SafeTargetPath(string outDir, string entryName)
     {
-        // Reject absolute/rooted entries and normalise separators~ 🛡️
+        // Reject absolute/rooted entries and normalise separators~ ðŸ›¡ï¸
         var normalized = entryName.Replace('\\', '/').TrimStart('/');
         var target = Path.GetFullPath(Path.Combine(outDir, normalized));
 
@@ -194,7 +200,7 @@ public sealed class DecompressModule : IWorkflowModule
     {
         using var archive = ZipFile.OpenRead(archivePath);
 
-        // 🛡️ Pre-scan: validate every entry before writing anything
+        // ðŸ›¡ï¸ Pre-scan: validate every entry before writing anything
         var plan = new List<(ZipArchiveEntry Entry, string Target)>();
         foreach (var entry in archive.Entries)
         {
@@ -230,7 +236,7 @@ public sealed class DecompressModule : IWorkflowModule
 
     private static async Task<List<string>> ExtractGZipAsync(string archivePath, string outDir, bool overwrite, CancellationToken ct)
     {
-        // GZip holds a single stream; derive the output name from the archive name~ 📦
+        // GZip holds a single stream; derive the output name from the archive name~ ðŸ“¦
         var name = Path.GetFileNameWithoutExtension(archivePath);
         var target = SafeTargetPath(outDir, name);
         if (!overwrite && System.IO.File.Exists(target))

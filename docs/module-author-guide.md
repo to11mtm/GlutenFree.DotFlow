@@ -441,6 +441,28 @@ text interpolates to a string; failures surface as binding errors and fail the n
 for a literal `{{`. Full semantics live in
 [`scripting.md` › Inline expressions in property bindings](scripting.md#inline-expressions-in-property-bindings).
 
+### The activation-input convention 🔌
+
+A connection is also **sequencing** — the only way to say "run this node after that one". A module
+whose schema declares **zero input ports is impossible to place mid-workflow**: server validation
+(MA004) rejects any incoming connection. So every property-driven data module should declare an
+optional `object` port named **`input`**:
+
+```csharp
+Inputs: Arr.create(
+    new PortDefinition(
+        Name: "input",
+        DisplayName: "Input",
+        DataType: typeof(object),
+        Description: "Optional. Connect a previous step to run this one after it; "
+            + "the value is available to templates as {{input}}~ 🔌",
+        IsRequired: false)),
+```
+
+The value arriving on it is addressable from any template-enabled property as `{{input}}` /
+`{{input.path}}` (`input` is a reserved template root). Only genuinely input-less modules —
+entry-point markers and triggers like `builtin.start` and `builtin.webhook.trigger` — omit it.
+
 ---
 
 *Made with 💖 by Ami-Chan! Happy module building, senpai~ UwU* ✨

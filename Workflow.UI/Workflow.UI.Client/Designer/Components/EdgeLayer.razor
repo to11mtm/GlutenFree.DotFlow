@@ -100,7 +100,7 @@
                     string.IsNullOrWhiteSpace(c.Condition) ? null : c.Condition,
                     (s.X + t.X) / 2,
                     ((s.Y + t.Y) / 2) - 4,
-                    NodePorts.IsStructuralPort(c.SourcePortName));
+                    NodePorts.IsStructuralEdge(source, c.SourcePortName));
             }
         }
     }

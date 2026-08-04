@@ -60,6 +60,15 @@ public class PropertyBinder : IPropertyBinder
     /// <summary>The escape sequence for a literal <c>{{</c>~ 🚪.</summary>
     private const string EscapedOpenBrace = @"\{\{";
 
+    /// <summary>
+    /// 🔌 Reserved template root addressing the executing node's own <c>input</c> port:
+    /// <c>{{input}}</c> is the whole value, <c>{{input.Thing.Id}}</c> traverses into it.
+    /// </summary>
+    private const string SelfInputRoot = "input";
+
+    /// <summary>The dotted prefix form of <see cref="SelfInputRoot"/>~ 🔌.</summary>
+    private const string SelfInputPrefix = "input.";
+
     /// <summary>The label used in error messages for node properties (vs. "Input" for ports).</summary>
     private const string PropertyKind = "Property";
 
@@ -360,6 +369,15 @@ public class PropertyBinder : IPropertyBinder
         PropertyBindingContext context,
         string portName)
     {
+        // 🔌 Bare {{input}} — the node's own 'input' port value. Checked before the pure-reference
+        // gate because a single undotted identifier isn't a "pure reference" and would otherwise
+        // fall into expression evaluation (where 'input' is an unknown identifier)~
+        if (context.SelfInputs is not null
+            && string.Equals(expression, SelfInputRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return ResolveSelfInputReference(string.Empty, context, portName);
+        }
+
         // 🧮 Phase 3.1.7 — Non-pure-reference templates are evaluated as expressions when enabled~
         if (!PureReferencePattern.IsMatch(expression))
         {
@@ -376,6 +394,15 @@ public class PropertyBinder : IPropertyBinder
         {
             var variablePath = expression.Substring(VariablePrefix.Length);
             return ResolveVariableReference(variablePath, context, portName);
+        }
+
+        // 🔌 {{input.path}} — the node's own input, dot-path below the port value. 'input' is a
+        // reserved root (D5 of the HTTP-input plan): it wins over a node that happens to be named
+        // 'input', which generated ids ('module-N') can never produce.
+        if (context.SelfInputs is not null
+            && expression.StartsWith(SelfInputPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return ResolveSelfInputReference(expression.Substring(SelfInputPrefix.Length), context, portName);
         }
 
         // Otherwise, treat as NodeId.OutputName pattern. 📤
@@ -531,6 +558,58 @@ public class PropertyBinder : IPropertyBinder
                     $"'{string.Join(".", segments.Take(i))}' while resolving '{{{{Variable.{variablePath}}}}}'.",
                 });
             }
+        }
+
+        return ReferenceResolution.Resolved(current);
+    }
+
+    /// <summary>
+    /// 🔌 Resolves <c>{{input}}</c> / <c>{{input.path}}</c> against the executing node's own
+    /// gathered inputs (<see cref="PropertyBindingContext.SelfInputs"/>). The root value is the
+    /// node's <c>input</c> port; dot-path segments traverse below it like every other reference~.
+    /// </summary>
+    private static ReferenceResolution ResolveSelfInputReference(
+        string path,
+        PropertyBindingContext context,
+        string portName)
+    {
+        var inputs = context.SelfInputs!;
+        if (!inputs.TryGetValue(SelfInputRoot, out var current))
+        {
+            // Case-insensitive fallback. ✨
+            var match = inputs.Keys.FirstOrDefault(k =>
+                k.Equals(SelfInputRoot, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+            {
+                return ReferenceResolution.Failed(new List<string>
+                {
+                    $"Input '{portName}': '{{{{input}}}}' has no value — connect a previous " +
+                    "step to this node's 'input' port.",
+                });
+            }
+
+            current = inputs[match];
+        }
+
+        if (path.Length == 0)
+        {
+            return ReferenceResolution.Resolved(current);
+        }
+
+        var segments = path.Split('.');
+        for (int i = 0; i < segments.Length; i++)
+        {
+            if (current == null)
+            {
+                return ReferenceResolution.Failed(new List<string>
+                {
+                    $"Input '{portName}': cannot traverse into null at " +
+                    $"'input{(i == 0 ? string.Empty : "." + string.Join(".", segments.Take(i)))}' " +
+                    $"while resolving '{{{{input.{path}}}}}'.",
+                });
+            }
+
+            current = TraverseProperty(current, segments[i]);
         }
 
         return ReferenceResolution.Resolved(current);

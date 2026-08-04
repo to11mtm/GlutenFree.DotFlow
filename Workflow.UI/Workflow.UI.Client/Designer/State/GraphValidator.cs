@@ -93,6 +93,106 @@ public static class GraphValidator
 
         issues.AddRange(ValidateTransactions(doc));
         issues.AddRange(ValidateStartAndEnd(doc));
+        issues.AddRange(ValidateFanOut(doc));
+        issues.AddRange(ValidatePorts(doc));
+
+        return issues;
+    }
+
+    /// <summary>
+    /// 🔌 Port-name rules (HTTP-input plan D2/D5) — mirrors the server's MA003/MA004 so the
+    /// mismatch is caught while editing rather than at save. Nodes without a loaded schema are
+    /// skipped (the unknown-module error already covers them); dynamic-output modules (empty
+    /// declared outputs) and merged-mode 'output' are exempt exactly like the server~ 🧭.
+    /// </summary>
+    /// <param name="doc">The document.</param>
+    /// <returns>The issues found.</returns>
+    public static IReadOnlyList<GraphIssue> ValidatePorts(DesignerDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        var issues = new List<GraphIssue>();
+
+        // D5 — 'input' is a reserved template root; a node literally named 'input' would be
+        // shadowed by it. Undrawable (ids are generated) but reachable via import~ 📥
+        foreach (var node in doc.Nodes)
+        {
+            if (string.Equals(node.Id, "input", StringComparison.OrdinalIgnoreCase))
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Warning,
+                    "'input' is a reserved word in templates ({{input}} means a node's own input), "
+                        + "so outputs of a node with id 'input' can't be referenced. Rename the node.",
+                    node.Id));
+            }
+        }
+
+        foreach (var c in doc.Connections)
+        {
+            // Target input port must be declared (MA004)~
+            if (doc.FindNode(c.TargetNodeId) is { Schema: { } targetSchema } target
+                && !string.IsNullOrWhiteSpace(c.TargetPortName))
+            {
+                var declared = targetSchema.Inputs.Select(p => p.Name).ToList();
+                if (!declared.Contains(c.TargetPortName, StringComparer.OrdinalIgnoreCase))
+                {
+                    var hint = declared.Count == 0
+                        ? $"'{target.ModuleId}' accepts no inputs."
+                        : $"'{target.ModuleId}' accepts: {string.Join(", ", declared)}.";
+                    issues.Add(new GraphIssue(
+                        IssueSeverity.Error,
+                        $"Connection into '{c.TargetNodeId}' uses input port '{c.TargetPortName}', "
+                            + $"which the module doesn't declare. {hint}",
+                        c.TargetNodeId));
+                }
+            }
+
+            // Source output port must be declared (MA003), unless dynamic or merged~
+            if (doc.FindNode(c.SourceNodeId) is { Schema: { } sourceSchema } source
+                && !string.IsNullOrWhiteSpace(c.SourcePortName))
+            {
+                var declared = sourceSchema.Outputs.Select(p => p.Name).ToList();
+                var mergedOk = string.Equals(c.SourcePortName, OutputShapingUx.MergedPortName, StringComparison.OrdinalIgnoreCase)
+                    && OutputShapingUx.IsMerged(source);
+
+                if (declared.Count > 0 && !mergedOk
+                    && !declared.Contains(c.SourcePortName, StringComparer.OrdinalIgnoreCase))
+                {
+                    issues.Add(new GraphIssue(
+                        IssueSeverity.Error,
+                        $"Connection out of '{c.SourceNodeId}' uses output port '{c.SourcePortName}', "
+                            + $"which the module doesn't declare. '{source.ModuleId}' emits: {string.Join(", ", declared)}.",
+                        c.SourceNodeId));
+                }
+            }
+        }
+
+        return issues;
+    }
+
+    /// <summary>
+    /// 🌟 Fan-out legibility rule (K5): a Fan Out whose <c>branch</c> port is wired to nothing
+    /// runs an empty sub-graph once per item — legal, and almost certainly not what was meant~ 🧭.
+    /// </summary>
+    /// <param name="doc">The document.</param>
+    /// <returns>The issues found (warnings only).</returns>
+    public static IReadOnlyList<GraphIssue> ValidateFanOut(DesignerDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        var issues = new List<GraphIssue>();
+        foreach (var node in doc.Nodes)
+        {
+            if (node.ModuleId == "builtin.fanout"
+                && !doc.Connections.Any(c => c.SourceNodeId == node.Id && c.SourcePortName == "branch"))
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Warning,
+                    "Fan Out's branch isn't connected — each item will run an empty sub-graph. "
+                        + "Wire the branch port to the nodes that should run once per item.",
+                    node.Id));
+            }
+        }
 
         return issues;
     }

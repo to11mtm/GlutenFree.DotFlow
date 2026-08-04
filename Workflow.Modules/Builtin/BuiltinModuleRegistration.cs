@@ -68,6 +68,7 @@ public static class BuiltinModules
         // Phase 2.2.1 — Conditional branching modules~ 🔀
         new ConditionalModule(),
         new SwitchModule(),
+        new PartitionModule(),
 
         // Phase 2.2.2 — Loop control modules~ 🔁
         new ForEachModule(),
@@ -118,6 +119,7 @@ public static class BuiltinModules
         new JsonTransformModule(),
         new ValidateDataModule(),
         new StringTransformModule(),
+        new SplitModule(),
 
         // Phase 3.1.4 — General-purpose script module~ 📜
         new Script.ScriptModule(),

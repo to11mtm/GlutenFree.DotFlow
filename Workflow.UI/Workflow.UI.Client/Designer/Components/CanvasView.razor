@@ -40,11 +40,20 @@
                 </div>
             }
         }
+        @{
+            var topology = GraphTopology.Compute(Document);
+            var nodeIssues = IssuesByNode();
+        }
         @foreach (var node in Document.Nodes)
         {
+            var issue = nodeIssues.TryGetValue(node.Id, out var found) ? found : null;
             <NodeView @key="node.Id" Node="node"
                       StateClass="@StateClassFor(node.Id)"
                       Selected="@IsSelected(node.Id)"
+                      Role="@(topology.Roles.TryGetValue(node.Id, out var role) ? role : null)"
+                      IconOverride="@ModuleIcon?.Invoke(node.ModuleId)"
+                      IssueTitle="@issue?.Title"
+                      IssueSeverityClass="@(issue?.SeverityClass ?? string.Empty)"
                       InputCompatible="@(connecting ? (p => IsCompatibleInput(node, p)) : null)"
                       ActiveSourcePort="@(connecting && connectSource?.Id == node.Id ? connectSourcePort : null)"
                       InputEndpoint="@(p => IsSelectedConnectionEndpoint(node.Id, p, isOutput: false))"
@@ -126,6 +135,34 @@
     /// <summary>Selection state (when editing is enabled).</summary>
     [Parameter]
     public SelectionState? Selection { get; set; }
+
+    /// <summary>Resolves a module id to its catalog icon (null falls back to the built-in table)~ 🎨.</summary>
+    [Parameter]
+    public Func<string, string?>? ModuleIcon { get; set; }
+
+    /// <summary>Current validation issues; nodes referenced by an issue get highlighted (C5)~ 📍.</summary>
+    [Parameter]
+    public IReadOnlyList<GraphIssue>? Issues { get; set; }
+
+    private sealed record NodeIssue(string Title, string SeverityClass);
+
+    private Dictionary<string, NodeIssue> IssuesByNode()
+    {
+        var map = new Dictionary<string, NodeIssue>();
+        if (this.Issues is null)
+        {
+            return map;
+        }
+
+        foreach (var group in this.Issues.Where(i => i.NodeId is not null).GroupBy(i => i.NodeId!))
+        {
+            var worst = group.Any(i => i.Severity == IssueSeverity.Error) ? "error" : "warning";
+            var title = string.Join("\n", group.Select(i => i.Message));
+            map[group.Key] = new NodeIssue(title, worst);
+        }
+
+        return map;
+    }
 
     private SelectionState? subscribedSelection;
 

@@ -16,6 +16,10 @@
     --df-state-failed: #ef5f6b;
     --df-state-skipped: #8a7bd8;
 
+    /* Start/End clarity palette (C2) — start is green, end is a neutral slate (end ≠ failure). */
+    --df-role-start: #3fbf7f;
+    --df-role-end: #8fa3c0;
+
     --df-space-1: 4px;
     --df-space-2: 8px;
     --df-space-3: 12px;
@@ -123,6 +127,26 @@ a.df-link:hover { text-decoration: underline; }
     user-select: none;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+/* 🧭 Start/End clarity (C2/C3) — declared BEFORE the selection/run-state rules so those
+   border-color overrides win during selection and runs. */
+.df-node--role-start { border-left: 4px solid var(--df-role-start); }
+.df-node--role-end { border-right: 4px solid var(--df-role-end); }
+.df-node--role-ambiguous.df-node--role-start { border-left-style: dashed; }
+.df-node--role-ambiguous.df-node--role-end { border-right-style: dashed; }
+.df-node--unwired { border-style: dashed; opacity: 0.75; }
+.df-node__rolebadges { position: absolute; top: -22px; left: 0; right: 0; display: flex; justify-content: space-between; gap: var(--df-space-1); pointer-events: none; }
+.df-badge { font-size: 0.68rem; font-weight: 600; line-height: 1; padding: 3px 8px; border-radius: 9px; white-space: nowrap; }
+.df-badge--start { background: var(--df-role-start); color: #0f1420; }
+.df-badge--end { background: var(--df-role-end); color: #0f1420; margin-left: auto; }
+.df-badge--plural { outline: 1.5px dashed rgba(231, 236, 243, 0.55); outline-offset: 1px; }
+
+/* 📍 Issue→node highlighting (C5) */
+.df-node--issue-warning { border-color: #e0b341; }
+.df-node--issue-error { border-color: var(--df-state-failed); }
+.df-node__issue { flex-shrink: 0; }
+.df-node__issue--warning { color: #e0b341; }
+.df-node__issue--error { color: var(--df-state-failed); }
+
 .df-node--selected { border-color: var(--df-accent); }
 .df-node--running { border-color: var(--df-state-running); animation: df-pulse 1.2s ease-in-out infinite; }
 .df-node--completed { border-color: var(--df-state-completed); }
@@ -161,6 +185,10 @@ a.df-link:hover { text-decoration: underline; }
     background: var(--df-surface); border-top: 1px solid var(--df-border); font-size: 0.8rem; color: var(--df-text-dim); }
 .df-statusbar__ok { color: var(--df-state-completed); }
 .df-statusbar__warn { color: #e0b341; }
+.df-statusbar__role { background: none; border: none; padding: 0; font: inherit; cursor: pointer; }
+.df-statusbar__role--start { color: var(--df-role-start); }
+.df-statusbar__role--end { color: var(--df-role-end); }
+.df-statusbar__role:hover { text-decoration: underline; }
 
 /* 📦 Palette + editing layout */
 .df-designer__body { display: flex; flex: 1; min-height: 0; }
@@ -191,6 +219,10 @@ a.df-link:hover { text-decoration: underline; }
 .df-region--finally .df-region__label { color: var(--df-text-dim); }
 .df-region--transaction { border-color: var(--df-warning, #fbbf24); background: rgba(251,191,36,0.06); }
 .df-region--transaction .df-region__label { color: var(--df-warning, #fbbf24); }
+.df-region--fanout { border-color: var(--df-state-skipped); background: rgba(138,123,216,0.06); }
+.df-region--fanout .df-region__label { color: var(--df-state-skipped); }
+.df-region--parallel { border-color: var(--df-state-running); background: rgba(79,156,249,0.05); }
+.df-region--parallel .df-region__label { color: var(--df-state-running); }
 
 .df-rubberband { position: absolute; border: 1px dashed var(--df-accent); background: rgba(79,156,249,0.12); pointer-events: none; }
 

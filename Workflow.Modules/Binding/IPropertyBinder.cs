@@ -98,6 +98,11 @@ public interface IPropertyBinder
 /// <param name="ServiceProvider">
 /// Optional service provider for advanced binding scenarios (e.g., custom converters).
 /// </param>
+/// <param name="SelfInputs">
+/// 🔌 The executing node's own gathered inputs (keyed by input port name), available for
+/// <c>{{input}}</c> / <c>{{input.path}}</c> resolution. Null when the binder runs outside a node
+/// execution (e.g. standalone binding scenarios) — the <c>input</c> root then stays inert.
+/// </param>
 /// <remarks>
 /// CopilotNote: Variables come from WorkflowDefinition.Variables + any runtime mutations.
 /// NodeOutputs come from WorkflowExecutor._nodeOutputs. Both are read-only snapshots
@@ -106,7 +111,8 @@ public interface IPropertyBinder
 public record PropertyBindingContext(
     IReadOnlyDictionary<string, object?> Variables,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, object?>> NodeOutputs,
-    IServiceProvider? ServiceProvider = null)
+    IServiceProvider? ServiceProvider = null,
+    IReadOnlyDictionary<string, object?>? SelfInputs = null)
 {
     /// <summary>
     /// Creates an empty context with no variables or node outputs.

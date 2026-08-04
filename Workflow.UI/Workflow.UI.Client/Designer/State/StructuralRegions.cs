@@ -42,8 +42,10 @@ public static class StructuralRegions
         var regions = new List<Region>();
 
         // Group structural edges by (owner, port) — one region per wired structural port.
+        // Module-aware (F3): fanout's 'branch' / parallel's branch ports are structural for
+        // builtin.fanout / builtin.parallel only, so an unrelated port named 'branch' stays plain.
         var structuralEdges = document.Connections
-            .Where(c => NodePorts.IsStructuralPort(c.SourcePortName))
+            .Where(c => NodePorts.IsStructuralEdge(document.FindNode(c.SourceNodeId), c.SourcePortName))
             .GroupBy(c => (c.SourceNodeId, c.SourcePortName));
 
         foreach (var group in structuralEdges)
@@ -61,7 +63,8 @@ public static class StructuralRegions
                 continue;
             }
 
-            regions.Add(new Region(ownerId, port, LabelFor(port), KindFor(port), bounds.Value, bodyIds));
+            var ownerModuleId = document.FindNode(ownerId)?.ModuleId;
+            regions.Add(new Region(ownerId, port, LabelFor(port, ownerModuleId), KindFor(port, ownerModuleId), bounds.Value, bodyIds));
         }
 
         return regions;
@@ -140,23 +143,49 @@ public static class StructuralRegions
             : null;
     }
 
-    private static string LabelFor(string port) => port switch
+    private static string LabelFor(string port, string? ownerModuleId = null)
     {
-        "loopBody" => "🔁 loop body",
-        "try" => "🛡️ try",
-        "catch" => "catch",
-        "finally" => "finally",
-        "transactionBody" => "💼 transaction",
-        _ => port,
-    };
+        if (ownerModuleId == "builtin.fanout" && port == "branch")
+        {
+            return "🌟 per item (parallel)";
+        }
 
-    private static string KindFor(string port) => port switch
+        if (ownerModuleId == "builtin.parallel")
+        {
+            return $"🌐 branch: {port}";
+        }
+
+        return port switch
+        {
+            "loopBody" => "🔁 loop body",
+            "try" => "🛡️ try",
+            "catch" => "catch",
+            "finally" => "finally",
+            "transactionBody" => "💼 transaction",
+            _ => port,
+        };
+    }
+
+    private static string KindFor(string port, string? ownerModuleId = null)
     {
-        "loopBody" => "loop",
-        "try" => "try",
-        "catch" => "catch",
-        "finally" => "finally",
-        "transactionBody" => "transaction",
-        _ => "loop",
-    };
+        if (ownerModuleId == "builtin.fanout" && port == "branch")
+        {
+            return "fanout";
+        }
+
+        if (ownerModuleId == "builtin.parallel")
+        {
+            return "parallel";
+        }
+
+        return port switch
+        {
+            "loopBody" => "loop",
+            "try" => "try",
+            "catch" => "catch",
+            "finally" => "finally",
+            "transactionBody" => "transaction",
+            _ => "loop",
+        };
+    }
 }

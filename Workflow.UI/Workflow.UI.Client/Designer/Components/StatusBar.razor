@@ -12,6 +12,17 @@
     }
     <span class="df-statusbar__sep">·</span>
     <span>@Document.Nodes.Count nodes, @Document.Connections.Count connections</span>
+    @if (Document.Nodes.Count > 0)
+    {
+        var topo = GraphTopology.Compute(Document);
+        <span class="df-statusbar__sep">·</span>
+        <button class="df-statusbar__role df-statusbar__role--start" data-testid="status-starts"
+                title="@(topo.StartNodeIds.Count == 1 ? "Click to jump to the start node" : "Multiple starting points — they all run, in parallel. Click to cycle through them.")"
+                @onclick="() => CycleStart(topo)">▶ @topo.StartNodeIds.Count start@(topo.StartNodeIds.Count == 1 ? "" : "s")@(topo.StartNodeIds.Count > 1 ? " (parallel)" : "")</button>
+        <button class="df-statusbar__role df-statusbar__role--end" data-testid="status-ends"
+                title="@(topo.EndNodeIds.Count == 1 ? "Click to jump to the end node" : "Multiple end points — each contributes to the result. Click to cycle through them.")"
+                @onclick="() => CycleEnd(topo)">⏹ @topo.EndNodeIds.Count end@(topo.EndNodeIds.Count == 1 ? "" : "s")</button>
+    }
     @if (ExtraInfo is not null)
     {
         <span class="df-statusbar__sep">·</span>
@@ -31,6 +42,37 @@
     /// <summary>Optional trailing info (e.g. save time / connection state).</summary>
     [Parameter]
     public string? ExtraInfo { get; set; }
+
+    /// <summary>Raised with a node id when the user clicks a start/end summary (jump-to-node)~ 🧭.</summary>
+    [Parameter]
+    public EventCallback<string> OnJumpTo { get; set; }
+
+    private int startCycle;
+    private int endCycle;
+
+    private Task CycleStart(GraphTopology.Result topo)
+    {
+        if (topo.StartNodeIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var id = topo.StartNodeIds[this.startCycle % topo.StartNodeIds.Count];
+        this.startCycle++;
+        return this.OnJumpTo.InvokeAsync(id);
+    }
+
+    private Task CycleEnd(GraphTopology.Result topo)
+    {
+        if (topo.EndNodeIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var id = topo.EndNodeIds[this.endCycle % topo.EndNodeIds.Count];
+        this.endCycle++;
+        return this.OnJumpTo.InvokeAsync(id);
+    }
 
     private int ErrorCount
     {

@@ -240,7 +240,9 @@ public sealed class ModuleAwareWorkflowValidator
                 var mergedOk = string.Equals(connection.SourcePortName, OutputShaping.MergedPortName, StringComparison.OrdinalIgnoreCase)
                     && IsMergedOutputNode(workflow, connection.SourceNodeId);
 
-                if (!mergedOk && !outputPortNames.Contains(connection.SourcePortName))
+                // Dynamic-port modules (switch/partition/parallel…) declare no outputs — skip,
+                // mirroring the engine's ValidateConnectionPorts~ 🔗
+                if (outputPortNames.Count > 0 && !mergedOk && !outputPortNames.Contains(connection.SourcePortName))
                 {
                     errors.Add(new ValidationError(
                         "MA003",

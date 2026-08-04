@@ -65,6 +65,12 @@ public class TryCatchModule : IWorkflowModule
     public ModuleSchema Schema => new(
         Inputs: Arr.create(
             new PortDefinition(
+                Name: "input",
+                DisplayName: "Input",
+                DataType: typeof(object),
+                Description: "Optional. Connect a previous step to run this one after it; the value is available to templates as {{input}}~ 🔌",
+                IsRequired: false),
+            new PortDefinition(
                 Name: "rethrow",
                 DisplayName: "Rethrow",
                 DataType: typeof(bool),

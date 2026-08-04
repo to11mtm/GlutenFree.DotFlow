@@ -101,8 +101,10 @@ public sealed class HttpRequestModuleTests : IDisposable
         outputs.Should().Contain(p => p.Name == "success");
         outputs.Should().Contain(p => p.Name == "durationMs");
 
-        // No data-flow inputs in v1~
-        schema.Inputs.Count.Should().Be(0);
+        // 🔌 HTTP-input plan D1 — an optional activation/data input so the node can be sequenced
+        // mid-workflow and templates can address the incoming value via {{input}}~
+        schema.Inputs.Count.Should().Be(1);
+        schema.Inputs.ToList().Should().Contain(p => p.Name == "input" && !p.IsRequired);
     }
 
     [Fact]

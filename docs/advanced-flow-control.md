@@ -29,8 +29,11 @@ This guide covers every control-flow primitive shipped in **Phase 2.2** of DotFl
    - [`builtin.loop.while`](#builtinloopwhile---iterate-while-condition)
    - [`builtin.break` / `builtin.continue`](#builtinbreak--builtincontinue)
 5. [Parallelism & Fan-Shaped Patterns](#-parallelism--fan-shaped-patterns)
+   - [Which fan-shaped module do I want?](#which-fan-shaped-module-do-i-want)
    - [`builtin.parallel`](#builtinparallel---static-n-branch-fan-out)
    - [`builtin.fanout`](#builtinfanout---per-item-fan-out)
+   - [`builtin.partition`](#builtinpartition---split-items-into-legs)
+   - [`builtin.split`](#builtinsplit---split-an-objects-properties)
    - [`builtin.fanin`](#builtinfanin---barrier-aggregation)
 6. [Error Handling](#-error-handling)
    - [`builtin.trycatch`](#builtintrycatch---error-boundary)
@@ -85,6 +88,23 @@ with no successors, but neither fact is visible on the canvas. `builtin.start` a
 them visible~ ✨
 
 Both are entirely optional and additive: existing workflows behave exactly as before.
+
+### The Designer Shows Start & End Automatically 🧭
+
+You don't need the marker modules to *see* where a workflow begins and ends. The designer derives
+both from the graph itself — the same way the engine does — and paints them on every workflow:
+
+- Every node with **no incoming connections** gets a green **`▶ Start`** badge and left-edge accent.
+- Every node with **no outgoing connections** gets a neutral **`⏹ End`** badge and right-edge accent.
+- When there are **several** starts or ends, each badge reads **`Start n of N`** / **`End n of N`**
+  with a dashed accent — informative, not a warning, since multiple entry/exit points are legal
+  (all starts run, in parallel; every end contributes to the result).
+- A node connected to **nothing** renders dashed and dimmed ("unwired") rather than badged as both.
+- The status bar summarizes the shape (`▶ 1 start · ⏹ 1 end`); clicking a summary jumps to — and
+  with several candidates, cycles through — the nodes in question.
+
+So the marker modules below are for *pinning intent* ("this is **the** entry point", "this is
+**the** result"), not the only signal.
 
 ### `builtin.start` — Where the Workflow Begins
 
@@ -288,6 +308,23 @@ They emit special sentinel keys (`__loop_break__: true` / `__loop_continue__: tr
 
 ## ⚡ Parallelism & Fan-Shaped Patterns
 
+### Which fan-shaped module do I want?
+
+Four modules route "one thing in, several legs out", and they are easy to mix up. The differences
+in one table:
+
+| Module | Input | Legs | Chooses leg by | What each leg receives |
+|---|---|---|---|---|
+| `builtin.switch` | one value | named, one per case | matching the value | *(routing only — the one matching leg fires)* |
+| `builtin.parallel` | *(none — pure trigger)* | named, static | *(all fire)* | nothing — it routes execution, not data |
+| `builtin.fanout` | a collection | **one** (`branch`) | *(no choice — every item)* | one run per item, concurrently (`item` + `index`) |
+| `builtin.partition` | a collection | named, from your rules | **what each item is** | the sub-list of items that matched that leg |
+| `builtin.split` | an object | named, from your keys | the property name | that property's value |
+
+Rules of thumb: *"do this for every item"* → **fanout**. *"send Foo items here and Bar/Baz items
+there"* → **partition**. *"take this object apart"* → **split**. *"run these three fixed things at
+once"* → **parallel**. *"pick one path based on a value"* → **switch**.
+
 ### `builtin.parallel` — Static N-Branch Fan-Out
 
 Fans out execution to N concurrent **named** branches; each branch is its own sub-graph. Waits for all to complete (or first to complete, with `waitForAll: false`)~ 🌐
@@ -347,6 +384,102 @@ Like `builtin.loop.foreach` but **parallel** — spawns one sub-graph per item v
   }
 }
 ```
+
+#### What actually happens 🔍
+
+Fan Out is the most-misunderstood module in the toolbox, so here it is step by step. Given
+`items = ["alice", "bob", "carol"]` and a `branch` wired to an HTTP node:
+
+1. Fan Out receives the collection and asks the engine to run its **branch sub-graph once per
+   item, concurrently** (up to `maxDegreeOfParallelism` at a time).
+2. Each run of the branch receives two inputs: **`item`** (one element — `"alice"`, then `"bob"`,
+   then `"carol"`, each in its own run) and **`index`** (0, 1, 2). Your branch nodes reference the
+   current element as `item` — they never see the whole collection.
+3. Nothing downstream of **`done`** runs until every item's branch has finished. `results` carries
+   the aggregated branch results and `count` the item count.
+4. One item failing cancels the others when `failFast` is `true` (the default).
+
+```text
+                    ┌─ branch(item="alice", index=0) ─ HTTP ─┐
+items ── Fan Out ───┼─ branch(item="bob",   index=1) ─ HTTP ─┼── done ──▶ next node
+                    └─ branch(item="carol", index=2) ─ HTTP ─┘
+```
+
+In the designer, everything wired from `branch` is boxed as *"🌟 per item (parallel)"* — that box
+is the code that runs once per element. If you want to route *different* items down *different*
+legs instead of running the same leg for all of them, that's [`builtin.partition`](#builtinpartition---split-items-into-legs).
+
+---
+
+### `builtin.partition` — Split Items into Legs
+
+Sorts a collection's items into **named legs** by per-item routing rules — *"Foo items here, Bar
+and Baz items there"*. The rules use the same `{match, port}` grammar as
+[`builtin.switch`](#builtinswitch---multi-way), evaluated for **every item** instead of once~ 🪓
+
+| Property / Input | Type | Required | Notes |
+|---|---|---|---|
+| `items` | collection (input or property) | **yes** | Same coercion as `fanout`/`foreach` |
+| `rules` | JSON array of `{match, port}` | **yes** | First match wins per item. **Several rules may name the same port** — that's how "Bar and Baz on one leg" works. |
+| `matchOn` | `string` path | optional | What to compare: blank = the item itself; `kind` or `payload.type` for object items |
+| `defaultPort` | `string` | optional | Leg for unmatched items. **Without it, an unmatched item fails the run** (listing the values) — items are never silently dropped. |
+| `caseSensitive` | `bool` | optional, default `false` | Same comparison semantics as Switch |
+
+| Output Port | Behaviour |
+|---|---|
+| *(one per distinct `port` in rules, + `defaultPort`)* | The sub-list of items that matched, in original order — **an empty list when none did** (legs always emit; empty ≠ silent) |
+| `counts`, `total` | *(data outputs)* Items per leg / total item count |
+
+```jsonc
+{
+  "id": "route_by_kind",
+  "moduleId": "builtin.partition",
+  "properties": {
+    "matchOn": "kind",
+    "rules": "[ { \"match\": \"Foo\", \"port\": \"foos\" }, { \"match\": \"Bar\", \"port\": \"others\" }, { \"match\": \"Baz\", \"port\": \"others\" } ]",
+    "defaultPort": "unmatched"
+  }
+}
+```
+
+Partition is **sequential** — it only sorts items into buckets; every leg fires with its sub-list.
+Want each bucket processed concurrently? Chain a `fanout` onto that leg. One job per module keeps
+both of them explainable~ ✨
+
+> 💡 The designer derives the node's output ports live from your `rules` table — add a rule, get a
+> port.
+
+---
+
+### `builtin.split` — Split an Object's Properties
+
+Takes an **object** apart: each listed property comes out its own port. The inverse of
+[`builtin.fanin`](#builtinfanin---barrier-aggregation) mode `Named`~ 🧩
+
+| Property / Input | Type | Required | Notes |
+|---|---|---|---|
+| `value` | object (input or property) | **yes** | Dictionary / JSON object / JSON-string object |
+| `keys` | JSON array of property names | **yes** | Each key becomes an output port emitting that property's value |
+| `restPort` | `string` | optional | Remaining (unlisted) properties, as one object |
+
+| Output Port | Behaviour |
+|---|---|
+| *(one per key)* | That property's value — `null` when the property is missing (objects legitimately have optional fields) |
+| *(restPort, when set)* | Everything not listed in `keys`, as one object (empty object when nothing remains) |
+
+```jsonc
+{
+  "id": "take_apart",
+  "moduleId": "builtin.split",
+  "properties": {
+    "keys": "[\"Foo\", \"Bar\"]",
+    "restPort": "rest"
+  }
+}
+```
+
+`{ "Foo": 1, "Bar": 2, "Baz": 3 }` → port `Foo` = `1`, port `Bar` = `2`, port `rest` =
+`{ "Baz": 3 }`. All ports always fire.
 
 ---
 
@@ -598,7 +731,9 @@ Just use `builtin.loop.foreach` or `while` — the engine threads a linked `Canc
 | Loops | `builtin.continue` | Skip to next iteration |
 | Parallelism | `builtin.parallel` | Static N-branch fan-out |
 | Parallelism | `builtin.fanout` | Per-item fan-out |
+| Parallelism | `builtin.partition` | Split items into legs by rules |
 | Parallelism | `builtin.fanin` | Barrier aggregation |
+| Transformation | `builtin.split` | Split an object's properties into ports |
 | Error handling | `builtin.trycatch` | Error boundary |
 | Error handling | `builtin.throw` | Structured failure |
 | Utilities | `builtin.log` | Structured logging |

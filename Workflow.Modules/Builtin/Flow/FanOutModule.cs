@@ -18,7 +18,7 @@ using Workflow.Modules.Abstractions;
 
 /// <summary>
 /// 🌟 Built-in fan-out module (<c>builtin.fanout</c>)~
-/// Like <see cref="ForEachModule"/>, but each item runs CONCURRENTLY in its own sub-graph
+/// Runs a sub-graph once per item in a collection, concurrently
 /// via <c>ParallelExecutionCoordinator</c>. Activates the <c>branch</c> port once per item
 /// (parallel) and fires <c>done</c> when all items complete~ ✨💖
 /// </summary>
@@ -57,7 +57,7 @@ public sealed class FanOutModule : IWorkflowModule
     public string Category => "Flow Control";
 
     /// <inheritdoc />
-    public string Description => "Runs a sub-graph concurrently for each item in a collection~ 🌟";
+    public string Description => "Runs a sub-graph once per item in a collection, concurrently~ 🌟";
 
     /// <inheritdoc />
     public string Icon => "🌟";
@@ -68,16 +68,16 @@ public sealed class FanOutModule : IWorkflowModule
     /// <inheritdoc />
     public ModuleSchema Schema { get; } = new(
         Inputs: Arr.create(
-            PortDefinition.Create<object>("items", isRequired: false)),
+            new PortDefinition("items", "Items", typeof(object), "Collection to fan out; each element becomes one parallel run~ 📦", false)),
         Outputs: Arr.create(
-            PortDefinition.Create<object>("branch", isRequired: false),
-            PortDefinition.Create<object>("results", isRequired: false),
-            PortDefinition.Create<int>("count", isRequired: false),
-            PortDefinition.Create<object>("done", isRequired: false)),
+            new PortDefinition("branch", "branch", typeof(object), "Runs once per item and receives item plus index~ 🌿", false),
+            new PortDefinition("results", "results", typeof(object), "Aggregated branch results after parallel runs finish~ 📊", false),
+            new PortDefinition("count", "count", typeof(int), "Number of items processed~ 🔢", false),
+            new PortDefinition("done", "done", typeof(object), "Fires after all item runs finish~ ✅", false)),
         Properties: Arr.create(
-            new ModulePropertyDefinition("items", "Items", typeof(object), "Static items to fan out over (input port wins when connected)~ 📦", false, null, PropertyEditorType.Json),
+            new ModulePropertyDefinition("items", "Items", typeof(object), "Static items to fan out; each element becomes one parallel run (input port wins when connected)~ 📦", false, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("maxDegreeOfParallelism", "Max Parallelism", typeof(int), "Cap on concurrently running branches (unset = unbounded)~ 🚦", false, null, PropertyEditorType.Number),
-            new ModulePropertyDefinition("failFast", "Fail Fast", typeof(bool), "Stop all branches as soon as one fails (default false)~ ⚡", false, false, PropertyEditorType.Boolean)));
+            new ModulePropertyDefinition("failFast", "Fail Fast", typeof(bool), "Stop all branches as soon as one fails (default true)~ ⚡", false, true, PropertyEditorType.Boolean)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -200,4 +200,3 @@ public sealed class FanOutModule : IWorkflowModule
         _ => element.GetRawText(),
     };
 }
-

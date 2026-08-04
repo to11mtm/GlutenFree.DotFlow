@@ -65,7 +65,13 @@ public sealed class DatabaseTransactionModule : IWorkflowModule
 
     /// <inheritdoc/>
     public ModuleSchema Schema => new(
-        Inputs: Arr<PortDefinition>.Empty,
+        Inputs: Arr.create(
+            new PortDefinition(
+                Name: "input",
+                DisplayName: "Input",
+                DataType: typeof(object),
+                Description: "Optional. Connect a previous step to run this one after it; the value is available to templates as {{input}}~ 🔌",
+                IsRequired: false)),
         Outputs: Arr.create(
             new PortDefinition(
                 Name: "success",

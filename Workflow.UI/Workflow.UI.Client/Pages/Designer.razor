@@ -83,6 +83,8 @@ else if (document is not null)
                 <div class="df-designer__canvas">
                     <CanvasView @ref="canvas" Document="document"
                                 Selection="selection" Commands="commands"
+                                ModuleIcon="IconFor"
+                                Issues="issues"
                                 OnDropModule="OnDropModule"
                                 OnNodeContextMenu="OnNodeContextMenu"
                                 OnConnectionContextMenu="OnConnectionContextMenu"
@@ -96,14 +98,14 @@ else if (document is not null)
             else
             {
                 <div class="df-designer__canvas">
-                    <CanvasView @ref="canvas" Document="document" NodeStateClass="runState.CssClassFor" />
+                    <CanvasView @ref="canvas" Document="document" ModuleIcon="IconFor" NodeStateClass="runState.CssClassFor" />
                 </div>
                 <div class="df-designer__props">
                     <RunOverlay Document="document" Run="runState" Reconnecting="reconnecting" OnCancel="CancelRun" OnClose="CloseRun" OnRerun="Rerun" OnJumpTo="JumpTo" />
                 </div>
             }
         </div>
-        <StatusBar Document="document" Issues="issues" ExtraInfo="@(runState is null ? statusInfo : "run mode (read-only)")" />
+        <StatusBar Document="document" Issues="issues" OnJumpTo="JumpTo" ExtraInfo="@(runState is null ? statusInfo : "run mode (read-only)")" />
     </div>
 
     @if (showRunDialog)
@@ -162,6 +164,7 @@ else if (document is not null)
     private CommandStack? commands;
     private readonly SelectionState selection = new();
     private readonly HashSet<string> knownModuleIds = new();
+    private readonly Dictionary<string, string> moduleIcons = new(System.StringComparer.Ordinal);
     private readonly Dictionary<string, ModuleSchemaDto?> schemaCache = new(System.StringComparer.Ordinal);
     private IReadOnlyList<GraphIssue> issues = System.Array.Empty<GraphIssue>();
     private bool loading = true;
@@ -213,9 +216,14 @@ else if (document is not null)
         {
             var modules = await Modules.ListAsync();
             this.knownModuleIds.Clear();
+            this.moduleIcons.Clear();
             foreach (var m in modules)
             {
                 this.knownModuleIds.Add(m.Id);
+                if (!string.IsNullOrWhiteSpace(m.Icon))
+                {
+                    this.moduleIcons[m.Id] = m.Icon;
+                }
             }
 
             if (string.Equals(this.Id, "new", System.StringComparison.OrdinalIgnoreCase))
@@ -671,6 +679,9 @@ else if (document is not null)
         this.selection.SelectNode(nodeId);
         this.showSaveDialog = false;
     }
+
+    private string? IconFor(string moduleId)
+        => this.moduleIcons.TryGetValue(moduleId, out var icon) ? icon : null;
 
     // ─── Run mode (3.3.c.0 / c.1) ────────────────────────────────────────────────
 

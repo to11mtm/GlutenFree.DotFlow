@@ -546,7 +546,10 @@ public class NodeExecutor : ReceiveActor
             }
         }
 
-        return new PropertyBindingContext(variables, nodeOutputs, _serviceProvider);
+        // 🔌 HTTP-input plan D4 — the node's own gathered inputs power the {{input}} /
+        // {{input.path}} template root (plain input keys are *also* overlaid as variables above,
+        // which predates the root and stays for compatibility).
+        return new PropertyBindingContext(variables, nodeOutputs, _serviceProvider, _inputs);
     }
 
     /// <summary>
