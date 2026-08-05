@@ -32,6 +32,7 @@
 | `06-streaming-data-plane-design.md` | design: opt-in streaming regions / chunked ports | ✅ |
 | `07-reusable-error-workflow-design.md` | design: error-pipeline parity (depends on 05) | ✅ |
 | `08-always-on-serving-design.md` | design: scheduled/event triggers + queued webhooks (Ultra parity) | ✅ |
+| `09-full-streaming-rewrite-assessment.md` | stakeholder assessment: full document-streaming rewrite (Option C) | ✅ |
 
 ## Comparison axes
 

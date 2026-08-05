@@ -218,6 +218,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "craplogic", "craplogic", "{
 		new-feature-design\snaplogic-analysis\06-streaming-data-plane-design.md = new-feature-design\snaplogic-analysis\06-streaming-data-plane-design.md
 		new-feature-design\snaplogic-analysis\07-reusable-error-workflow-design.md = new-feature-design\snaplogic-analysis\07-reusable-error-workflow-design.md
 		new-feature-design\snaplogic-analysis\08-always-on-serving-design.md = new-feature-design\snaplogic-analysis\08-always-on-serving-design.md
+		new-feature-design\snaplogic-analysis\09-full-streaming-rewrite-assessment.md = new-feature-design\snaplogic-analysis\09-full-streaming-rewrite-assessment.md
 	EndProjectSection
 EndProject
 Global
