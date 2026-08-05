@@ -78,3 +78,35 @@ public enum StreamCardinality
     /// </summary>
     Variable,
 }
+
+/// <summary>
+/// 🪣 Phase 5.1 — a streaming stage that <b>ends</b> the stream and produces ordinary batch
+/// outputs, rather than emitting more items.
+/// </summary>
+/// <remarks>
+/// <para>
+/// CopilotNote: Two kinds of node need this — the <c>builtin.stream.collect</c> bridge (turns a
+/// stream back into an array for the batch world) and every <b>sink</b> (a bulk insert or file
+/// writer that reports <c>rowsAffected</c> / <c>itemCount</c> when the stream drains). Returning a
+/// plain <see cref="ModuleResult"/> means the engine's normal port dispatch takes over at the
+/// region's edge with no special cases~ ✨.
+/// </para>
+/// <para>
+/// State is safe here: everything lives in locals for the duration of the call, so a singleton
+/// module instance can serve many concurrent executions~ 🛡️.
+/// </para>
+/// </remarks>
+public interface IStreamTerminalModule : IStreamingWorkflowModule
+{
+    /// <summary>
+    /// Consumes the whole item stream and returns this node's batch outputs. 🪣.
+    /// </summary>
+    /// <param name="context">Execution context (properties, region-start variable snapshot).</param>
+    /// <param name="input">The upstream item stream, drained to completion.</param>
+    /// <param name="cancellationToken">Cancellation token, linked to the region and execution.</param>
+    /// <returns>The node's result — outputs feed non-streaming successors as usual.</returns>
+    public Task<ModuleResult> ExecuteTerminalAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken cancellationToken = default);
+}

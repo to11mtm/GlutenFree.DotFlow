@@ -69,6 +69,25 @@ one — `JsonPayload` now, `BinaryPayload` (stream/chunk, SnapLogic diamond-view
 — so binary support later doesn't break the module contract. Sources ignore `input`; sinks
 drain it and emit nothing; transforms do both.
 
+**Terminal stages (added during 5.1.1 implementation):** a stage with a streaming *input* but
+batch *outputs* — `builtin.stream.collect` and every sink that reports `rowsAffected`/`itemCount`
+— can't express itself through `ExecuteStreamAsync`, which only yields items. Those implement a
+second interface:
+
+```csharp
+public interface IStreamTerminalModule : IStreamingWorkflowModule
+{
+    Task<ModuleResult> ExecuteTerminalAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken ct);
+}
+```
+
+Returning a plain `ModuleResult` means the engine's existing port dispatch takes over at the
+region's edge with no special cases. State is safe in both methods: it lives in locals for the
+duration of the call, so singleton module instances still serve concurrent executions.
+
 ### 3.4 First streaming-capable modules
 
 `builtin.database.query` (reader → items), `builtin.file.csv.read` / `.json.read` (array

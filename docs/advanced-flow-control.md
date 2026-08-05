@@ -40,7 +40,10 @@ This guide covers every control-flow primitive shipped in **Phase 2.2** of DotFl
    - [`builtin.throw`](#builtinthrow---structured-failure)
 7. [Expression Cheatsheet (Jint / JavaScript)](#-expression-cheatsheet-jint--javascript)
 8. [Common Patterns & Recipes](#-common-patterns--recipes)
-9. [Further Reading](#-further-reading)
+9. [Working with Large Data](#-working-with-large-data)
+   - [Chunked ForEach (the pattern that works today)](#chunked-foreach-the-pattern-that-works-today)
+   - [Stream bridges](#stream-bridges-builtinstreamcollect--builtinstreamfromitems)
+10. [Further Reading](#-further-reading)
 
 ---
 
@@ -723,6 +726,75 @@ Just use `builtin.loop.foreach` or `while` — the engine threads a linked `Canc
 
 ---
 
+## 🌊 Working with Large Data
+
+A workflow run normally carries **one payload through the graph**. That's simple and auditable,
+but it means a node that loads a million rows holds a million rows *in memory* — and every
+downstream node sees the whole array.
+
+Two things help, and it's worth knowing which one you need.
+
+### Chunked ForEach (the pattern that works today)
+
+Don't fetch everything at once. Fetch a **page**, process it, then fetch the next one. The memory
+ceiling becomes "one page", not "the whole table".
+
+```text
+[start]
+   ↓
+[set-variable offset = 0]
+   ↓
+[loop.while  condition: {{Variable.hasMore}}]
+   │ loopBody
+   ├──> [database.query  LIMIT 1000 OFFSET {{Variable.offset}}]
+   │        ↓
+   │    [transform.map]              ← process just this page
+   │        ↓
+   │    [database.bulkinsert]        ← write just this page
+   │        ↓
+   │    [set-variable  offset = {{Variable.offset}} + 1000,
+   │                   hasMore = {{query-1.rowCount}} == 1000]
+   └── done ──> [end]
+```
+
+Rules of thumb:
+
+| Do | Why |
+| --- | --- |
+| Page with a **keyset** (`WHERE id > {{Variable.lastId}}`) rather than `OFFSET` when you can | `OFFSET` gets slower on every page |
+| Keep the page size modest (500–5 000 rows) | The page is your memory ceiling |
+| Make writes **idempotent** | A retried run reprocesses a page |
+| Track progress in a **workflow-scope** variable | The next run can resume where this one stopped |
+
+This pattern needs no new features — it composes `builtin.loop.while`, the database/file modules,
+and variables you already have.
+
+### Stream bridges (`builtin.stream.collect` / `builtin.stream.fromitems`)
+
+Phase 5.1 adds **streaming ports** — items flowing one at a time between nodes with backpressure,
+so a chain of streaming nodes never materializes the whole dataset. Streaming ports connect
+**only** to streaming ports; the two bridge nodes convert between the streaming and batch worlds:
+
+| Module | Direction | Use it when |
+| --- | --- | --- |
+| 🚰 `builtin.stream.fromitems` | array → stream | You already have an array (script output, HTTP body, small query) and want streaming nodes to process it item by item |
+| 🪣 `builtin.stream.collect` | stream → array | A streaming region needs to hand its results to ordinary nodes |
+
+> ⚠️ **Collect undoes bounded memory** — that's its job, so it's guarded. `maxItems` (default
+> 100 000) and the optional `maxBytes` make it **fail loudly** rather than quietly exhaust the
+> heap. If you're collecting a huge stream just to feed one batch node, prefer streaming all the
+> way to a sink instead.
+
+`fromitems` does *not* make anything memory-bounded — the array is already loaded. For genuinely
+large data, start the region with a streaming **source** (a streaming database query or file
+reader) rather than an array.
+
+See [`phases/Phase5-1-StreamingDataPlane.md`](../phases/Phase5-1-StreamingDataPlane.md) for what's
+landed so far and [the design doc](../new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md)
+for the full model.
+
+---
+
 ## 📚 Further Reading
 
 | Topic | Reference |
@@ -759,6 +831,8 @@ Just use `builtin.loop.foreach` or `while` — the engine threads a linked `Canc
 | Utilities | `builtin.json.value` | Emit a configured JSON body (demos / tests / stubs) |
 | Markers | `builtin.start` | Explicit workflow entry point |
 | Markers | `builtin.end` | Explicit workflow result |
+| Streaming | `builtin.stream.fromitems` | Array → item stream (enter a streaming region) |
+| Streaming | `builtin.stream.collect` | Item stream → array (leave a streaming region, guarded) |
 
 > 💖 **Ami's tip:** Build complex flows from these primitives bottom-up. If you find yourself wanting a new control-flow module, check whether composition (e.g. `trycatch` inside `foreach`) does the job first — most useful patterns are already expressible~ UwU 🎀
 

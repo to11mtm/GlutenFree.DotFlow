@@ -64,6 +64,8 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 | **D16 Stream ports render as diamonds** | Following SnapLogic's circle/diamond precedent and doc 06 §3.1: `NodeView`/`NodePorts` render streaming ports with a distinct glyph + tooltip; `EdgeLayer` draws stream edges with a distinct stroke (dashed/animated). Shape mismatch is refused at drag time, not just linted after. |
 | **D17 Region halo reuses `RegionId` machinery** | Designer auto-assigns a computed region grouping for stream-linked nodes and renders a halo (same visual language as loop-body regions); the engine continues to *ignore* `RegionId` — region detection is connection-driven. |
 | **D18 Connection properties UI** | Selecting a stream edge opens a small properties popover (BufferCapacity) — first time connections get editable properties; `EdgeLayer` hit-test already exists. |
+| **D19 Streaming category in the palette** | Bridges ship under a new **"Streaming"** category (Q4 partially answered: bridges are genuinely new *nodes*; streaming-capable *existing* modules will instead grow streaming ports and a 🌊 badge, no duplicate module ids). |
+| **D20 `IStreamTerminalModule` for stream→batch stages** | Found during 5.1.1: `ExecuteStreamAsync` can only yield items, so a stage with a streaming input but batch outputs (`stream.collect`, and every sink reporting `rowsAffected`/`itemCount`) had no way to express itself. Terminal stages implement `ExecuteTerminalAsync` returning a plain `ModuleResult`, so the engine's existing port dispatch handles the region edge with no special cases. Design doc 06 §3.3 updated. |
 
 ### TO RESOLVE 🤔
 
@@ -79,9 +81,10 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 - [ ] **Q3 `Cardinality` placement.** ✅ **RESOLVED (5.1.0):** a **per-module** default-interface
       member on `IStreamingWorkflowModule`. Per-port cardinality deferred to 5.1.P3 — no v1 module
       needs it, and per-module keeps the designer's resequencing rule simple.
-- [ ] **Q4 Palette treatment.** New "Streaming" category vs. streaming *variants* surfaced on
-      existing modules (e.g. db.query gains a streaming output port, no separate module)?
-      V1 recommendation: same module, schema exposes both port sets; palette badge "🌊-capable".
+- [ ] **Q4 Palette treatment.** ⚙️ **PARTIALLY RESOLVED (5.1.1, D19):** the two *bridges* are new
+      nodes in a new **"Streaming"** category. Still open for **existing** modules gaining
+      streaming ports (5.1.3+): a 🌊 "stream-capable" badge on the same module id (recommended)
+      vs. separate module ids.
 - [ ] **Q5 `{{item}}` in the binding picker.** The `{{x}}` picker and ƒx builder
       (`ExpressionBuilder`) must offer `{{item}}` inside regions and *hide* `{{nodeId.port}}`
       upstream refs that aren't meaningful per-item — confirm exact rules with docs/variables.md
@@ -130,13 +133,24 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 **Result:** solution builds clean; `Workflow.Tests` 1608 passed (+18 new), `Workflow.Tests.UI`
 661 passed (+2 new). Pre-existing flaky tests unrelated to this slice (they pass in isolation).
 
-### 5.1.1 — Bridges + Option A guidance 🌉 (~2 days)
+### 5.1.1 — Bridges + Option A guidance 🌉 (~2 days) ✅ **COMPLETE**
 
-- [ ] `builtin.stream.collect` (stream→array; bounded-accumulator guard from day one, D10)
+- [x] `builtin.stream.collect` (stream→array; bounded-accumulator guard from day one, D10)
       and `builtin.stream.fromitems` (array→stream).
-- [ ] Guidance doc: chunked-ForEach patterns for users who need bounded memory *today*
-      (docs/advanced-flow-control.md addendum).
-- [ ] Unit tests for both bridges incl. guard-limit failures.
+      → `Workflow.Modules/Builtin/Stream/*` (auto-discovered; new "Streaming" palette category)
+- [x] **Unified bounded-accumulator guard** → `Workflow.Modules/Streaming/BoundedAccumulator.cs`:
+      `maxItems` (default 100 000, placeholder pending 5.1.3 calibration) + optional `maxBytes`
+      (measured only when configured), fail-loud via `StreamAccumulatorLimitException`, and
+      `Spill` **rejected with a "not until 5.1.6" message** rather than silently ignored.
+- [x] **`IStreamTerminalModule`** (contract addition — see D20 below).
+- [x] Guidance doc: chunked-ForEach patterns for bounded memory *today*
+      → `docs/advanced-flow-control.md` §"Working with Large Data" (+ TOC and module index).
+- [x] Unit tests for both bridges incl. guard-limit failures.
+      → `Workflow.Tests/Modules/Stream/StreamBridgeTests.cs` (19 tests)
+
+**Result:** `Workflow.Tests` 1629 passed / 1632 total; the 3 failures are the known pre-existing
+flaky set (all present in the pre-change baseline). Module discovery + validator accept both new
+modules unchanged.
 
 ### 5.1.2 — Validation + designer rendering 🎨 (~1 week) — **the UX slice**
 
