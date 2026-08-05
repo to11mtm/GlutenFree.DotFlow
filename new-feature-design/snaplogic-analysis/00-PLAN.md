@@ -28,6 +28,10 @@
 | `02-snaplogic-comparison.md` | side-by-side architectural differences | ✅ |
 | `03-porting-guide.md` | Snap→module mapping, gap analysis, porting advice | ✅ |
 | `04-future-slp-import.md` | feasibility outline for a future `.slp` importer | ✅ |
+| `05-subworkflow-design.md` | design: `builtin.workflow.execute` (Pipeline Execute parity) | ✅ |
+| `06-streaming-data-plane-design.md` | design: opt-in streaming regions / chunked ports | ✅ |
+| `07-reusable-error-workflow-design.md` | design: error-pipeline parity (depends on 05) | ✅ |
+| `08-always-on-serving-design.md` | design: scheduled/event triggers + queued webhooks (Ultra parity) | ✅ |
 
 ## Comparison axes
 

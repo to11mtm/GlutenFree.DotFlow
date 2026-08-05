@@ -207,6 +207,19 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "use-testing-feedback", "use
 		use-testing-feedback\Designer-Split-Preview-Plan.md = use-testing-feedback\Designer-Split-Preview-Plan.md
 	EndProjectSection
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "craplogic", "craplogic", "{A37D1439-8A20-404D-9699-D5D0FF3BA0B4}"
+	ProjectSection(SolutionItems) = preProject
+		new-feature-design\snaplogic-analysis\00-PLAN.md = new-feature-design\snaplogic-analysis\00-PLAN.md
+		new-feature-design\snaplogic-analysis\01-dotflow-architecture.md = new-feature-design\snaplogic-analysis\01-dotflow-architecture.md
+		new-feature-design\snaplogic-analysis\02-snaplogic-comparison.md = new-feature-design\snaplogic-analysis\02-snaplogic-comparison.md
+		new-feature-design\snaplogic-analysis\03-porting-guide.md = new-feature-design\snaplogic-analysis\03-porting-guide.md
+		new-feature-design\snaplogic-analysis\04-future-slp-import.md = new-feature-design\snaplogic-analysis\04-future-slp-import.md
+		new-feature-design\snaplogic-analysis\05-subworkflow-design.md = new-feature-design\snaplogic-analysis\05-subworkflow-design.md
+		new-feature-design\snaplogic-analysis\06-streaming-data-plane-design.md = new-feature-design\snaplogic-analysis\06-streaming-data-plane-design.md
+		new-feature-design\snaplogic-analysis\07-reusable-error-workflow-design.md = new-feature-design\snaplogic-analysis\07-reusable-error-workflow-design.md
+		new-feature-design\snaplogic-analysis\08-always-on-serving-design.md = new-feature-design\snaplogic-analysis\08-always-on-serving-design.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -511,5 +524,6 @@ Global
 		{B1C9ADDD-0456-43A1-BD8B-BB4322D9A8FA} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
 		{44ADFF90-B3F6-4957-B8FA-08229D6CECE8} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
 		{C29A0EB2-E8E4-457C-9EF0-D3203A14F63B} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
+		{A37D1439-8A20-404D-9699-D5D0FF3BA0B4} = {969AD7F6-3DDB-4827-8C22-1FD170A9D92B}
 	EndGlobalSection
 EndGlobal
