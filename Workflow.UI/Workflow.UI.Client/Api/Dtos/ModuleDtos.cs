@@ -39,7 +39,9 @@ public sealed record ModuleDetailsDto(
     ModuleSchemaDto Schema,
     List<string> Dependencies,
     bool Enabled = true,
-    List<string>? AvailableVersions = null);
+    List<string>? AvailableVersions = null,
+    bool StreamCapable = false,
+    string? Cardinality = null);
 
 /// <summary>📐 Phase 3.3.a.0 — A module schema: ports + properties (mirrors <c>ModuleSchemaDto</c>)~ ✨.</summary>
 public sealed record ModuleSchemaDto(
@@ -70,7 +72,8 @@ public sealed record PortDefinitionDto(
     string? DataType,
     string? Description,
     bool IsRequired,
-    JsonElement? DefaultValue);
+    JsonElement? DefaultValue,
+    bool IsStreaming = false);
 
 /// <summary>
 /// ⚙️ Phase 3.3.a.0 — A configurable module property (mirrors <c>ModulePropertyDefinitionDto</c>).

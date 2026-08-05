@@ -50,6 +50,12 @@ public record ModuleSchema(
 /// an input's value is data produced by an upstream node or supplied as a run input, never text an
 /// author typed, so expanding it would let untrusted data reference workflow variables. 🛡️.
 /// </param>
+/// <param name="IsStreaming">
+/// Whether this port carries a <c>StreamItem</c> stream rather than a single value (Phase 5.1). 🌊
+/// Streaming outputs may only connect to streaming inputs and vice versa; the
+/// <c>builtin.stream.collect</c> / <c>builtin.stream.fromitems</c> bridges convert between the two
+/// worlds. Defaults to <b>false</b> so every existing module stays batch~ ✨.
+/// </param>
 /// <remarks>
 /// <para>
 /// CopilotNote: Ports are different from properties! Ports carry data between nodes,
@@ -64,7 +70,8 @@ public record PortDefinition(
     string? Description = null,
     bool IsRequired = true,
     object? DefaultValue = null,
-    bool SupportsTemplates = false)
+    bool SupportsTemplates = false,
+    bool IsStreaming = false)
 {
     /// <summary>
     /// Creates a port definition with name as display name.
@@ -87,6 +94,20 @@ public record PortDefinition(
     /// <returns>A new PortDefinition.</returns>
     public static PortDefinition Create<T>(string name, bool isRequired = true, bool supportsTemplates = false)
         => new(name, name, typeof(T), null, isRequired, null, supportsTemplates);
+
+    /// <summary>
+    /// Creates a <b>streaming</b> port definition carrying <c>StreamItem</c>s (Phase 5.1). 🌊.
+    /// </summary>
+    /// <param name="name">The port name (also used as display name).</param>
+    /// <param name="isRequired">Whether the port must be connected.</param>
+    /// <param name="description">Optional human-readable description.</param>
+    /// <returns>A new streaming PortDefinition.</returns>
+    /// <remarks>
+    /// CopilotNote: Streaming ports always carry <c>StreamItem</c>, so the data type is fixed —
+    /// the shape rule (stream↔stream only) is what the designer and validator enforce~ ✨.
+    /// </remarks>
+    public static PortDefinition CreateStreaming(string name, bool isRequired = true, string? description = null)
+        => new(name, name, typeof(StreamItem), description, isRequired, null, false, true);
 }
 
 /// <summary>

@@ -50,6 +50,36 @@ public sealed class DocumentAndGeometryTests
         JsonSerializer.Serialize(back).Should().Be(JsonSerializer.Serialize(dto));
     }
 
+    /// <summary>
+    /// 🌊 Phase 5.1.0 — a streaming connection's buffer capacity must survive an open/save cycle,
+    /// otherwise the designer would silently reset a tuned region back to the default~ 🛡️.
+    /// </summary>
+    [Fact]
+    public void Document_StreamingConnection_RoundTripsBufferCapacity()
+    {
+        var dto = SampleDto() with
+        {
+            Connections = new List<ConnectionDto>
+            {
+                new("http-1", "items", "log-1", "items", BufferCapacity: 256),
+            },
+        };
+
+        var doc = DesignerDocument.FromDto(dto, _ => null);
+
+        doc.Connections[0].BufferCapacity.Should().Be(256);
+        doc.ToDto().Connections[0].BufferCapacity.Should().Be(256);
+    }
+
+    /// <summary>🌊 Phase 5.1.0 — cloning (copy/paste, undo) keeps the buffer capacity~ 🧬.</summary>
+    [Fact]
+    public void Connection_Clone_KeepsBufferCapacity()
+    {
+        var connection = DesignerConnection.FromDto(new ConnectionDto("a", "items", "b", "items", BufferCapacity: 8));
+
+        connection.Clone().BufferCapacity.Should().Be(8);
+    }
+
     [Fact]
     public void Document_UnknownModule_KeptNotDropped()
     {

@@ -300,6 +300,59 @@ The `ModuleValidator` runs automatically when your module is registered. Here's 
 
 ---
 
+## 7a. Streaming modules (Phase 5.1) 🌊
+
+Most modules process **one payload per run**. A module that can handle a *large* dataset —
+a database result set, a big CSV, a paged API — can additionally run as a **stage inside a
+streaming region**, where items flow one at a time with backpressure and bounded memory.
+
+Implement `IStreamingWorkflowModule` **in addition to** `IWorkflowModule` (never instead of):
+
+```csharp
+public sealed class MyReaderModule : IStreamingWorkflowModule
+{
+    // …the usual IWorkflowModule members…
+
+    public ModuleSchema Schema => new(
+        Arr<PortDefinition>.Empty,
+        Arr.create(PortDefinition.CreateStreaming("items")),   // 🌊 a streaming port
+        Arr<ModulePropertyDefinition>.Empty);
+
+    // One output item per input item — lets the engine restore order after parallel workers.
+    // Declare Variable instead if you filter or split.
+    StreamCardinality IStreamingWorkflowModule.Cardinality => StreamCardinality.OneToOne;
+
+    public async IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // Sources ignore `input` and yield; sinks drain `input` and yield nothing;
+        // transforms do both.
+        await foreach (var item in input.WithCancellation(cancellationToken))
+        {
+            yield return item;
+        }
+    }
+}
+```
+
+Rules worth knowing before you start:
+
+| Rule | Why |
+| --- | --- |
+| Streaming ports connect **only** to streaming ports | The `builtin.stream.collect` / `builtin.stream.fromitems` bridges convert between the streaming and batch worlds — the designer refuses mismatched wires |
+| **No variable writes inside a region** | Per-item ordering is non-deterministic; variables are a read-only snapshot taken at region start |
+| Payloads are **JSON** in v1 | `StreamItem.Payload` is a union — `BinaryPayload` is reserved so binary support stays additive |
+| Declare `Cardinality` honestly | Only `OneToOne` stages can sit between a multi-worker stage and its resequencer; the designer validates this |
+| Don't emit tombstones | They're engine plumbing for skipped items; modules never see or create them |
+| Set `SourceOffset` if you can seek | Nothing consumes it yet, but it's what future resume support will use |
+
+Full design: [`new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md`](../new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md) ·
+Plan: [`phases/Phase5-1-StreamingDataPlane.md`](../phases/Phase5-1-StreamingDataPlane.md)
+
+---
+
 ## 8. Troubleshooting
 
 ### "Module was skipped — failed validation"

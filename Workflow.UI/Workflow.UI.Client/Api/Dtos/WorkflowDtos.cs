@@ -80,13 +80,15 @@ public sealed record PositionDto(double X, double Y);
 /// <param name="TargetPortName">Target input port.</param>
 /// <param name="Condition">Optional runtime condition expression.</param>
 /// <param name="Priority">Ordering priority (lower first).</param>
+/// <param name="BufferCapacity">Optional bounded-channel capacity for a streaming connection (Phase 5.1). 🌊.</param>
 public sealed record ConnectionDto(
     string SourceNodeId,
     string SourcePortName,
     string TargetNodeId,
     string TargetPortName,
     string? Condition = null,
-    int Priority = 0);
+    int Priority = 0,
+    int? BufferCapacity = null);
 
 /// <summary>
 /// 📋 Phase 3.3.a.0 — Lightweight workflow list row (mirrors <c>WorkflowSummaryDto</c>)~ ✨.

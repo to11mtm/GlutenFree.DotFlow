@@ -19,13 +19,15 @@ using Workflow.Modules.Abstractions;
 /// <param name="Description">Optional human-readable description.</param>
 /// <param name="IsRequired">Whether the port must be connected.</param>
 /// <param name="DefaultValue">Optional default value (for optional inputs), as JSON.</param>
+/// <param name="IsStreaming">Whether the port carries a stream of items (Phase 5.1). 🌊.</param>
 public sealed record PortDefinitionDto(
     string Name,
     string DisplayName,
     string? DataType,
     string? Description,
     bool IsRequired,
-    JsonElement? DefaultValue)
+    JsonElement? DefaultValue,
+    bool IsStreaming = false)
 {
     /// <summary>Projects a <see cref="PortDefinition"/> into its DTO~ 🔌.</summary>
     /// <param name="port">The domain port definition.</param>
@@ -37,7 +39,8 @@ public sealed record PortDefinitionDto(
             JsonTypeHelpers.TypeName(port.DataType),
             port.Description,
             port.IsRequired,
-            ModuleJson.ToElement(port.DefaultValue));
+            ModuleJson.ToElement(port.DefaultValue),
+            port.IsStreaming);
 }
 
 /// <summary>
@@ -152,6 +155,11 @@ public sealed record ModuleSummaryDto(
 /// <param name="Dependencies">Module ids this module depends on.</param>
 /// <param name="Enabled">Whether the resolved version is enabled (Phase 2.8.2).</param>
 /// <param name="AvailableVersions">All installed versions of this module id (Phase 2.8.2).</param>
+/// <param name="StreamCapable">Whether the module can run as a streaming stage (Phase 5.1). 🌊.</param>
+/// <param name="Cardinality">
+/// Output items produced per input item when streaming — <c>"OneToOne"</c> or <c>"Variable"</c>;
+/// null for non-streaming modules. Drives the designer's resequencing validation. 🔢.
+/// </param>
 public sealed record ModuleDetailsDto(
     string Id,
     string DisplayName,
@@ -162,7 +170,9 @@ public sealed record ModuleDetailsDto(
     ModuleSchemaDto Schema,
     IReadOnlyList<string> Dependencies,
     bool Enabled = true,
-    IReadOnlyList<string>? AvailableVersions = null)
+    IReadOnlyList<string>? AvailableVersions = null,
+    bool StreamCapable = false,
+    string? Cardinality = null)
 {
     /// <summary>Projects an <see cref="IWorkflowModule"/> into a details DTO~ 📦.</summary>
     /// <param name="module">The module.</param>
@@ -183,7 +193,9 @@ public sealed record ModuleDetailsDto(
             ModuleSchemaDto.From(module.Schema),
             module.Dependencies.ToList(),
             enabled,
-            availableVersions);
+            availableVersions,
+            module is IStreamingWorkflowModule,
+            (module as IStreamingWorkflowModule)?.Cardinality.ToString());
 }
 
 /// <summary>

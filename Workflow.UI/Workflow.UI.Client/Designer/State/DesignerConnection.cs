@@ -29,6 +29,12 @@ public sealed class DesignerConnection
     /// <summary>Gets or sets the ordering priority (lower first).</summary>
     public int Priority { get; set; }
 
+    /// <summary>
+    /// Gets or sets the optional bounded-channel capacity for a streaming connection (Phase 5.1). 🌊
+    /// Null means "use the workflow default, else the engine default".
+    /// </summary>
+    public int? BufferCapacity { get; set; }
+
     /// <summary>A stable identity key for selection/dedup: <c>src.port→tgt.port</c>~ 🔑.</summary>
     public string Key => $"{this.SourceNodeId}.{this.SourcePortName}→{this.TargetNodeId}.{this.TargetPortName}";
 
@@ -44,12 +50,20 @@ public sealed class DesignerConnection
             TargetPortName = dto.TargetPortName,
             Condition = dto.Condition,
             Priority = dto.Priority,
+            BufferCapacity = dto.BufferCapacity,
         };
 
     /// <summary>Projects this connection back to a wire DTO~ 📤.</summary>
     /// <returns>The connection DTO.</returns>
     public ConnectionDto ToDto()
-        => new(this.SourceNodeId, this.SourcePortName, this.TargetNodeId, this.TargetPortName, this.Condition, this.Priority);
+        => new(
+            this.SourceNodeId,
+            this.SourcePortName,
+            this.TargetNodeId,
+            this.TargetPortName,
+            this.Condition,
+            this.Priority,
+            this.BufferCapacity);
 
     /// <summary>Creates a clone~ 🧬.</summary>
     /// <returns>A cloned connection.</returns>
@@ -62,5 +76,6 @@ public sealed class DesignerConnection
             TargetPortName = this.TargetPortName,
             Condition = this.Condition,
             Priority = this.Priority,
+            BufferCapacity = this.BufferCapacity,
         };
 }

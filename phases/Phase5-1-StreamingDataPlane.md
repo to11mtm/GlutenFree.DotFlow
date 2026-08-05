@@ -76,8 +76,9 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
       (`mapAsync` ≈ `maxWorkers`, built-in backpressure, supervision deciders ≈ per-item error
       policy). Spike both in 5.1.3's proving slice; pick by observability + test ergonomics,
       not micro-benchmarks. **Decide during 5.1.3, before 5.1.4 scales module coverage.**
-- [ ] **Q3 `Cardinality` placement.** On `ModuleSchema` (per module) or per output port?
-      Splitter-style modules argue per-port. V1 recommendation: per-module hint, per-port later.
+- [ ] **Q3 `Cardinality` placement.** ✅ **RESOLVED (5.1.0):** a **per-module** default-interface
+      member on `IStreamingWorkflowModule`. Per-port cardinality deferred to 5.1.P3 — no v1 module
+      needs it, and per-module keeps the designer's resequencing rule simple.
 - [ ] **Q4 Palette treatment.** New "Streaming" category vs. streaming *variants* surfaced on
       existing modules (e.g. db.query gains a streaming output port, no separate module)?
       V1 recommendation: same module, schema exposes both port sets; palette badge "🌊-capable".
@@ -106,15 +107,28 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 
 ## Sub-Phase Checklist
 
-### 5.1.0 — Core contracts 📐 (~3 days)
+### 5.1.0 — Core contracts 📐 (~3 days) ✅ **COMPLETE**
 
-- [ ] `StreamItem` record: `Payload` union (`JsonPayload` now, `BinaryPayload` reserved),
+- [x] `StreamItem` record: `Payload` union (`JsonPayload` now, `BinaryPayload` reserved),
       `SourceOffset?(Token, Sequence)`, engine-internal tombstone flag.
-- [ ] `IStreamingWorkflowModule` in `Workflow.Modules/Abstractions` (+ `Cardinality` hint per Q3).
-- [ ] `PortDefinition.IsStreaming`; `ConnectionDefinition.BufferCapacity : int?` (typed, D3).
-- [ ] Serialization round-trip + structural-equality tests for changed core records.
-- [ ] Module contracts DTO surface (`ModuleContracts.cs`) exposes new flags to the UI.
-- [ ] **Docs:** module-author-guide.md section stub "streaming modules".
+      → `Workflow.Core/Models/StreamItem.cs`
+- [x] `IStreamingWorkflowModule` in `Workflow.Modules/Abstractions` (+ `Cardinality` hint per Q3).
+      → `Workflow.Modules/Abstractions/IStreamingWorkflowModule.cs`; **Q3 resolved: per-module hint**
+      (default-interface member, so existing modules are untouched and a module can override it
+      explicitly when it filters/splits).
+- [x] `PortDefinition.IsStreaming` (+ `PortDefinition.CreateStreaming` factory);
+      `ConnectionDefinition.BufferCapacity : int?` (typed, D3).
+- [x] Serialization round-trip + structural-equality tests for changed core records.
+      → `Workflow.Tests/Core/Models/StreamingContractsTests.cs` (18 tests)
+- [x] Module contracts DTO surface (`ModuleContracts.cs`) exposes new flags to the UI:
+      `PortDefinitionDto.IsStreaming`, `ModuleDetailsDto.StreamCapable` + `Cardinality`.
+- [x] **UI wire-DTO mirrors + designer fidelity** (not in the original list, but required so the
+      designer can't silently drop the new fields on save): `Workflow.UI.Client/Api/Dtos/*`,
+      `DesignerConnection` FromDto/ToDto/Clone + 2 bUnit guards.
+- [x] **Docs:** module-author-guide.md §7a "Streaming modules".
+
+**Result:** solution builds clean; `Workflow.Tests` 1608 passed (+18 new), `Workflow.Tests.UI`
+661 passed (+2 new). Pre-existing flaky tests unrelated to this slice (they pass in isolation).
 
 ### 5.1.1 — Bridges + Option A guidance 🌉 (~2 days)
 

@@ -16,6 +16,11 @@ namespace Workflow.Core.Models;
 /// <param name="TargetPortName">The name of the input port on the target node. 🚪.</param>
 /// <param name="Condition">Optional condition expression for conditional routing. Can be null for unconditional. 🔀.</param>
 /// <param name="Priority">Priority for parallel execution (lower numbers execute first). Default is 0. 📊.</param>
+/// <param name="BufferCapacity">
+/// Optional bounded-channel capacity for a <b>streaming</b> connection (Phase 5.1). 🌊
+/// Null means "use the workflow default, else the engine default (64)". Ignored on non-streaming
+/// connections. Smaller values tighten memory, larger values smooth bursty producers~ ✨.
+/// </param>
 /// <remarks>
 /// CopilotNote: Connections represent the "edges" in our workflow graph!
 /// Multiple connections from the same source create parallel execution paths, nya~! 💫
@@ -27,4 +32,5 @@ public record ConnectionDefinition(
     string TargetNodeId,
     string TargetPortName,
     string? Condition = null,
-    int Priority = 0);
+    int Priority = 0,
+    int? BufferCapacity = null);
