@@ -79,6 +79,12 @@ This directory contains individual phase breakdown files to make it easier to na
 - Testing & QA
 - **LAUNCH PREPARATION! 🎉**
 
+### Phase 5 — SnapLogic Gap Closure 🌊 *(post-Phase-4 track, provisional)*
+Sourced from the [SnapLogic architecture analysis](../new-feature-design/snaplogic-analysis/00-PLAN.md)
+(artifacts 00–09: comparison, porting guide, gap designs).
+- [Phase5-1-StreamingDataPlane.md](Phase5-1-StreamingDataPlane.md) ⏳ — **streaming regions**: opt-in stream-typed ports + `StreamRegionExecutorActor` for bounded-memory large-dataset ETL. Design fully resolved in [06-streaming-data-plane-design.md](../new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md) (20 decisions); 7 sub-phases (5.1.0–5.1.6) with designer UX as a per-slice acceptance criterion; Q1–Q5 open~ 🌊
+- Sub-workflows ([design 05](../new-feature-design/snaplogic-analysis/05-subworkflow-design.md)), reusable error workflows ([07](../new-feature-design/snaplogic-analysis/07-reusable-error-workflow-design.md)), and always-on serving ([08](../new-feature-design/snaplogic-analysis/08-always-on-serving-design.md)) — designs ready, phase docs not yet broken out.
+
 ---
 
 ## Purpose

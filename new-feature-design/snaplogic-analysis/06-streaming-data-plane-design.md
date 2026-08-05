@@ -236,6 +236,11 @@ verification/calibration tasks rather than design decisions:
 
 ## 8. Phasing
 
+> 📋 **Detailed implementation plan:**
+> [`phases/Phase5-1-StreamingDataPlane.md`](../../phases/Phase5-1-StreamingDataPlane.md) —
+> sub-phase checklists (5.1.0–5.1.6 + post-MVP), designer-UX acceptance criteria per slice,
+> and plan-level decisions D15–D18 / questions Q1–Q5. Summary below is superseded by that plan.
+
 1. Bridge modules + Option A guidance doc (cheap, immediate).
 2. Port capability + validation + designer rendering.
 3. `StreamRegionExecutorActor` + channels + 3 modules (db.query → map → bulkinsert) as the
