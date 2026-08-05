@@ -126,6 +126,9 @@ regions prove insufficient in practice, and (c) a breaking v2 is commercially ac
 
 - [ ] Is >50% of target workload large-volume per-document ETL?
 - [ ] Are we willing to break every existing workflow binding (`{{nodeId.port}}`) and custom module?
+  - Yes because we are still testing 
 - [ ] Can we fund parallel maintenance of two engines during transition?
+  - We don't need to maintain both engines because this isn't released yet. 
 - [ ] Is per-run snapshot auditability expendable, or must the v2 replicate it per-document?
+  - Need clarification on this. 
 - [ ] Has the Akka.Streams-backed region executor (06 §6 phase 3) been tried first?

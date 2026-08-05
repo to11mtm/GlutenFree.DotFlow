@@ -35,15 +35,21 @@ error — cheaper and less surprising.
 
 ```json
 {
+  "schemaVersion": 1,
   "error":       { "message", "errorType", "nodeId", "stackTrace?" },   // from WorkflowError
   "execution":   { "executionId", "workflowId", "workflowName", "startedAt", "failedAt" },
   "node":        { "id", "name", "moduleId" },
+  "item":        { ...optional — per-item variant... },                  // streaming error envelopes (doc 06 §4.3)
+  "offset":      { "token?", "sequence?" },                              // optional SourceOffset of the failing item
   "parameters":  { ...caller-declared extras... }
 }
 ```
 
 Recommend a versioned, documented shape (`schemaVersion: 1`) since error workflows will be
-shared assets that many workflows depend on.
+shared assets that many workflows depend on. The optional `item`/`offset` fields form the
+**per-item variant** used by streaming error ports ([`06`](06-streaming-data-plane-design.md)
+§4.3) — absent for whole-execution errors — so error workflows handle both cases against one
+schema.
 
 ## 3. Rules & safeguards
 
