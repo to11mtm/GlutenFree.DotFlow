@@ -207,7 +207,7 @@ public sealed class WorkflowEndpointsTests : IClassFixture<WorkflowEndpointsTest
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["Persistence:Provider"] = "sqlite",
-                    ["Persistence:ConnectionString"] = ":memory:",
+                    ["Persistence:ConnectionString"] = Workflow.Tests.TestSqlite.InMemory(),
                 });
             });
         }

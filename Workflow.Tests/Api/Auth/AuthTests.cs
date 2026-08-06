@@ -219,7 +219,7 @@ public sealed class AuthTests
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["Persistence:Provider"] = "sqlite",
-                    ["Persistence:ConnectionString"] = ":memory:",
+                    ["Persistence:ConnectionString"] = Workflow.Tests.TestSqlite.InMemory(),
                     ["Api:Auth:Require"] = this.require ? "true" : "false",
 
                     ["Api:Auth:ApiKeys:0:KeyHash"] = ApiKeyHasher.Hash(ViewerKey),

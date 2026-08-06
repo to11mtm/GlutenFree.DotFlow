@@ -99,7 +99,7 @@ public sealed class SignalRTestHarness : WebApplicationFactory<Program>
             var settings = new Dictionary<string, string?>
             {
                 ["Persistence:Provider"] = "sqlite",
-                ["Persistence:ConnectionString"] = ":memory:",
+                ["Persistence:ConnectionString"] = Workflow.Tests.TestSqlite.InMemory(),
                 ["Api:Auth:Require"] = this.requireAuth ? "true" : "false",
                 ["Api:Auth:Jwt:SigningKey"] = JwtSigningKey,
                 ["Api:Auth:Jwt:Issuer"] = JwtIssuer,

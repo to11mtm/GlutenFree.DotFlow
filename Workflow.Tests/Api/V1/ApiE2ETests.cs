@@ -75,7 +75,7 @@ public sealed class ApiE2ETests : IClassFixture<ApiE2ETests.E2EFactory>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["Persistence:Provider"] = "sqlite",
-                    ["Persistence:ConnectionString"] = ":memory:",
+                    ["Persistence:ConnectionString"] = Workflow.Tests.TestSqlite.InMemory(),
                 });
             });
         }

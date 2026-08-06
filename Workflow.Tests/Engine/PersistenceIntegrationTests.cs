@@ -87,7 +87,9 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
 
         await WaitForTerminalState(supervisor, created.ExecutionId, TimeSpan.FromSeconds(10));
 
-        var nodeRecords = await _provider.ExecutionHistory.GetNodeExecutionsAsync(created.ExecutionId);
+        var nodeRecords = await Eventually(
+            () => _provider.ExecutionHistory.GetNodeExecutionsAsync(created.ExecutionId),
+            r => r.Count > 0);
         nodeRecords.Should().NotBeEmpty();
         nodeRecords.Should().OnlyContain(r => r.State == NodeExecutionState.Completed);
     }
@@ -143,7 +145,9 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
         var status = await WaitForTerminalState(supervisor, created.ExecutionId, TimeSpan.FromSeconds(10));
         status.State.Should().Be(ExecutionState.Completed);
 
-        var nodeRecords = await _provider.ExecutionHistory.GetNodeExecutionsAsync(created.ExecutionId);
+        var nodeRecords = await Eventually(
+            () => _provider.ExecutionHistory.GetNodeExecutionsAsync(created.ExecutionId),
+            r => r.Count >= status.NodeStates.Values.Count(s => s == NodeExecutionState.Completed));
         var completedCount = status.NodeStates.Values.Count(s => s == NodeExecutionState.Completed);
         nodeRecords.Count.Should().Be(completedCount);
     }
@@ -161,7 +165,9 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
 
         await WaitForTerminalState(supervisor, created.ExecutionId, TimeSpan.FromSeconds(10));
 
-        var executionEntry = await _provider.Variables.GetVariableAsync(VariableScope.ForExecution(created.ExecutionId), "persistedVar");
+        var executionEntry = await Eventually(
+            () => _provider.Variables.GetVariableAsync(VariableScope.ForExecution(created.ExecutionId), "persistedVar"),
+            e => e is not null);
         var workflowEntry = await _provider.Variables.GetVariableAsync(VariableScope.ForWorkflow(workflow.Id), "persistedVar");
 
         executionEntry.Should().NotBeNull();
@@ -312,6 +318,44 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
 
         supervisor.Tell(new GetWorkflowStatus(executionId));
         return ExpectMsg<WorkflowStatusResponse>(TimeSpan.FromSeconds(3));
+    }
+
+    /// <summary>
+    /// ⏳ Polls until a persistence read satisfies <paramref name="condition"/>.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: reaching a terminal execution state does <b>not</b> mean every write has landed —
+    /// the engine pipes persistence writes asynchronously (Phase 2.1.5 <c>PipeTo</c>). Asserting a
+    /// stored value immediately after <see cref="WaitForTerminalState"/> is therefore a race that
+    /// only shows up under parallel load, which is exactly the kind of flake that wastes an
+    /// afternoon. Poll for the value instead of sleeping and hoping~ 🛡️.
+    /// </remarks>
+    /// <typeparam name="T">The value being read.</typeparam>
+    /// <param name="read">Performs the persistence read.</param>
+    /// <param name="condition">What "settled" looks like.</param>
+    /// <param name="timeout">How long to keep trying.</param>
+    /// <returns>The first value satisfying the condition, or the last one read at timeout.</returns>
+    private static async Task<T> Eventually<T>(
+        Func<Task<T>> read,
+        Func<T, bool> condition,
+        TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        T value;
+
+        do
+        {
+            value = await read();
+            if (condition(value))
+            {
+                return value;
+            }
+
+            await Task.Delay(50);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        return value;
     }
 
     private static WorkflowDefinition CreateSingleNodeWorkflow(string moduleId)

@@ -61,7 +61,11 @@ public sealed class RateLimitTests
         {
             ["Api:RateLimit:Enabled"] = "true",
             ["Api:RateLimit:PermitLimit"] = "2",
-            ["Api:RateLimit:WindowSeconds"] = "60",
+
+            // 🚦 A long window on purpose: with a short one, a window boundary landing between the
+            // 2nd and 3rd request lets the 3rd through legitimately, and the test fails for a
+            // reason that has nothing to do with rate limiting. An hour makes that impossible~
+            ["Api:RateLimit:WindowSeconds"] = "3600",
         });
         var client = factory.CreateClient();
 

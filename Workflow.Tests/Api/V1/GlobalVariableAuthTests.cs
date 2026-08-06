@@ -100,7 +100,7 @@ public sealed class GlobalVariableAuthTests : IClassFixture<GlobalVariableAuthTe
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["Persistence:Provider"] = "sqlite",
-                    ["Persistence:ConnectionString"] = ":memory:",
+                    ["Persistence:ConnectionString"] = Workflow.Tests.TestSqlite.InMemory(),
                     ["Api:Auth:Require"] = "true",
 
                     ["Api:Auth:ApiKeys:0:KeyHash"] = ApiKeyHasher.Hash(DevKey),

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://xunit.net/schema/current/xunit.runner.schema.json",
+
+  "//": [
+    "🧪 Why parallelism is bounded here.",
+    "This assembly mixes fast unit tests with heavyweight integration tests that each spin up a",
+    "full ASP.NET host (WebApplicationFactory) or an Akka ActorSystem. xUnit defaults to one",
+    "parallel collection per logical core — on a 32-core machine that meant ~32 hosts/actor",
+    "systems racing for CPU, and the engine's timing-sensitive waits (ExpectMsg timeouts, actor",
+    "scheduling) began to miss their deadlines. The result was a rotating cast of ~5 failures per",
+    "run that always passed in isolation, which is the most expensive kind of test failure: it",
+    "trains people to ignore red.",
+    "Capping the workers keeps the suite honest. Measured cost is small; measured benefit is a",
+    "green run you can trust."
+  ],
+
+  "maxParallelThreads": 8,
+  "parallelizeAssembly": false
+}

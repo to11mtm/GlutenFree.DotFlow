@@ -10,6 +10,11 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- 🧪 Bounded parallelism so heavyweight host/actor tests don't starve each other~ -->
+        <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="coverlet.collector" />
         <PackageReference Include="LanguageExt.Core" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" />

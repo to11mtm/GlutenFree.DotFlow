@@ -383,6 +383,14 @@ in isolation (95/95 pass).
   buffer the whole stream, so it ships under the unified bounded-accumulator policy (§4.5) with
   `collect`, and gains real value once spill (5.1.6) exists. Pairs naturally with a future
   `sorted: true` hint that would let `aggregate`/`join` stream instead of accumulate.
+- **5.1.P6** ➕ **Incremental (fold-based) aggregate fast path.** `builtin.transform.aggregate` is
+  currently a *bounded* aggregate: it buffers every item, then reuses the batch aggregation. That's
+  uniform and safe, but `sum`/`count`/`avg`/`min`/`max`/`first`/`last` are all **foldable** — they
+  could run in constant memory with no `maxItems` ceiling at all. Only `median`/`distinct`/`mode`
+  genuinely need the whole set. Splitting the operations into "foldable" and "must-buffer" would
+  remove the guard from the common cases and make an aggregate over a billion rows viable.
+  Deferred because the buffered version is correct today and the split adds a second code path to
+  keep in agreement (the `Aggregate_StreamedAndBatched_Agree` test would need extending per op).
 
 ---
 
