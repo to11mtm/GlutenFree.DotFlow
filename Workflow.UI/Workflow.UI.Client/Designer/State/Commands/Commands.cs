@@ -265,6 +265,49 @@ public sealed class EditConnectionCommand : IDesignerCommand
     }
 }
 
+/// <summary>
+/// 🌊 Phase 5.1.2 — Edits a streaming connection's bounded-channel capacity~ ✨.
+/// </summary>
+/// <remarks>
+/// CopilotNote: Connections gained their first *tunable* property here. Null means "inherit the
+/// workflow, then engine, default" — which is what you get back by clearing the field~ 🎚️.
+/// </remarks>
+public sealed class EditConnectionBufferCommand : IDesignerCommand
+{
+    private readonly string key;
+    private readonly int? before;
+    private readonly int? after;
+
+    /// <summary>Initializes a new instance of the <see cref="EditConnectionBufferCommand"/> class~ 🌊.</summary>
+    /// <param name="key">The connection key.</param>
+    /// <param name="before">The old capacity (null = inherit).</param>
+    /// <param name="after">The new capacity (null = inherit).</param>
+    public EditConnectionBufferCommand(string key, int? before, int? after)
+    {
+        this.key = key;
+        this.before = before;
+        this.after = after;
+    }
+
+    /// <inheritdoc/>
+    public string Description => "Edit stream buffer";
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document) => this.Set(document, this.after);
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document) => this.Set(document, this.before);
+
+    private void Set(DesignerDocument document, int? capacity)
+    {
+        var conn = document.Connections.FirstOrDefault(c => c.Key == this.key);
+        if (conn is not null)
+        {
+            conn.BufferCapacity = capacity;
+        }
+    }
+}
+
 /// <summary>📝 Phase 3.3.b.3 — Edits workflow-level metadata (name/description/tags)~ ✨.</summary>
 public sealed class EditWorkflowMetaCommand : IDesignerCommand
 {

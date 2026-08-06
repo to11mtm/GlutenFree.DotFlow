@@ -42,9 +42,10 @@
         <div class="df-node__col df-node__col--in">
             @foreach (var port in Inputs)
             {
-                <div class="df-port df-port--in @(InputCompatible?.Invoke(port) == true ? "df-port--compatible" : "") @(InputEndpoint?.Invoke(port) == true ? "df-port--endpoint" : "")"
+                <div class="df-port df-port--in @(IsStreamingPort(port, false) ? "df-port--stream" : "") @(InputCompatible?.Invoke(port) == true ? "df-port--compatible" : "") @(InputEndpoint?.Invoke(port) == true ? "df-port--endpoint" : "")"
                      style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
                      data-port-in="@port"
+                     data-port-streaming="@(IsStreamingPort(port, false) ? "true" : null)"
                      title="@PortTitle(port, isOutput: false)"
                      @onpointerup="() => OnInputPointerUp(port)" @onpointerup:stopPropagation="true">
                     <span class="df-port__dot" data-port-anchor="in:@port"></span>
@@ -55,9 +56,10 @@
         <div class="df-node__col df-node__col--out">
             @foreach (var port in Outputs)
             {
-                <div class="df-port df-port--out @(port == ActiveSourcePort ? "df-port--source" : "") @(OutputEndpoint?.Invoke(port) == true ? "df-port--endpoint" : "")"
+                <div class="df-port df-port--out @(IsStreamingPort(port, true) ? "df-port--stream" : "") @(port == ActiveSourcePort ? "df-port--source" : "") @(OutputEndpoint?.Invoke(port) == true ? "df-port--endpoint" : "")"
                      style="height:@(CanvasGeometry.PortRowHeight.ToString(Inv))px;"
                      data-port-out="@port"
+                     data-port-streaming="@(IsStreamingPort(port, true) ? "true" : null)"
                      title="@PortTitle(port, isOutput: true)"
                      @onpointerdown="() => OnOutputPointerDown(port)" @onpointerdown:stopPropagation="true">
                     <span class="df-port__label">@port</span>
@@ -156,8 +158,24 @@
     {
         var ports = isOutput ? Node.Schema?.Outputs : Node.Schema?.Inputs;
         var description = ports?.FirstOrDefault(p => p.Name == port)?.Description;
-        return string.IsNullOrWhiteSpace(description) ? null : description;
+        var streaming = IsStreamingPort(port, isOutput);
+
+        // 🌊 A diamond port is a different *kind* of connection, so say so — the shape alone
+        // doesn't teach anyone the rule the first time they meet it~
+        var streamNote = streaming ? "🌊 Streaming port — connects only to other streaming ports" : null;
+
+        return (string.IsNullOrWhiteSpace(description), streamNote) switch
+        {
+            (true, null) => null,
+            (true, _) => streamNote,
+            (false, null) => description,
+            _ => $"{description} · {streamNote}",
+        };
     }
+
+    /// <summary>Whether a port carries a stream (drives the diamond glyph)~ 🌊.</summary>
+    private bool IsStreamingPort(string port, bool isOutput)
+        => StreamGraph.IsStreamingPort(Node, port, isOutput);
 
     private string Icon => !string.IsNullOrWhiteSpace(IconOverride) ? IconOverride! : Node.ModuleId switch
     {

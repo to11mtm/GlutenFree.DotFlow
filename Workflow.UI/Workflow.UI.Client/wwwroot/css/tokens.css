@@ -175,6 +175,10 @@ a.df-link:hover { text-decoration: underline; }
 .df-port--compatible .df-port__dot { background: var(--df-state-completed); box-shadow: 0 0 0 4px rgba(74,222,128,0.25); animation: df-port-pulse 1s ease-in-out infinite; }
 .df-port--endpoint { color: var(--df-accent); }
 .df-port--endpoint .df-port__dot { background: var(--df-accent); }
+/* 🌊 Streaming ports are diamonds, not dots — a different *kind* of connection, so a different
+   shape (the same trick SnapLogic uses for document vs binary views). Only diamonds meet diamonds. */
+.df-port--stream .df-port__dot { border-radius: 2px; transform: translateY(-50%) rotate(45deg); background: var(--df-stream, #2aa9c4); width: 11px; height: 11px; }
+.df-port--stream { color: var(--df-stream, #2aa9c4); }
 @keyframes df-port-pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(74,222,128,0.2); } 50% { box-shadow: 0 0 0 6px rgba(74,222,128,0.35); } }
 
 .df-connect-ghost { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; overflow: visible; }
@@ -218,6 +222,8 @@ a.df-link:hover { text-decoration: underline; }
 .df-palette__item { display: flex; align-items: center; gap: var(--df-space-2); padding: var(--df-space-2) var(--df-space-3); cursor: grab; border-radius: var(--df-radius); }
 .df-palette__item:hover { background: var(--df-surface-2); }
 .df-palette__icon { font-size: 1.1rem; }
+/* 🌊 Streaming-capable modules carry a small badge so the palette teaches the capability */
+.df-palette__badge { margin-left: auto; font-size: 0.75rem; opacity: 0.85; }
 .df-palette__details { margin: var(--df-space-3); padding: var(--df-space-3); background: var(--df-surface-2); border-radius: var(--df-radius); }
 .df-palette__details-id { color: var(--df-text-dim); font-size: 0.75rem; margin-bottom: var(--df-space-2); }
 
@@ -237,6 +243,9 @@ a.df-link:hover { text-decoration: underline; }
 .df-region--transaction .df-region__label { color: var(--df-warning, #fbbf24); }
 .df-region--fanout { border-color: var(--df-state-skipped); background: rgba(138,123,216,0.06); }
 .df-region--fanout .df-region__label { color: var(--df-state-skipped); }
+/* 🌊 Streaming region — the nodes the engine runs as one back-pressured pipeline */
+.df-region--stream { border-color: var(--df-stream, #2aa9c4); border-style: solid; background: rgba(42,169,196,0.05); }
+.df-region--stream .df-region__label { color: var(--df-stream, #2aa9c4); }
 .df-region--parallel { border-color: var(--df-state-running); background: rgba(79,156,249,0.05); }
 .df-region--parallel .df-region__label { color: var(--df-state-running); }
 

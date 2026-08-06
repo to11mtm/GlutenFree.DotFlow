@@ -105,6 +105,7 @@ pre-filled with the declared initial value, with the description as help text.
 {{nodeId.portName}}                 an upstream node's output
 {{input}}                           the value arriving on this node's own 'input' port
 {{input.Thing.Id}}                  a path into that incoming value
+{{item}}                            the current item, inside a streaming region only
 Order {{Variable.id}} shipped       tokens embed inside plain text
 {{Variable.count > 5}}              expressions evaluate (sandboxed JavaScript)
 \{\{not a token}}                   an escaped literal — renders as {{not a token}}
@@ -118,6 +119,10 @@ any step into (say) an HTTP Request and use `{{input.orderId}}` in the URL or bo
 the upstream node's id. (`{{nodeId.port}}` still works when you want to be explicit, and it's the
 only way to reach nodes further upstream.) `{{input}}` requires a connection into the node's
 `input` port — without one it fails the node, per the rule below.
+
+`item` is the other reserved root: inside a **streaming region** it means *the item currently
+flowing through*. It's offered by the picker only there, and using it outside a region is a
+design-time error — see [streaming regions](designer.md#streaming-regions-) in the designer guide.
 
 The designer's `{{x}}` button lists everything referenceable from the selected node — this node's
 own input (`{{input}}`, first in the list when wired), workflow variables, globals, and upstream

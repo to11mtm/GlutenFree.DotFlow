@@ -118,6 +118,8 @@ public sealed record ModuleSchemaDto(
 /// <param name="Description">What the module does.</param>
 /// <param name="Icon">The icon identifier.</param>
 /// <param name="Version">The module version as a string.</param>
+/// <param name="Enabled">Whether the resolved version is enabled.</param>
+/// <param name="StreamCapable">Whether the module can run as a streaming stage (Phase 5.1). 🌊.</param>
 public sealed record ModuleSummaryDto(
     string Id,
     string DisplayName,
@@ -125,7 +127,8 @@ public sealed record ModuleSummaryDto(
     string Description,
     string Icon,
     string? Version,
-    bool Enabled = true)
+    bool Enabled = true,
+    bool StreamCapable = false)
 {
     /// <summary>Projects an <see cref="IWorkflowModule"/> into a summary DTO~ 📦.</summary>
     /// <param name="module">The module.</param>
@@ -139,7 +142,8 @@ public sealed record ModuleSummaryDto(
             module.Description,
             module.Icon,
             JsonTypeHelpers.VersionString(module.Version),
-            enabled);
+            enabled,
+            module is IStreamingWorkflowModule);
 }
 
 /// <summary>

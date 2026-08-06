@@ -32,6 +32,12 @@ public static class VariableTokens
     /// <summary>The literal token for the node's own input~ 🔌.</summary>
     public const string SelfInputToken = "{{input}}";
 
+    /// <summary>The picker group name for the current streaming item~ 🌊.</summary>
+    public const string StreamItemCategory = "This streaming item";
+
+    /// <summary>The literal token for the item flowing through a streaming region~ 🌊.</summary>
+    public const string StreamItemToken = "{{item}}";
+
     /// <summary>A pickable binding token~ 🎫.</summary>
     /// <param name="Token">The literal token text to insert (e.g. <c>{{Variable.count}}</c>).</param>
     /// <param name="Label">The display label.</param>
@@ -75,6 +81,17 @@ public static class VariableTokens
         IReadOnlyCollection<string>? globals = null)
     {
         var options = new List<TokenOption>();
+
+        // 🌊 5.1.2 — inside a streaming region, the item currently flowing is *the* thing you bind
+        // to, so it leads the list. Outside a region the token is meaningless, and the lint says so.
+        if (StreamGraph.RegionIndexByNode(document).ContainsKey(nodeId))
+        {
+            options.Add(new TokenOption(
+                StreamItemToken,
+                "item — the streaming item being processed",
+                StreamItemCategory,
+                "One item at a time; variables here are a read-only snapshot"));
+        }
 
         // 🔌 D-I (input-shape hinting) — the node's own incoming value first: it's the
         // beginner-friendliest token, and it only appears when it will actually resolve.

@@ -24,7 +24,8 @@ public sealed record ModuleSummaryDto(
     string Description,
     string Icon,
     string? Version,
-    bool Enabled = true);
+    bool Enabled = true,
+    bool StreamCapable = false);
 
 /// <summary>
 /// 📦 Phase 3.3.a.0 — Full module details incl. schema (mirrors <c>ModuleDetailsDto</c>)~ ✨.

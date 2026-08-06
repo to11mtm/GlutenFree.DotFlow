@@ -354,6 +354,18 @@
             <label class="df-label">Condition (optional)</label>
             <input class="df-input" data-testid="conn-condition" @bind="connCondition" placeholder="e.g. output.status == 200" />
         </div>
+        @if (IsSelectedConnectionStreaming)
+        {
+            <div class="df-field" data-testid="conn-stream-section">
+                <label class="df-label">🌊 Buffer capacity (items)</label>
+                <input class="df-input" type="number" min="1" data-testid="conn-buffer"
+                       @bind="connBuffer" placeholder="default (64)" />
+                <div class="df-hint">
+                    How many items may wait between these two nodes. Smaller uses less memory;
+                    larger smooths bursty producers. Leave empty to inherit the default.
+                </div>
+            </div>
+        }
         <div class="df-row">
             <button class="df-btn df-btn--primary" data-testid="conn-apply" @onclick="ApplyConnection">Apply</button>
             <button class="df-btn df-btn--danger" data-testid="conn-delete" @onclick="DeleteConnection">Delete</button>
@@ -412,6 +424,9 @@
 
     private string? seededConnKey;
     private string connCondition = string.Empty;
+
+    // 🌊 5.1.2 — per-connection bounded-channel capacity (null = inherit the default).
+    private int? connBuffer;
 
     /// <summary>The document.</summary>
     [Parameter, EditorRequired]
@@ -692,10 +707,12 @@
         {
             this.seededConnKey = conn.Key;
             this.connCondition = conn.Condition ?? string.Empty;
+            this.connBuffer = conn.BufferCapacity;
         }
         else if (conn is null)
         {
             this.seededConnKey = null;
+            this.connBuffer = null;
         }
     }
 
@@ -925,7 +942,21 @@
         {
             this.Commands.Execute(new EditConnectionCommand(conn.Key, conn.Condition, after));
         }
+
+        // 🌊 Buffer capacity is only meaningful on a streaming edge; a blank field means "inherit".
+        if (this.IsSelectedConnectionStreaming)
+        {
+            var capacity = this.connBuffer is > 0 ? this.connBuffer : null;
+            if (capacity != conn.BufferCapacity)
+            {
+                this.Commands.Execute(new EditConnectionBufferCommand(conn.Key, conn.BufferCapacity, capacity));
+            }
+        }
     }
+
+    /// <summary>Whether the selected edge carries a stream (drives the buffer editor)~ 🌊.</summary>
+    private bool IsSelectedConnectionStreaming
+        => this.SelectedConnection is { } c && StreamGraph.IsStreamingEdge(this.Document, c);
 
     private void DeleteConnection()
     {

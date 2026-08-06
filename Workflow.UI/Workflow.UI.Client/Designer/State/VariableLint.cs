@@ -31,6 +31,12 @@ public static class VariableLint
     /// <summary>The builtin module that writes a variable at run time~ ✍️.</summary>
     public const string SetVariableModuleId = "builtin.setvariable";
 
+    /// <summary>The reserved root meaning "this node's own incoming value"~ 🔌.</summary>
+    public const string SelfInputRoot = "input";
+
+    /// <summary>The reserved root meaning "the item currently flowing through a region"~ 🌊.</summary>
+    public const string StreamItemRoot = "item";
+
     private const string VariablePrefix = "Variable.";
 
     /// <summary>Matches an unescaped <c>{{ … }}</c> token, exactly as the binder does.</summary>
@@ -174,6 +180,30 @@ public static class VariableLint
     {
         if (reference.Kind == ReferenceKind.NodeOutput)
         {
+            // 🔌 'input' is a reserved root meaning "this node's own incoming value" — it never
+            // names a node, so it must not be looked up as one (docs/variables.md).
+            if (string.Equals(reference.Name, SelfInputRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                yield break;
+            }
+
+            // 🌊 'item' is the per-item root inside a streaming region — meaningless outside one,
+            // and saying so is far kinder than "no node called 'item'" (5.1.2, Q5).
+            if (string.Equals(reference.Name, StreamItemRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!StreamGraph.RegionIndexByNode(doc).ContainsKey(node.Id))
+                {
+                    yield return new GraphIssue(
+                        IssueSeverity.Error,
+                        $"'{node.Name}' → {reference.PropertyName}: {reference.Token} refers to the current "
+                        + "streaming item, but this node isn't inside a streaming region. Use {{input}} for "
+                        + "the value coming in, or wire this node's streaming ports.",
+                        node.Id);
+                }
+
+                yield break;
+            }
+
             if (doc.FindNode(reference.Name) is null)
             {
                 yield return new GraphIssue(

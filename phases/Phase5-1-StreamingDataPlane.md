@@ -66,6 +66,7 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 | **D18 Connection properties UI** | Selecting a stream edge opens a small properties popover (BufferCapacity) — first time connections get editable properties; `EdgeLayer` hit-test already exists. |
 | **D19 Streaming category in the palette** | Bridges ship under a new **"Streaming"** category (Q4 partially answered: bridges are genuinely new *nodes*; streaming-capable *existing* modules will instead grow streaming ports and a 🌊 badge, no duplicate module ids). |
 | **D20 `IStreamTerminalModule` for stream→batch stages** | Found during 5.1.1: `ExecuteStreamAsync` can only yield items, so a stage with a streaming input but batch outputs (`stream.collect`, and every sink reporting `rowsAffected`/`itemCount`) had no way to express itself. Terminal stages implement `ExecuteTerminalAsync` returning a plain `ModuleResult`, so the engine's existing port dispatch handles the region edge with no special cases. Design doc 06 §3.3 updated. |
+| **D21 Region detection is mirrored, not shared** | `Workflow.UI.Client` deliberately has no `Workflow.Core` reference (Phase 3.3 D2 keeps a React port additive), so the designer's `StreamGraph` and the engine's future region detector are two implementations of one rule. They get a **drift-guard test** (the `SplitPreviewDriftGuardTests` pattern) in 5.1.3 rather than a shared library. |
 
 ### TO RESOLVE 🤔
 
@@ -85,10 +86,11 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
       nodes in a new **"Streaming"** category. Still open for **existing** modules gaining
       streaming ports (5.1.3+): a 🌊 "stream-capable" badge on the same module id (recommended)
       vs. separate module ids.
-- [ ] **Q5 `{{item}}` in the binding picker.** The `{{x}}` picker and ƒx builder
-      (`ExpressionBuilder`) must offer `{{item}}` inside regions and *hide* `{{nodeId.port}}`
-      upstream refs that aren't meaningful per-item — confirm exact rules with docs/variables.md
-      semantics during 5.1.2.
+- [ ] **Q5 `{{item}}` in the binding picker.** ✅ **RESOLVED (5.1.2):** the picker offers `{{item}}`
+      only when the node sits inside a streaming region (listed first, since it's *the* thing you
+      bind to there), and the lint gives a targeted error when `{{item}}` is used outside one.
+      Upstream `{{nodeId.port}}` refs were left available — they resolve to the region's inputs, and
+      hiding them would break legitimate config references.
 
 ---
 
@@ -152,25 +154,35 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 flaky set (all present in the pre-change baseline). Module discovery + validator accept both new
 modules unchanged.
 
-### 5.1.2 — Validation + designer rendering 🎨 (~1 week) — **the UX slice**
+### 5.1.2 — Validation + designer rendering 🎨 (~1 week) — **the UX slice** ✅ **COMPLETE**
 
 Engine/shared validation:
-- [ ] Region detection (maximal stream-linked sub-graph) as a shared routine usable by engine
-      *and* designer validation.
-- [ ] Rules: shape mismatch; `SetVariable`-in-region; stream crossing construct boundaries
-      (D14); resequencing cardinality rule (D8); required bridge suggestions.
+- [x] Region detection (maximal stream-linked sub-graph) → `Designer/State/StreamGraph.cs`
+      (`Regions`, `RegionIndexByNode`, `IsStreamingPort/Edge`, `IsShapeMismatch`, `BridgeFor`).
+      ⚠️ **Not literally shared** — `Workflow.UI.Client` has no `Workflow.Core` reference by design
+      (Phase 3.3 D2), so the engine gets its own copy in 5.1.3 **plus a drift-guard test**, the same
+      pattern as `SplitPreviewDriftGuardTests`. Recorded as **D21**.
+- [x] Rules → `GraphValidator.ValidateStreaming` (wired into `Validate`): shape mismatch (names the
+      bridge to insert), `SetVariable`-in-region, stream crossing a construct boundary.
+- [ ] Resequencing/cardinality rule — **moved to 5.1.4**, where `maxWorkers` exists (there is
+      nothing to validate against before then).
 
 Designer (Workflow.UI.Client):
-- [ ] `NodePorts`/`NodeView`: diamond glyph + tooltip for streaming ports (D16).
-- [ ] `EdgeLayer`: distinct stream-edge stroke; **drag-time refusal** of shape-mismatched
-      connections (snap-back + toast, matching existing invalid-wire behavior).
-- [ ] `CanvasView`: computed region halo over stream-linked nodes (D17).
-- [ ] `GraphValidator`: all rules above as lints with fix-it hints ("insert Collect bridge").
-- [ ] `VariableLint` + `{{x}}` picker + `ExpressionBuilder`: `{{item}}` availability inside
-      regions per Q5; `SetVariable` lint.
-- [ ] Connection properties popover: `BufferCapacity` editor on stream edges (D18).
-- [ ] Palette treatment per Q4 (🌊 badge or category).
-- [ ] bUnit tests for each designer behavior; screenshot/story added to docs/designer.md.
+- [x] `NodeView`: diamond glyph (`df-port--stream`, `data-port-streaming`) + a tooltip that teaches
+      the rule; `StreamGraph.IsStreamingPort` is the single source of truth.
+- [x] `EdgeLayer`: distinct stream stroke/colour + `data-edge-streaming`.
+- [x] `CanvasView`: **drag-time refusal** of shape-mismatched wires (`IsCompatibleInput`) and the
+      🌊 region halo (`StructuralRegions.UnionBounds` promoted to public and reused).
+- [x] `VariableLint` + `{{x}}` picker: `{{item}}` offered **inside** regions, with a targeted error
+      when used outside one. Also fixed an adjacent bug — `{{input.field}}` was linted as a missing
+      *node* named `input`; reserved roots are now explicit (`SelfInputRoot`, `StreamItemRoot`).
+- [x] Connection properties: buffer-capacity editor on stream edges only, undoable via the new
+      `EditConnectionBufferCommand` (D18).
+- [x] Palette: 🌊 stream-capable badge (`ModuleSummaryDto.StreamCapable` added server + client).
+- [x] Tests: `StreamingTopologyTests` (23 state specs) + `StreamingCanvasTests` (11 bUnit specs).
+
+**Result:** `Workflow.Tests.UI` **695 passed / 0 failed** (+34 new). `Workflow.Tests` 1628/1632 —
+the 4 failures are the known flaky API set (all pass in isolation; unrelated files).
 
 ### 5.1.3 — Region executor proving slice ⚙️ (~2 weeks)
 

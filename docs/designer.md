@@ -177,6 +177,35 @@ Author it in [Linq Studio](linq-studio.md) as usual; at run time it joins the tr
 way (matching `connectionId`), running on the transaction's open connection so its reads see the
 body's uncommitted writes and its writes roll back with everything else.
 
+### Streaming regions 🌊
+
+Some modules can process **one item at a time with bounded memory** instead of one payload per run.
+The designer makes that a visible, guided distinction:
+
+| What you see | What it means |
+| --- | --- |
+| A **diamond** port instead of a round one | The port carries a *stream* of items, not a single value |
+| A wire that **refuses to attach** | Streams only connect to streams. The port shapes have to match — same idea as plug shapes |
+| A 🌊 **halo** behind a group of nodes | Those nodes form one *streaming region*: the engine runs them as a single back-pressured pipeline |
+| A 🌊 badge in the palette | That module can act as a streaming stage |
+
+To cross between the two worlds, use a bridge node: **🪣 Collect Stream** (stream → array) or
+**🚰 Stream From Items** (array → stream). If you wire a mismatch by importing a file, the
+validation panel says which bridge to insert and where.
+
+Inside a region:
+
+- Bind to **`{{item}}`** — the item currently flowing. The `{{x}}` picker offers it automatically
+  and only there.
+- **Variables are read-only** — a snapshot taken when the region starts. A Set Variable node inside
+  a region is rejected, because items don't finish in a defined order. Collect first, then write.
+- Select a streaming wire to tune its **buffer capacity** (how many items may wait between two
+  nodes). Blank means the default; smaller uses less memory, larger smooths bursty producers.
+- Streams can't cross into a loop body, try/catch, or parallel branch — collect before the boundary.
+
+See [Working with Large Data](advanced-flow-control.md#-working-with-large-data) for when to reach
+for streaming versus a chunked ForEach.
+
 ## Running (S3)
 
 **▶ Run** opens an inputs dialog — a form generated from the workflow's declared

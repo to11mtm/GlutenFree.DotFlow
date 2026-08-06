@@ -27,6 +27,14 @@
                 <span class="df-region__label">@region.Label</span>
             </div>
         }
+        @foreach (var stream in StreamRegionHalos)
+        {
+            <div class="df-region df-region--stream"
+                 data-region-stream="@stream.Index"
+                 style="left:@(stream.Bounds.X.ToString(Inv))px; top:@(stream.Bounds.Y.ToString(Inv))px; width:@(stream.Bounds.Width.ToString(Inv))px; height:@(stream.Bounds.Height.ToString(Inv))px;">
+                <span class="df-region__label">🌊 streaming region</span>
+            </div>
+        }
         <EdgeLayer Document="Document" Selection="Selection" OnConnectionContextMenu="OnConnectionContextMenuInternal" />
         @if (Commands is not null && DragState.DraggingModuleId is not null)
         {
@@ -531,6 +539,25 @@
 
     private Task OnViewportContextMenu(MouseEventArgs e) => this.OnCanvasContextMenu.InvokeAsync(e);
 
+    /// <summary>
+    /// 🌊 Streaming-region halos (5.1.2). The engine detects regions from connections, not from
+    /// <c>RegionId</c>, so the designer computes the same thing for drawing — nothing is persisted
+    /// and nothing can drift into the definition~ 🗺️.
+    /// </summary>
+    private IEnumerable<(int Index, Rect Bounds)> StreamRegionHalos
+    {
+        get
+        {
+            foreach (var region in StreamGraph.Regions(this.Document))
+            {
+                if (StructuralRegions.UnionBounds(this.Document, region.NodeIds) is { } bounds)
+                {
+                    yield return (region.Index, bounds);
+                }
+            }
+        }
+    }
+
     private Task NavigateTo(Point canvasPoint)
     {
         // Center the clicked canvas point in the viewport (minimap navigation).
@@ -602,6 +629,14 @@
             {
                 return false;
             }
+        }
+
+        // 🌊 Shape rule (5.1.2): a stream may only meet a stream. Refusing the wire while dragging
+        // is what stops an invalid streaming graph from ever being drawn — the validator's message
+        // then only has to explain imported graphs~
+        if (StreamGraph.IsShapeMismatch(this.connectSource, this.connectSourcePort, targetNode, inputPort))
+        {
+            return false;
         }
 
         // No cycle.

@@ -95,6 +95,7 @@ public static class GraphValidator
         issues.AddRange(ValidateStartAndEnd(doc));
         issues.AddRange(ValidateFanOut(doc));
         issues.AddRange(ValidatePorts(doc));
+        issues.AddRange(ValidateStreaming(doc));
 
         return issues;
     }
@@ -322,6 +323,88 @@ public static class GraphValidator
         => node.Properties.TryGetValue("connectionId", out var el) && el.ValueKind == JsonValueKind.String
             ? el.GetString()
             : null;
+
+    /// <summary>
+    /// 🌊 Phase 5.1.2 — streaming-topology rules. The shape rule is enforced at drag time too
+    /// (<c>CanvasView</c>), so these mostly catch imported or hand-edited graphs — but they're the
+    /// authority, and they're what turns "it hung" into "you can't do that, here's the fix"~ 🧭.
+    /// </summary>
+    /// <param name="doc">The document.</param>
+    /// <returns>The streaming issues found.</returns>
+    public static IReadOnlyList<GraphIssue> ValidateStreaming(DesignerDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+
+        var issues = new List<GraphIssue>();
+
+        // ── Rule 1: the shape rule — streaming ends only meet streaming ends ────────────────
+        foreach (var c in doc.Connections)
+        {
+            var source = doc.FindNode(c.SourceNodeId);
+            var target = doc.FindNode(c.TargetNodeId);
+
+            if (!StreamGraph.IsShapeMismatch(source, c.SourcePortName, target, c.TargetPortName))
+            {
+                continue;
+            }
+
+            var sourceIsStreaming = StreamGraph.IsStreamingPort(source, c.SourcePortName, isOutput: true);
+            var bridge = StreamGraph.BridgeFor(sourceIsStreaming);
+            var direction = sourceIsStreaming
+                ? $"'{c.SourceNodeId}.{c.SourcePortName}' is a stream but '{c.TargetNodeId}.{c.TargetPortName}' expects a single value"
+                : $"'{c.SourceNodeId}.{c.SourcePortName}' is a single value but '{c.TargetNodeId}.{c.TargetPortName}' expects a stream";
+
+            issues.Add(new GraphIssue(
+                IssueSeverity.Error,
+                $"{direction}. Insert a '{bridge}' node between them.",
+                c.TargetNodeId));
+        }
+
+        var regionIndexByNode = StreamGraph.RegionIndexByNode(doc);
+        if (regionIndexByNode.Count == 0)
+        {
+            return issues;
+        }
+
+        // ── Rule 2: no variable writes inside a region ─────────────────────────────────────
+        // Items are processed concurrently and out of order, so "the" value a write leaves behind
+        // is undefined. Variables are a read-only snapshot taken when the region starts~ 💾
+        foreach (var node in doc.Nodes)
+        {
+            if (regionIndexByNode.ContainsKey(node.Id)
+                && string.Equals(node.ModuleId, StreamGraph.SetVariableModuleId, StringComparison.Ordinal))
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Error,
+                    $"'{node.Name}' writes a variable inside a streaming region, where item order isn't defined. "
+                        + "Collect the stream first, then write the variable after the region.",
+                    node.Id));
+            }
+        }
+
+        // ── Rule 3: streams may not cross a construct boundary ─────────────────────────────
+        // A live stream entering a loop body / try / catch / parallel branch would tie two
+        // schedulers together — deadlock territory. Bridge out, then back in~ 🚧
+        foreach (var c in doc.Connections)
+        {
+            if (!StreamGraph.IsStreamingEdge(doc, c))
+            {
+                continue;
+            }
+
+            var source = doc.FindNode(c.SourceNodeId);
+            if (NodePorts.IsStructuralEdge(source, c.SourcePortName))
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Error,
+                    $"A stream can't cross into a '{c.SourcePortName}' body. Collect it before the boundary "
+                        + "and stream again inside, or keep the whole region outside the construct.",
+                    c.SourceNodeId));
+            }
+        }
+
+        return issues;
+    }
 
     /// <summary>
     /// Returns true if adding the candidate edge (source→target) would create a cycle in the

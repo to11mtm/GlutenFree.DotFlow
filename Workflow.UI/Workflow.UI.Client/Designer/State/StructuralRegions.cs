@@ -118,7 +118,14 @@ public static class StructuralRegions
         return visited.ToList();
     }
 
-    private static Rect? UnionBounds(DesignerDocument document, IReadOnlyList<string> nodeIds)
+    /// <summary>
+    /// The padded union of a set of nodes' bounds in canvas space — the geometry every region
+    /// halo is drawn from (structural bodies and, since 5.1.2, streaming regions)~ 📐.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="nodeIds">The node ids to enclose.</param>
+    /// <returns>The padded bounds, or null when no id resolves to a node.</returns>
+    public static Rect? UnionBounds(DesignerDocument document, IReadOnlyList<string> nodeIds)
     {
         double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
         var any = false;

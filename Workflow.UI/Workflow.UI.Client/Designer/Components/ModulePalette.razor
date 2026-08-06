@@ -29,14 +29,19 @@
                 <div class="df-palette__group-title">@group.Key</div>
                 @foreach (var m in group.Value)
                 {
-                    <div class="df-palette__item" draggable="true"
+                    <div class="df-palette__item @(m.StreamCapable ? "df-palette__item--stream" : "")" draggable="true"
                          data-module-id="@m.Id"
+                         data-module-stream="@(m.StreamCapable ? "true" : null)"
                          @ondragstart="() => DragState.Begin(m.Id)"
                          @ondragend="() => DragState.End()"
                          @onclick="() => Selected = m"
-                         title="@m.Description">
+                         title="@(m.StreamCapable ? $"{m.Description} · 🌊 can run as a streaming stage" : m.Description)">
                         <span class="df-palette__icon">@m.Icon</span>
                         <span class="df-palette__name">@m.DisplayName</span>
+                        @if (m.StreamCapable)
+                        {
+                            <span class="df-palette__badge" title="Streaming-capable">🌊</span>
+                        }
                     </div>
                 }
             </div>
