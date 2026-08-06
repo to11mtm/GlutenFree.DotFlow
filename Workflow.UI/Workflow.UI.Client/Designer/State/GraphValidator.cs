@@ -403,6 +403,51 @@ public static class GraphValidator
             }
         }
 
+        // ── Rule 4 (5.1.4): worker/ordering configuration ──────────────────────────────────
+        foreach (var node in doc.Nodes)
+        {
+            if (!regionIndexByNode.ContainsKey(node.Id))
+            {
+                continue;
+            }
+
+            var workers = StreamGraph.MaxWorkersOf(node);
+            if (workers < 1)
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Error,
+                    $"'{node.Name}' asks for {workers} workers. It needs at least 1.",
+                    node.Id));
+                continue;
+            }
+
+            if (workers <= 1)
+            {
+                continue;
+            }
+
+            // Only a per-item stage can be parallelised — a module that consumes the whole stream
+            // owns its own loop, so the knob would silently do nothing (D26)~ 👷
+            if (node.Schema is { StreamShape: { } shape } && !string.Equals(shape, "perItem", StringComparison.Ordinal))
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Warning,
+                    $"'{node.Name}' processes the whole stream itself, so it always runs one item at a "
+                        + $"time — 'maxWorkers = {workers}' will be ignored.",
+                    node.Id));
+            }
+
+            if (!StreamGraph.OrderedOf(node))
+            {
+                issues.Add(new GraphIssue(
+                    IssueSeverity.Warning,
+                    $"'{node.Name}' runs {workers} items at once with ordering turned off, so items after "
+                        + "it arrive in completion order. Keeping order costs nothing here — turn it back on "
+                        + "unless you specifically need the throughput.",
+                    node.Id));
+            }
+        }
+
         return issues;
     }
 

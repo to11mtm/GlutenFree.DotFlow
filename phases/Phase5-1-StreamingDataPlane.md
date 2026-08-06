@@ -133,19 +133,15 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 
       Design doc 06 §5.1/§6 updated; `SourceOffset` **stays** (it was reserved for checkpointing in
       D12, which is untouched by this).
-- [ ] **Q3 `Cardinality` placement.** ✅ **RESOLVED (5.1.0):** a **per-module** default-interface
-      member on `IStreamingWorkflowModule`. Per-port cardinality deferred to 5.1.P3.
-      ⚠️ **Superseded in part by Q6/D25:** its original job — gating which stages could be
-      resequenced — no longer exists, since ordering now holds at every cardinality. The hint is
-      currently **vestigial**. See **Q7**.
-- [ ] ⚠️ **Q7 (new, from Q6): repurpose or remove `StreamCardinality`?** The distinction that
-      actually matters after D25/D26 is **per-item** (can run with `maxWorkers > 1`) vs
-      **whole-stream** (owns its own iteration → must run single-worker, e.g. `aggregate`), which
-      falls out of *which interface a module implements* rather than a declared enum. Options for
-      5.1.4: (a) delete `StreamCardinality` and let the implemented interface speak; (b) keep it
-      purely as a designer hint ("this stage may change item counts"). Recommendation: **(a)** —
-      a knob with no behaviour attached is a knob that will eventually lie. Removing it is a
-      pre-1.0 breaking change to an interface nothing ships against yet.
+- [ ] **Q3 `Cardinality` placement.** ✅ **RESOLVED (5.1.0), then SUPERSEDED (5.1.4).** Shipped as a
+      per-module default-interface member; **deleted** once D25 removed its only purpose. See Q7.
+- [ ] ⚠️ **Q7 (new, from Q6): repurpose or remove `StreamCardinality`?** ✅ **RESOLVED (5.1.4):
+      removed.** The distinction that actually matters after D25/D26 is **per-item** (can run with
+      `maxWorkers > 1`) vs **whole-stream** (owns its own iteration → single-worker), and that
+      follows from *which interface a module implements* rather than a declared enum. The enum is
+      gone; `ModuleSchemaDto.StreamShape` (`"perItem"`/`"wholeStream"`/null) carries the fact to
+      the designer, which uses it to warn when `maxWorkers` is set on a stage that can't honour it.
+      A guard test asserts the type no longer exists.
 - [ ] **Q4 Palette treatment.** ⚙️ **PARTIALLY RESOLVED (5.1.1, D19):** the two *bridges* are new
       nodes in a new **"Streaming"** category. Still open for **existing** modules gaining
       streaming ports (5.1.3+): a 🌊 "stream-capable" badge on the same module id (recommended)
@@ -286,27 +282,48 @@ The unit-suite failures are pre-existing parallel-collection flakiness — **ver
 suite with all streaming tests excluded (5 failures out of 1632) and by running every failing class
 in isolation (95/95 pass).
 
-### 5.1.4 — Scale-out: workers, errors, module coverage 🧯 (~2 weeks)
+### 5.1.4 — Scale-out: workers, errors, module coverage 🧯 (~2 weeks) 🔄 **IN PROGRESS**
 
 - [x] **Q6 resolved** ahead of the slice (D25) — resequencing buffer, overflow policy and
-      tombstones are **deleted from the design**, not built.
-- [ ] **Per-item stage contract (D26)** — an optional `ProcessAsync(StreamItem) → IEnumerable<StreamItem>`
-      entry point; the runner uses `SelectAsync(maxWorkers)`/`SelectAsyncUnordered` + `SelectMany`.
-      Stream-shaped modules keep working, pinned to one worker. **Blocks `maxWorkers`.**
-- [ ] **Q7**: delete `StreamCardinality` (recommended) or demote it to a pure designer hint.
-- [ ] `maxWorkers` + `ordered` (default true) per stage — two knobs, no buffers (D25/D9).
-- [ ] Per-item error policy (`fail`/`skip`/error port) + per-item error envelope (D7);
-      streaming `error` port wiring in designer (same diamond rules). `skip` is now trivial —
-      a stage returning zero outputs contributes nothing at its slot.
-- [ ] **Designer UX:** stage knob editors in `PropertiesPanel` (maxWorkers, ordered, error policy);
-      "⚠ unordered" node badge when `maxWorkers > 1 && !ordered`; lint pairing the two.
-- [ ] Streaming variants of `builtin.database.query` (source), `builtin.transform.map` (per-item),
-      `builtin.database.bulkinsert` (sink) — **carried over from 5.1.3**.
+      tombstones are **deleted from the design**, not built. Tombstone machinery removed from
+      `StreamItem` too, with a guard test.
+- [x] **Per-item stage contract (D26)** → `IStreamItemProcessor.ProcessAsync(item, context, ct)`
+      returning `IReadOnlyList<StreamItem>` (0 = drop, 1 = transform, N = split). The runner uses
+      `SelectAsync(maxWorkers)` / `SelectAsyncUnordered` + `SelectMany`. Whole-stream modules keep
+      working and run single-worker.
+- [x] **Q7 resolved: `StreamCardinality` deleted.** Its only job was gating resequencing. The
+      distinction that actually matters — *per-item* vs *whole-stream* — now follows from the
+      interface a module implements, and is surfaced to the designer as
+      `ModuleSchemaDto.StreamShape` (`"perItem"` / `"wholeStream"` / null).
+- [x] `maxWorkers` + `ordered` (default **true**) per stage, read from node properties;
+      `maxWorkers` is pinned to 1 for whole-stream modules rather than silently ignored.
+- [x] Per-item error policy `onItemError: fail | skip`; skipped items are recorded in
+      `StreamRegionResult.ItemErrors` (node id, item index, `SourceOffset`, exception) — the
+      envelope that feeds doc 07's per-item error document. **Cancellation stays fatal** under
+      `skip`, which has its own test.
+- [x] **Designer UX:** `StreamGraph.MaxWorkersOf/OrderedOf/IsUnorderedStage`; "⚠ unordered" badge
+      on the node; validator warns on unordered concurrency, warns when `maxWorkers` is set on a
+      whole-stream stage, and errors on `maxWorkers < 1` (this is the cardinality/resequencing
+      validation rule deferred from 5.1.2, in its post-D25 form).
+- [x] `builtin.transform.map` is now a **per-item streaming stage** — the same `MapRecord` serves
+      both paths, plus streaming `items` ports and the three new knobs on its schema.
+- [x] Tests: `StreamPerItemStageTests` (9 — concurrency bound, ordering under jitter, filter and
+      splitter order preservation, both error policies, cancellation, whole-stream compatibility),
+      plus designer knob specs (6) and badge render specs (2).
+- [ ] Streaming variants of `builtin.database.query` (source) and `builtin.database.bulkinsert`
+      (sink) — **carried over from 5.1.3**.
 - [ ] Remaining v1 streaming modules: `builtin.file.csv.read`/`.json.read` (sources),
       `builtin.transform.query` (filter — per-item returning 0 or 1), `builtin.file.*.write` (sinks).
 - [ ] Streaming `aggregate` under the unified guard policy (whole-stream shape, single worker).
+- [ ] Streaming `error` port wiring in the designer (the envelope exists; the port doesn't yet).
+- [ ] Stage knob editors in `PropertiesPanel` (the schema declares them, so the generic property
+      editor already renders them — a dedicated grouping/UX pass is still worth doing).
 - [ ] Docker-gated 1M-row Postgres → map → bulkinsert test with a bounded-memory assertion, and
       guard-default calibration from those measurements — **carried over from 5.1.3**.
+
+**Progress:** `Workflow.Tests` 1660/1668 · `Workflow.Tests.UI` **703/703** · builds clean. The 8
+unit failures are the known parallel-collection flakiness (all 67 tests in those classes pass in
+isolation).
 
 ### 5.1.5 — Observability & sampling 🔭 (~1 week)
 

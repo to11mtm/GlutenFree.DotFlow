@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Akka;
 using Akka.Streams;
 using Akka.Streams.Dsl;
 using Workflow.Core.Models;
@@ -69,6 +70,7 @@ public sealed class StreamRegionRunner
 
         var stopwatch = Stopwatch.StartNew();
         var counters = plan.Stages.ToDictionary(s => s.NodeId, _ => new StageCounter(), StringComparer.Ordinal);
+        var errors = new List<StreamItemError>();
 
         var head = plan.Stages[0];
         var source = Source.From(() => head.Module.ExecuteStreamAsync(
@@ -85,14 +87,15 @@ public sealed class StreamRegionRunner
         for (var i = 1; i < pipelineStages; i++)
         {
             var stage = plan.Stages[i];
-            var upstream = source;
+            var upstream = source.Buffer(stage.BufferCapacity, OverflowStrategy.Backpressure);
 
-            source = Source.From(() => stage.Module.ExecuteStreamAsync(
-                    stage.Context,
-                    upstream.Buffer(stage.BufferCapacity, OverflowStrategy.Backpressure)
-                        .RunAsAsyncEnumerable(this.materializer),
-                    cancellationToken))
-                .Select(item => Count(counters, stage.NodeId, item));
+            source = stage.Module is IStreamItemProcessor processor
+                ? PerItemStage(upstream, stage, processor, counters, errors, cancellationToken)
+                : Source.From(() => stage.Module.ExecuteStreamAsync(
+                        stage.Context,
+                        upstream.RunAsAsyncEnumerable(this.materializer),
+                        cancellationToken))
+                    .Select(item => Count(counters, stage.NodeId, item));
         }
 
         ModuleResult? terminalResult = null;
@@ -119,7 +122,50 @@ public sealed class StreamRegionRunner
         return new StreamRegionResult(
             terminalResult,
             counters.ToDictionary(kv => kv.Key, kv => kv.Value.Count, StringComparer.Ordinal),
-            stopwatch.Elapsed);
+            stopwatch.Elapsed,
+            errors);
+    }
+
+    /// <summary>
+    /// Builds a <b>per-item</b> stage (D26): the engine owns the loop, so it can run
+    /// <c>maxWorkers</c> concurrent calls and — with <c>ordered</c> — still emit in source order,
+    /// because Akka orders by input slot (D25)~ 🧩.
+    /// </summary>
+    private Source<StreamItem, NotUsed> PerItemStage(
+        Source<StreamItem, NotUsed> upstream,
+        StreamStage stage,
+        IStreamItemProcessor processor,
+        IReadOnlyDictionary<string, StageCounter> counters,
+        List<StreamItemError> errors,
+        CancellationToken cancellationToken)
+    {
+        async Task<IReadOnlyList<StreamItem>> Process(StreamItem item)
+        {
+            try
+            {
+                return await processor.ProcessAsync(item, stage.Context, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException
+                                       && stage.OnItemError != StreamItemErrorPolicy.Fail)
+            {
+                // 🧯 'skip' drops the item — which, post-D25, needs no tombstone: contributing
+                // nothing at this slot leaves the order of everything else untouched.
+                lock (errors)
+                {
+                    errors.Add(new StreamItemError(stage.NodeId, item.Index, item.Offset, ex));
+                }
+
+                return Array.Empty<StreamItem>();
+            }
+        }
+
+        var mapped = stage.Ordered
+            ? upstream.SelectAsync(stage.MaxWorkers, Process)
+            : upstream.SelectAsyncUnordered(stage.MaxWorkers, Process);
+
+        return mapped
+            .SelectMany(items => items)
+            .Select(item => Count(counters, stage.NodeId, item));
     }
 
     private static StreamItem Count(IReadOnlyDictionary<string, StageCounter> counters, string nodeId, StreamItem item)
@@ -172,11 +218,56 @@ public sealed record StreamRegionPlan(IReadOnlyList<StreamStage> Stages);
 /// How many items may wait upstream of this stage — the connection's <c>BufferCapacity</c>, else
 /// the engine default. 🎚️.
 /// </param>
+/// <param name="MaxWorkers">
+/// How many items this stage may process concurrently (per-item stages only; D26). Default 1. 👷.
+/// </param>
+/// <param name="Ordered">
+/// Whether output keeps source order when <paramref name="MaxWorkers"/> &gt; 1. Default
+/// <b>true</b> — ordering is free (D25), so opting out is a deliberate throughput choice. 🔢.
+/// </param>
+/// <param name="OnItemError">What to do when processing a single item throws. 🧯.</param>
 public sealed record StreamStage(
     string NodeId,
     IStreamingWorkflowModule Module,
     ModuleExecutionContext Context,
-    int BufferCapacity = StreamRegionRunner.DefaultBufferCapacity);
+    int BufferCapacity = StreamRegionRunner.DefaultBufferCapacity,
+    int MaxWorkers = 1,
+    bool Ordered = true,
+    StreamItemErrorPolicy OnItemError = StreamItemErrorPolicy.Fail);
+
+/// <summary>
+/// 🧯 What a stage does when processing one item throws.
+/// </summary>
+public enum StreamItemErrorPolicy
+{
+    /// <summary>
+    /// Fail the whole region — the default, and the right choice when items are not independent. 🛑.
+    /// </summary>
+    Fail,
+
+    /// <summary>
+    /// Drop the item and carry on; the failure is recorded in
+    /// <see cref="StreamRegionResult.ItemErrors"/>. ⏭️.
+    /// </summary>
+    Skip,
+}
+
+/// <summary>
+/// 🧾 One item that failed while a stage was processing it (with <see cref="StreamItemErrorPolicy.Skip"/>).
+/// </summary>
+/// <param name="NodeId">The stage that failed. 🆔.</param>
+/// <param name="ItemIndex">The item's ordinal within the stage's input. 🔢.</param>
+/// <param name="Offset">The item's source offset, when the source supplied one. 📍.</param>
+/// <param name="Error">The exception. ⚠️.</param>
+/// <remarks>
+/// CopilotNote: This is the per-item half of the error story — the envelope shape that feeds the
+/// streaming <c>error</c> port and doc 07's per-item error document (`item` + `offset` fields)~ 🧾.
+/// </remarks>
+public sealed record StreamItemError(
+    string NodeId,
+    long ItemIndex,
+    SourceOffset? Offset,
+    Exception Error);
 
 /// <summary>
 /// 📊 The outcome of running a region.
@@ -187,7 +278,9 @@ public sealed record StreamStage(
 /// </param>
 /// <param name="ItemCounts">Items emitted per stage, for history and the monitor.</param>
 /// <param name="Duration">Wall-clock duration of the region.</param>
+/// <param name="ItemErrors">Items dropped by a <c>skip</c> policy (empty when none). 🧯.</param>
 public sealed record StreamRegionResult(
     ModuleResult? TerminalResult,
     IReadOnlyDictionary<string, long> ItemCounts,
-    TimeSpan Duration);
+    TimeSpan Duration,
+    IReadOnlyList<StreamItemError> ItemErrors);

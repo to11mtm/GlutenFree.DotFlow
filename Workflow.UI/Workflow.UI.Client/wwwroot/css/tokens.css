@@ -246,6 +246,9 @@ a.df-link:hover { text-decoration: underline; }
 /* 🌊 Streaming region — the nodes the engine runs as one back-pressured pipeline */
 .df-region--stream { border-color: var(--df-stream, #2aa9c4); border-style: solid; background: rgba(42,169,196,0.05); }
 .df-region--stream .df-region__label { color: var(--df-stream, #2aa9c4); }
+/* ⚠ A stage that traded source order for throughput — say so on the node, not just in the panel */
+.df-node__badge { margin-left: auto; padding: 0 var(--df-space-1); font-size: 0.65rem; border-radius: var(--df-radius); white-space: nowrap; }
+.df-node__badge--unordered { color: var(--df-warning, #fbbf24); border: 1px solid var(--df-warning, #fbbf24); }
 .df-region--parallel { border-color: var(--df-state-running); background: rgba(79,156,249,0.05); }
 .df-region--parallel .df-region__label { color: var(--df-state-running); }
 

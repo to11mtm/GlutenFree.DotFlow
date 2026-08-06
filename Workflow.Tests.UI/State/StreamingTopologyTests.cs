@@ -248,6 +248,109 @@ public sealed class StreamingTopologyTests
 
     #endregion
 
+    #region Worker & ordering knobs (5.1.4)
+
+    private static DesignerNode PerItemNode(string id, int? maxWorkers = null, bool? ordered = null)
+    {
+        var node = new DesignerNode
+        {
+            Id = id,
+            ModuleId = "m.stream",
+            Name = id,
+            Schema = new ModuleSchemaDto(
+                [Port("items", streaming: true)],
+                [Port("items", streaming: true)],
+                new List<ModulePropertyDefinitionDto>(),
+                "perItem"),
+        };
+
+        if (maxWorkers is { } w)
+        {
+            node.Properties["maxWorkers"] = System.Text.Json.JsonDocument.Parse(
+                w.ToString(System.Globalization.CultureInfo.InvariantCulture)).RootElement.Clone();
+        }
+
+        if (ordered is { } o)
+        {
+            node.Properties["ordered"] = System.Text.Json.JsonDocument.Parse(o ? "true" : "false").RootElement.Clone();
+        }
+
+        return node;
+    }
+
+    [Fact]
+    public void MaxWorkers_DefaultsToOne_AndOrderedDefaultsToTrue()
+    {
+        var node = PerItemNode("a");
+
+        StreamGraph.MaxWorkersOf(node).Should().Be(1);
+        StreamGraph.OrderedOf(node).Should().BeTrue("ordering is free, so it's on unless you opt out");
+        StreamGraph.IsUnorderedStage(node).Should().BeFalse();
+    }
+
+    [Fact]
+    public void UnorderedStage_RequiresBothConcurrencyAndOptOut()
+    {
+        StreamGraph.IsUnorderedStage(PerItemNode("a", maxWorkers: 4, ordered: true)).Should().BeFalse();
+        StreamGraph.IsUnorderedStage(PerItemNode("b", maxWorkers: 1, ordered: false)).Should().BeFalse(
+            "one worker can't produce out-of-order output whatever the flag says");
+        StreamGraph.IsUnorderedStage(PerItemNode("c", maxWorkers: 4, ordered: false)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void UnorderedStage_InARegion_IsWarned()
+    {
+        var a = PerItemNode("a");
+        var b = PerItemNode("b", maxWorkers: 4, ordered: false);
+        var doc = Doc([a, b], [Conn("a", "items", "b", "items")]);
+
+        var issues = GraphValidator.ValidateStreaming(doc);
+
+        issues.Should().ContainSingle(i =>
+            i.NodeId == "b" && i.Severity == IssueSeverity.Warning && i.Message.Contains("completion order"));
+    }
+
+    [Fact]
+    public void MaxWorkers_OnAWholeStreamStage_WarnsItWillBeIgnored()
+    {
+        // 🛡️ D26 — a module that owns its own loop can't be parallelised, so the knob is a lie.
+        var a = StreamNode("a");
+        var b = StreamNode("b");
+        b.Schema = new ModuleSchemaDto(
+            [Port("items", streaming: true)],
+            [Port("items", streaming: true)],
+            new List<ModulePropertyDefinitionDto>(),
+            "wholeStream");
+        b.Properties["maxWorkers"] = System.Text.Json.JsonDocument.Parse("4").RootElement.Clone();
+
+        var issues = GraphValidator.ValidateStreaming(Doc([a, b], [Conn("a", "items", "b", "items")]));
+
+        issues.Should().ContainSingle(i =>
+            i.NodeId == "b" && i.Message.Contains("one item at a time"));
+    }
+
+    [Fact]
+    public void MaxWorkers_BelowOne_IsAnError()
+    {
+        var a = PerItemNode("a");
+        var b = PerItemNode("b", maxWorkers: 0);
+
+        var issues = GraphValidator.ValidateStreaming(Doc([a, b], [Conn("a", "items", "b", "items")]));
+
+        issues.Should().ContainSingle(i => i.NodeId == "b" && i.Severity == IssueSeverity.Error);
+    }
+
+    [Fact]
+    public void WorkerKnobs_OutsideARegion_AreNotLinted()
+    {
+        var lonely = PerItemNode("solo", maxWorkers: 8, ordered: false);
+
+        GraphValidator.ValidateStreaming(Doc([lonely])).Should().BeEmpty(
+            "an unwired node isn't running anything yet");
+    }
+
+    #endregion
+
     #region {{item}} token (Q5)
 
     [Fact]

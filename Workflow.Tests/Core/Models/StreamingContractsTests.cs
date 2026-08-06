@@ -178,14 +178,20 @@ public class StreamingContractsTests
     }
 
     [Fact]
-    public void ModuleDetailsDto_FlagsStreamCapableModulesWithCardinality()
+    public void ModuleDetailsDto_FlagsStreamCapableModulesWithShape()
     {
         var details = ModuleDetailsDto.From(new FakeStreamingModule());
 
         details.StreamCapable.Should().BeTrue();
-        details.Cardinality.Should().Be(nameof(StreamCardinality.OneToOne));
+        details.StreamShape.Should().Be("wholeStream");
         details.Schema.Outputs.Should().ContainSingle(p => p.Name == "items" && p.IsStreaming);
     }
+
+    [Fact]
+    public void ModuleDetailsDto_PerItemModuleReportsPerItemShape()
+        => ModuleDetailsDto.From(new FakePerItemModule()).StreamShape.Should().Be(
+            "perItem",
+            "only per-item stages can be parallelised, so the designer needs to know which is which");
 
     [Fact]
     public void ModuleDetailsDto_BatchModuleIsNotStreamCapable()
@@ -193,32 +199,36 @@ public class StreamingContractsTests
         var details = ModuleDetailsDto.From(new FakeBatchModule());
 
         details.StreamCapable.Should().BeFalse();
-        details.Cardinality.Should().BeNull();
+        details.StreamShape.Should().BeNull();
     }
 
     [Fact]
     public void ModuleDetailsDto_SerializesStreamingFieldsForTheClient()
     {
-        var json = JsonSerializer.Serialize(ModuleDetailsDto.From(new FakeStreamingModule()), JsonOptions);
+        var json = JsonSerializer.Serialize(ModuleDetailsDto.From(new FakePerItemModule()), JsonOptions);
 
         using var parsed = JsonDocument.Parse(json);
         parsed.RootElement.GetProperty("streamCapable").GetBoolean().Should().BeTrue();
-        parsed.RootElement.GetProperty("cardinality").GetString().Should().Be("OneToOne");
+        parsed.RootElement.GetProperty("streamShape").GetString().Should().Be("perItem");
     }
 
     #endregion
 
-    #region Cardinality
+    #region Stage shape (Q7 — cardinality deleted)
+
+    /// <summary>
+    /// 🛡️ Q7/D25 guard — `StreamCardinality` existed only to gate resequencing. The resequencer is
+    /// gone, so the enum went with it rather than lingering as a knob with no behaviour~ ✨
+    /// </summary>
+    [Fact]
+    public void StreamCardinality_NoLongerExists()
+        => typeof(IStreamingWorkflowModule).Assembly.GetType("Workflow.Modules.Abstractions.StreamCardinality")
+            .Should().BeNull("D25 removed its only purpose; the shape now follows from the interface implemented");
 
     [Fact]
-    public void Cardinality_DefaultsToOneToOne()
-        => ((IStreamingWorkflowModule)new FakeStreamingModule()).Cardinality.Should().Be(StreamCardinality.OneToOne);
-
-    [Fact]
-    public void Cardinality_CanBeDeclaredVariable()
-        => ((IStreamingWorkflowModule)new FakeVariableCardinalityModule()).Cardinality.Should().Be(
-            StreamCardinality.Variable,
-            "filters and splitters cannot be resequenced");
+    public void PerItemProcessor_IsAlsoAStreamingModule()
+        => new FakePerItemModule().Should().BeAssignableTo<IStreamingWorkflowModule>(
+            "the engine treats both shapes as streaming stages; only the loop owner differs");
 
     #endregion
 
@@ -279,9 +289,13 @@ public class StreamingContractsTests
         }
     }
 
-    private sealed class FakeVariableCardinalityModule : FakeStreamingModule, IStreamingWorkflowModule
+    private sealed class FakePerItemModule : FakeStreamingModule, IStreamItemProcessor
     {
-        StreamCardinality IStreamingWorkflowModule.Cardinality => StreamCardinality.Variable;
+        public ValueTask<IReadOnlyList<StreamItem>> ProcessAsync(
+            StreamItem item,
+            ModuleExecutionContext context,
+            CancellationToken cancellationToken = default)
+            => ValueTask.FromResult<IReadOnlyList<StreamItem>>(new[] { item });
     }
 
     #endregion

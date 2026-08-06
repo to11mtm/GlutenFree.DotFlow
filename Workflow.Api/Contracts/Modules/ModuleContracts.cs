@@ -94,19 +94,44 @@ public sealed record ModulePropertyDefinitionDto(
 /// <param name="Inputs">Input port DTOs.</param>
 /// <param name="Outputs">Output port DTOs.</param>
 /// <param name="Properties">Configuration property DTOs.</param>
+/// <param name="StreamShape">
+/// How the module streams — <c>"perItem"</c>, <c>"wholeStream"</c>, or null when it isn't
+/// stream-capable. Lives on the schema (not just the details DTO) because the designer resolves
+/// nodes through a schema-only lookup, and its worker/ordering lints need this. 🧩.
+/// </param>
 public sealed record ModuleSchemaDto(
     IReadOnlyList<PortDefinitionDto> Inputs,
     IReadOnlyList<PortDefinitionDto> Outputs,
-    IReadOnlyList<ModulePropertyDefinitionDto> Properties)
+    IReadOnlyList<ModulePropertyDefinitionDto> Properties,
+    string? StreamShape = null)
 {
     /// <summary>Projects a <see cref="ModuleSchema"/> into its DTO~ 📐.</summary>
     /// <param name="schema">The domain schema.</param>
+    /// <param name="streamShape">The module's streaming shape, when it has one.</param>
     /// <returns>A serializable <see cref="ModuleSchemaDto"/>.</returns>
-    public static ModuleSchemaDto From(ModuleSchema schema)
+    public static ModuleSchemaDto From(ModuleSchema schema, string? streamShape = null)
         => new(
             schema.Inputs.Select(PortDefinitionDto.From).ToList(),
             schema.Outputs.Select(PortDefinitionDto.From).ToList(),
-            schema.Properties.Select(ModulePropertyDefinitionDto.From).ToList());
+            schema.Properties.Select(ModulePropertyDefinitionDto.From).ToList(),
+            streamShape);
+
+    /// <summary>Projects a module's schema, carrying its streaming shape~ 🌊.</summary>
+    /// <param name="module">The module.</param>
+    /// <returns>A serializable <see cref="ModuleSchemaDto"/>.</returns>
+    public static ModuleSchemaDto From(IWorkflowModule module)
+        => From(module?.Schema ?? ModuleSchema.Empty, StreamShapeOf(module));
+
+    /// <summary>Names a module's streaming shape, or null when it isn't stream-capable~ 🧩.</summary>
+    /// <param name="module">The module.</param>
+    /// <returns><c>"perItem"</c>, <c>"wholeStream"</c>, or null.</returns>
+    public static string? StreamShapeOf(IWorkflowModule? module)
+        => module switch
+        {
+            IStreamItemProcessor => "perItem",
+            IStreamingWorkflowModule => "wholeStream",
+            _ => null,
+        };
 }
 
 /// <summary>
@@ -160,9 +185,11 @@ public sealed record ModuleSummaryDto(
 /// <param name="Enabled">Whether the resolved version is enabled (Phase 2.8.2).</param>
 /// <param name="AvailableVersions">All installed versions of this module id (Phase 2.8.2).</param>
 /// <param name="StreamCapable">Whether the module can run as a streaming stage (Phase 5.1). 🌊.</param>
-/// <param name="Cardinality">
-/// Output items produced per input item when streaming — <c>"OneToOne"</c> or <c>"Variable"</c>;
-/// null for non-streaming modules. Drives the designer's resequencing validation. 🔢.
+/// <param name="StreamShape">
+/// How the module streams — <c>"perItem"</c> (engine drives the loop, so <c>maxWorkers</c> applies),
+/// <c>"wholeStream"</c> (module drives its own loop, always single-worker), or null when the module
+/// isn't stream-capable. Replaces the 5.1.0 <c>cardinality</c> field, which D25 left without a
+/// purpose (phase-plan Q7). 🧩.
 /// </param>
 public sealed record ModuleDetailsDto(
     string Id,
@@ -176,7 +203,7 @@ public sealed record ModuleDetailsDto(
     bool Enabled = true,
     IReadOnlyList<string>? AvailableVersions = null,
     bool StreamCapable = false,
-    string? Cardinality = null)
+    string? StreamShape = null)
 {
     /// <summary>Projects an <see cref="IWorkflowModule"/> into a details DTO~ 📦.</summary>
     /// <param name="module">The module.</param>
@@ -194,12 +221,12 @@ public sealed record ModuleDetailsDto(
             module.Description,
             module.Icon,
             JsonTypeHelpers.VersionString(module.Version),
-            ModuleSchemaDto.From(module.Schema),
+            ModuleSchemaDto.From(module),
             module.Dependencies.ToList(),
             enabled,
             availableVersions,
             module is IStreamingWorkflowModule,
-            (module as IStreamingWorkflowModule)?.Cardinality.ToString());
+            ModuleSchemaDto.StreamShapeOf(module));
 }
 
 /// <summary>

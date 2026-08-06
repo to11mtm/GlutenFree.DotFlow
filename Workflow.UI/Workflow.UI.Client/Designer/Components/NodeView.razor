@@ -36,6 +36,11 @@
         {
             <span class="df-node__warn" title="unknown module">⚠</span>
         }
+        @if (StreamGraph.IsUnorderedStage(Node))
+        {
+            <span class="df-node__badge df-node__badge--unordered" data-testid="node-unordered"
+                  title="This stage runs items concurrently with ordering turned off, so downstream items arrive in completion order. Keeping order costs nothing — turn it back on unless you need the throughput.">⚠ unordered</span>
+        }
     </div>
 
     <div class="df-node__ports">

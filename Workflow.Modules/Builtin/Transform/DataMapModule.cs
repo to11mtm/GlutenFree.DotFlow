@@ -7,18 +7,20 @@ namespace Workflow.Modules.Builtin.Transform;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using LanguageExt;
 using Workflow.Core.Models;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.Transform.Internal;
+using Workflow.Modules.Internal;
 
 /// <summary>
 /// 🔄 Built-in Data Map module (<c>builtin.transform.map</c>) — declarative per-record reshaping:
 /// rename, nested access, defaults, type conversion, and computed expressions~ ✨.
 /// </summary>
-public sealed class DataMapModule : IWorkflowModule
+public sealed class DataMapModule : IStreamItemProcessor
 {
     /// <inheritdoc />
     public string ModuleId => "builtin.transform.map";
@@ -41,17 +43,22 @@ public sealed class DataMapModule : IWorkflowModule
     /// <inheritdoc />
     public ModuleSchema Schema => new(
         Inputs: Arr.create(
-            new PortDefinition("source", "Source", typeof(object), "Record or array of records to map~ 📥", false)),
+            new PortDefinition("source", "Source", typeof(object), "Record or array of records to map~ 📥", false),
+            PortDefinition.CreateStreaming("items", isRequired: false, description: "Item stream to map, one record at a time~ 🌊")),
         Outputs: Arr.create(
             new PortDefinition("result", "Result", typeof(object), "Mapped record(s)~ 📤", false),
             new PortDefinition("count", "Count", typeof(int), "Number of records mapped~ 🔢", false),
-            new PortDefinition("success", "Success", typeof(bool), "Whether mapping succeeded~ ✅", false)),
+            new PortDefinition("success", "Success", typeof(bool), "Whether mapping succeeded~ ✅", false),
+            PortDefinition.CreateStreaming("items", isRequired: false, description: "Mapped item stream~ 🌊")),
         Properties: Arr.create(
             new ModulePropertyDefinition("source", "Source", typeof(object), "Source data when not connected via port~ 📥", false, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("mapping", "Mapping", typeof(object), "targetField → path string or { path, expression, default, convert }~ 🗺️", true, null, PropertyEditorType.Json),
             new ModulePropertyDefinition("language", "Expression Language", typeof(string), "js (default) or csharp~ 🧮", false, "js", PropertyEditorType.Text),
             new ModulePropertyDefinition("flatten", "Flatten", typeof(bool), "Flatten nested output to dotted keys~ 📏", false, false, PropertyEditorType.Boolean),
-            new ModulePropertyDefinition("ignoreNulls", "Ignore Nulls", typeof(bool), "Drop keys whose mapped value is null~ 🧹", false, false, PropertyEditorType.Boolean)));
+            new ModulePropertyDefinition("ignoreNulls", "Ignore Nulls", typeof(bool), "Drop keys whose mapped value is null~ 🧹", false, false, PropertyEditorType.Boolean),
+            new ModulePropertyDefinition("maxWorkers", "Max workers", typeof(int), "How many items to map concurrently when streaming~ 👷", false, 1, PropertyEditorType.Number),
+            new ModulePropertyDefinition("ordered", "Keep source order", typeof(bool), "Emit mapped items in source order (free — leave on unless you need raw throughput)~ 🔢", false, true, PropertyEditorType.Boolean),
+            new ModulePropertyDefinition("onItemError", "On item error", typeof(string), "fail (default) or skip~ 🧯", false, "fail", PropertyEditorType.Dropdown, Arr.create<object>("fail", "skip"))));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -128,6 +135,64 @@ public sealed class DataMapModule : IWorkflowModule
             return ModuleResult.Fail($"🔄 Map failed: {ex.Message}~ 💔", ex);
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 🌊 Phase 5.1.4 — the per-item streaming path (D26). Mapping is inherently per record, so the
+    /// same <see cref="MapRecord"/> that powers the batch path serves here; the engine owns the
+    /// loop, which is what lets it run <c>maxWorkers</c> of these concurrently and still emit in
+    /// source order~ 🧩.
+    /// </remarks>
+    public async ValueTask<IReadOnlyList<StreamItem>> ProcessAsync(
+        StreamItem item,
+        ModuleExecutionContext context,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (TransformDataNormalizer.Normalize(context.Properties.GetValueOrDefault("mapping")) is not IReadOnlyDictionary<string, object?> mapping)
+        {
+            throw new TransformModuleException("mapping must be an object~ 💔");
+        }
+
+        var language = ReadString(context.Properties, "language");
+        if (!ItemExpressionEvaluator.TryResolve(context, language, out var evaluator, out _))
+        {
+            throw new TransformModuleException($"expression language '{language}' is not available~ 💔");
+        }
+
+        var record = item.Payload is JsonPayload json
+            ? TransformDataNormalizer.Normalize(JsonValueConverter.FromElement(json.Value))
+            : null;
+
+        var mapped = await this.MapRecord(
+            context,
+            evaluator!,
+            mapping,
+            record,
+            (int)item.Index,
+            ReadBool(context.Properties, "flatten"),
+            ReadBool(context.Properties, "ignoreNulls"),
+            cancellationToken).ConfigureAwait(false);
+
+        return new[]
+        {
+            item with { Payload = new JsonPayload(JsonSerializer.SerializeToElement(mapped)) },
+        };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Mapping is per item, so the engine-driven <see cref="ProcessAsync"/> path is always used —
+    /// this whole-stream entry point exists only to satisfy the interface~ 🧩.
+    /// </remarks>
+    public IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "builtin.transform.map is a per-item stage — the region executor calls ProcessAsync~ 🧩");
 
     private async Task<Dictionary<string, object?>> MapRecord(
         ModuleExecutionContext context,

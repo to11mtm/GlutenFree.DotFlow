@@ -306,47 +306,54 @@ Most modules process **one payload per run**. A module that can handle a *large*
 a database result set, a big CSV, a paged API — can additionally run as a **stage inside a
 streaming region**, where items flow one at a time with backpressure and bounded memory.
 
-Implement `IStreamingWorkflowModule` **in addition to** `IWorkflowModule` (never instead of):
+Implement `IStreamItemProcessor` — the **per-item** shape, and the one to reach for:
 
 ```csharp
-public sealed class MyReaderModule : IStreamingWorkflowModule
+public sealed class MyMapModule : IStreamItemProcessor
 {
     // …the usual IWorkflowModule members…
 
     public ModuleSchema Schema => new(
-        Arr<PortDefinition>.Empty,
-        Arr.create(PortDefinition.CreateStreaming("items")),   // 🌊 a streaming port
+        Arr.create(PortDefinition.CreateStreaming("items")),        // 🌊 streaming in
+        Arr.create(PortDefinition.CreateStreaming("items")),        // 🌊 streaming out
         Arr<ModulePropertyDefinition>.Empty);
 
-    // One output item per input item — lets the engine restore order after parallel workers.
-    // Declare Variable instead if you filter or split.
-    StreamCardinality IStreamingWorkflowModule.Cardinality => StreamCardinality.OneToOne;
+    // The ENGINE owns the loop, so it can run `maxWorkers` of these at once and still emit
+    // in source order. Return 0 items to drop, 1 to transform, N to split.
+    public ValueTask<IReadOnlyList<StreamItem>> ProcessAsync(
+        StreamItem item,
+        ModuleExecutionContext context,
+        CancellationToken cancellationToken = default)
+        => ValueTask.FromResult<IReadOnlyList<StreamItem>>(new[] { item });
 
-    public async IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+    // Per-item stages never use this path.
+    public IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
         ModuleExecutionContext context,
         IAsyncEnumerable<StreamItem> input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        // Sources ignore `input` and yield; sinks drain `input` and yield nothing;
-        // transforms do both.
-        await foreach (var item in input.WithCancellation(cancellationToken))
-        {
-            yield return item;
-        }
-    }
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("per-item stage");
 }
 ```
+
+**Sources and accumulating stages** own their own loop instead, implementing
+`IStreamingWorkflowModule.ExecuteStreamAsync` directly (a source ignores `input` and yields).
+**Sinks** implement `IStreamTerminalModule.ExecuteTerminalAsync`, which drains the stream and
+returns an ordinary `ModuleResult`. Both shapes always run single-worker.
 
 Rules worth knowing before you start:
 
 | Rule | Why |
 | --- | --- |
+| Prefer **per-item** | It's less code, and it's the only shape the engine can parallelise (`maxWorkers`) |
+| Per-item calls must be **concurrency-safe** | Keep state in locals, not fields — several may run at once |
 | Streaming ports connect **only** to streaming ports | The `builtin.stream.collect` / `builtin.stream.fromitems` bridges convert between the streaming and batch worlds — the designer refuses mismatched wires |
-| **No variable writes inside a region** | Per-item ordering is non-deterministic; variables are a read-only snapshot taken at region start |
+| **No variable writes inside a region** | Ordering across concurrent items is not defined; variables are a read-only snapshot taken at region start |
 | Payloads are **JSON** in v1 | `StreamItem.Payload` is a union — `BinaryPayload` is reserved so binary support stays additive |
-| Declare `Cardinality` honestly | Only `OneToOne` stages can sit between a multi-worker stage and its resequencer; the designer validates this |
-| Don't emit tombstones | They're engine plumbing for skipped items; modules never see or create them |
+| Don't try to restore order yourself | Ordering is free: the engine emits in source order unless the author sets `ordered: false` |
 | Set `SourceOffset` if you can seek | Nothing consumes it yet, but it's what future resume support will use |
+
+Stage knobs an author can expose (the engine reads them from node properties):
+`maxWorkers` (default 1), `ordered` (default true), `onItemError` (`fail` default, or `skip`).
 
 Full design: [`new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md`](../new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md) ·
 Plan: [`phases/Phase5-1-StreamingDataPlane.md`](../phases/Phase5-1-StreamingDataPlane.md)

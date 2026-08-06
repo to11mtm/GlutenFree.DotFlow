@@ -42,13 +42,14 @@ public sealed record ModuleDetailsDto(
     bool Enabled = true,
     List<string>? AvailableVersions = null,
     bool StreamCapable = false,
-    string? Cardinality = null);
+    string? StreamShape = null);
 
 /// <summary>📐 Phase 3.3.a.0 — A module schema: ports + properties (mirrors <c>ModuleSchemaDto</c>)~ ✨.</summary>
 public sealed record ModuleSchemaDto(
     List<PortDefinitionDto> Inputs,
     List<PortDefinitionDto> Outputs,
-    List<ModulePropertyDefinitionDto> Properties);
+    List<ModulePropertyDefinitionDto> Properties,
+    string? StreamShape = null);
 
 /// <summary>📦 Phase 3.6.0 — Result of installing a module package (mirrors <c>ModuleInstallResultDto</c>)~ ✨.</summary>
 /// <param name="Module">The installed module's details.</param>

@@ -171,6 +171,37 @@ public sealed class StreamingCanvasTests : TestContext
 
     #region Buffer capacity editor (D18)
 
+    /// <summary>
+    /// ⚠️ 5.1.4 — a stage that traded source order for throughput says so on the node itself,
+    /// where the person reading the graph will actually see it~
+    /// </summary>
+    [Fact]
+    public void UnorderedStage_ShowsABadgeOnTheNode()
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        var node = Node("a", StreamSchema(), 100);
+        node.Properties["maxWorkers"] = System.Text.Json.JsonDocument.Parse("4").RootElement.Clone();
+        node.Properties["ordered"] = System.Text.Json.JsonDocument.Parse("false").RootElement.Clone();
+        doc.Nodes.Add(node);
+
+        var cut = this.Render(doc, new CommandStack(doc));
+
+        cut.Find("[data-testid=node-unordered]").TextContent.Should().Contain("unordered");
+    }
+
+    [Fact]
+    public void OrderedStage_ShowsNoBadge()
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        var node = Node("a", StreamSchema(), 100);
+        node.Properties["maxWorkers"] = System.Text.Json.JsonDocument.Parse("4").RootElement.Clone();
+        doc.Nodes.Add(node);
+
+        var cut = this.Render(doc, new CommandStack(doc));
+
+        cut.FindAll("[data-testid=node-unordered]").Should().BeEmpty("ordering is on by default");
+    }
+
     private static DesignerDocument StreamingPair()
     {
         var doc = new DesignerDocument { Name = "wf" };

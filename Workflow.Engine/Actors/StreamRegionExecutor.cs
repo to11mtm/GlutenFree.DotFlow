@@ -7,6 +7,7 @@ namespace Workflow.Engine.Actors;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Akka.Actor;
@@ -136,7 +137,10 @@ public sealed class StreamRegionExecutor : ReceiveActor
                     nodeId,
                     module,
                     this.BuildContext(nodeId, nodeDefinition, module, isSource: i == 0),
-                    this.BufferCapacityFor(nodeId)));
+                    this.BufferCapacityFor(nodeId),
+                    MaxWorkersFor(nodeDefinition, module),
+                    OrderedFor(nodeDefinition),
+                    ItemErrorPolicyFor(nodeDefinition)));
             }
 
             this.log.Info(
@@ -220,6 +224,56 @@ public sealed class StreamRegionExecutor : ReceiveActor
             .FirstOrDefault(e => string.Equals(e.TargetNodeId, nodeId, StringComparison.Ordinal))
             ?.BufferCapacity
            ?? StreamRegionRunner.DefaultBufferCapacity;
+
+    /// <summary>
+    /// Reads the stage's <c>maxWorkers</c> knob. Only <b>per-item</b> stages can be parallelised
+    /// (D26) — a stream-shaped module owns its own loop, so asking for workers there would silently
+    /// do nothing. Pinning it to 1 with a warning is more honest than pretending~ 👷.
+    /// </summary>
+    private static int MaxWorkersFor(NodeDefinition node, IStreamingWorkflowModule module)
+    {
+        var requested = ReadInt(node, "maxWorkers") ?? 1;
+        if (requested <= 1)
+        {
+            return 1;
+        }
+
+        return module is IStreamItemProcessor ? requested : 1;
+    }
+
+    /// <summary>Reads the stage's <c>ordered</c> knob — ordering is free (D25), so it defaults on~ 🔢.</summary>
+    private static bool OrderedFor(NodeDefinition node)
+        => ReadBool(node, "ordered") ?? true;
+
+    /// <summary>Reads the stage's per-item error policy (<c>fail</c> by default)~ 🧯.</summary>
+    private static StreamItemErrorPolicy ItemErrorPolicyFor(NodeDefinition node)
+        => ReadString(node, "onItemError")?.Trim().ToLowerInvariant() switch
+        {
+            "skip" => StreamItemErrorPolicy.Skip,
+            _ => StreamItemErrorPolicy.Fail,
+        };
+
+    private static int? ReadInt(NodeDefinition node, string property)
+        => node.Properties.Find(property).Case switch
+        {
+            JsonElement { ValueKind: JsonValueKind.Number } e when e.TryGetInt32(out var n) => n,
+            JsonElement { ValueKind: JsonValueKind.String } e when int.TryParse(e.GetString(), out var n) => n,
+            _ => null,
+        };
+
+    private static bool? ReadBool(NodeDefinition node, string property)
+        => node.Properties.Find(property).Case switch
+        {
+            JsonElement { ValueKind: JsonValueKind.True } => true,
+            JsonElement { ValueKind: JsonValueKind.False } => false,
+            JsonElement { ValueKind: JsonValueKind.String } e when bool.TryParse(e.GetString(), out var b) => b,
+            _ => null,
+        };
+
+    private static string? ReadString(NodeDefinition node, string property)
+        => node.Properties.Find(property).Case is JsonElement { ValueKind: JsonValueKind.String } e
+            ? e.GetString()
+            : null;
 
     private ModuleExecutionContext BuildContext(
         string nodeId,

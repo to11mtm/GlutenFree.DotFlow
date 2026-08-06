@@ -7,6 +7,7 @@ namespace Workflow.UI.Client.Designer.State;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 
 /// <summary>
 /// 🌊 Phase 5.1.2 — streaming-topology helpers: which ports carry streams, which edges are
@@ -56,6 +57,63 @@ public static class StreamGraph
     public static bool IsStreamCapable(DesignerNode? node)
         => (node?.Schema?.Inputs.Any(p => p.IsStreaming) ?? false)
            || (node?.Schema?.Outputs.Any(p => p.IsStreaming) ?? false);
+
+    /// <summary>
+    /// 👷 Phase 5.1.4 — whether a stage's output may arrive out of source order: it asked for
+    /// concurrency and opted out of ordering.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <returns>True when the node is configured unordered with more than one worker.</returns>
+    /// <remarks>
+    /// CopilotNote: ordering is <b>free</b> (D25 — Akka orders by input slot), so turning it off is
+    /// a deliberate throughput trade. The designer badges it rather than hiding it, because
+    /// "why is my output shuffled?" is otherwise a very expensive question to answer~ ⚠️.
+    /// </remarks>
+    public static bool IsUnorderedStage(DesignerNode? node)
+        => node is not null
+           && MaxWorkersOf(node) > 1
+           && !OrderedOf(node);
+
+    /// <summary>Reads a node's <c>maxWorkers</c> property (default 1)~ 👷.</summary>
+    /// <param name="node">The node.</param>
+    /// <returns>The configured worker count.</returns>
+    public static int MaxWorkersOf(DesignerNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        if (!node.Properties.TryGetValue("maxWorkers", out var value))
+        {
+            return 1;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var n) => n,
+            JsonValueKind.String when int.TryParse(value.GetString(), out var n) => n,
+            _ => 1,
+        };
+    }
+
+    /// <summary>Reads a node's <c>ordered</c> property (default true)~ 🔢.</summary>
+    /// <param name="node">The node.</param>
+    /// <returns>Whether the stage keeps source order.</returns>
+    public static bool OrderedOf(DesignerNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        if (!node.Properties.TryGetValue("ordered", out var value))
+        {
+            return true;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.False => false,
+            JsonValueKind.True => true,
+            JsonValueKind.String when bool.TryParse(value.GetString(), out var b) => b,
+            _ => true,
+        };
+    }
 
     /// <summary>
     /// Gets whether a connection is a <b>valid</b> streaming edge (both ends streaming)~ 🌊.

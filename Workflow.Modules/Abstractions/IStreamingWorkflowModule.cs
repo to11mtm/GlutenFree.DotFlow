@@ -6,47 +6,49 @@ namespace Workflow.Modules.Abstractions;
 
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using Workflow.Core.Models;
 
 /// <summary>
 /// 🌊 Phase 5.1 — implemented by modules that can run as a <b>stage inside a streaming region</b>,
-/// processing items one at a time with backpressure instead of one payload per run.
+/// processing items with backpressure instead of one payload per run.
 /// </summary>
 /// <remarks>
 /// <para>
 /// CopilotNote: This is an <b>optional</b> companion to <see cref="IWorkflowModule"/>, never a
-/// replacement. A module implements both: <c>ExecuteAsync</c> for a normal batch run, and
-/// <c>ExecuteStreamAsync</c> when the author wired its streaming ports. The engine picks the path
-/// based on the ports the workflow actually connected~ ✨.
+/// replacement. A module implements both: <c>ExecuteAsync</c> for a normal batch run, and a
+/// streaming entry point for when the author wired its streaming ports~ ✨.
+/// </para>
+/// <para>
+/// <b>Pick the right shape</b> (phase 5.1.4, D26):
+/// <list type="bullet">
+/// <item><description>
+/// <see cref="IStreamItemProcessor"/> — <b>per item</b>. The engine owns the loop, so it can run
+/// <c>maxWorkers</c> copies of your code concurrently and still deliver items in source order.
+/// <b>Prefer this</b>: it's less code and it's the only shape that can be parallelised.
+/// </description></item>
+/// <item><description>
+/// <see cref="ExecuteStreamAsync"/> — <b>whole stream</b>. Your module owns the loop, which is what
+/// sources and accumulating stages need. Runs single-worker by definition.
+/// </description></item>
+/// </list>
 /// </para>
 /// <para>
 /// Roles fall out of how a module uses the parameters:
 /// <list type="bullet">
 /// <item><description><b>Source</b> — ignores <c>input</c>, yields items (db query, file reader).</description></item>
 /// <item><description><b>Transform</b> — consumes and yields (map, filter).</description></item>
-/// <item><description><b>Sink</b> — consumes and yields nothing (bulk insert, file writer).</description></item>
+/// <item><description><b>Sink</b> — see <see cref="IStreamTerminalModule"/>.</description></item>
 /// </list>
 /// </para>
 /// <para>
-/// Design: <see href="../../new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md">06 — Streaming Data Plane</see> §3.3 (D5).
+/// Design: <see href="../../new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md">06 — Streaming Data Plane</see> §3.3 (D5, D26).
 /// </para>
 /// </remarks>
 public interface IStreamingWorkflowModule : IWorkflowModule
 {
     /// <summary>
-    /// Gets how many output items this stage produces per input item. 🔢.
-    /// </summary>
-    /// <remarks>
-    /// ⚠️ <b>Under review (phase-plan Q7).</b> This hint originally gated which stages could sit
-    /// under a resequencing buffer. D25 removed the resequencer — Akka.Streams orders by input
-    /// slot, so ordering holds at every cardinality — which leaves this member without behaviour
-    /// attached. 5.1.4 decides whether to delete it or demote it to a purely cosmetic designer
-    /// hint ("this stage may change item counts")~ 🌸.
-    /// </remarks>
-    public StreamCardinality Cardinality => StreamCardinality.OneToOne;
-
-    /// <summary>
-    /// Runs this module as a streaming stage. 🌊.
+    /// Runs this module as a streaming stage that owns its own iteration. 🌊.
     /// </summary>
     /// <param name="context">
     /// Execution context — <c>Inputs</c> holds any non-streaming inputs, <c>Variables</c> is the
@@ -57,9 +59,8 @@ public interface IStreamingWorkflowModule : IWorkflowModule
     /// <returns>The produced item stream — empty for sinks.</returns>
     /// <remarks>
     /// CopilotNote: this shape hands the module the <b>whole stream</b>, so the module owns the
-    /// loop and the engine can't parallelise it. 5.1.4 adds an optional per-item entry point
-    /// (D26) for stages that want <c>maxWorkers &gt; 1</c>; modules using this method keep working
-    /// and simply run single-worker~ ✨.
+    /// loop and the engine can't parallelise it — a stage using it always runs single-worker.
+    /// Implement <see cref="IStreamItemProcessor"/> instead when your work is per item~ ✨.
     /// </remarks>
     public IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
         ModuleExecutionContext context,
@@ -68,22 +69,41 @@ public interface IStreamingWorkflowModule : IWorkflowModule
 }
 
 /// <summary>
-/// 🔢 How many output items a streaming stage produces per input item.
+/// 🧩 Phase 5.1.4 (D26) — a streaming stage whose work is defined <b>one item at a time</b>, which
+/// lets the engine run it with bounded concurrency (<c>maxWorkers</c>) while preserving order.
 /// </summary>
 /// <remarks>
-/// ⚠️ Under review — see <see cref="IStreamingWorkflowModule.Cardinality"/> and phase-plan Q7.
+/// <para>
+/// CopilotNote: This is the shape to reach for. Because the <i>engine</i> drives the loop, it can
+/// hand N items to N concurrent calls and still emit results in source order — Akka.Streams orders
+/// by input slot, so a call returning zero items simply contributes nothing at its slot and one
+/// returning many keeps them contiguous. That's why the resequencing buffer, overflow policy and
+/// tombstones this design once specified were all deleted (D25)~ 🌸.
+/// </para>
+/// <para>
+/// Return zero items to <b>drop</b> an item (a filter), one to transform it, or many to split it.
+/// Implementations must be safe to call concurrently: keep state in locals, not fields.
+/// </para>
 /// </remarks>
-public enum StreamCardinality
+public interface IStreamItemProcessor : IStreamingWorkflowModule
 {
     /// <summary>
-    /// Exactly one output per input. 1️⃣.
+    /// Processes a single item. 🧩.
     /// </summary>
-    OneToOne,
-
-    /// <summary>
-    /// Zero-or-more outputs per input (filters, splitters). 🔀.
-    /// </summary>
-    Variable,
+    /// <param name="item">The incoming item.</param>
+    /// <param name="context">
+    /// Execution context — properties are bound once when the region starts, and
+    /// <c>Variables</c> is the read-only region-start snapshot.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token, linked to the region and execution.</param>
+    /// <returns>
+    /// Zero items to drop, one to transform, many to split. Order within the returned sequence is
+    /// preserved.
+    /// </returns>
+    public ValueTask<IReadOnlyList<StreamItem>> ProcessAsync(
+        StreamItem item,
+        ModuleExecutionContext context,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
