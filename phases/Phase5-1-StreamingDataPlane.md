@@ -67,18 +67,46 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 | **D19 Streaming category in the palette** | Bridges ship under a new **"Streaming"** category (Q4 partially answered: bridges are genuinely new *nodes*; streaming-capable *existing* modules will instead grow streaming ports and a 🌊 badge, no duplicate module ids). |
 | **D20 `IStreamTerminalModule` for stream→batch stages** | Found during 5.1.1: `ExecuteStreamAsync` can only yield items, so a stage with a streaming input but batch outputs (`stream.collect`, and every sink reporting `rowsAffected`/`itemCount`) had no way to express itself. Terminal stages implement `ExecuteTerminalAsync` returning a plain `ModuleResult`, so the engine's existing port dispatch handles the region edge with no special cases. Design doc 06 §3.3 updated. |
 | **D21 Region detection is mirrored, not shared** | `Workflow.UI.Client` deliberately has no `Workflow.Core` reference (Phase 3.3 D2 keeps a React port additive), so the designer's `StreamGraph` and the engine's future region detector are two implementations of one rule. They get a **drift-guard test** (the `SplitPreviewDriftGuardTests` pattern) in 5.1.3 rather than a shared library. |
+| **D19 Akka.Streams is the region executor** | Resolved in 5.1.3 by spike — see the Q2 entry for the evidence table and the long-term strategic reasoning (triggers/queues, Reuse-mode child stages, throttled connectors). Kept an internal detail: modules only ever see `IAsyncEnumerable<StreamItem>`. |
+| **D22 v1 regions are linear chains** | `StreamRegion.ChainOrder()` throws on branching inside a region. Broadcast/merge inside a region waits for the operators that need it; the alternative — materializing a graph shape we can't yet validate or explain in the designer — trades a clear error for a mysterious hang. |
 
 ### TO RESOLVE 🤔
 
 - [ ] **Q1 Verification: secrets encryption for spill.** Confirm the secret-variable encryption
       mechanism (docs/variables.md "Secrets — current limits") is suitable for spill-at-rest;
       if not, pick a Data-Protection-based envelope (as 2.4.a.5 did for connections). **Blocks 5.1.6.**
-- [ ] **Q2 Region executor internals: raw channels or Akka.Streams?** Design default is
-      `System.Threading.Channels`; the [Phase 2.2 analysis](Phase2-2-Akka-Streams-Analysis.md)
-      explicitly ear-marked linear back-pressured pipelines as the Streams sweet spot
-      (`mapAsync` ≈ `maxWorkers`, built-in backpressure, supervision deciders ≈ per-item error
-      policy). Spike both in 5.1.3's proving slice; pick by observability + test ergonomics,
-      not micro-benchmarks. **Decide during 5.1.3, before 5.1.4 scales module coverage.**
+- [ ] **Q2 Region executor internals: raw channels or Akka.Streams?** ✅ **RESOLVED (5.1.3, D19):
+      Akka.Streams.** A throwaway spike tested the five things the executor actually needs, and all
+      five passed decisively:
+
+      | Need | Akka.Streams answer | Spike result |
+      | --- | --- | --- |
+      | Consume our module contract | `Source.From(IAsyncEnumerable)` | 1 000 items, no adapter needed |
+      | Bounded memory / backpressure | `.Buffer(n, Backpressure)` | producer emitted ~22 while consumer took 5 (unbounded would be 10 000) |
+      | `maxWorkers` (D8) | `SelectAsync(n)` / `SelectAsyncUnordered(n)` | ordered **and** unordered variants built in |
+      | Per-item `skip` policy (D7) | supervision `Directive.Resume` | 9/10 items survived a thrower |
+      | Region cancellation | `KillSwitch` | infinite stream stopped in 131 ms |
+
+      **Long-term weighting (as directed):** the choice was made on strategic reach, not just this
+      slice. The same library is the natural implementation for work already designed elsewhere —
+      queue-fed and scheduled triggers with `RestartSource` backoff and `Throttle`
+      ([08](../new-feature-design/snaplogic-analysis/08-always-on-serving-design.md) §2.1/§2.2),
+      Reuse-mode child stages ([05](../new-feature-design/snaplogic-analysis/05-subworkflow-design.md)),
+      rate-limited connectors, and `GroupedWithin` batching. The
+      [Phase 2.2 analysis](Phase2-2-Akka-Streams-Analysis.md) reached the same conclusion from the
+      other direction: keep graph-shaped orchestration on raw actors, adopt Streams exactly at the
+      "linear back-pressured pipeline" seams. A streaming region *is* that seam.
+
+      **Cost:** one new package (`Akka.Streams`, same family/version as the actor core, so no
+      version-skew risk). **Contained:** modules only ever see `IAsyncEnumerable<StreamItem>`, so
+      the choice is swappable without touching a single module.
+
+- [ ] ⚠️ **Q6 (new, from the spike): is the resequencing design now redundant?** `SelectAsync(n)`
+      already provides *ordered* bounded concurrency, which is exactly what D8's optional
+      resequencing buffer was invented to provide — and it does it without an overflow policy or
+      sequence tombstones. Decide in 5.1.4 whether `resequence`/`onResequenceOverflow`/tombstones
+      collapse into "ordered vs unordered `maxWorkers`" (much simpler, and one less knob to teach).
+      Design doc 06 §5.1 would need updating if so.
 - [ ] **Q3 `Cardinality` placement.** ✅ **RESOLVED (5.1.0):** a **per-module** default-interface
       member on `IStreamingWorkflowModule`. Per-port cardinality deferred to 5.1.P3 — no v1 module
       needs it, and per-module keeps the designer's resequencing rule simple.
@@ -184,19 +212,34 @@ Designer (Workflow.UI.Client):
 **Result:** `Workflow.Tests.UI` **695 passed / 0 failed** (+34 new). `Workflow.Tests` 1628/1632 —
 the 4 failures are the known flaky API set (all pass in isolation; unrelated files).
 
-### 5.1.3 — Region executor proving slice ⚙️ (~2 weeks)
+### 5.1.3 — Region executor proving slice ⚙️ (~2 weeks) 🔄 **IN PROGRESS**
 
-- [ ] **Q2 spike:** same 3-stage region on raw Channels vs Akka.Streams; decide + record D19.
-- [ ] `StreamRegionExecutorActor`: stage lifecycle, bounded buffers, backpressure, linked
-      cancellation, fault → region-as-node failure (parent trycatch applies).
-- [ ] Streaming variants: `builtin.database.query` (source) → `builtin.transform.map`
-      (1:1 transform) → `builtin.database.bulkinsert` (sink).
-- [ ] Region entry/exit hand-off: scalar outputs (`itemCount`) dispatch normally downstream.
-- [ ] History: per-node item counts + duration records (D-history, doc 06 §4.4).
-- [ ] Monitor v1: `RunState` gains per-stage `itemsIn/itemsOut/rate`; `NodeInspector` shows
-      them; SignalR `StreamStageProgress` event (throttled).
-- [ ] Integration tests: 1M-row Docker-gated Postgres → map → bulkinsert with bounded memory
-      assertion; cancellation mid-stream; guard calibration measurements (feeds D10 defaults).
+- [x] **Q2 spike** — decided **Akka.Streams** (D19; full reasoning + spike numbers in the Q2 entry
+      above). Spike project was throwaway and has been deleted.
+- [x] Engine-side region detection → `Workflow.Engine/Streaming/StreamRegionDetector.cs`
+      (`Regions`, `RegionOf`, `StreamRegion.SourceNodeIds/TerminalNodeIds/ChainOrder`). Mirrors the
+      designer's `StreamGraph` per **D21**, with a documented drift guard in both test suites.
+      Detection is connection-driven; `RegionId` is explicitly ignored (test proves it).
+- [x] `StreamRegionRunner` → materializes a region as an Akka.Streams graph: per-edge bounded
+      buffers (`BufferCapacity` → workflow default → 64), backpressure, linked cancellation,
+      terminal-stage hand-off returning a plain `ModuleResult`, per-stage item counts + duration.
+      v1 shape is a **linear chain**; branching inside a region fails loudly rather than
+      materializing something we can't reason about.
+- [x] Tests → `Workflow.Tests/Engine/Streaming/` (19): detection/chain-order/drift-guard fixtures,
+      plus the runner's **bounded-memory proof** (10 000-item source vs slow sink stays under 2 000
+      produced), cancellation, stage-failure propagation, empty source, no-terminal drain, and the
+      **real 5.1.1 bridge modules** (`fromitems` → `collect`) round-tripping through the runner
+      with the collect guard still returning a routable failed `ModuleResult`.
+- [ ] **`WorkflowExecutor` wiring** — detect region entry during dispatch, build the plan from
+      bound contexts, run it, then resume normal port dispatch from the terminal outputs.
+      *(Next step: the runner is proven standalone but not yet reachable from a real execution.)*
+- [ ] Streaming variants of `builtin.database.query` / `builtin.transform.map` /
+      `builtin.database.bulkinsert` — **moved to 5.1.4** with the rest of module coverage; the
+      slice's proof is carried by the runner tests + real bridge modules above.
+- [ ] Monitor v1 (`RunState` per-stage rates, `StreamStageProgress` SignalR event) — follows the
+      executor wiring, since there's no execution to report against until then.
+- [ ] Docker-gated 1M-row Postgres integration test + guard calibration — follows the streaming
+      database modules.
 
 ### 5.1.4 — Scale-out: workers, errors, module coverage 🧯 (~2 weeks)
 
