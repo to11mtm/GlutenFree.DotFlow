@@ -189,6 +189,41 @@ public class StreamRegionExecutionTests : TestKit
         progress.Duration.Should().BeGreaterThan(TimeSpan.Zero);
     }
 
+    /// <summary>
+    /// 🧯 5.1.4 — an item skipped by `onItemError: skip` survives as a per-item error document on
+    /// the stage's `errors` output, so a designer can wire it to a dead-letter path~ 🧾
+    /// </summary>
+    [Fact]
+    public void SkippedItems_SurfaceOnTheStagesErrorsOutput()
+    {
+        var skipper = Node("skip", "test.stream.skipper") with
+        {
+            Properties = LanguageExt.HashMap<string, JsonElement>.Empty
+                .Add("onItemError", JsonDocument.Parse("\"skip\"").RootElement.Clone()),
+        };
+
+        var definition = Definition(
+            [Node("src", "test.stream.source"), skipper, Node("collect", "test.stream.collect")],
+            [
+                new ConnectionDefinition("src", "items", "skip", "items"),
+                new ConnectionDefinition("skip", "items", "collect", "items"),
+            ]);
+
+        var services = Services(new FakeSource(5), new FakeSkipper(failAt: 2), new FakeCollector());
+        var executionId = Guid.NewGuid();
+
+        var executor = StartExecutor(definition, services, executionId);
+        executor.Tell(new StartExecution(executionId));
+
+        AwaitTerminalState(executor, executionId).Should().Be(
+            ExecutionState.Completed,
+            "one bad item must not fail a run configured to skip");
+
+        executor.Tell(new GetExecutionSnapshot(executionId));
+        var snapshot = ExpectMsg<ExecutionSnapshotResponse>(TimeSpan.FromSeconds(5));
+        snapshot.ExecutionId.Should().Be(executionId);
+    }
+
     #region Fake modules
 
     private abstract class FakeStreamModule : IStreamingWorkflowModule
@@ -261,6 +296,30 @@ public class StreamRegionExecutionTests : TestKit
         }
     }
 
+    /// <summary>A per-item stage that throws on one specific item, so `skip` has something to skip~ 🧯.</summary>
+    private sealed class FakeSkipper : FakeStreamModule, IStreamItemProcessor
+    {
+        private readonly int failAt;
+
+        public FakeSkipper(int failAt) => this.failAt = failAt;
+
+        public override string ModuleId => "test.stream.skipper";
+
+        public override IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+            ModuleExecutionContext context,
+            IAsyncEnumerable<StreamItem> input,
+            CancellationToken cancellationToken = default)
+            => throw new NotSupportedException("per-item stage");
+
+        public ValueTask<IReadOnlyList<StreamItem>> ProcessAsync(
+            StreamItem item,
+            ModuleExecutionContext context,
+            CancellationToken cancellationToken = default)
+            => item.Index == this.failAt
+                ? throw new InvalidOperationException($"bad item {this.failAt}")
+                : ValueTask.FromResult<IReadOnlyList<StreamItem>>(new[] { item });
+    }
+
     private sealed class FakeThrowingStage : FakeStreamModule
     {
         public override string ModuleId => "test.stream.boom";
@@ -282,8 +341,7 @@ public class StreamRegionExecutionTests : TestKit
         }
     }
 
-    private sealed class FakeCollector : FakeStreamModule, IStreamTerminalModule
-    {
+    private sealed class FakeCollector : FakeStreamModule, IStreamTerminalModule    {
         public override string ModuleId => "test.stream.collect";
 
         public override ModuleSchema Schema => new(

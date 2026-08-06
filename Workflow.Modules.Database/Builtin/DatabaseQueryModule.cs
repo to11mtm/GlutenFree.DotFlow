@@ -10,6 +10,9 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using LanguageExt;
@@ -33,7 +36,7 @@ using Workflow.Modules.Database.Internal;
 /// <c>services.AddDatabaseModules()</c> (D2/D14; host-side assembly scan lands in 2.4.a.5)~ 🧠.
 /// </para>
 /// </remarks>
-public sealed class DatabaseQueryModule : IWorkflowModule
+public sealed class DatabaseQueryModule : IStreamingWorkflowModule
 {
     /// <inheritdoc/>
     public string ModuleId => "builtin.database.query";
@@ -86,7 +89,11 @@ public sealed class DatabaseQueryModule : IWorkflowModule
                 DisplayName: "Duration (ms)",
                 DataType: typeof(long),
                 Description: "Query round-trip elapsed time in milliseconds~ ⏱️",
-                IsRequired: false)),
+                IsRequired: false),
+            PortDefinition.CreateStreaming(
+                "items",
+                isRequired: false,
+                description: "Result rows as a stream — reads with bounded memory instead of materialising every row~ 🌊")),
         Properties: Arr.create(
             new ModulePropertyDefinition(
                 Name: "connectionId",
@@ -293,8 +300,7 @@ public sealed class DatabaseQueryModule : IWorkflowModule
     /// Executes the query and projects every row into a column→value dictionary,
     /// capturing the ordered column names once from the reader schema~ 📊.
     /// </summary>
-    private static (IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows, IReadOnlyList<string> Columns) ReadAll(
-        DataConnection db,
+    private static (IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows, IReadOnlyList<string> Columns) ReadAll(        DataConnection db,
         string query,
         DataParameter[] parameters)
     {
@@ -322,5 +328,93 @@ public sealed class DatabaseQueryModule : IWorkflowModule
         }
 
         return (rows, columns);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 🌊 Phase 5.1.4 — the streaming source path. This is the whole reason streaming exists: the
+    /// <see cref="ReadAll"/> path above materialises every row into a list, so a million-row query
+    /// costs a million rows of memory. Here the reader stays open and each row is yielded as it's
+    /// read, so memory is bounded by the downstream buffer rather than the result set~ 💾.
+    /// </remarks>
+    public async IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Services.GetService(typeof(IDbConnectionFactory)) is not IDbConnectionFactory factory)
+        {
+            throw new InvalidOperationException(
+                "IDbConnectionFactory not registered in DI. Call services.AddDatabaseModules() at host startup~ 💔");
+        }
+
+        var validation = this.ValidateConfiguration(context.Properties);
+        if (!validation.IsValid)
+        {
+            throw new InvalidOperationException(
+                $"Invalid configuration: {string.Join("; ", validation.Errors)}~ 💔");
+        }
+
+        var query = DbModuleSupport.GetString(context.Properties, "query")!;
+        var timeoutSeconds = DbModuleSupport.TryParseInt(context.Properties, "timeoutSeconds") ?? 30;
+
+        var parameters = SqlParameterBinder.Bind(
+            SqlParameterTemplateResolver.Resolve(
+                SqlParameterBinder.Normalize(context.Properties.TryGetValue("parameters", out var p) ? p : null),
+                context.Inputs,
+                context.Variables));
+
+        // An ambient transaction connection belongs to the transaction, so it must not be disposed
+        // here — same ownership rule as the batch path~ 💼
+        var ambient = DbModuleSupport.TryGetAmbientConnection(context);
+        var db = ambient ?? await DbModuleSupport
+            .CreateConnectionAsync(factory, context.Properties, cancellationToken)
+            .ConfigureAwait(false);
+
+        try
+        {
+            db.CommandTimeout = timeoutSeconds;
+
+            using var reader = db.ExecuteReader(query, parameters);
+            IDataReader r = reader.Reader!;
+
+            var fieldCount = r.FieldCount;
+            var columns = new string[fieldCount];
+            for (var i = 0; i < fieldCount; i++)
+            {
+                columns[i] = r.GetName(i);
+            }
+
+            long index = 0;
+            while (r.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var row = new Dictionary<string, object?>(fieldCount, StringComparer.Ordinal);
+                for (var i = 0; i < fieldCount; i++)
+                {
+                    var value = r.GetValue(i);
+                    row[columns[i]] = value is DBNull ? null : value;
+                }
+
+                // 📍 The row ordinal doubles as the checkpoint sequence — cheap, and what a future
+                // resume would seek with (D12). Nothing consumes it yet.
+                yield return StreamItem.FromJson(
+                    JsonSerializer.SerializeToElement(row),
+                    index,
+                    new SourceOffset(index.ToString(CultureInfo.InvariantCulture), index));
+
+                index++;
+            }
+        }
+        finally
+        {
+            if (ambient is null)
+            {
+                await db.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 }

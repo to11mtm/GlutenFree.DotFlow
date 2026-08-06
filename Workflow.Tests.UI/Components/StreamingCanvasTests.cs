@@ -272,4 +272,80 @@ public sealed class StreamingCanvasTests : TestContext
     }
 
     #endregion
+
+    #region Stage knobs (5.1.4)
+
+    private static ModuleSchemaDto KnobSchema()
+        => new(
+            new List<PortDefinitionDto> { Port("items", streaming: true) },
+            new List<PortDefinitionDto> { Port("items", streaming: true) },
+            new List<ModulePropertyDefinitionDto>
+            {
+                new("mapping", "Mapping", "object", null, false, null, "Json", null),
+                new("maxWorkers", "Max workers", "int", null, false, null, "Number", null),
+                new("ordered", "Keep source order", "bool", null, false, null, "Boolean", null),
+                new("onItemError", "On item error", "string", null, false, null, "Dropdown", null),
+            },
+            "perItem");
+
+    private static DesignerDocument KnobDoc(bool unordered = false)
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        var a = Node("a", KnobSchema(), 100);
+        var b = Node("b", KnobSchema(), 400);
+        if (unordered)
+        {
+            b.Properties["maxWorkers"] = System.Text.Json.JsonDocument.Parse("4").RootElement.Clone();
+            b.Properties["ordered"] = System.Text.Json.JsonDocument.Parse("false").RootElement.Clone();
+        }
+
+        doc.Nodes.Add(a);
+        doc.Nodes.Add(b);
+        doc.Connections.Add(new DesignerConnection
+        {
+            SourceNodeId = "a", SourcePortName = "items", TargetNodeId = "b", TargetPortName = "items",
+        });
+        return doc;
+    }
+
+    [Fact]
+    public void StageKnobs_AreGroupedForANodeInsideARegion()
+    {
+        var doc = KnobDoc();
+        var selection = new SelectionState();
+        selection.SelectNode("b");
+
+        var cut = this.RenderPanel(doc, new CommandStack(doc), selection);
+
+        cut.Find("[data-testid=stage-knobs]").TextContent.Should().Contain("Streaming");
+    }
+
+    [Fact]
+    public void StageKnobs_AreHiddenOutsideARegion()
+    {
+        // Same module, but unwired — the knobs would configure nothing.
+        var doc = new DesignerDocument { Name = "wf" };
+        doc.Nodes.Add(Node("lonely", KnobSchema(), 100));
+        var selection = new SelectionState();
+        selection.SelectNode("lonely");
+
+        var cut = this.RenderPanel(doc, new CommandStack(doc), selection);
+
+        cut.FindAll("[data-testid=stage-knobs]").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void StageKnobs_ExplainAnUnorderedStage()
+    {
+        var doc = KnobDoc(unordered: true);
+        var selection = new SelectionState();
+        selection.SelectNode("b");
+
+        var cut = this.RenderPanel(doc, new CommandStack(doc), selection);
+
+        cut.Find("[data-testid=stage-unordered-hint]").TextContent
+            .Should().Contain("completion order");
+    }
+
+    #endregion
 }

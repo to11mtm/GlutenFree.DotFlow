@@ -21,7 +21,7 @@ using Workflow.Modules.Builtin.File.Internal;
 /// 💾 Built-in JSON Write module (<c>builtin.file.json.write</c>) — serialises an object graph
 /// to a JSON file~ 📁✨.
 /// </summary>
-public sealed class JsonWriteModule : IWorkflowModule
+public sealed class JsonWriteModule : IStreamTerminalModule
 {
     /// <inheritdoc />
     public string ModuleId => "builtin.file.json.write";
@@ -44,9 +44,11 @@ public sealed class JsonWriteModule : IWorkflowModule
     /// <inheritdoc />
     public ModuleSchema Schema => new(
         Inputs: Arr.create(
-            new PortDefinition("data", "Data", typeof(object), "Object graph to serialise~ 📄", false)),
+            new PortDefinition("data", "Data", typeof(object), "Object graph to serialise~ 📄", false),
+            PortDefinition.CreateStreaming("items", isRequired: false, description: "Items to write as a JSON array — emitted incrementally~ 🌊")),
         Outputs: Arr.create(
             new PortDefinition("bytesWritten", "Bytes Written", typeof(long), "Number of bytes written~ 📊", false),
+            new PortDefinition("itemCount", "Item Count", typeof(long), "Number of items written when streaming~ 🔢", false),
             new PortDefinition("success", "Success", typeof(bool), "Whether the write succeeded~ ✅", false)),
         Properties: Arr.create(
             new ModulePropertyDefinition("path", "Path", typeof(string), "Output JSON file path~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
@@ -124,4 +126,96 @@ public sealed class JsonWriteModule : IWorkflowModule
             return ModuleResult.Fail($"💾 Failed to write JSON '{rawPath}': {ex.Message}~ 💔", ex);
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 🌊 Phase 5.1.4 — the streaming sink. The batch path serialises the whole graph to a string
+    /// first; here a <see cref="Utf8JsonWriter"/> writes the opening bracket, then each item as it
+    /// arrives, then the closing bracket — so a million-item array is written without ever holding
+    /// a million items (or their serialised text) in memory~ 💾.
+    /// </remarks>
+    public async Task<ModuleResult> ExecuteTerminalAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(input);
+
+        var rawPath = FileModuleSupport.GetString(context.Properties, "path");
+        if (rawPath is null)
+        {
+            return ModuleResult.Fail("path is required~ 💔");
+        }
+
+        if (!FileModuleSupport.TryValidatePath(context, rawPath, PathAccessIntent.Write, out var path, out var failure))
+        {
+            return failure!;
+        }
+
+        var indented = FileModuleSupport.GetBool(context.Properties, "indented", true);
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            long itemCount = 0;
+
+            await using (var stream = System.IO.File.Create(path))
+            await using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = indented }))
+            {
+                writer.WriteStartArray();
+
+                await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+                {
+                    if (item.Payload is not JsonPayload json)
+                    {
+                        continue;
+                    }
+
+                    json.Value.WriteTo(writer);
+                    itemCount++;
+
+                    // Flush periodically so the buffer can't grow with the stream~ 💾
+                    if (itemCount % 100 == 0)
+                    {
+                        await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
+                writer.WriteEndArray();
+                await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            sw.Stop();
+            context.Logger.LogDebug("💾 Streamed {Count} JSON items to {Path}", itemCount, path);
+
+            return ModuleResult.Ok(
+                new Dictionary<string, object?>
+                {
+                    ["bytesWritten"] = new FileInfo(path).Length,
+                    ["itemCount"] = itemCount,
+                    ["success"] = true,
+                },
+                ExecutionMetrics.FromDuration(sw.Elapsed));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return ModuleResult.Fail($"💾 Failed to write JSON '{rawPath}': {ex.Message}~ 💔", ex);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>JSON write is a sink — the region executor calls <see cref="ExecuteTerminalAsync"/>~ 🪣.</remarks>
+    public IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "builtin.file.json.write is a terminal stage — the region executor calls ExecuteTerminalAsync~ 🪣");
 }

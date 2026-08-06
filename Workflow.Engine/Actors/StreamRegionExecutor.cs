@@ -197,14 +197,61 @@ public sealed class StreamRegionExecutor : ReceiveActor
             (long)result.Duration.TotalMilliseconds,
             string.Join(", ", result.ItemCounts.Select(kv => $"{kv.Key}={kv.Value}")));
 
+        if (result.ItemErrors.Count > 0)
+        {
+            this.log.Warning(
+                "🧯 Streaming region {RegionIndex} skipped {ErrorCount} item(s): {Nodes}",
+                this.region.Index,
+                result.ItemErrors.Count,
+                string.Join(", ", result.ItemErrors.Select(e => e.NodeId).Distinct()));
+        }
+
+        // 🧯 Skipped items become per-node `errors` outputs, so a designer can wire a stage's error
+        // port to a logger/dead-letter path. Each entry follows doc 07's per-item error document
+        // (`item`/`offset` fields), so error workflows read one schema~ 🧾
+        var errorsByNode = result.ItemErrors
+            .GroupBy(e => e.NodeId, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<IReadOnlyDictionary<string, object?>>)g.Select(ErrorDocument).ToList(),
+                StringComparer.Ordinal);
+
         parent.Tell(new StreamRegionCompleted(
             this.region.Index,
             this.region.ChainOrder(),
             terminalNodeId,
             result.TerminalResult?.Outputs ?? new Dictionary<string, object?>(),
             result.ItemCounts,
-            result.Duration));
+            result.Duration,
+            errorsByNode));
     }
+
+    /// <summary>
+    /// Projects a skipped item into the shared per-item error document
+    /// (<see href="../../new-feature-design/snaplogic-analysis/07-reusable-error-workflow-design.md">doc 07</see> §2)~ 🧾.
+    /// </summary>
+    private static IReadOnlyDictionary<string, object?> ErrorDocument(StreamItemError error)
+        => new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["schemaVersion"] = 1,
+            ["error"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["message"] = error.Error.Message,
+                ["errorType"] = error.Error.GetType().Name,
+                ["nodeId"] = error.NodeId,
+            },
+            ["item"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["index"] = error.ItemIndex,
+            },
+            ["offset"] = error.Offset is null
+                ? null
+                : new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["token"] = error.Offset.Token,
+                    ["sequence"] = error.Offset.Sequence,
+                },
+        };
 
     private void Fail(IActorRef parent, Exception error)
     {

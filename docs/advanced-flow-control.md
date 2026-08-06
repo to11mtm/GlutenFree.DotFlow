@@ -789,6 +789,25 @@ so a chain of streaming nodes never materializes the whole dataset. Streaming po
 large data, start the region with a streaming **source** (a streaming database query or file
 reader) rather than an array.
 
+### A real streaming ETL 🚚
+
+The shape that motivates the whole feature — read a large table, reshape each row, write it back —
+with memory bounded by the buffers rather than the row count:
+
+```text
+[database.query]  🌊 items ──▶ 🌊 items [transform.map]  🌊 items ──▶ 🌊 items [database.bulkinsert]
+   SELECT … FROM orders          mapping: { … }                        table: orders_flat
+                                 maxWorkers: 4                         batchSize: 500
+                                 ordered: true
+```
+
+- The query holds its reader open and yields rows as they arrive.
+- The map runs up to 4 rows concurrently and **still emits in source order** (ordering is free).
+- The bulk insert accumulates 500 rows, writes them, releases them, repeats.
+
+Peak memory is roughly "one batch plus the buffers", whether the table has a thousand rows or ten
+million.
+
 See [`phases/Phase5-1-StreamingDataPlane.md`](../phases/Phase5-1-StreamingDataPlane.md) for what's
 landed so far and [the design doc](../new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md)
 for the full model.
@@ -833,6 +852,26 @@ for the full model.
 | Markers | `builtin.end` | Explicit workflow result |
 | Streaming | `builtin.stream.fromitems` | Array → item stream (enter a streaming region) |
 | Streaming | `builtin.stream.collect` | Item stream → array (leave a streaming region, guarded) |
+
+**🌊 Stream-capable modules** (they gain streaming `items` ports alongside their batch ports — the
+palette shows a 🌊 badge):
+
+| Module | Role when streaming |
+|---|---|
+| `builtin.database.query` | **source** — reads rows with bounded memory instead of materialising the result set |
+| `builtin.database.bulkinsert` | **sink** — writes in `batchSize` batches; that number is your memory ceiling |
+| `builtin.transform.map` | **per-item** transform — supports `maxWorkers` / `ordered` |
+| `builtin.transform.query` | **per-item** filter + projection (`where`, `select`); `orderBy`/`skip`/`take` are batch-only |
+| `builtin.file.csv.read` | **source** — parses rows as it reads instead of loading the file |
+| `builtin.file.json.read` | **source** — streams a root array's elements; a non-array root is rejected |
+| `builtin.file.csv.write` | **sink** — writes rows as they arrive; header comes from the first row |
+| `builtin.file.json.write` | **sink** — emits a JSON array incrementally as items arrive |
+| `builtin.transform.aggregate` | **terminal** — must buffer (you can't average a stream halfway), so it carries a `maxItems` guard |
+
+**When an item goes wrong.** Set a stage's `onItemError` to `skip` and a failing item is dropped
+instead of failing the run; the stage's **`errors`** output then carries one error document per
+dropped item (with its source offset), ready to wire to a logging or dead-letter branch. The
+default stays `fail`, because items usually aren't independent.
 
 > 💖 **Ami's tip:** Build complex flows from these primitives bottom-up. If you find yourself wanting a new control-flow module, check whether composition (e.g. `trycatch` inside `foreach`) does the job first — most useful patterns are already expressible~ UwU 🎀
 

@@ -1524,7 +1524,17 @@ public class WorkflowExecutor : ReceiveActor
             // observability — cheap, and the only per-node number that means anything here~ 📊
             if (message.ItemCounts.TryGetValue(nodeId, out var itemCount))
             {
-                _nodeOutputs[nodeId] = new Dictionary<string, object?> { ["itemCount"] = itemCount };
+                var outputs = new Dictionary<string, object?> { ["itemCount"] = itemCount };
+
+                // 🧯 Skipped items surface on the node's 'errors' output so a designer can wire a
+                // stage's error path to a logger or dead-letter branch.
+                if (message.ItemErrors?.TryGetValue(nodeId, out var errors) == true)
+                {
+                    outputs["errors"] = errors;
+                    outputs["errorCount"] = (long)errors.Count;
+                }
+
+                _nodeOutputs[nodeId] = outputs;
             }
         }
 

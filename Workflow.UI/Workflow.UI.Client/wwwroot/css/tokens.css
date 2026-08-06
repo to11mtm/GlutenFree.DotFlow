@@ -281,6 +281,11 @@ a.df-link:hover { text-decoration: underline; }
 .df-props__version { display: inline-block; margin-top: var(--df-space-1); font-size: 0.7rem; color: var(--df-text-dim); }
 .df-props__conn { padding: var(--df-space-2) var(--df-space-3); background: var(--df-surface-2); border-radius: var(--df-radius); font-size: 0.85rem; word-break: break-word; }
 .df-props__hint { margin: var(--df-space-2) 0 var(--df-space-3); padding: var(--df-space-2) var(--df-space-3); background: var(--df-accent-weak); border-left: 3px solid var(--df-accent); border-radius: var(--df-radius); font-size: 0.8rem; line-height: 1.4; }
+/* ⚠ A hint about a trade the author made deliberately (unordered concurrency) */
+.df-props__hint--warn { background: rgba(251,191,36,0.10); border-left-color: var(--df-warning, #fbbf24); }
+/* 🌊 Stage knobs are grouped because they configure the engine, not the module */
+.df-props__section { margin-top: var(--df-space-4); padding-top: var(--df-space-3); border-top: 1px solid var(--df-border); }
+.df-props__section-title { font-size: 0.75rem; color: var(--df-text-dim); margin-bottom: var(--df-space-2); }
 .df-label__info { margin-left: var(--df-space-1); color: var(--df-text-dim); cursor: help; font-size: 0.75rem; }
 .df-field-help { color: var(--df-text-dim); font-size: 0.75rem; line-height: 1.4; margin: 2px 0 var(--df-space-1); }
 

@@ -7,6 +7,7 @@ namespace Workflow.Modules.Builtin.Transform;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,12 +15,14 @@ using LanguageExt;
 using Workflow.Core.Models;
 using Workflow.Modules.Abstractions;
 using Workflow.Modules.Builtin.Transform.Internal;
+using Workflow.Modules.Internal;
+using Workflow.Modules.Streaming;
 
 /// <summary>
 /// 📊 Built-in Aggregate module (<c>builtin.transform.aggregate</c>) — sum/count/avg/min/max/
 /// first/last/distinct/median/mode over a collection, with optional grouping~ ✨.
 /// </summary>
-public sealed class AggregateModule : IWorkflowModule
+public sealed class AggregateModule : IStreamTerminalModule
 {
     private static readonly System.Collections.Generic.HashSet<string> KnownOps = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -47,7 +50,8 @@ public sealed class AggregateModule : IWorkflowModule
     /// <inheritdoc />
     public ModuleSchema Schema => new(
         Inputs: Arr.create(
-            new PortDefinition("data", "Data", typeof(object), "Array of records to aggregate~ 📥", false)),
+            new PortDefinition("data", "Data", typeof(object), "Array of records to aggregate~ 📥", false),
+            PortDefinition.CreateStreaming("items", isRequired: false, description: "Items to aggregate — buffered under the accumulator guard~ 🌊")),
         Outputs: Arr.create(
             new PortDefinition("result", "Result", typeof(object), "Aggregation result~ 📤", false),
             new PortDefinition("groups", "Groups", typeof(object), "Per-group results (when groupBy set)~ 🗂️", false),
@@ -57,7 +61,8 @@ public sealed class AggregateModule : IWorkflowModule
             new ModulePropertyDefinition("operation", "Operation", typeof(string), "sum/count/avg/min/max/first/last/distinct/median/mode~ 📊", true, "count", PropertyEditorType.Dropdown, Arr.create<object>("sum", "count", "avg", "min", "max", "first", "last", "distinct", "median", "mode")),
             new ModulePropertyDefinition("property", "Property", typeof(string), "Dot-path to aggregate (required for numeric ops on records)~ 🔢", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("groupBy", "Group By", typeof(string), "Dot-path or expression to group by~ 🗂️", false, null, PropertyEditorType.Text),
-            new ModulePropertyDefinition("language", "Expression Language", typeof(string), "js (default) or csharp~ 🧮", false, "js", PropertyEditorType.Text)));
+            new ModulePropertyDefinition("language", "Expression Language", typeof(string), "js (default) or csharp~ 🧮", false, "js", PropertyEditorType.Text),
+            new ModulePropertyDefinition("maxItems", "Max items", typeof(int), "Fail if more than this many items are buffered while streaming~ 🛡️", false, BoundedAccumulator.DefaultMaxItems, PropertyEditorType.Number)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -142,6 +147,81 @@ public sealed class AggregateModule : IWorkflowModule
             return ModuleResult.Fail($"📊 Aggregate failed: {ex.Message}~ 💔", ex);
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 🌊 Phase 5.1.4 — aggregation is inherently **whole-stream**: you can't emit an average until
+    /// the last item has been seen. So this is a terminal stage that buffers, which makes it the
+    /// one streaming module that must carry the **bounded-accumulator guard** (§4.5, D10) — it
+    /// fails loudly past <c>maxItems</c> rather than quietly eating the heap the way SnapLogic's
+    /// Aggregate warns you about~ 🛡️.
+    /// </remarks>
+    public async Task<ModuleResult> ExecuteTerminalAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(input);
+
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+
+        try
+        {
+            var accumulator = new BoundedAccumulator(new BoundedAccumulatorPolicy(ReadMaxItems(context)));
+
+            await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+            {
+                accumulator.Admit(item, context.NodeId);
+
+                if (item.Payload is JsonPayload json
+                    && TransformDataNormalizer.Normalize(JsonValueConverter.FromElement(json.Value))
+                        is IReadOnlyDictionary<string, object?> row)
+                {
+                    rows.Add(row);
+                }
+            }
+        }
+        catch (StreamAccumulatorLimitException ex)
+        {
+            return ModuleResult.Fail(ex.Message, ex);
+        }
+        catch (NotSupportedException ex)
+        {
+            return ModuleResult.Fail(ex.Message, ex);
+        }
+
+        // Hand the buffered rows to the same aggregation the batch path uses — one implementation,
+        // so a streamed aggregate and a batch aggregate can never disagree~ ✨
+        var batchContext = context with
+        {
+            Inputs = new Dictionary<string, object?>(context.Inputs, StringComparer.Ordinal) { ["data"] = rows },
+        };
+
+        return await this.ExecuteAsync(batchContext, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Aggregate is a terminal stage — the region executor calls <see cref="ExecuteTerminalAsync"/>~ 🪣.</remarks>
+    public IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "builtin.transform.aggregate is a terminal stage — the region executor calls ExecuteTerminalAsync~ 🪣");
+
+    /// <summary>Reads the accumulator ceiling from properties (numbers arrive typed or as text)~ 🛡️.</summary>
+    private static int ReadMaxItems(ModuleExecutionContext context)
+        => context.Properties.TryGetValue("maxItems", out var raw) && raw is not null
+            ? raw switch
+            {
+                int i => i,
+                long l => (int)l,
+                double d => (int)d,
+                string s when int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) => parsed,
+                _ => BoundedAccumulator.DefaultMaxItems,
+            }
+            : BoundedAccumulator.DefaultMaxItems;
 
     private static object? Aggregate(string operation, IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, string? property)
     {

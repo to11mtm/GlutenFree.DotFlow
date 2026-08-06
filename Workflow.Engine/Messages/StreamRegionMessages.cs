@@ -24,6 +24,10 @@ public record ExecuteStreamRegion;
 /// <param name="Outputs">The terminal stage's outputs (empty when the region had no terminal stage). 📦.</param>
 /// <param name="ItemCounts">Items emitted per stage, for history and the monitor. 📊.</param>
 /// <param name="Duration">Wall-clock duration of the region. ⏱️.</param>
+/// <param name="ItemErrors">
+/// Per-node skipped-item error documents (doc 07 §2 shape), surfaced as each node's <c>errors</c>
+/// output so a designer can wire a stage's error path~ 🧯.
+/// </param>
 /// <remarks>
 /// CopilotNote: Phase 5.1.3 — WorkflowExecutor marks every member node Completed, stores the
 /// terminal outputs under <c>TerminalNodeId</c>, and resumes ordinary port dispatch from there~ 💖.
@@ -34,7 +38,8 @@ public record StreamRegionCompleted(
     string TerminalNodeId,
     IReadOnlyDictionary<string, object?> Outputs,
     IReadOnlyDictionary<string, long> ItemCounts,
-    TimeSpan Duration);
+    TimeSpan Duration,
+    IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, object?>>>? ItemErrors = null);
 
 /// <summary>
 /// Sent by <see cref="Workflow.Engine.Actors.StreamRegionExecutor"/> to its parent when the region

@@ -181,8 +181,29 @@ public class StreamPerItemStageTests : IDisposable
     }
 
     [Fact]
-    public async Task ItemError_SkipPolicy_KeepsCancellationFatal()
+    public async Task ItemError_SkipPolicy_CapturesOffsetForDeadLettering()
     {
+        // 🧾 The envelope is what a dead-letter path needs: which node, which item, and where in
+        // the source it came from (doc 07's per-item error document).
+        var terminal = new CollectingTerminal();
+        var (result, _) = await this.RunAsync(
+            new StreamStage("src", new OffsetSource(6), Context("src")),
+            new StreamStage(
+                "boom",
+                new FailingProcessor(failAt: 3),
+                Context("boom"),
+                OnItemError: StreamItemErrorPolicy.Skip),
+            terminal);
+
+        var error = result.ItemErrors.Should().ContainSingle().Subject;
+        error.NodeId.Should().Be("boom");
+        error.ItemIndex.Should().Be(3);
+        error.Offset.Should().NotBeNull();
+        error.Offset!.Sequence.Should().Be(3, "the source offset is what a retry would seek with");
+    }
+
+    [Fact]
+    public async Task ItemError_SkipPolicy_KeepsCancellationFatal()    {
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
@@ -259,6 +280,28 @@ public class StreamPerItemStageTests : IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 await Task.Yield();
                 yield return StreamItem.FromJson(Json(i), i);
+            }
+        }
+    }
+
+    private sealed class OffsetSource : FakeStage
+    {
+        private readonly int count;
+
+        public OffsetSource(int count) => this.count = count;
+
+        public override async IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+            ModuleExecutionContext context,
+            IAsyncEnumerable<StreamItem> input,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            for (var i = 0; i < this.count; i++)
+            {
+                await Task.Yield();
+                yield return StreamItem.FromJson(
+                    Json(i),
+                    i,
+                    new SourceOffset(i.ToString(System.Globalization.CultureInfo.InvariantCulture), i));
             }
         }
     }

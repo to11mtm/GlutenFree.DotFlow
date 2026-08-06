@@ -201,6 +201,10 @@ Inside a region:
   a region is rejected, because items don't finish in a defined order. Collect first, then write.
 - Select a streaming wire to tune its **buffer capacity** (how many items may wait between two
   nodes). Blank means the default; smaller uses less memory, larger smooths bursty producers.
+- The properties panel grows a **🌊 Streaming** section for stages in a region: **max workers**
+  (how many items to process at once), **keep source order** (free — leave it on unless you need
+  raw throughput), and **on item error** (`fail`, or `skip` to drop bad items onto the stage's
+  `errors` output).
 - Streams can't cross into a loop body, try/catch, or parallel branch — collect before the boundary.
 
 See [Working with Large Data](advanced-flow-control.md#-working-with-large-data) for when to reach

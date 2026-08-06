@@ -7,7 +7,9 @@ namespace Workflow.Modules.Builtin.File;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -23,7 +25,7 @@ using Workflow.Modules.Internal;
 /// 📄 Built-in JSON Read module (<c>builtin.file.json.read</c>) — parses a JSON file into a
 /// plain CLR object graph~ 📁✨.
 /// </summary>
-public sealed class JsonReadModule : IWorkflowModule
+public sealed class JsonReadModule : IStreamingWorkflowModule
 {
     /// <inheritdoc />
     public string ModuleId => "builtin.file.json.read";
@@ -55,7 +57,8 @@ public sealed class JsonReadModule : IWorkflowModule
         Outputs: Arr.create(
             new PortDefinition("data", "Data", typeof(object), "Parsed JSON as dict/list/scalar~ 📄", false),
             new PortDefinition("isArray", "Is Array", typeof(bool), "Whether the root is an array~ 🔢", false),
-            new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ ✅", false)),
+            new PortDefinition("success", "Success", typeof(bool), "Whether the parse succeeded~ ✅", false),
+            PortDefinition.CreateStreaming("items", isRequired: false, description: "Array elements as a stream — the file is never fully loaded (root must be an array)~ 🌊")),
         Properties: Arr.create(
             new ModulePropertyDefinition("path", "Path", typeof(string), "JSON file path. Supports {{Variable.Name}}~ 📂", true, null, PropertyEditorType.FilePath, SupportsTemplates: true),
             new ModulePropertyDefinition("encoding", "Encoding", typeof(string), "Text encoding~ 🔤", false, "utf-8", PropertyEditorType.Text)));
@@ -122,6 +125,56 @@ public sealed class JsonReadModule : IWorkflowModule
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return ModuleResult.Fail($"📄 Failed to read JSON '{rawPath}': {ex.Message}~ 💔", ex);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// 🌊 Phase 5.1.4 — the streaming source path. The batch path reads the entire file into a
+    /// string before parsing; this one uses <c>DeserializeAsyncEnumerable</c> over the open file
+    /// stream, so elements are surfaced as the parser reaches them and a huge array never lands in
+    /// memory at once.
+    /// <para>
+    /// <b>The root must be an array.</b> Streaming a single object or scalar is meaningless — there
+    /// is nothing to iterate — so that fails with an explanation rather than silently emitting one
+    /// item or nothing~ 🚧.
+    /// </para>
+    /// </remarks>
+    public async IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var rawPath = FileModuleSupport.GetString(context.Properties, "path")
+            ?? throw new InvalidOperationException("path is required~ 💔");
+
+        if (!FileModuleSupport.TryValidatePath(context, rawPath, PathAccessIntent.Read, out var path, out var failure))
+        {
+            throw new InvalidOperationException(failure!.ErrorMessage ?? $"path '{rawPath}' was rejected~ 💔");
+        }
+
+        if (!System.IO.File.Exists(path))
+        {
+            throw new FileNotFoundException($"📄 File not found: '{rawPath}'~ 💔", path);
+        }
+
+        await using var stream = System.IO.File.OpenRead(path);
+
+        long index = 0;
+        await foreach (var element in JsonSerializer
+                           .DeserializeAsyncEnumerable<JsonElement>(stream, cancellationToken: cancellationToken)
+                           .ConfigureAwait(false))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            yield return StreamItem.FromJson(
+                element,
+                index,
+                new SourceOffset(index.ToString(CultureInfo.InvariantCulture), index));
+
+            index++;
         }
     }
 }

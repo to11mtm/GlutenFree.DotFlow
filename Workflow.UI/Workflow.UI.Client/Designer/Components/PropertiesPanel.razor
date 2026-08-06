@@ -176,7 +176,7 @@
 
         @if (SelectedNode.Schema is { Properties.Count: > 0 } schema)
         {
-            @foreach (var prop in schema.Properties)
+            @foreach (var prop in schema.Properties.Where(p => !StreamingStageProperties.Contains(p.Name)))
             {
                 <PropertyEditor Property="prop"
                                 Value="@ValueFor(prop.Name)"
@@ -187,6 +187,36 @@
                                 CanEscapeLiteral="@CanEscapeLiteral(prop.Name)"
                                 Focused="name => lastFocusedProperty = name"
                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
+            }
+
+            @* 🌊 Stage knobs only make sense while the node is actually part of a streaming
+               region, and they read better grouped than scattered among the module's own
+               settings~ *@
+            @if (StreamingStageKnobs.Count > 0 && IsSelectedNodeStreaming)
+            {
+                <div class="df-props__section" data-testid="stage-knobs">
+                    <div class="df-props__section-title">🌊 Streaming</div>
+                    @if (StreamGraph.IsUnorderedStage(SelectedNode))
+                    {
+                        <div class="df-props__hint df-props__hint--warn" data-testid="stage-unordered-hint">
+                            ⚠ Items will arrive downstream in completion order. Keeping source order
+                            costs nothing here — turn <em>Keep source order</em> back on unless you
+                            specifically need the throughput.
+                        </div>
+                    }
+                    @foreach (var prop in StreamingStageKnobs)
+                    {
+                        <PropertyEditor Property="prop"
+                                        Value="@ValueFor(prop.Name)"
+                                        CodeLanguage="@CodeLanguageFor()"
+                                        Error="@ErrorFor(prop)"
+                                        TokenOptions="@NodeTokenOptions"
+                                        UnresolvableBinding="@IsUnresolvable(prop.Name)"
+                                        CanEscapeLiteral="@CanEscapeLiteral(prop.Name)"
+                                        Focused="name => lastFocusedProperty = name"
+                                        ValueChanged="v => OnValueChanged(prop.Name, v)" />
+                    }
+                </div>
             }
         }
         else
@@ -957,6 +987,25 @@
     /// <summary>Whether the selected edge carries a stream (drives the buffer editor)~ 🌊.</summary>
     private bool IsSelectedConnectionStreaming
         => this.SelectedConnection is { } c && StreamGraph.IsStreamingEdge(this.Document, c);
+
+    /// <summary>
+    /// 🌊 5.1.4 — the per-stage knobs, grouped out of the module's own settings because they
+    /// configure the *engine's* handling of the stage rather than what the module does~ 🎚️.
+    /// </summary>
+    private static readonly HashSet<string> StreamingStageProperties =
+        new(StringComparer.Ordinal) { "maxWorkers", "ordered", "onItemError" };
+
+    /// <summary>The selected node's streaming knobs, in a stable order~ 🎚️.</summary>
+    private List<ModulePropertyDefinitionDto> StreamingStageKnobs
+        => this.SelectedNode?.Schema?.Properties
+               .Where(p => StreamingStageProperties.Contains(p.Name))
+               .OrderBy(p => Array.IndexOf(new[] { "maxWorkers", "ordered", "onItemError" }, p.Name))
+               .ToList()
+           ?? new List<ModulePropertyDefinitionDto>();
+
+    /// <summary>Whether the selected node currently sits inside a streaming region~ 🗺️.</summary>
+    private bool IsSelectedNodeStreaming
+        => this.SelectedNode is { } n && StreamGraph.RegionIndexByNode(this.Document).ContainsKey(n.Id);
 
     private void DeleteConnection()
     {

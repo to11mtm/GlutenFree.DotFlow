@@ -307,23 +307,54 @@ in isolation (95/95 pass).
       validation rule deferred from 5.1.2, in its post-D25 form).
 - [x] `builtin.transform.map` is now a **per-item streaming stage** — the same `MapRecord` serves
       both paths, plus streaming `items` ports and the three new knobs on its schema.
-- [x] Tests: `StreamPerItemStageTests` (9 — concurrency bound, ordering under jitter, filter and
-      splitter order preservation, both error policies, cancellation, whole-stream compatibility),
-      plus designer knob specs (6) and badge render specs (2).
-- [ ] Streaming variants of `builtin.database.query` (source) and `builtin.database.bulkinsert`
-      (sink) — **carried over from 5.1.3**.
-- [ ] Remaining v1 streaming modules: `builtin.file.csv.read`/`.json.read` (sources),
-      `builtin.transform.query` (filter — per-item returning 0 or 1), `builtin.file.*.write` (sinks).
-- [ ] Streaming `aggregate` under the unified guard policy (whole-stream shape, single worker).
-- [ ] Streaming `error` port wiring in the designer (the envelope exists; the port doesn't yet).
-- [ ] Stage knob editors in `PropertiesPanel` (the schema declares them, so the generic property
-      editor already renders them — a dedicated grouping/UX pass is still worth doing).
-- [ ] Docker-gated 1M-row Postgres → map → bulkinsert test with a bounded-memory assertion, and
-      guard-default calibration from those measurements — **carried over from 5.1.3**.
+- [x] **Streaming database family**: `builtin.database.query` is a streaming **source** (holds the
+      reader open and yields rows, instead of materialising the result set) and
+      `builtin.database.bulkinsert` is a streaming **sink** (accumulates only up to `batchSize`,
+      flushes, releases — so `batchSize` is both the SQL batch *and* the memory ceiling). Both
+      respect an ambient transaction connection exactly as their batch paths do.
+- [x] `builtin.transform.query` is a per-item **filter/projection** — `where` drops an item by
+      returning zero items (no tombstone, D25), `select` reshapes it. `orderBy`/`skip`/`take`
+      **fail loudly** when streaming rather than silently returning wrong data: they need the whole
+      result set. (Those want `builtin.stream.sort`, 5.1.P5.)
+- [x] Tests: `StreamPerItemStageTests` (9), designer knob specs (6), badge render specs (2),
+      `StreamingDatabaseModuleTests` (11), and `StreamingFileModuleTests` (11) — all **Docker-free**,
+      covering early abandonment of large readers, cancellation, batch flushing, the
+      **database ETL** (query → map ×4 → bulk insert, 120 rows) and the **CSV round trip**
+      (read → filter ×4 → write, order preserved) through the region runner.
+- [x] **Streaming file family**: `builtin.file.csv.read` is a streaming **source** (parser stays
+      open, rows yielded as read) and `builtin.file.csv.write` is a streaming **sink** (rows
+      written as they arrive; header inferred from the first row, which is the same rule the batch
+      path documents — a stream can't survey every row first).
+- [x] **Streaming `aggregate`**: a **terminal** stage, because you can't emit an average before the
+      last item. It's therefore the one buffering streaming module, and carries the
+      **bounded-accumulator guard** (`maxItems`, fails loudly). It hands its buffered rows to the
+      *same* aggregation the batch path uses, with a test asserting streamed and batched results
+      agree.
+- [x] **`builtin.file.json.read`** streams a root **array** via `DeserializeAsyncEnumerable` over
+      the open file stream — elements surface as the parser reaches them. A non-array root
+      **fails loudly**: there is nothing to iterate, so emitting one item (or none) would be a
+      guess.
+- [x] **Streaming `error` surface**: skipped items are projected into doc 07's per-item error
+      document (`schemaVersion`, `error`, `item`, `offset`) and surfaced as each stage's
+      **`errors`** / `errorCount` node outputs, so a designer can wire a stage's error path to a
+      logger or dead-letter branch. Tests assert the envelope carries the failing item's
+      `SourceOffset` — which is what a retry would seek with.
+- [x] **`builtin.file.json.write`** streams a JSON **array** out with `Utf8JsonWriter` — opening
+      bracket, each item as it arrives (flushed periodically), closing bracket — so a huge array is
+      written without ever holding it, or its serialised text, in memory.
+- [x] **Stage knobs grouped in `PropertiesPanel`**: `maxWorkers` / `ordered` / `onItemError` are
+      lifted out of the module's own settings into a 🌊 **Streaming** section, shown **only when the
+      node actually sits in a region** (otherwise they'd configure nothing), with an inline warning
+      explaining an unordered stage.
+- [ ] `builtin.file.xml.read` streaming source + `.xml.write` sink — deferred: XML has no
+      equivalent of a self-delimiting element stream without committing to a document shape, and
+      the CSV/JSON pair already covers the file story. Revisit on demand.
+- [ ] Docker-gated 1M-row **Postgres** test + guard-default calibration. *(Bounded memory is now
+      proven Docker-free on SQLite, CSV **and** JSON in the default suite; the Postgres run is for
+      scale numbers.)*
 
-**Progress:** `Workflow.Tests` 1660/1668 · `Workflow.Tests.UI` **703/703** · builds clean. The 8
-unit failures are the known parallel-collection flakiness (all 67 tests in those classes pass in
-isolation).
+**Progress:** `Workflow.Tests` 1696/1700 · `Workflow.Tests.UI` **706/706** · builds clean;
+**110 streaming tests** green.
 
 ### 5.1.5 — Observability & sampling 🔭 (~1 week)
 

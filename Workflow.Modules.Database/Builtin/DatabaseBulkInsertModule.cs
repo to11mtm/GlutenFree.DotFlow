@@ -18,6 +18,7 @@ using Workflow.Modules.Abstractions;
 using Workflow.Modules.Database.Abstractions;
 using Workflow.Modules.Database.Internal;
 using Workflow.Modules.Database.Transactions;
+using Workflow.Modules.Internal;
 
 /// <summary>
 /// 📊 Built-in database bulk-insert module (<c>builtin.database.bulkinsert</c>) — Phase 2.4.a.4~ ✨💖.
@@ -30,7 +31,7 @@ using Workflow.Modules.Database.Transactions;
 /// The typed <c>AsQueryable</c>/<c>InsertWithOutput</c> route lives in 2.4.b (Roslyn models) — see
 /// Q14. All batches run in ONE transaction so a mid-run failure rolls back everything~ 🛡️.
 /// </remarks>
-public sealed class DatabaseBulkInsertModule : IWorkflowModule
+public sealed class DatabaseBulkInsertModule : IStreamTerminalModule
 {
     /// <inheritdoc/>
     public string ModuleId => "builtin.database.bulkinsert";
@@ -52,7 +53,11 @@ public sealed class DatabaseBulkInsertModule : IWorkflowModule
 
     /// <inheritdoc/>
     public ModuleSchema Schema => new(
-        Inputs: Arr<PortDefinition>.Empty,
+        Inputs: Arr.create(
+            PortDefinition.CreateStreaming(
+                "items",
+                isRequired: false,
+                description: "Rows to insert as a stream — written in batches, so memory stays bounded~ 🌊")),
         Outputs: Arr.create(
             new PortDefinition(
                 Name: "insertedCount",
@@ -329,9 +334,184 @@ public sealed class DatabaseBulkInsertModule : IWorkflowModule
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// 🌊 Phase 5.1.4 — the streaming sink. Items are accumulated only up to <c>batchSize</c>, then
+    /// written and released, so a million-row load costs one batch of memory rather than a million
+    /// rows. The batch size is doing double duty here: SQL efficiency *and* the memory ceiling~ 💾.
+    /// </remarks>
+    public async Task<ModuleResult> ExecuteTerminalAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(input);
+
+        if (context.Services.GetService(typeof(IDbConnectionFactory)) is not IDbConnectionFactory factory)
+        {
+            return ModuleResult.Fail(
+                "IDbConnectionFactory not registered in DI. Call services.AddDatabaseModules() at host startup~ 💔");
+        }
+
+        var tableName = DbModuleSupport.GetString(context.Properties, "table");
+        if (string.IsNullOrWhiteSpace(tableName))
+        {
+            return ModuleResult.Fail("'table' is required~ 💔");
+        }
+
+        var batchSize = DbModuleSupport.TryParseInt(context.Properties, "batchSize") ?? 500;
+        if (batchSize <= 0)
+        {
+            return ModuleResult.Fail("'batchSize' must be a positive number~ 💔");
+        }
+
+        var timeoutSeconds = DbModuleSupport.TryParseInt(context.Properties, "timeoutSeconds") ?? 30;
+        var columnMapping = CoerceMapping(context.Properties.TryGetValue("columnMapping", out var m) ? m : null);
+        var returningColumns = CoerceStringList(context.Properties.TryGetValue("returningColumns", out var rc) ? rc : null);
+
+        var sw = Stopwatch.StartNew();
+        var ambientConnection = DbModuleSupport.TryGetAmbientConnection(context);
+        var db = ambientConnection;
+        var ownsConnection = false;
+
+        if (db is null)
+        {
+            try
+            {
+                db = await DbModuleSupport.CreateConnectionAsync(factory, context.Properties, cancellationToken)
+                    .ConfigureAwait(false);
+                ownsConnection = true;
+            }
+            catch (ConnectionNotFoundException ex)
+            {
+                sw.Stop();
+                return ModuleResult.Fail($"Connection '{ex.ConnectionId}' not found~ 💔", ex);
+            }
+            catch (UnknownProviderException ex)
+            {
+                sw.Stop();
+                return ModuleResult.Fail($"Unknown provider '{ex.ProviderKey}'~ 💔", ex);
+            }
+        }
+
+        IDbTransactionScope? scope = null;
+        try
+        {
+            db.CommandTimeout = timeoutSeconds;
+            if (ambientConnection is null)
+            {
+                scope = await DefaultDbTransactionScope
+                    .CreateAsync(db, DefaultIsolation(db.DataProvider.Name), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            var target = scope?.Connection ?? db;
+            var inserted = 0;
+            var outputRows = new List<IReadOnlyDictionary<string, object?>>();
+            var batch = new List<IReadOnlyDictionary<string, object?>>(batchSize);
+
+            await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+            {
+                if (item.Payload is not JsonPayload json)
+                {
+                    continue;
+                }
+
+                if (JsonValueConverter.FromElement(json.Value) is IReadOnlyDictionary<string, object?> row)
+                {
+                    batch.Add(row);
+                }
+                else
+                {
+                    return ModuleResult.Fail(
+                        $"Bulk insert needs object rows, but item {item.Index} was not an object~ 💔");
+                }
+
+                if (batch.Count >= batchSize)
+                {
+                    inserted += Flush(target, tableName!, batch, columnMapping, batchSize, returningColumns, outputRows);
+                }
+            }
+
+            if (batch.Count > 0)
+            {
+                inserted += Flush(target, tableName!, batch, columnMapping, batchSize, returningColumns, outputRows);
+            }
+
+            if (scope is not null)
+            {
+                await scope.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            sw.Stop();
+
+            return ModuleResult.Ok(
+                new Dictionary<string, object?>
+                {
+                    ["insertedCount"] = inserted,
+                    ["outputRows"] = outputRows,
+                    ["success"] = true,
+                    ["durationMs"] = sw.ElapsedMilliseconds,
+                },
+                ExecutionMetrics.FromDuration(sw.Elapsed));
+        }
+        catch (BatchInsertWriter.BulkRowBindException ex)
+        {
+            sw.Stop();
+            return ModuleResult.Fail($"Bulk insert failed binding row {ex.RowIndex}: {ex.Message}~ 💔", ex);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning disable CA1031 // Provider-level SQL errors are surfaced as a clean Fail; the transaction rolls back on dispose~ 🌸
+        {
+            sw.Stop();
+            return ModuleResult.Fail($"Bulk insert failed: {DbErrorContext.Describe(ex)}~ 💔", ex);
+        }
+#pragma warning restore CA1031
+        finally
+        {
+            if (scope is not null)
+            {
+                await scope.DisposeAsync().ConfigureAwait(false);
+            }
+            else if (ownsConnection)
+            {
+                await db.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Bulk insert is a sink — the region executor calls <see cref="ExecuteTerminalAsync"/>~ 🪣.</remarks>
+    public IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            "builtin.database.bulkinsert is a terminal stage — the region executor calls ExecuteTerminalAsync~ 🪣");
+
+    /// <summary>Writes one accumulated batch and clears it, so memory never grows past a batch~ 💾.</summary>
+    private static int Flush(
+        DataConnection target,
+        string tableName,
+        List<IReadOnlyDictionary<string, object?>> batch,
+        IReadOnlyDictionary<string, string>? columnMapping,
+        int batchSize,
+        IReadOnlyList<string>? returningColumns,
+        List<IReadOnlyDictionary<string, object?>> outputRows)
+    {
+        var result = BatchInsertWriter.Write(target, tableName, batch, columnMapping, batchSize, returningColumns);
+        if (result.OutputRows is { Count: > 0 })
+        {
+            outputRows.AddRange(result.OutputRows);
+        }
+
+        batch.Clear();
+        return result.InsertedCount;
+    }
+
     /// <summary>Default isolation for the bulk transaction — SQLite only accepts Serializable/ReadUncommitted~ 🔒.</summary>
-    private static IsolationLevel DefaultIsolation(string providerName)
-        => providerName.Contains("SQLite", StringComparison.OrdinalIgnoreCase)
+    private static IsolationLevel DefaultIsolation(string providerName)        => providerName.Contains("SQLite", StringComparison.OrdinalIgnoreCase)
             ? IsolationLevel.Serializable
             : IsolationLevel.ReadCommitted;
 
