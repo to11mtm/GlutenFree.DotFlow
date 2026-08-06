@@ -131,6 +131,10 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private readonly System.Collections.Generic.HashSet<string> _pendingLoopNodes = new();
 
+    // 🌊 Phase 5.1.3 — streaming regions, detected once per execution from connections + port
+    // schemas. Null until first needed; empty for the overwhelming majority of workflows.
+    private IReadOnlyList<Workflow.Engine.Streaming.StreamRegion>? _streamRegions;
+
     /// <summary>
     /// CopilotNote: Phase 2.2.3a — pending parallel requests received from NodeExecutor
     /// (via <c>NodeParallelExecutionRequested</c>) before the corresponding
@@ -304,6 +308,8 @@ public class WorkflowExecutor : ReceiveActor
         Receive<NodeLoopExecutionRequested>(msg => _pendingLoops[msg.NodeId] = msg.Loop);
         Receive<LoopCompleted>(HandleLoopCompleted);
         Receive<LoopFailed>(HandleLoopFailed);
+        Receive<StreamRegionCompleted>(HandleStreamRegionCompleted);
+        Receive<StreamRegionFailed>(HandleStreamRegionFailed);
 
         // Phase 2.2.3a: Parallel execution messages~ 🌐✨
         Receive<NodeParallelExecutionRequested>(msg => _pendingParallels[msg.NodeId] = msg.Parallel);
@@ -750,6 +756,26 @@ public class WorkflowExecutor : ReceiveActor
         }
 
         _log.Info("⚡ Executing node {NodeId} ({NodeName})", nodeId, nodeDef.Name);
+
+        // 🌊 Phase 5.1.3 — a node inside a streaming region isn't dispatched on its own: the whole
+        // region runs as one back-pressured pipeline. Reaching the region's source starts it;
+        // reaching any other member means the region is already running (or about to), so there's
+        // nothing to do here~
+        if (FindStreamRegion(nodeId) is { } region)
+        {
+            var sourceNodeId = region.SourceNodeIds.FirstOrDefault();
+            if (!string.Equals(sourceNodeId, nodeId, StringComparison.Ordinal))
+            {
+                _log.Debug(
+                    "🌊 Node {NodeId} belongs to streaming region {RegionIndex}; it runs as part of that pipeline~",
+                    nodeId,
+                    region.Index);
+                return;
+            }
+
+            ExecuteStreamRegionNode(region, nodeId);
+            return;
+        }
 
         // Gather inputs from workflow inputs and predecessor outputs
         var nodeInputs = GatherNodeInputs(nodeId);
@@ -1408,6 +1434,162 @@ public class WorkflowExecutor : ReceiveActor
             ExecuteReadySuccessors(loopNodeId, new LanguageExt.Arr<string>(donePorts));
         }
         // If there are no done-port edges, all reachable work is body-scope → already complete above.
+    }
+
+    /// <summary>
+    /// 🌊 Phase 5.1.3 — the streaming regions in this workflow, detected once from connections and
+    /// port schemas. <c>RegionId</c> on a node is a designer hint the engine deliberately ignores~ 🗺️.
+    /// </summary>
+    private IReadOnlyList<Workflow.Engine.Streaming.StreamRegion> StreamRegions
+    {
+        get
+        {
+            if (_streamRegions is not null)
+            {
+                return _streamRegions;
+            }
+
+            var registry = _serviceProvider.GetService(typeof(Workflow.Modules.Abstractions.IModuleRegistry))
+                as Workflow.Modules.Abstractions.IModuleRegistry;
+            _streamRegions = Workflow.Engine.Streaming.StreamRegionDetector.Regions(
+                _definition,
+                nodeId =>
+                {
+                    var node = GetNodeDefinition(nodeId);
+                    return node is null ? null : registry?.GetModule(node.ModuleId)?.Schema;
+                });
+
+            if (_streamRegions.Count > 0)
+            {
+                _log.Info("🌊 Detected {RegionCount} streaming region(s) in this workflow", _streamRegions.Count);
+            }
+
+            return _streamRegions;
+        }
+    }
+
+    /// <summary>Finds the streaming region a node belongs to, or null~ 🔎.</summary>
+    private Workflow.Engine.Streaming.StreamRegion? FindStreamRegion(string nodeId)
+        => StreamRegions.FirstOrDefault(r => r.NodeIds.Contains(nodeId, StringComparer.Ordinal));
+
+    /// <summary>Spawns a <see cref="StreamRegionExecutor"/> for a region whose source was reached~ 🌊.</summary>
+    private void ExecuteStreamRegionNode(Workflow.Engine.Streaming.StreamRegion region, string sourceNodeId)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        // Every member is "running" for the region's lifetime — the monitor shows the whole
+        // pipeline lighting up at once, which is what actually happens~ 📡
+        foreach (var memberId in region.NodeIds)
+        {
+            TransitionNodeState(memberId, NodeExecutionState.Running, now);
+            _context = _context.WithNodeStarted(memberId, now);
+            _runningNodes = _runningNodes.Add(memberId);
+        }
+
+        var inputs = GatherNodeInputs(sourceNodeId);
+        _nodeInputs[sourceNodeId] = new Dictionary<string, object?>(inputs);
+
+        var actor = Context.ActorOf(
+            StreamRegionExecutor.Props(
+                region,
+                _definition,
+                inputs,
+                _context.Variables,
+                _executionId,
+                _serviceProvider,
+                _executionCts.Token),
+            $"stream-region-{region.Index}-{Guid.NewGuid():N}");
+
+        Context.Watch(actor);
+        actor.Tell(new ExecuteStreamRegion());
+    }
+
+    /// <summary>
+    /// Handles a completed streaming region: every member node is marked complete, the terminal
+    /// stage's outputs are stored under its node id, and ordinary port dispatch resumes~ 🌊✅.
+    /// </summary>
+    private void HandleStreamRegionCompleted(StreamRegionCompleted message)
+    {
+        Context.Unwatch(Sender);
+
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var nodeId in message.NodeIds)
+        {
+            _runningNodes = _runningNodes.Remove(nodeId);
+            _completedNodes = _completedNodes.Add(nodeId);
+            TransitionNodeState(nodeId, NodeExecutionState.Completed, now);
+
+            // Per-stage item counts are the streaming equivalent of a node's outputs for
+            // observability — cheap, and the only per-node number that means anything here~ 📊
+            if (message.ItemCounts.TryGetValue(nodeId, out var itemCount))
+            {
+                _nodeOutputs[nodeId] = new Dictionary<string, object?> { ["itemCount"] = itemCount };
+            }
+        }
+
+        // The terminal stage's real outputs win over the item-count placeholder~
+        _nodeOutputs[message.TerminalNodeId] = new Dictionary<string, object?>(message.Outputs);
+
+        _log.Info(
+            "🌊 Streaming region {RegionIndex} completed in {Duration}ms across {NodeCount} node(s)",
+            message.RegionIndex,
+            (long)message.Duration.TotalMilliseconds,
+            message.NodeIds.Count);
+
+        // 📡 Per-stage throughput for the monitor — published on the EventStream the 3.2 bridge
+        // already forwards to SignalR, so no engine→API coupling is introduced here~
+        var progressEvent = new StreamRegionProgress(
+            _executionId,
+            message.RegionIndex,
+            message.ItemCounts,
+            message.Duration,
+            now);
+        Context.Parent.Tell(progressEvent);
+        Context.System.EventStream.Publish(progressEvent);
+
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+            return;
+        }
+
+        ExecuteReadySuccessors(message.TerminalNodeId);
+    }
+
+    /// <summary>
+    /// Handles a failed streaming region — treated exactly like a node failure so retries, error
+    /// handling and enclosing try/catch boundaries all behave as usual~ 🌊❌.
+    /// </summary>
+    private void HandleStreamRegionFailed(StreamRegionFailed message)
+    {
+        Context.Unwatch(Sender);
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Members other than the blamed node didn't fail on their own — they stop because the
+        // pipeline stopped, so Skipped is the honest state for them~
+        foreach (var nodeId in message.NodeIds)
+        {
+            _runningNodes = _runningNodes.Remove(nodeId);
+
+            if (!string.Equals(nodeId, message.FailedNodeId, StringComparison.Ordinal)
+                && !_completedNodes.Contains(nodeId)
+                && !_skippedNodes.Contains(nodeId))
+            {
+                _skippedNodes = _skippedNodes.Add(nodeId);
+                TransitionNodeState(nodeId, NodeExecutionState.Skipped, now);
+            }
+        }
+
+        _log.Error(
+            message.Error,
+            "🌊 Streaming region {RegionIndex} failed at node {NodeId}: {Error}",
+            message.RegionIndex,
+            message.FailedNodeId,
+            message.Error.Message);
+
+        HandleNodeFailure(message.FailedNodeId, message.Error);
     }
 
     /// <summary>

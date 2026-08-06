@@ -138,7 +138,7 @@ documents) should be accounted for here rather than deferred blindly:
    sorted-stream/hang caveats show the cost); collect-then-join instead.
    - **Unified policy (decided):** the guard + spill options form one reusable "bounded
      accumulator" policy shared by every unbounded-memory stage — `aggregate`,
-     `builtin.stream.collect`, and any future buffering stage (resequencer included).
+     `builtin.stream.collect`, and any future buffering stage (a `stream.sort`, 5.1.P5).
    - **Guard defaults (decided):** derive defaults from available memory and expected
      workload rather than fixed constants; user-overridable per stage. Concrete numbers to be
      calibrated with real measurements during the proving slice (phase 3).
@@ -174,24 +174,35 @@ are ordinary sub-graph citizens) and **(a)** as a per-stage `maxWorkers` propert
 default). **(c)** is explicitly out of scope — document that streams may not cross construct
 boundaries; bridge nodes are the escape hatch.
 
-**Ordering (decided):** with `maxWorkers > 1` a stage may emit out of order; an **optional
-per-stage resequencing buffer** (`resequence: bool`) restores source order at the cost of
-memory + latency. The designer must make the distinction visible — e.g. badge a stage
-"⚠ unordered" when `maxWorkers > 1` and `resequence` is off, and surface both knobs together.
-The documented **v1 ordering contract**: output is strictly source order when every stage in
-the region is single-worker; otherwise ordering is only guaranteed downstream of a
-resequenced stage.
+**Ordering — ⚠️ REVISED (Phase 5.1.3/5.1.4, D25).** This section originally specified an optional
+per-stage **resequencing buffer** with an `onResequenceOverflow` policy and **sequence tombstones**
+from skipping stages. A spike against the chosen executor (Akka.Streams) showed that machinery is
+**unnecessary at every cardinality** and it has been **deleted from the design**:
 
-**Resequencing overflow (decided):** when the buffer fills while waiting for a missing
-sequence, per-stage policy `onResequenceOverflow: backpressure (default) | fail`. To prevent
-the backpressure-deadlock case, any stage that drops items (`skip` error policy, filters)
-emits **sequence tombstones** — zero-payload markers that let the resequencer advance past
-gaps. Tombstones are engine plumbing, invisible to modules and to the monitor's item counts.
-**Scope (decided):** resequencing applies only to **1:1 stages** in v1 (one output per input);
-stages that multiply items (0..N maps, splitters) may not sit between a `maxWorkers > 1`
-stage and its resequencer — **enforced by design-time validation**, which requires modules to
-declare their cardinality (a `Cardinality: OneToOne | Variable` hint on the streaming module
-schema).
+| Stage shape under `SelectAsync(4)` + `SelectMany`, random delays | Ordered? |
+| --- | --- |
+| 1:1 transform | ✅ |
+| Filter (0..1 outputs per input) | ✅ |
+| Splitter (1..N outputs per input) | ✅ |
+| In-flight work under a slow straggler | bounded by parallelism, not stream length |
+
+Ordering is by **input slot**, not by a sequence key: a stage emitting zero outputs contributes
+nothing at its slot, and one emitting N keeps them contiguous. So the model is simply:
+
+- **`maxWorkers`** (default 1) and **`ordered`** (default **true**) — two knobs, no buffers.
+- The designer badges a stage "⚠ unordered" only when `maxWorkers > 1 && !ordered`.
+- **Documented v1 ordering contract:** output is in source order unless a stage opts out of
+  ordering. (Previously: "source order iff every stage is single-worker.")
+- Stages that consume the whole stream at their own rhythm (`aggregate`) can't be parallelised and
+  run single-worker; "restore source order" is meaningless for them anyway.
+
+`SourceOffset` **remains** — it was reserved for checkpointing (§5.2, D12), which is unaffected.
+
+**Consequence for the module contract (D26):** `ExecuteStreamAsync` hands a module the *whole*
+stream, so the module owns the loop and the engine can neither parallelise nor order it. Getting
+`maxWorkers` therefore requires an optional **per-item** entry point
+(`ProcessAsync(StreamItem) → IEnumerable<StreamItem>`); stream-shaped modules keep working but stay
+single-worker. Per-item is also the simpler contract for module authors.
 
 ### 5.2 Region checkpointing / resumability
 
@@ -206,7 +217,7 @@ schema).
 be totally ordered within its source** (decided): shape is
 `record SourceOffset(string Token, long Sequence)`, where `Sequence` is a monotonic ordinal
 supplied by the source (row number, item index) and `Token` is whatever the source needs to
-seek (page cursor, byte offset). `Sequence` gives ordering/resequencing a uniform key;
+seek (page cursor, byte offset). `Sequence` is a uniform ordinal for checkpoint bookkeeping;
 `Token` gives resumability. (2) The source module contract includes an optional
 `StartFrom(SourceOffset)` capability flag. That keeps source-offset checkpointing a purely
 additive later phase. Document the v1 recovery contract explicitly: *re-runnable source +
@@ -221,19 +232,20 @@ idempotent sink, or don't stream it.*
 | Binary streams | JSON-only v1; `StreamItem.Payload` modeled as a union so binary is additive (§3.3) |
 | Reuse-mode sub-workflows | accounted for: child-execution stage as a plain `IStreamingWorkflowModule`, later phase (§3.5) |
 | Parallel composition | (b) regions-inside-branches + (a) per-stage `maxWorkers` in v1; region-spanning-constructs (c) out of scope (§5.1) |
-| Ordering / resequencing | optional per-stage resequencing buffer; designer badges unordered stages; v1 contract = source order iff all stages single-worker (§5.1) |
+| ~~Ordering / resequencing~~ | ⚠️ **SUPERSEDED (D25)** — resequencing buffer, overflow policy and tombstones **deleted**; ordering is `maxWorkers` + `ordered` (default true), correct at every cardinality (§5.1) |
+| Module contract for parallelism | per-item `ProcessAsync` entry point required for `maxWorkers`; stream-shaped modules stay single-worker (D26, §5.1) |
 | Checkpointing | deferred; `SourceOffset` + `StartFrom` enablers reserved in contracts now (§5.2) |
 | `SourceOffset` shape | `(Token: string, Sequence: long)` — opaque seekable token + monotonic ordinal for ordering (§5.2) |
 | Streaming error envelope | failing item + per-item error document (doc 07 contract) in one envelope (§4.3) |
 | Monitor item sampling | supported but off by default; configurable per workflow/stage; redaction-aware (§4.4) |
 | Aggregate memory guard | hard limits fail loudly by default; opt-in per-stage spill mode (§4.5) |
-| Resequencing overflow | `backpressure` (default) \| `fail` per stage; sequence tombstones from skipping stages prevent deadlock (§5.1) |
+| ~~Resequencing overflow~~ | ⚠️ **SUPERSEDED (D25)** — no resequencer, so no overflow policy and no tombstones (§5.1) |
 | Sampling redaction basis | `IsSecret`-based v1; field-level annotations only if proven insufficient (§4.4) |
 | Spill storage | configured persistence provider (S3/NATS/DB) + temp-file option; cleanup on complete/fail/cancel + startup orphan sweep (§4.5) |
 | Guard defaults | memory/workload-derived, per-stage overridable; calibrate in proving slice (§4.5) |
 | `stream.collect` guards | yes — one unified "bounded accumulator" policy across all buffering stages (§4.5) |
 | Doc 07 error-schema alignment | agreed — per-item variant added to doc 07 §2 |
-| Resequencing scope | 1:1 stages only in v1; enforced via design-time validation + module `Cardinality` hint (§5.1) |
+| ~~Resequencing scope~~ | ⚠️ **SUPERSEDED (D25)** — ordering holds at every cardinality, so there is no scope rule and the `Cardinality` hint loses its purpose (phase-plan Q7) |
 | Spill encryption | reversible encryption at rest, same mechanism as secret variables (§4.5) |
 | Guard budget basis | host memory at engine start (engine-wide cap); per-region arbiter later if needed (§4.5) |
 | Spill providers v1 | prefer DB/NATS over S3 (simplicity, orphan-sweep safety); temp-file for testing (§4.5) |
@@ -245,13 +257,15 @@ verification/calibration tasks rather than design decisions:
 
 - [ ] Verify the secret-variable encryption mechanism is suitable for spill-at-rest use
       (docs/variables.md notes current secrets limits) — before phase 3.
-- [ ] Define the `Cardinality` hint on the streaming module schema and the exact design-time
-      validation rule for resequencing regions — during phase 2 (validation work).
+- [ ] Decide the fate of `StreamCardinality` now that D25 removed its purpose: delete it
+      (recommended) or demote it to a designer-only "may change item counts" hint —
+      phase-plan **Q7**, during 5.1.4.
 - [ ] Calibrate guard defaults (`maxGroups`, `maxAccumulatorBytes`) from measurements —
       during phase 3 (proving slice).
 - [ ] Revisit deferred items when triggered by demand: S3 spill provider (naming/sweep
       design), per-region memory arbiter, field-level sensitivity annotations,
-      region-spanning parallel (§5.1c), source-offset checkpointing (§5.2).
+      region-spanning parallel (§5.1c), source-offset checkpointing (§5.2),
+      `builtin.stream.sort` (5.1.P5).
 
 ## 8. Phasing
 

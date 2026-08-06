@@ -37,10 +37,11 @@ public interface IStreamingWorkflowModule : IWorkflowModule
     /// Gets how many output items this stage produces per input item. 🔢.
     /// </summary>
     /// <remarks>
-    /// CopilotNote: Only <see cref="StreamCardinality.OneToOne"/> stages may sit between a
-    /// multi-worker stage and its resequencer — ordering can't be restored when a stage multiplies
-    /// or collapses items. The designer validates this at design time so nobody discovers it at
-    /// run time~ 🛡️ (design doc 06 §5.1, D8).
+    /// ⚠️ <b>Under review (phase-plan Q7).</b> This hint originally gated which stages could sit
+    /// under a resequencing buffer. D25 removed the resequencer — Akka.Streams orders by input
+    /// slot, so ordering holds at every cardinality — which leaves this member without behaviour
+    /// attached. 5.1.4 decides whether to delete it or demote it to a purely cosmetic designer
+    /// hint ("this stage may change item counts")~ 🌸.
     /// </remarks>
     public StreamCardinality Cardinality => StreamCardinality.OneToOne;
 
@@ -51,12 +52,15 @@ public interface IStreamingWorkflowModule : IWorkflowModule
     /// Execution context — <c>Inputs</c> holds any non-streaming inputs, <c>Variables</c> is the
     /// region-start snapshot (read-only: variable writes are forbidden inside a region).
     /// </param>
-    /// <param name="input">
-    /// The upstream item stream. <b>Empty</b> for sources. Tombstones are filtered out by the
-    /// region executor before they reach a module.
-    /// </param>
+    /// <param name="input">The upstream item stream. <b>Empty</b> for sources.</param>
     /// <param name="cancellationToken">Cancellation token, linked to the region and execution.</param>
     /// <returns>The produced item stream — empty for sinks.</returns>
+    /// <remarks>
+    /// CopilotNote: this shape hands the module the <b>whole stream</b>, so the module owns the
+    /// loop and the engine can't parallelise it. 5.1.4 adds an optional per-item entry point
+    /// (D26) for stages that want <c>maxWorkers &gt; 1</c>; modules using this method keep working
+    /// and simply run single-worker~ ✨.
+    /// </remarks>
     public IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
         ModuleExecutionContext context,
         IAsyncEnumerable<StreamItem> input,
@@ -66,15 +70,18 @@ public interface IStreamingWorkflowModule : IWorkflowModule
 /// <summary>
 /// 🔢 How many output items a streaming stage produces per input item.
 /// </summary>
+/// <remarks>
+/// ⚠️ Under review — see <see cref="IStreamingWorkflowModule.Cardinality"/> and phase-plan Q7.
+/// </remarks>
 public enum StreamCardinality
 {
     /// <summary>
-    /// Exactly one output per input — order can be restored by a resequencer. 1️⃣.
+    /// Exactly one output per input. 1️⃣.
     /// </summary>
     OneToOne,
 
     /// <summary>
-    /// Zero-or-more outputs per input (filters, splitters) — cannot be resequenced. 🔀.
+    /// Zero-or-more outputs per input (filters, splitters). 🔀.
     /// </summary>
     Variable,
 }

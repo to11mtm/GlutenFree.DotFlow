@@ -37,20 +37,9 @@ public class StreamingContractsTests
         var item = StreamItem.FromJson(json, index: 3);
 
         item.Index.Should().Be(3);
-        item.IsTombstone.Should().BeFalse();
         item.Offset.Should().BeNull();
         item.Payload.Should().BeOfType<JsonPayload>()
             .Which.Value.GetProperty("id").GetInt32().Should().Be(7);
-    }
-
-    [Fact]
-    public void Tombstone_PreservesIndexAndCarriesNoPayload()
-    {
-        var tombstone = StreamItem.Tombstone(index: 42);
-
-        tombstone.IsTombstone.Should().BeTrue();
-        tombstone.Index.Should().Be(42, "a resequencer advances past gaps using the dropped index");
-        tombstone.Payload.Should().BeOfType<EmptyPayload>();
     }
 
     [Fact]
@@ -77,6 +66,18 @@ public class StreamingContractsTests
     {
         StreamPayload.Empty.Should().BeSameAs(StreamPayload.Empty);
         StreamPayload.Empty.Should().Be(new EmptyPayload());
+    }
+
+    /// <summary>
+    /// 🛡️ D25 guard — the tombstone machinery was deleted when the resequencer was. If someone
+    /// reintroduces it, this test's name explains why they shouldn't~ ✨
+    /// </summary>
+    [Fact]
+    public void StreamItem_HasNoTombstoneMachinery()
+    {
+        typeof(StreamItem).GetProperty("IsTombstone").Should().BeNull(
+            "D25 removed the resequencer, so dropped items need no marker — Akka.Streams orders by input slot");
+        typeof(StreamItem).GetMethod("Tombstone").Should().BeNull();
     }
 
     #endregion
