@@ -80,6 +80,10 @@ nodes: `builtin.loop.foreach` (or `builtin.parallel` over partitions) wrapping a
 - [ ] What is "the child's output" when several terminal nodes exist — map of terminal
       nodeId→outputs, or require a `builtin.end` node with declared outputs? (Recommend:
       designate `builtin.end` as the output contract; else expose the map.)
+  - Go with the reccomendation: require a `builtin.end` node with declared outputs. This is simpler and more explicit.
 - [ ] Version pinning (`workflowVersion` property) — needed for stable estates?
+  - Default should be pinned to the current version at design time, but allow an optional `workflowVersion` property to override for specific use cases.
 - [ ] Should child executions of a fire-and-forget node be cancellable independently via API?
+  - Yes, provide an API endpoint to cancel child executions independently, but document that they will still be linked to parent cancellation if the parent is cancelled.
 - [ ] Designer treatment: render child workflow name + jump-to link; warn on missing target.
+  - Yes, the designer should render the child workflow name and provide a jump-to link. If the target workflow is missing, display a clear warning to the user.
