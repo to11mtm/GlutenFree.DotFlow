@@ -269,13 +269,24 @@ public class StreamBridgeTests
     }
 
     [Fact]
-    public void Accumulator_SpillMode_IsRejectedUntilItExists()
+    public void Accumulator_SpillMode_IsAcceptedAndStillEnforcesTheCeiling()
     {
-        var act = () => new BoundedAccumulator(
-            new BoundedAccumulatorPolicy(OnLimit: AccumulatorLimitBehavior.Spill));
+        // 5.1.6 shipped spill, so the constructor no longer refuses it. What must NOT change is
+        // that the ceiling still applies — spill moves items off the heap, it doesn't remove the
+        // bound. A spill mode that silently meant "unlimited" would be the exact failure we built
+        // the accumulator to prevent~ 🛡️
+        var accumulator = new BoundedAccumulator(
+            new BoundedAccumulatorPolicy(MaxItems: 3, OnLimit: AccumulatorLimitBehavior.Spill));
 
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage("*5.1.6*", "a knob that silently does nothing is worse than one that says 'not yet'");
+        accumulator.OnLimit.Should().Be(AccumulatorLimitBehavior.Spill);
+
+        for (var i = 0; i < 3; i++)
+        {
+            accumulator.Admit(StreamItem.FromJson(default, i), "n1");
+        }
+
+        var act = () => accumulator.Admit(StreamItem.FromJson(default, 3), "n1");
+        act.Should().Throw<StreamAccumulatorLimitException>();
     }
 
     [Fact]

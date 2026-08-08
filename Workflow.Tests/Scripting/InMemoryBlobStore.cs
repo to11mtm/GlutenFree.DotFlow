@@ -6,7 +6,9 @@ namespace Workflow.Tests.Scripting;
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Workflow.Persistence.Abstractions;
@@ -34,6 +36,21 @@ public sealed class InMemoryBlobStore : IBlobStore
 
     public Task<bool> ExistsAsync(string key, CancellationToken ct = default)
         => Task.FromResult(this.store.ContainsKey(key));
+
+    public async IAsyncEnumerable<BlobInfo> ListAsync(
+        string prefix,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        foreach (var kvp in this.store)
+        {
+            if (kvp.Key.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                yield return new BlobInfo(kvp.Key, kvp.Value.Length, DateTimeOffset.UtcNow);
+            }
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
 
     public Task<string> GeneratePresignedUrlAsync(string key, TimeSpan expiry, CancellationToken ct = default)
         => Task.FromResult($"memory://{key}");

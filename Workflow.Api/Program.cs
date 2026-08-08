@@ -5,6 +5,7 @@ using Workflow.Api.Auth;
 using Workflow.Api.Database;
 using Workflow.Api.Observability;
 using Workflow.Api.RealTime;
+using Workflow.Api.Streaming;
 using Workflow.Api.V1;
 using Workflow.Api.Webhooks;
 using Workflow.Core.Abstractions;
@@ -307,8 +308,15 @@ builder.Services.AddRealTime(builder.Configuration);
 // 🚦 Phase 2.7.8 — Rate-limiting seam (disabled unless Api:RateLimit:Enabled)~
 builder.Services.AddWorkflowRateLimiting(builder.Configuration);
 
+// 💾 Phase 5.1.6 — Streaming spill. No implicit default: without Streaming:Spill:Store a node with
+// spill enabled fails loudly rather than landing scratch somewhere nobody provisioned~
+builder.Services.AddStreamingSpill(builder.Configuration);
+
 var app = builder.Build();
 
+// 📢 Phase 5.1.6 (Q-D) — first of the three required spill warnings: startup, per-execution,
+// designer. Disabling spill encryption is allowed, never quiet~
+Workflow.Api.Streaming.SpillServiceCollectionExtensions.LogSpillConfiguration(app.Services);
 // 📖 Phase 2.7.8 — Serve the OpenAPI document + UI (docs are useful in every environment)~
 app.UseSwagger();
 if (app.Environment.IsDevelopment())

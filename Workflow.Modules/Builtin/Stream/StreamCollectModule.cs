@@ -86,7 +86,15 @@ public sealed class StreamCollectModule : IStreamTerminalModule
                 DataType: typeof(long),
                 Description: "Optional payload-size ceiling in bytes. Leave empty to skip byte measurement.",
                 IsRequired: false,
-                EditorType: PropertyEditorType.Number)));
+                EditorType: PropertyEditorType.Number),
+            new ModulePropertyDefinition(
+                Name: "spill",
+                DisplayName: "Spill to storage",
+                DataType: typeof(bool),
+                Description: "Keep buffering past the in-memory budget by writing items to the host's spill store. The item/byte ceiling still applies. Requires Streaming:Spill:Store to be configured on the host.",
+                IsRequired: false,
+                DefaultValue: false,
+                EditorType: PropertyEditorType.Boolean)));
 
     /// <inheritdoc />
     public async Task<ModuleResult> ExecuteTerminalAsync(
@@ -103,30 +111,17 @@ public sealed class StreamCollectModule : IStreamTerminalModule
             return ModuleResult.Fail(policyError);
         }
 
-        var collected = new List<object?>();
-
         try
         {
-            var accumulator = new BoundedAccumulator(policy);
-
-            await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
-            {
-                accumulator.Admit(item, context.NodeId);
-                collected.Add(ToValue(item));
-            }
-
-            context.Logger.LogInformation(
-                "🪣 Collected {Count} items at node {NodeId}~",
-                collected.Count,
-                context.NodeId);
-
-            return ModuleResult.Ok(new Dictionary<string, object?>(StringComparer.Ordinal)
-            {
-                ["items"] = collected,
-                ["count"] = (long)collected.Count,
-            });
+            return policy.OnLimit == AccumulatorLimitBehavior.Spill
+                ? await CollectSpillingAsync(context, input, policy, cancellationToken).ConfigureAwait(false)
+                : await CollectInMemoryAsync(context, input, policy, cancellationToken).ConfigureAwait(false);
         }
         catch (StreamAccumulatorLimitException ex)
+        {
+            return ModuleResult.Fail(ex.Message, ex);
+        }
+        catch (SpillNotConfiguredException ex)
         {
             return ModuleResult.Fail(ex.Message, ex);
         }
@@ -135,6 +130,99 @@ public sealed class StreamCollectModule : IStreamTerminalModule
             return ModuleResult.Fail(ex.Message, ex);
         }
     }
+
+    private static async Task<ModuleResult> CollectInMemoryAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        BoundedAccumulatorPolicy policy,
+        CancellationToken cancellationToken)
+    {
+        var collected = new List<object?>();
+        var accumulator = new BoundedAccumulator(policy);
+
+        await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            accumulator.Admit(item, context.NodeId);
+            collected.Add(ToValue(item));
+        }
+
+        context.Logger.LogInformation(
+            "🪣 Collected {Count} items at node {NodeId}~",
+            collected.Count,
+            context.NodeId);
+
+        return ModuleResult.Ok(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["items"] = collected,
+            ["count"] = (long)collected.Count,
+        });
+    }
+
+    /// <summary>
+    /// Collects with spill enabled — the ceiling still applies, only the storage changes~ 💾.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: The output is still a single in-memory array, because that is what
+    /// <c>collect</c> means: it is the bridge back to the batch world and downstream batch nodes
+    /// take a materialised list. Spill therefore raises the ceiling on the <i>buffer</i>, not on the
+    /// result — which is why the guard is still enforced. Streaming straight to a sink remains the
+    /// right shape when the data genuinely doesn't fit~ 🌊
+    /// </remarks>
+    private static async Task<ModuleResult> CollectSpillingAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        BoundedAccumulatorPolicy policy,
+        CancellationToken cancellationToken)
+    {
+        var store = context.Services.GetService(typeof(ISpillStore)) as ISpillStore
+            ?? throw new SpillNotConfiguredException(
+                $"Node '{context.NodeId}' has spill enabled, but this host has no spill store configured. " +
+                "Set Streaming:Spill:Store (Sqlite for fast local disk, Blob for nodes with slow local IOPS), " +
+                "or turn spill off and lower the item limit~ 💾");
+
+        var protector = context.Services.GetService(typeof(ISpillProtector)) as ISpillProtector
+            ?? NoOpSpillProtector.Instance;
+
+        var accumulator = new BoundedAccumulator(policy);
+        await using var buffer = new SpillableItemBuffer(
+            store,
+            protector,
+            new SpillSessionKey(context.ExecutionId, RegionIndexFor(context), context.NodeId),
+            memoryItemThreshold: null,
+            logger: context.Logger);
+
+        await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            accumulator.Admit(item, context.NodeId);
+            await buffer.AddAsync(item, cancellationToken).ConfigureAwait(false);
+        }
+
+        var collected = new List<object?>((int)Math.Min(buffer.Count, int.MaxValue));
+        await foreach (var item in buffer.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            collected.Add(ToValue(item));
+        }
+
+        context.Logger.LogInformation(
+            "🪣 Collected {Count} items at node {NodeId} ({Spilled} via the '{Store}' spill store)~",
+            collected.Count,
+            context.NodeId,
+            buffer.SpilledCount,
+            store.Name);
+
+        return ModuleResult.Ok(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["items"] = collected,
+            ["count"] = (long)collected.Count,
+        });
+    }
+
+    private static int RegionIndexFor(ModuleExecutionContext context)
+        => context.Properties.TryGetValue("__regionIndex", out var raw)
+            && raw is not null
+            && TryReadInt64(raw, out var parsed)
+            ? (int)parsed
+            : 0;
 
     /// <inheritdoc />
     /// <remarks>
@@ -190,7 +278,28 @@ public sealed class StreamCollectModule : IStreamTerminalModule
             maxBytes = parsedBytes;
         }
 
-        return new BoundedAccumulatorPolicy(maxItems, maxBytes);
+        var onLimit = TryReadBool(context, "spill")
+            ? AccumulatorLimitBehavior.Spill
+            : AccumulatorLimitBehavior.Fail;
+
+        return new BoundedAccumulatorPolicy(maxItems, maxBytes, onLimit);
+    }
+
+    private static bool TryReadBool(ModuleExecutionContext context, string name)
+    {
+        if (!context.Properties.TryGetValue(name, out var raw) || raw is null)
+        {
+            return false;
+        }
+
+        return raw switch
+        {
+            bool b => b,
+            JsonElement { ValueKind: JsonValueKind.True } => true,
+            JsonElement { ValueKind: JsonValueKind.False } => false,
+            string s => bool.TryParse(s, out var parsed) && parsed,
+            _ => false,
+        };
     }
 
     private static bool TryReadInt64(object raw, out long value)

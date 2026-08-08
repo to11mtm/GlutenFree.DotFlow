@@ -71,6 +71,74 @@ public sealed class SqliteProviderTests : IAsyncLifetime
         result.ErrorMessage.Should().BeNull();
     }
 
+    // ── Blob Store ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Blobs_PutGet_ShouldRoundTrip()
+    {
+        var key = $"sqlite-blob-{Guid.NewGuid():N}";
+        var payload = "hello from a sqlite blob column~"u8.ToArray();
+
+        var etag = await _provider.Blobs!.PutAsync(key, new System.IO.MemoryStream(payload), "text/plain");
+        etag.Should().NotBeNullOrEmpty();
+
+        await using var stream = await _provider.Blobs.GetAsync(key);
+        stream.Should().NotBeNull();
+        using var ms = new System.IO.MemoryStream();
+        await stream!.CopyToAsync(ms);
+        ms.ToArray().Should().Equal(payload);
+    }
+
+    [Fact]
+    public async Task Blobs_List_ShouldFilterByPrefix_AndReportSizes()
+    {
+        var prefix = $"listing/{Guid.NewGuid():N}/";
+        await _provider.Blobs!.PutAsync(prefix + "a", new System.IO.MemoryStream("aa"u8.ToArray()));
+        await _provider.Blobs.PutAsync(prefix + "b", new System.IO.MemoryStream("bbb"u8.ToArray()));
+        await _provider.Blobs.PutAsync($"other/{Guid.NewGuid():N}", new System.IO.MemoryStream("zz"u8.ToArray()));
+
+        var found = new Dictionary<string, long>();
+        await foreach (var info in _provider.Blobs.ListAsync(prefix))
+        {
+            found[info.Key] = info.SizeBytes;
+            info.LastModified.Should().BeAfter(DateTimeOffset.UtcNow.AddMinutes(-5));
+        }
+
+        found.Should().HaveCount(2);
+        found[prefix + "a"].Should().Be(2);
+        found[prefix + "b"].Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Blobs_List_ShouldReturnEverything_ForEmptyPrefix()
+    {
+        await _provider.Blobs!.PutAsync($"anything-{Guid.NewGuid():N}", new System.IO.MemoryStream("x"u8.ToArray()));
+
+        var count = 0;
+        await foreach (var _ in _provider.Blobs.ListAsync(string.Empty))
+        {
+            count++;
+        }
+
+        count.Should().BeGreaterThan(0, "an empty prefix means 'list everything'~");
+    }
+
+    [Fact]
+    public async Task Blobs_List_ShouldNotSeeDeletedKeys()
+    {
+        var prefix = $"swept/{Guid.NewGuid():N}/";
+        await _provider.Blobs!.PutAsync(prefix + "gone", new System.IO.MemoryStream("x"u8.ToArray()));
+        (await _provider.Blobs.DeleteAsync(prefix + "gone")).Should().BeTrue();
+
+        var found = new List<string>();
+        await foreach (var info in _provider.Blobs.ListAsync(prefix))
+        {
+            found.Add(info.Key);
+        }
+
+        found.Should().BeEmpty();
+    }
+
     // ── Workflow CRUD ─────────────────────────────────────────────────────────
 
     [Fact]

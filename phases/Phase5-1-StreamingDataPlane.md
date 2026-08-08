@@ -204,6 +204,8 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
       `maxItems` (default 100 000, placeholder pending 5.1.3 calibration) + optional `maxBytes`
       (measured only when configured), fail-loud via `StreamAccumulatorLimitException`, and
       `Spill` **rejected with a "not until 5.1.6" message** rather than silently ignored.
+      *(5.1.6 shipped: `Spill` is now accepted and the ceiling still applies — spill changes where
+      buffered items live, not whether there's a bound.)*
 - [x] **`IStreamTerminalModule`** (contract addition — see D20 below).
 - [x] Guidance doc: chunked-ForEach patterns for bounded memory *today*
       → `docs/advanced-flow-control.md` §"Working with Large Data" (+ TOC and module index).
@@ -364,13 +366,42 @@ in isolation (95/95 pass).
 - [ ] Metrics (`IWorkflowMetrics`): stage throughput/error counters for dashboards.
 - [ ] docs/execution-monitor.md + docs/variables.md updates.
 
-### 5.1.6 — Spill mode 💾 (~1 week, gated on Q1)
+### 5.1.6 — Spill mode 💾 ✅ **complete**
 
-- [ ] Unified bounded-accumulator policy object; spill to DB/NATS provider + temp-file (D11).
-- [ ] Encryption at rest per Q1 resolution; cleanup on terminal states + startup orphan sweep.
-- [ ] Spill option surfaced in `PropertyEditor` for guard-bearing stages, with "prefer
-      limits; spill is a scale valve" helper text.
-- [ ] Docker-gated integration tests (NATS + Postgres spill; crash-cleanup sweep).
+> 📋 **Storage & encryption plan:** [`Phase5-1-6-SpillMode-Plan.md`](Phase5-1-6-SpillMode-Plan.md) —
+> written first because two prerequisites turned out to be missing and one recorded decision was
+> unimplementable. All questions (Q-A…Q-E, Q-C1, Q-E1) are resolved there.
+
+- [x] **Q1 resolved (investigation):** there is **no secret-variable encryption to reuse** —
+      `IsSecret` is a designer-only flag and `docs/variables.md` states globals are stored
+      plaintext. Spill therefore builds its own protector on **ASP.NET Data Protection**, copying
+      the `IConnectionStringProtector` layering (abstraction in modules, host supplies the
+      implementation). Approved.
+- [x] ⚠️ **Prerequisite (new):** `PostgresPersistenceProvider.Blobs` and
+      `NatsPersistenceProvider.Blobs` both returned **null** — the design's preferred spill targets
+      didn't exist. Now implemented: `PostgresBlobStore` (BYTEA + `Migration_003_AddBlobs`) and
+      `NatsBlobStore` (JetStream Object Store, bucket `WF_BLOBS`, no new package).
+- [x] `IBlobStore.ListAsync(prefix)` (+ `BlobInfo`) across S3 / SQLite / Postgres / NATS / in-memory
+      — S3 pages via the continuation token, NATS filters tombstones.
+- [x] `ISpillStore`/`ISpillSession` with **no implicit default** — `spill: true` on a host without
+      `Streaming:Spill:Store` fails loudly naming the setting (Q-C1).
+- [x] `SqliteSpillStore` (recommended **local**), `BlobStoreSpillStore` (recommended for **low-IOPS**
+      nodes; ⛔ refuses an in-memory blob store), `DirectorySpillStore` (explicit opt-in).
+- [x] `ISpillProtector` + `NoOpSpillProtector` + `DataProtectionSpillProtector`, encryption **on by
+      default**, with all three required warnings when it's off: startup, per-execution, designer.
+- [x] `SpillableItemBuffer` (memory head / spilled tail) wired into the bounded-accumulator policy;
+      `stream.collect` and `aggregate` honour `spill: true`. **The ceiling still applies** — spill
+      changes where items live, not whether there's a bound.
+- [x] `SpillCleanupHostedService` — retention keyed to execution completion, plus a longer
+      *abandoned* threshold so a crashed host can't leak scratch forever (Q-E1).
+- [x] Designer: spill toggle in the 🌊 Streaming section, "prefer a limit you can live with" helper
+      text, and host-accurate warnings fed from a new `spill` block on `GET /api/v1/status`.
+- [x] Tests: 31 unit tests (`Workflow.Tests/Streaming/`), 6 designer tests, Docker-gated
+      Postgres/NATS/S3 blob-store tests.
+
+**Deferred:** the Docker-gated *spill* integration run (Postgres/NATS spill end-to-end, crash-cleanup
+sweep) — Docker was unavailable on the dev host; the blob-store tests it depends on are written and
+gated.
 
 ### Post-MVP slices (tracked, not scheduled)
 

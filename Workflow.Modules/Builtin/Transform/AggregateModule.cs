@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using LanguageExt;
@@ -62,7 +63,8 @@ public sealed class AggregateModule : IStreamTerminalModule
             new ModulePropertyDefinition("property", "Property", typeof(string), "Dot-path to aggregate (required for numeric ops on records)~ 🔢", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("groupBy", "Group By", typeof(string), "Dot-path or expression to group by~ 🗂️", false, null, PropertyEditorType.Text),
             new ModulePropertyDefinition("language", "Expression Language", typeof(string), "js (default) or csharp~ 🧮", false, "js", PropertyEditorType.Text),
-            new ModulePropertyDefinition("maxItems", "Max items", typeof(int), "Fail if more than this many items are buffered while streaming~ 🛡️", false, BoundedAccumulator.DefaultMaxItems, PropertyEditorType.Number)));
+            new ModulePropertyDefinition("maxItems", "Max items", typeof(int), "Fail if more than this many items are buffered while streaming~ 🛡️", false, BoundedAccumulator.DefaultMaxItems, PropertyEditorType.Number),
+            new ModulePropertyDefinition("spill", "Spill to storage", typeof(bool), "Keep buffering past the in-memory budget by writing items to the host's spill store. The item ceiling still applies. Requires Streaming:Spill:Store on the host~ 💾", false, false, PropertyEditorType.Boolean)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -165,24 +167,34 @@ public sealed class AggregateModule : IStreamTerminalModule
         ArgumentNullException.ThrowIfNull(input);
 
         var rows = new List<IReadOnlyDictionary<string, object?>>();
+        var spill = ReadSpill(context);
 
         try
         {
-            var accumulator = new BoundedAccumulator(new BoundedAccumulatorPolicy(ReadMaxItems(context)));
+            var accumulator = new BoundedAccumulator(new BoundedAccumulatorPolicy(
+                ReadMaxItems(context),
+                MaxBytes: null,
+                OnLimit: spill ? AccumulatorLimitBehavior.Spill : AccumulatorLimitBehavior.Fail));
 
-            await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+            if (spill)
             {
-                accumulator.Admit(item, context.NodeId);
-
-                if (item.Payload is JsonPayload json
-                    && TransformDataNormalizer.Normalize(JsonValueConverter.FromElement(json.Value))
-                        is IReadOnlyDictionary<string, object?> row)
+                await this.BufferViaSpillAsync(context, input, accumulator, rows, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
                 {
-                    rows.Add(row);
+                    accumulator.Admit(item, context.NodeId);
+                    AddRow(rows, item);
                 }
             }
         }
         catch (StreamAccumulatorLimitException ex)
+        {
+            return ModuleResult.Fail(ex.Message, ex);
+        }
+        catch (SpillNotConfiguredException ex)
         {
             return ModuleResult.Fail(ex.Message, ex);
         }
@@ -200,6 +212,70 @@ public sealed class AggregateModule : IStreamTerminalModule
 
         return await this.ExecuteAsync(batchContext, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Buffers the stream through the host's spill store before aggregating~ 💾.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: Aggregate still materialises rows at the end, because that's what a whole-stream
+    /// aggregate is — spill bounds the <i>peak</i> memory during accumulation, not the final row
+    /// set. For truly unbounded inputs the answer is incremental aggregation (post-MVP 5.1.P6),
+    /// not a bigger buffer~ 🌊
+    /// </remarks>
+    private async Task BufferViaSpillAsync(
+        ModuleExecutionContext context,
+        IAsyncEnumerable<StreamItem> input,
+        BoundedAccumulator accumulator,
+        List<IReadOnlyDictionary<string, object?>> rows,
+        CancellationToken cancellationToken)
+    {
+        var store = context.Services.GetService(typeof(ISpillStore)) as ISpillStore
+            ?? throw new SpillNotConfiguredException(
+                $"Node '{context.NodeId}' has spill enabled, but this host has no spill store configured. " +
+                "Set Streaming:Spill:Store (Sqlite for fast local disk, Blob for nodes with slow local IOPS), " +
+                "or turn spill off and lower the item limit~ 💾");
+
+        var protector = context.Services.GetService(typeof(ISpillProtector)) as ISpillProtector
+            ?? NoOpSpillProtector.Instance;
+
+        await using var buffer = new SpillableItemBuffer(
+            store,
+            protector,
+            new SpillSessionKey(context.ExecutionId, 0, context.NodeId),
+            memoryItemThreshold: null,
+            logger: context.Logger);
+
+        await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            accumulator.Admit(item, context.NodeId);
+            await buffer.AddAsync(item, cancellationToken).ConfigureAwait(false);
+        }
+
+        await foreach (var item in buffer.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
+            AddRow(rows, item);
+        }
+    }
+
+    private static void AddRow(List<IReadOnlyDictionary<string, object?>> rows, StreamItem item)
+    {
+        if (item.Payload is JsonPayload json
+            && TransformDataNormalizer.Normalize(JsonValueConverter.FromElement(json.Value))
+                is IReadOnlyDictionary<string, object?> row)
+        {
+            rows.Add(row);
+        }
+    }
+
+    private static bool ReadSpill(ModuleExecutionContext context)
+        => context.Properties.TryGetValue("spill", out var raw) && raw is not null
+            && raw switch
+            {
+                bool b => b,
+                JsonElement { ValueKind: JsonValueKind.True } => true,
+                string s => bool.TryParse(s, out var parsed) && parsed,
+                _ => false,
+            };
 
     /// <inheritdoc />
     /// <remarks>Aggregate is a terminal stage — the region executor calls <see cref="ExecuteTerminalAsync"/>~ 🪣.</remarks>

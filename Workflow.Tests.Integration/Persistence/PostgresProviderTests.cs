@@ -5,6 +5,8 @@
 namespace Workflow.Tests.Integration.Persistence;
 
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using DotNet.Testcontainers.Builders;
@@ -17,11 +19,11 @@ using Workflow.Persistence.Postgres;
 using Xunit;
 
 /// <summary>
-/// ?? Phase 2.1.2 — Integration tests for the PostgreSQL persistence provider~ ???
+/// ?? Phase 2.1.2 ï¿½ Integration tests for the PostgreSQL persistence provider~ ???
 /// </summary>
 /// <remarks>
 /// CopilotNote: Requires Docker. Each test class spins up one postgres:15-alpine container
-/// via Testcontainers — shared across all tests in the class for speed.
+/// via Testcontainers ï¿½ shared across all tests in the class for speed.
 /// Tests are marked [Trait("Category", "Integration")] so they can be skipped in CI without Docker~ ??
 /// </remarks>
 [Trait("Category", "Integration")]
@@ -76,6 +78,90 @@ public sealed class PostgresProviderTests : IAsyncLifetime
         result.IsHealthy.Should().BeFalse("bad connection should be unhealthy~ ??");
         result.ErrorMessage.Should().NotBeNullOrEmpty();
         await bad.DisposeAsync();
+    }
+
+    // -- Blob Store ------------------------------------------------------------
+
+    [Fact]
+    public void Provider_Blobs_ShouldBeWired()
+    {
+        _provider.Blobs.Should().NotBeNull("the blobs table ships in migration 003~");
+    }
+
+    [Fact]
+    public async Task Blobs_PutGet_ShouldRoundTrip()
+    {
+        var key = $"pg-blob-{Guid.NewGuid():N}.txt";
+        var payload = "hello from bytea~"u8.ToArray();
+
+        var etag = await _provider.Blobs!.PutAsync(key, new MemoryStream(payload), "text/plain");
+        etag.Should().NotBeNullOrEmpty();
+
+        await using var stream = await _provider.Blobs.GetAsync(key);
+        stream.Should().NotBeNull();
+        using var ms = new MemoryStream();
+        await stream!.CopyToAsync(ms);
+        ms.ToArray().Should().Equal(payload);
+    }
+
+    [Fact]
+    public async Task Blobs_Put_ShouldOverwrite_AndKeepOriginalCreatedAt()
+    {
+        var key = $"pg-blob-{Guid.NewGuid():N}";
+        var first = await _provider.Blobs!.PutAsync(key, new MemoryStream("one"u8.ToArray()));
+        var second = await _provider.Blobs.PutAsync(key, new MemoryStream("two-longer"u8.ToArray()));
+
+        second.Should().NotBe(first, "the ETag is a content hash, so different content must differ~");
+
+        await using var stream = await _provider.Blobs.GetAsync(key);
+        using var ms = new MemoryStream();
+        await stream!.CopyToAsync(ms);
+        ms.ToArray().Should().Equal("two-longer"u8.ToArray());
+    }
+
+    [Fact]
+    public async Task Blobs_Get_ShouldReturnNull_WhenMissing()
+    {
+        (await _provider.Blobs!.GetAsync($"absent-{Guid.NewGuid():N}")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Blobs_Delete_ShouldReportWhetherItExisted()
+    {
+        var key = $"pg-blob-{Guid.NewGuid():N}";
+        await _provider.Blobs!.PutAsync(key, new MemoryStream("data"u8.ToArray()));
+
+        (await _provider.Blobs.ExistsAsync(key)).Should().BeTrue();
+        (await _provider.Blobs.DeleteAsync(key)).Should().BeTrue();
+        (await _provider.Blobs.ExistsAsync(key)).Should().BeFalse();
+        (await _provider.Blobs.DeleteAsync(key)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Blobs_List_ShouldFilterByPrefix_AndReportMetadata()
+    {
+        var prefix = $"listing/{Guid.NewGuid():N}/";
+        await _provider.Blobs!.PutAsync(prefix + "a", new MemoryStream("aa"u8.ToArray()));
+        await _provider.Blobs.PutAsync(prefix + "b", new MemoryStream("bbb"u8.ToArray()));
+        await _provider.Blobs.PutAsync($"other/{Guid.NewGuid():N}", new MemoryStream("zz"u8.ToArray()));
+
+        var found = new Dictionary<string, long>();
+        await foreach (var info in _provider.Blobs.ListAsync(prefix))
+        {
+            found[info.Key] = info.SizeBytes;
+            info.LastModified.Should().BeAfter(DateTimeOffset.UtcNow.AddMinutes(-5));
+        }
+
+        found.Should().HaveCount(2);
+        found[prefix + "a"].Should().Be(2);
+        found[prefix + "b"].Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Blobs_PresignedUrl_ShouldThrow()
+    {
+        var act = () => _provider.Blobs!.GeneratePresignedUrlAsync("any", TimeSpan.FromMinutes(1));
+        await act.Should().ThrowAsync<NotSupportedException>();
     }
 
     // -- Workflow CRUD ---------------------------------------------------------
@@ -413,7 +499,7 @@ public sealed class PostgresProviderTests : IAsyncLifetime
     {
         var scope = VariableScope.ForExecution(Guid.NewGuid());
 
-        // CopilotNote: 5 parallel SetVariableAsync calls — versions must be 1..5 with no duplicates~ ??
+        // CopilotNote: 5 parallel SetVariableAsync calls ï¿½ versions must be 1..5 with no duplicates~ ??
         await Task.WhenAll(Enumerable.Range(0, 5).Select(i =>
             _provider.Variables.SetVariableAsync(scope, "concurrent", i)));
 

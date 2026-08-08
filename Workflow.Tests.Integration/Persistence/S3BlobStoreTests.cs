@@ -5,7 +5,9 @@
 namespace Workflow.Tests.Integration.Persistence;
 
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,7 +17,7 @@ using Workflow.Persistence.S3;
 using Xunit;
 
 /// <summary>
-/// ?? Phase 2.1.4 — Integration tests for the S3 blob store using MinIO~ ???
+/// ?? Phase 2.1.4 ï¿½ Integration tests for the S3 blob store using MinIO~ ???
 /// </summary>
 /// <remarks>
 /// CopilotNote: Spins up one MinIO container shared across all tests in this class.
@@ -41,7 +43,7 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         await _container.StartAsync();
 
         // CopilotNote: We construct the endpoint URL explicitly with http:// scheme to avoid
-        // surprises from MinioContainer.GetConnectionString() across Testcontainers versions —
+        // surprises from MinioContainer.GetConnectionString() across Testcontainers versions ï¿½
         // MinIO in this test setup serves plain HTTP, so we MUST request http://~ ??
         var endpoint = $"http://{_container.Hostname}:{_container.GetMappedPublicPort(9000)}";
 
@@ -189,6 +191,45 @@ public sealed class S3BlobStoreTests : IAsyncLifetime
         var key = $"ghost/{Guid.NewGuid():N}.txt";
         var stream = await _provider.Blobs!.GetAsync(key);
         stream.Should().BeNull("missing keys should return null instead of throwing~ ??");
+    }
+
+    [Fact]
+    public async Task List_ShouldFilterByPrefix()
+    {
+        var prefix = $"listing/{Guid.NewGuid():N}/";
+        await _provider.Blobs!.PutAsync(prefix + "a.txt", new MemoryStream("aa"u8.ToArray()));
+        await _provider.Blobs.PutAsync(prefix + "b.txt", new MemoryStream("bbb"u8.ToArray()));
+        await _provider.Blobs.PutAsync($"elsewhere/{Guid.NewGuid():N}.txt", new MemoryStream("zz"u8.ToArray()));
+
+        var found = new Dictionary<string, long>();
+        await foreach (var info in _provider.Blobs.ListAsync(prefix))
+        {
+            found[info.Key] = info.SizeBytes;
+        }
+
+        found.Should().HaveCount(2);
+        found[prefix + "a.txt"].Should().Be(2);
+        found[prefix + "b.txt"].Should().Be(3);
+    }
+
+    [Fact]
+    public async Task List_ShouldPageBeyondASingleListObjectsResponse()
+    {
+        // CopilotNote: ListObjectsV2 caps at 1000 keys per response. A sweep that ignored the
+        // continuation token would silently reclaim only the first page and leak the rest, which
+        // is exactly the kind of bug that only shows up in production~ ??
+        var prefix = $"paging/{Guid.NewGuid():N}/";
+        var puts = Enumerable.Range(0, 1005)
+            .Select(i => _provider.Blobs!.PutAsync($"{prefix}{i:D4}", new MemoryStream("x"u8.ToArray())));
+        await Task.WhenAll(puts);
+
+        var count = 0;
+        await foreach (var _ in _provider.Blobs!.ListAsync(prefix))
+        {
+            count++;
+        }
+
+        count.Should().Be(1005);
     }
 
     [Fact(Skip = "Needs real S3 or SSL debugging, skip for now")]

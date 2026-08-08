@@ -8,6 +8,7 @@ using System.Diagnostics;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
 using NATS.Client.KeyValueStore;
+using NATS.Client.ObjectStore;
 
 /// <summary>
 /// 🔗 Manages the NATS connection, JetStream context, and KV context lifecycle~ ✨💖
@@ -22,6 +23,7 @@ public sealed class NatsConnectionManager : IAsyncDisposable
     private readonly NatsConnection _connection;
     private readonly NatsJSContext _jsContext;
     private readonly NatsKVContext _kvContext;
+    private readonly NatsObjContext _objContext;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NatsConnectionManager"/> class~ 🔌.
@@ -41,6 +43,7 @@ public sealed class NatsConnectionManager : IAsyncDisposable
         _connection = new NatsConnection(opts);
         _jsContext = new NatsJSContext(_connection);
         _kvContext = new NatsKVContext(_jsContext);
+        _objContext = new NatsObjContext(_jsContext);
     }
 
     /// <summary>Gets the raw NATS connection~ 🔌.</summary>
@@ -51,6 +54,9 @@ public sealed class NatsConnectionManager : IAsyncDisposable
 
     /// <summary>Gets the Key-Value store context for KV bucket operations~ 🗃️.</summary>
     public INatsKVContext KV => _kvContext;
+
+    /// <summary>Gets the Object Store context for chunked binary buckets~ 🪣.</summary>
+    public INatsObjContext ObjectStore => _objContext;
 
     /// <summary>
     /// Pings the server and returns latency. Useful for health checks~ 🏥.

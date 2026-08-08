@@ -6,6 +6,7 @@ namespace Workflow.Persistence.Nats;
 
 using System.Diagnostics;
 using NATS.Client.KeyValueStore;
+using NATS.Client.ObjectStore;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 using Workflow.Persistence.Nats.Repositories;
@@ -15,7 +16,7 @@ using Workflow.Persistence.Nats.Repositories;
 /// </summary>
 /// <remarks>
 /// CopilotNote: All repositories are backed by NATS KV buckets created during <see cref="InitializeAsync"/>.
-/// Blobs are not supported — returns <c>null</c> for <see cref="Blobs"/>; use S3 provider for blob storage.
+/// Blobs are backed by a JetStream **Object Store** bucket (also created during initialisation).
 /// The provider manages one <see cref="NatsConnectionManager"/> for the lifetime of the application~
 /// </remarks>
 public sealed class NatsPersistenceProvider : IPersistenceProvider
@@ -56,8 +57,11 @@ public sealed class NatsPersistenceProvider : IPersistenceProvider
     public IVariableStore Variables { get; private set; }
 
     /// <inheritdoc/>
-    /// <remarks>NATS KV is not suitable for large binary blobs — use S3 provider instead~ ☁️.</remarks>
-    public IBlobStore? Blobs => null;
+    /// <remarks>
+    /// CopilotNote: Backed by the JetStream **Object Store**, not KV — KV really isn't suitable for
+    /// binaries, but the Object Store chunks them properly. Populated by <see cref="InitializeAsync"/>~ 🪣.
+    /// </remarks>
+    public IBlobStore? Blobs { get; private set; }
 
     /// <inheritdoc />
     /// <remarks>CopilotNote: NATS webhook repo is not implemented in V1 — deferred to Phase 4~ </remarks>
@@ -102,9 +106,15 @@ public sealed class NatsPersistenceProvider : IPersistenceProvider
             },
             ct).ConfigureAwait(false);
 
+        // 🪣 Object Store bucket for blobs — CreateObjectStoreAsync is idempotent like the KV variant~
+        var blobStore = await _connectionManager.ObjectStore
+            .CreateObjectStoreAsync(new NatsObjConfig(NatsBlobStore.BucketName), ct)
+            .ConfigureAwait(false);
+
         Workflows = new NatsWorkflowRepository(workflowStore);
         ExecutionHistory = new NatsExecutionHistoryRepository(execStore, nodeStore);
         Variables = new NatsVariableStore(variableStore);
+        Blobs = new NatsBlobStore(blobStore);
 
         _initialized = true;
     }

@@ -5,6 +5,7 @@
 namespace Workflow.Persistence.S3;
 
 using System.Net;
+using System.Runtime.CompilerServices;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
@@ -193,6 +194,38 @@ public sealed class S3BlobStore : IBlobStore, IDisposable
         {
             return false;
         }
+    }
+
+    /// <inheritdoc/>
+    public async IAsyncEnumerable<BlobInfo> ListAsync(
+        string prefix,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(prefix);
+
+        string? continuationToken = null;
+        do
+        {
+            var token = continuationToken;
+            var resp = await RetryAsync(
+                innerCt => _client.ListObjectsV2Async(
+                    new ListObjectsV2Request
+                    {
+                        BucketName = _config.BucketName,
+                        Prefix = prefix,
+                        ContinuationToken = token,
+                    },
+                    innerCt),
+                ct).ConfigureAwait(false);
+
+            foreach (var obj in resp.S3Objects ?? [])
+            {
+                yield return new BlobInfo(obj.Key, obj.Size ?? 0L, obj.LastModified ?? DateTime.MinValue);
+            }
+
+            continuationToken = resp.IsTruncated == true ? resp.NextContinuationToken : null;
+        }
+        while (continuationToken is not null);
     }
 
     /// <inheritdoc/>

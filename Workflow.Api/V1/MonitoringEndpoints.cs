@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using Workflow.Api.Observability;
 using Workflow.Modules.Abstractions;
 using Workflow.Persistence.Abstractions;
@@ -107,6 +108,7 @@ public static class MonitoringEndpoints
         }
 
         var snapshot = metrics?.Snapshot();
+        var spill = http.RequestServices.GetService<IOptions<Workflow.Api.Streaming.SpillOptions>>()?.Value;
 
         var payload = new
         {
@@ -117,6 +119,17 @@ public static class MonitoringEndpoints
             activeExecutions = snapshot?.Active ?? 0,
             activeConnections = tracker?.ConnectionCount ?? 0,
             activeSubscriptions = tracker?.SubscriptionCount ?? 0,
+
+            // 💾 Phase 5.1.6 (Q-D) — the designer can't see host settings, so spill availability and
+            // whether spill is encrypted ride along here. Without this the designer would have to
+            // stay silent about an unencrypted spill, and "quietly unencrypted" is exactly the
+            // outcome the decision rules out~
+            spill = new
+            {
+                configured = spill is not null && spill.Store != Workflow.Api.Streaming.SpillStoreKind.None,
+                store = spill?.Store.ToString() ?? "None",
+                encrypted = spill?.Encrypt ?? true,
+            },
         };
 
         return Results.Ok(payload);

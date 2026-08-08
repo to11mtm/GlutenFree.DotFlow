@@ -37,6 +37,7 @@ public sealed class PostgresPersistenceProvider : IPersistenceProvider
         Workflows = new PostgresWorkflowRepository(_factory);
         ExecutionHistory = new PostgresExecutionHistoryRepository(_factory);
         Variables = new PostgresVariableStore(_factory);
+        Blobs = new PostgresBlobStore(_factory);
     }
 
     /// <inheritdoc/>
@@ -55,7 +56,7 @@ public sealed class PostgresPersistenceProvider : IPersistenceProvider
     public IVariableStore Variables { get; }
 
     /// <inheritdoc/>
-    public IBlobStore? Blobs => null;
+    public IBlobStore? Blobs { get; }
 
     /// <inheritdoc />
     /// <remarks>CopilotNote: Postgres webhook repo is not implemented in V1 — deferred to Phase 4~ </remarks>

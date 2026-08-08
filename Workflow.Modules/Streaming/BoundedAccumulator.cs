@@ -11,7 +11,7 @@ using Workflow.Core.Models;
 
 /// <summary>
 /// 🛡️ Phase 5.1 — the <b>one</b> memory policy shared by every stage that buffers items
-/// (<c>builtin.stream.collect</c>, streaming <c>aggregate</c>, and the resequencer).
+/// (<c>builtin.stream.collect</c> and streaming <c>aggregate</c>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -21,8 +21,10 @@ using Workflow.Core.Models;
 /// and then OOMs, which is exactly the failure mode we don't want~ 🌸.
 /// </para>
 /// <para>
-/// Design: doc 06 §4.5 (D10). Spill-to-storage is <b>reserved</b> (<see cref="AccumulatorLimitBehavior.Spill"/>)
-/// and lands in phase 5.1.6 — until then choosing it is a configuration error, not a silent no-op.
+/// Design: doc 06 §4.5 (D10). <see cref="AccumulatorLimitBehavior.Spill"/> shipped in phase 5.1.6 —
+/// note that it changes <b>where</b> buffered items live, not whether there is a limit. The ceiling
+/// still applies; spill just means the items between the memory budget and the ceiling live in the
+/// configured spill store instead of the heap~ 💾.
 /// Guard defaults become host-memory-derived in a later slice; the constant here is a deliberate
 /// placeholder to be calibrated by the 5.1.3 proving slice~ 📏.
 /// </para>
@@ -42,19 +44,15 @@ public sealed class BoundedAccumulator
     /// Initializes a new instance of the <see cref="BoundedAccumulator"/> class. 🛡️.
     /// </summary>
     /// <param name="policy">The limits to enforce; null uses <see cref="BoundedAccumulatorPolicy.Default"/>.</param>
-    /// <exception cref="NotSupportedException">
-    /// Thrown when <see cref="AccumulatorLimitBehavior.Spill"/> is requested before phase 5.1.6.
-    /// </exception>
     public BoundedAccumulator(BoundedAccumulatorPolicy? policy = null)
     {
         this.policy = policy ?? BoundedAccumulatorPolicy.Default;
-
-        if (this.policy.OnLimit == AccumulatorLimitBehavior.Spill)
-        {
-            throw new NotSupportedException(
-                "Spill mode isn't available yet (phase 5.1.6) — lower the limit, or collect fewer items~ 💾");
-        }
     }
+
+    /// <summary>
+    /// Gets the behaviour configured for when a ceiling is reached. 🚦.
+    /// </summary>
+    public AccumulatorLimitBehavior OnLimit => this.policy.OnLimit;
 
     /// <summary>
     /// Gets how many items have been admitted so far. 🔢.
@@ -114,7 +112,9 @@ public sealed class BoundedAccumulator
 /// </summary>
 /// <param name="MaxItems">Maximum items to buffer; null disables the item ceiling. 🔢.</param>
 /// <param name="MaxBytes">Maximum estimated payload bytes; null (default) skips byte measurement. 🧠.</param>
-/// <param name="OnLimit">What to do at the ceiling. Fail is the default and the only v1 option. 🚦.</param>
+/// <param name="OnLimit">
+/// What to do at the ceiling. <see cref="AccumulatorLimitBehavior.Fail"/> is the default. 🚦.
+/// </param>
 public sealed record BoundedAccumulatorPolicy(
     int? MaxItems = BoundedAccumulator.DefaultMaxItems,
     long? MaxBytes = null,
@@ -132,13 +132,19 @@ public sealed record BoundedAccumulatorPolicy(
 public enum AccumulatorLimitBehavior
 {
     /// <summary>
-    /// Fail the node with a message naming the limit. The v1 default~ 🛑.
+    /// Fail the node with a message naming the limit. The default~ 🛑.
     /// </summary>
     Fail,
 
     /// <summary>
-    /// Spill accumulated state to configured storage and continue. <b>Reserved for phase 5.1.6</b>~ 💾.
+    /// Keep buffering past the memory budget by writing items to the configured spill store~ 💾.
     /// </summary>
+    /// <remarks>
+    /// CopilotNote: This is <b>not</b> "no limit". The configured ceiling still applies — spill
+    /// changes where items live, not whether there's a bound. A host with no spill store configured
+    /// fails loudly (<see cref="SpillNotConfiguredException"/>) rather than silently choosing a
+    /// scratch location nobody provisioned~ 🚧
+    /// </remarks>
     Spill,
 }
 

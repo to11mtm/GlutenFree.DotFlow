@@ -5,6 +5,8 @@
 namespace Workflow.Tests.Integration.Persistence;
 
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -16,7 +18,7 @@ using Workflow.Persistence.Nats;
 using Xunit;
 
 /// <summary>
-/// ?? Phase 2.1.3 — Integration tests for the NATS KV persistence provider~ ???
+/// ?? Phase 2.1.3 ï¿½ Integration tests for the NATS KV persistence provider~ ???
 /// </summary>
 /// <remarks>
 /// CopilotNote: Requires Docker. Spins up one NATS container (with JetStream enabled)
@@ -79,9 +81,89 @@ public sealed class NatsProviderTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Provider_Blobs_ShouldBeNull()
+    public void Provider_Blobs_ShouldBeWired()
     {
-        _provider.Blobs.Should().BeNull("NATS KV is not suitable for large blobs — use S3 instead~ ??");
+        // CopilotNote: Blobs live in the JetStream *Object Store*, not KV â€” KV would be the wrong
+        // tool for binaries, but the Object Store chunks them properly~
+        _provider.Blobs.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Blobs_PutGet_ShouldRoundTrip()
+    {
+        var key = $"nats-blob-{Guid.NewGuid():N}.txt";
+        var payload = "hello from the object store~"u8.ToArray();
+
+        var etag = await _provider.Blobs!.PutAsync(key, new MemoryStream(payload), "text/plain");
+        etag.Should().NotBeNullOrEmpty("the object digest doubles as an ETag~");
+
+        await using var stream = await _provider.Blobs.GetAsync(key);
+        stream.Should().NotBeNull();
+        using var ms = new MemoryStream();
+        await stream!.CopyToAsync(ms);
+        ms.ToArray().Should().Equal(payload);
+    }
+
+    [Fact]
+    public async Task Blobs_Get_ShouldReturnNull_WhenMissing()
+    {
+        var stream = await _provider.Blobs!.GetAsync($"absent-{Guid.NewGuid():N}");
+        stream.Should().BeNull("a missing key is not an exceptional condition~");
+    }
+
+    [Fact]
+    public async Task Blobs_Delete_ShouldReportWhetherItExisted()
+    {
+        var key = $"nats-blob-{Guid.NewGuid():N}";
+        await _provider.Blobs!.PutAsync(key, new MemoryStream("data"u8.ToArray()));
+
+        (await _provider.Blobs.ExistsAsync(key)).Should().BeTrue();
+        (await _provider.Blobs.DeleteAsync(key)).Should().BeTrue();
+        (await _provider.Blobs.ExistsAsync(key)).Should().BeFalse();
+        (await _provider.Blobs.DeleteAsync($"absent-{Guid.NewGuid():N}")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Blobs_List_ShouldFilterByPrefix()
+    {
+        var prefix = $"listing/{Guid.NewGuid():N}/";
+        await _provider.Blobs!.PutAsync(prefix + "a", new MemoryStream("aa"u8.ToArray()));
+        await _provider.Blobs.PutAsync(prefix + "b", new MemoryStream("bbb"u8.ToArray()));
+        await _provider.Blobs.PutAsync($"other/{Guid.NewGuid():N}", new MemoryStream("zz"u8.ToArray()));
+
+        var found = new List<string>();
+        await foreach (var info in _provider.Blobs.ListAsync(prefix))
+        {
+            found.Add(info.Key);
+            info.SizeBytes.Should().BeGreaterThan(0);
+        }
+
+        found.Should().BeEquivalentTo([prefix + "a", prefix + "b"]);
+    }
+
+    [Fact]
+    public async Task Blobs_List_ShouldNotIncludeDeletedObjects()
+    {
+        var prefix = $"tombstones/{Guid.NewGuid():N}/";
+        await _provider.Blobs!.PutAsync(prefix + "gone", new MemoryStream("x"u8.ToArray()));
+        await _provider.Blobs.DeleteAsync(prefix + "gone");
+
+        var found = new List<string>();
+        await foreach (var info in _provider.Blobs.ListAsync(prefix))
+        {
+            found.Add(info.Key);
+        }
+
+        // CopilotNote: the Object Store keeps a tombstone entry after delete â€” a sweep that
+        // "reclaimed" those would loop forever trying to delete what's already gone~
+        found.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Blobs_PresignedUrl_ShouldThrow()
+    {
+        var act = () => _provider.Blobs!.GeneratePresignedUrlAsync("any", TimeSpan.FromMinutes(1));
+        await act.Should().ThrowAsync<NotSupportedException>();
     }
 
     // -- Workflow CRUD ---------------------------------------------------------
@@ -415,7 +497,7 @@ public sealed class NatsProviderTests : IAsyncLifetime
     [Fact]
     public async Task Variable_Watch_ShouldFireOnChange()
     {
-        // CopilotNote: Basic watch test — confirm that after Set, the updated value is immediately readable.
+        // CopilotNote: Basic watch test ï¿½ confirm that after Set, the updated value is immediately readable.
         // Full reactive watch (IAsyncEnumerable) is a more advanced usage~ ?
         var scope = VariableScope.ForExecution(Guid.NewGuid());
         var varName = $"watch_{Guid.NewGuid():N}";

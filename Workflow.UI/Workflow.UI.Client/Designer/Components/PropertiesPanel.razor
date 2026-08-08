@@ -216,6 +216,46 @@
                                         Focused="name => lastFocusedProperty = name"
                                         ValueChanged="v => OnValueChanged(prop.Name, v)" />
                     }
+
+                    @* 💾 5.1.6 — spill guidance. The designer can't read host settings, so these
+                       only appear once /status has told us what the host actually does~ *@
+                    @if (HasSpillKnob)
+                    {
+                        <div class="df-props__hint" data-testid="spill-prefer-limits">
+                            💾 Prefer a limit you can live with over spilling. Spill keeps a big
+                            collect from failing, but it trades memory for IO — if this stage is
+                            routinely huge, streaming straight to a sink is usually the better shape.
+                        </div>
+
+                        @if (IsSpillEnabled && HostSpill is { } spillStatus)
+                        {
+                            @if (!spillStatus.Configured)
+                            {
+                                <div class="df-props__hint df-props__hint--warn" data-testid="spill-not-configured">
+                                    ⛔ This host has no spill store configured, so this node will
+                                    <strong>fail at run time</strong>. Set
+                                    <code>Streaming:Spill:Store</code> — <em>Sqlite</em> for hosts
+                                    with fast local disk, <em>Blob</em> for cloud nodes whose local
+                                    disk is slow or throttled.
+                                </div>
+                            }
+                            else if (!spillStatus.Encrypted)
+                            {
+                                <div class="df-props__hint df-props__hint--warn" data-testid="spill-unencrypted">
+                                    ⚠ Spill encryption is <strong>disabled</strong> on this host
+                                    (<code>Streaming:Spill:Encrypt=false</code>). Anything this
+                                    stream carries will be written to the
+                                    <code>@spillStatus.Store</code> store in the clear.
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="df-props__hint" data-testid="spill-target">
+                                    💾 Spilling to the <code>@spillStatus.Store</code> store, encrypted at rest.
+                                </div>
+                            }
+                        }
+                    }
                 </div>
             }
         }
@@ -477,6 +517,17 @@
     /// </summary>
     [Parameter]
     public IReadOnlyCollection<string>? GlobalVariableNames { get; set; }
+
+    /// <summary>
+    /// 💾 Phase 5.1.6 — what the host reports about spill, fetched once per designer session.
+    /// </summary>
+    /// <remarks>
+    /// CopilotNote: The designer can't read host configuration, so this arrives from
+    /// <c>/api/v1/status</c>. Null means "we couldn't ask" — in which case we say nothing rather
+    /// than inventing a warning, but we also never claim spill is safe when we don't know~ ⚠️
+    /// </remarks>
+    [Parameter]
+    public SpillStatus? HostSpill { get; set; }
 
     private DesignerNode? SelectedNode
         => this.Selection.Nodes.Count == 1 ? this.Document.FindNode(System.Linq.Enumerable.First(this.Selection.Nodes)) : null;
@@ -993,15 +1044,23 @@
     /// configure the *engine's* handling of the stage rather than what the module does~ 🎚️.
     /// </summary>
     private static readonly HashSet<string> StreamingStageProperties =
-        new(StringComparer.Ordinal) { "maxWorkers", "ordered", "onItemError" };
+        new(StringComparer.Ordinal) { "maxWorkers", "ordered", "onItemError", "spill" };
 
     /// <summary>The selected node's streaming knobs, in a stable order~ 🎚️.</summary>
     private List<ModulePropertyDefinitionDto> StreamingStageKnobs
         => this.SelectedNode?.Schema?.Properties
                .Where(p => StreamingStageProperties.Contains(p.Name))
-               .OrderBy(p => Array.IndexOf(new[] { "maxWorkers", "ordered", "onItemError" }, p.Name))
+               .OrderBy(p => Array.IndexOf(new[] { "maxWorkers", "ordered", "onItemError", "spill" }, p.Name))
                .ToList()
            ?? new List<ModulePropertyDefinitionDto>();
+
+    /// <summary>Whether the selected node exposes a spill toggle at all~ 💾.</summary>
+    private bool HasSpillKnob
+        => this.SelectedNode?.Schema?.Properties.Any(p => p.Name == "spill") == true;
+
+    /// <summary>Whether the selected node currently has spill switched on~ 💾.</summary>
+    private bool IsSpillEnabled
+        => this.ValueFor("spill") is { ValueKind: System.Text.Json.JsonValueKind.True };
 
     /// <summary>Whether the selected node currently sits inside a streaming region~ 🗺️.</summary>
     private bool IsSelectedNodeStreaming

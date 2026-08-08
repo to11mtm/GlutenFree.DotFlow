@@ -348,4 +348,140 @@ public sealed class StreamingCanvasTests : TestContext
     }
 
     #endregion
+
+    #region Spill knob (5.1.6)
+
+    private static ModuleSchemaDto SpillSchema()
+        => new(
+            new List<PortDefinitionDto> { Port("items", streaming: true) },
+            new List<PortDefinitionDto> { Port("items", streaming: true) },
+            new List<ModulePropertyDefinitionDto>
+            {
+                new("maxItems", "Max items", "int", null, false, null, "Number", null),
+                new("spill", "Spill to storage", "bool", null, false, null, "Boolean", null),
+            },
+            "terminal");
+
+    private static DesignerDocument SpillDoc(bool spillOn)
+    {
+        var doc = new DesignerDocument { Name = "wf" };
+        var a = Node("a", SpillSchema(), 100);
+        var b = Node("b", SpillSchema(), 400);
+        if (spillOn)
+        {
+            b.Properties["spill"] = System.Text.Json.JsonDocument.Parse("true").RootElement.Clone();
+        }
+
+        doc.Nodes.Add(a);
+        doc.Nodes.Add(b);
+        doc.Connections.Add(new DesignerConnection
+        {
+            SourceNodeId = "a", SourcePortName = "items", TargetNodeId = "b", TargetPortName = "items",
+        });
+        return doc;
+    }
+
+    private IRenderedComponent<PropertiesPanel> RenderPanelWithSpill(
+        DesignerDocument doc,
+        SelectionState selection,
+        Workflow.UI.Client.Api.SpillStatus? hostSpill)
+        => this.RenderComponent<PropertiesPanel>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.Selection, selection)
+            .Add(x => x.Commands, new CommandStack(doc))
+            .Add(x => x.HostSpill, hostSpill));
+
+    [Fact]
+    public void SpillKnob_AlwaysPrefersALimitYouCanLiveWith()
+    {
+        // The guidance is the point: spill is a safety valve, not the recommended shape.
+        var doc = SpillDoc(spillOn: false);
+        var selection = new SelectionState();
+        selection.SelectNode("b");
+
+        var cut = this.RenderPanelWithSpill(doc, selection, null);
+
+        cut.Find("[data-testid=spill-prefer-limits]").TextContent
+            .Should().Contain("Prefer a limit");
+    }
+
+    [Fact]
+    public void SpillOn_WithNoStoreConfigured_WarnsItWillFailAtRunTime()
+    {
+        // 🚧 Catching this in the designer rather than at 3am is the entire value of surfacing the
+        // host flag — the run-time failure is loud, but it's also *late*.
+        var doc = SpillDoc(spillOn: true);
+        var selection = new SelectionState();
+        selection.SelectNode("b");
+
+        var cut = this.RenderPanelWithSpill(
+            doc, selection, new Workflow.UI.Client.Api.SpillStatus(false, "None", true));
+
+        cut.Find("[data-testid=spill-not-configured]").TextContent
+            .Should().Contain("Streaming:Spill:Store");
+    }
+
+    [Fact]
+    public void SpillOn_WithEncryptionDisabled_SaysSoLoudly()
+    {
+        // 📢 Q-D's third required warning. A host may run spill unencrypted; it may never do so
+        // quietly, and the designer is where the person choosing to spill is actually looking.
+        var doc = SpillDoc(spillOn: true);
+        var selection = new SelectionState();
+        selection.SelectNode("b");
+
+        var cut = this.RenderPanelWithSpill(
+            doc, selection, new Workflow.UI.Client.Api.SpillStatus(true, "Sqlite", Encrypted: false));
+
+        cut.Find("[data-testid=spill-unencrypted]").TextContent
+            .Should().Contain("in the clear");
+    }
+
+    [Fact]
+    public void SpillOn_WithAHealthyHost_NamesTheStoreAndConfirmsEncryption()
+    {
+        var doc = SpillDoc(spillOn: true);
+        var selection = new SelectionState();
+        selection.SelectNode("b");
+
+        var cut = this.RenderPanelWithSpill(
+            doc, selection, new Workflow.UI.Client.Api.SpillStatus(true, "Blob", Encrypted: true));
+
+        var text = cut.Find("[data-testid=spill-target]").TextContent;
+        text.Should().Contain("Blob");
+        text.Should().Contain("encrypted");
+    }
+
+    [Fact]
+    public void SpillOff_ShowsNoHostWarnings()
+    {
+        // Warning about a store you aren't using is noise, and noise is how real warnings get ignored.
+        var doc = SpillDoc(spillOn: false);
+        var selection = new SelectionState();
+        selection.SelectNode("b");
+
+        var cut = this.RenderPanelWithSpill(
+            doc, selection, new Workflow.UI.Client.Api.SpillStatus(false, "None", Encrypted: false));
+
+        cut.FindAll("[data-testid=spill-not-configured]").Should().BeEmpty();
+        cut.FindAll("[data-testid=spill-unencrypted]").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SpillOn_WithUnknownHostStatus_StaysSilentRatherThanGuessing()
+    {
+        // If /status was unreachable we genuinely don't know. Inventing a warning would train
+        // people to ignore the real one; claiming it's fine would be worse.
+        var doc = SpillDoc(spillOn: true);
+        var selection = new SelectionState();
+        selection.SelectNode("b");
+
+        var cut = this.RenderPanelWithSpill(doc, selection, null);
+
+        cut.FindAll("[data-testid=spill-not-configured]").Should().BeEmpty();
+        cut.FindAll("[data-testid=spill-unencrypted]").Should().BeEmpty();
+        cut.FindAll("[data-testid=spill-target]").Should().BeEmpty();
+    }
+
+    #endregion
 }

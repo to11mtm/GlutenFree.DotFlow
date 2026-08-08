@@ -33,5 +33,8 @@ public class WorkflowDataConnection : DataConnection
 
     /// <summary>Gets the <c>variables</c> table~ 💾.</summary>
     public ITable<VariableEntity> Variables => this.GetTable<VariableEntity>();
+
+    /// <summary>Gets the <c>blobs</c> table~ 🗃️.</summary>
+    public ITable<BlobEntity> Blobs => this.GetTable<BlobEntity>();
 }
 

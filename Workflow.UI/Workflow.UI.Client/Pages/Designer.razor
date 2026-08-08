@@ -10,6 +10,7 @@
 @inject Workflow.UI.Client.Api.ModulesClient Modules
 @inject Workflow.UI.Client.Api.ExecutionsClient Executions
 @inject Workflow.UI.Client.Api.VariablesClient Variables
+@inject IServiceProvider Services
 @inject Workflow.UI.Client.Services.IFileDownloader Downloader
 @inject Workflow.UI.Client.Designer.State.WorkflowImportHandoff ImportHandoff
 @inject Workflow.UI.Client.Api.RealTimeClient RealTime
@@ -92,7 +93,8 @@ else if (document is not null)
                 </div>
                 <div class="df-designer__props">
                     <PropertiesPanel Document="document" Selection="selection" Commands="commands"
-                                     GlobalVariableNames="globalVariableNames" />
+                                     GlobalVariableNames="globalVariableNames"
+                                     HostSpill="hostSpill" />
                 </div>
             }
             else
@@ -179,6 +181,7 @@ else if (document is not null)
 
     // 🌍 V6 — global variable names for the token picker; null when the store is unreachable.
     private List<string>? globalVariableNames;
+    private Workflow.UI.Client.Api.SpillStatus? hostSpill;
     private readonly string statusInfo = "editing";
     private DotNetObjectReference<Designer>? keysRef;
 
@@ -280,6 +283,7 @@ else if (document is not null)
             this.selection.Changed += this.OnSelectionChanged;
             this.Revalidate();
             await this.LoadGlobalVariables();
+            await this.LoadHostSpillStatus();
 
             // Deep link: /designer/{id}?execution={executionId} opens history mode.
             var query = new System.Uri(Nav.Uri).Query;
@@ -765,6 +769,42 @@ else if (document is not null)
 
         // Globals participate in the binding lint, so re-run it once they're known.
         this.Revalidate();
+    }
+
+    /// <summary>
+    /// 💾 Phase 5.1.6 — fetches the host's spill capability once per designer session so the
+    /// properties panel can warn accurately about an unconfigured or unencrypted spill store.
+    /// </summary>
+    /// <remarks>
+    /// Best-effort, like the globals fetch: if <c>/status</c> is unreachable we leave it null and
+    /// the panel says nothing rather than inventing a warning. What we must never do is claim spill
+    /// is encrypted when we haven't checked~ ⚠️
+    /// <para>
+    /// CopilotNote: <c>SystemClient</c> is resolved from the container rather than <c>@inject</c>ed
+    /// because it is genuinely <b>optional</b> here — the designer is fully usable without it, and a
+    /// hard injection would make every host and test that renders this page register a client it
+    /// may not otherwise need. <c>GetService</c> is the accurate expression of "optional"~ 🧩
+    /// </para>
+    /// </remarks>
+    private async Task LoadHostSpillStatus()
+    {
+        var client = this.Services.GetService(typeof(Workflow.UI.Client.Api.SystemClient))
+            as Workflow.UI.Client.Api.SystemClient;
+
+        if (client is null)
+        {
+            this.hostSpill = null;
+            return;
+        }
+
+        try
+        {
+            this.hostSpill = await client.GetSpillStatusAsync();
+        }
+        catch (Exception)
+        {
+            this.hostSpill = null;
+        }
     }
 
     private async Task StartRun(RunRequest request)

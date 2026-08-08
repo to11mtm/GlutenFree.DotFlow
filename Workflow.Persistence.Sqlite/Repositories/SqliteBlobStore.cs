@@ -6,6 +6,8 @@ using LinqToDB.Async;
 
 namespace Workflow.Persistence.Sqlite.Repositories;
 
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using LinqToDB;
 using Workflow.Persistence.Abstractions;
@@ -109,6 +111,38 @@ public sealed class SqliteBlobStore : IBlobStore
         return await db.Blobs
             .AnyAsync(b => b.Key == key, token: ct)
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async IAsyncEnumerable<BlobInfo> ListAsync(
+        string prefix,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(prefix);
+
+        await using var db = _factory.Create();
+
+        // CopilotNote: project only metadata — never pull the Data column into memory just to
+        // enumerate keys, or a sweep over a full bucket would be a memory bomb~ 🧨
+        var rows = await db.Blobs
+            .Where(b => b.Key.StartsWith(prefix))
+            .Select(b => new { b.Key, b.ByteSize, b.UpdatedAt })
+            .ToListAsync(token: ct)
+            .ConfigureAwait(false);
+
+        foreach (var row in rows)
+        {
+            yield return new BlobInfo(
+                row.Key,
+                row.ByteSize,
+                DateTimeOffset.TryParse(
+                    row.UpdatedAt,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind,
+                    out var parsed)
+                    ? parsed
+                    : DateTimeOffset.MinValue);
+        }
     }
 
     /// <inheritdoc/>
