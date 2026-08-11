@@ -1,4 +1,4 @@
-# 10 — Option Assessment & Plan: Full Document-Streaming Mode 🌊🔥
+﻿# 10 — Option Assessment & Plan: Full Document-Streaming Mode 🌊🔥
 
 > **Type:** option assessment with effort estimates — *not* a commitment or a schedule.
 > **Supersedes the sizing in** [`09-full-streaming-rewrite-assessment.md`](09-full-streaming-rewrite-assessment.md),
@@ -13,6 +13,22 @@ either a rewrite or the status quo?
 A **dual-mode** engine costs ~**5–9 engineer-months**, keeps batch semantics for the workloads they
 genuinely suit, and — critically — **most of the mode boundary already exists and is already
 validated in the designer**. See §6 (recommendation) and §5 (the mode design).
+
+> ### 📊 Calibrated against actuals — see [Appendix A](#appendix-a-calibration-against-phase-51-actuals-)
+>
+> Phase 5.1's estimates missed by **~24× on effort** (35 estimated engineer-days delivered in ~11.8
+> working hours). But the useful finding is different: **93% of the calendar time was spent waiting
+> for decisions, not implementing them.**
+>
+> Calibrated calendar figures, which are the ones to plan against:
+>
+> | | Conventional estimate | Calibrated calendar | Decision-latency floor |
+> | --- | --- | --- | --- |
+> | **C** full rewrite | 11–20 engineer-months | **~11–26 weeks** | ~4–7 weeks |
+> | **M** dual mode ⭐ | 5–9 engineer-months | **~4–9 weeks** | ~2–3 weeks |
+>
+> For Option M the latency floor is roughly *half* the total — implementation is no longer the
+> dominant cost. The schedule is set by how fast §7's open questions get answered.
 
 ---
 
@@ -94,6 +110,12 @@ lives; the rest is comparatively mechanical.
 
 Treat the ranges as "low = everything we already understand holds; high = two of the semantic
 questions turn out to be genuinely hard." I would not bet on the low end.
+
+> 📊 **Calibrated equivalent: ~11–26 weeks calendar** with agent-assisted implementation, of which
+> a **~4–7 week decision-latency floor** cannot be compressed by working faster. See
+> [Appendix A.5](#a5-4-and-5-re-stated-with-calibrated-units). Appendix A also confirms the warning
+> above empirically: the slices with the most unresolved design compressed ~4× *less* than the
+> slices with a settled spec.
 
 ### 4.2 Breakdown
 
@@ -231,6 +253,11 @@ That is a dramatically smaller conceptual ask than doc 09 was pricing.
 | | **Total** | **~6.75–13 mo** | Nominal |
 | | **Realistic scope for a usable mode** (items 1–5, 8, 9) | **~5–9 mo** | Items 6 and 7 are demand-driven and land incrementally |
 
+> 📊 **Calibrated equivalent: ~4–9 weeks calendar**, with a **~2–3 week decision-latency floor** —
+> roughly half the total. Seven gating decisions drive that floor and are enumerated in
+> [Appendix A.5](#the-open-decisions-enumerated); three of them are serial. See
+> [Appendix A](#appendix-a-calibration-against-phase-51-actuals-).
+
 **And every item ships independently and usefully.** That's the structural advantage over C: there is
 no flag day, no unusable intermediate state, and the project can stop at any point with a coherent
 product. Option C has a long valley where nothing works.
@@ -297,6 +324,13 @@ model's auditability turns out to be unwanted rather than merely unexercised.
 
 ## 7. Decision checklist (what I still need from you)
 
+> 📊 [Appendix A.3](#a3-the-real-constraint-is-decision-latency-not-implementation) found that
+> **93% of Phase 5.1's calendar time was decision latency**, and that serial decisions cost far more
+> than parallel ones. So these are batched deliberately — answering them in one pass is worth more
+> than any implementation speedup.
+
+**Independent — answerable now, in any order:**
+
 - [ ] ❗ **§4.6 — which auditability model?** (a) aggregate-only, (b) sampled *(recommended, already
       designed as 5.1.5)*, or (c) full per-document. This gates the monitor design and is the item
       you flagged for clarification.
@@ -306,5 +340,189 @@ model's auditability turns out to be unwanted rather than merely unexercised.
       no-released-users argument?
 - [ ] **Confirm the "no semantic mode flag" position** (§5.4) — mode inferred from graph shape, with
       only lifecycle declared.
+- [ ] **Module coverage: exhaustive or on-demand?** (§5.3-6) — the difference between a fixed
+      1.5–2.5 month block and an incremental trickle.
 - [ ] Any appetite constraint I should estimate against? The §5.3 ranges assume a small team fluent
       in this codebase and no hard deadline.
+
+**Serial — each needs the previous one answered first (so worth starting early):**
+
+- [ ] **Branching semantics inside a region** — what fan-out/fan-in means when D22's linear-chain
+      restriction lifts. Gates everything else in §5.3.
+- [ ] **Per-document error-boundary scoping** — the streaming `trycatch` shape. Needs branching first.
+- [ ] **Stateful operator semantics** — window/join memory bounds. Needs both of the above.
+
+---
+
+# Appendix A — Calibration against Phase 5.1 actuals 📊
+
+> Added after the fact. Phase 5.1 is the only project in this repo where an estimate was written
+> **before** implementation and the implementation then happened in a measurable window — so it is
+> the only calibration data available. This appendix compares the two and re-states §4/§5 in light
+> of it.
+>
+> **The headline is not the one I expected.** The estimates were wrong by ~24× on effort — but that
+> turns out to be nearly irrelevant, because **93% of the calendar time was spent waiting for
+> decisions, not implementing them.**
+
+## A.1 What was measured, and how
+
+**Sources:** the session's turn timestamps (23 turns) and the repo's git history, which align
+closely — the user committed immediately before nearly every message, so commits bracket the work.
+
+**Method:** turns were clustered into working blocks, splitting on any gap > 2 hours (treated as a
+break rather than work). Block duration = first turn of the cluster → last commit of the cluster.
+
+| Block | Covers | Duration |
+| --- | --- | --- |
+| B1 | Analysis docs `01`–`09` | 48 min |
+| B2 | Design review ×4 rounds, phase plan, 5.1.0, 5.1.1, 5.1.2, start of 5.1.3 | 116 min |
+| B3 | Rest of 5.1.3, all of 5.1.4, flaky-test remediation | 446 min |
+| B4 | 5.1.6 spill (incl. two blob stores) | 79 min |
+| B5 | Doc refresh + this document | 16 min |
+| | **Total working** | **705 min ≈ 11.8 h** |
+| | **Calendar span** (08-05 → 08-11) | **167 h ≈ 7.0 days** |
+| | **Waiting** (the five breaks: 22 h, 16.5 h, 4.9 h, 47.9 h, 72 h) | **155 h — 93.0% of calendar** |
+
+### ⚠️ Limits of this data — read before using any number below
+
+1. **n = 1.** One project, one codebase, one agent, one user. Treat everything here as a
+   directional signal, not a coefficient.
+2. **Block time includes user reading and response time**, so it *overstates* agent working time.
+   The effort ratio below is therefore a **floor**, not a ceiling.
+3. **Not everything estimated was delivered.** The Docker-gated 1M-row scale run and the spill
+   integration run were never executed, guard defaults are still an uncalibrated placeholder,
+   `file.xml.*` was deferred, and **5.1.5 was skipped entirely**. So 35 estimated engineer-days
+   bought somewhat less than 35 days of scope — inflating the ratio further.
+4. **Self-estimation conflict.** The same author wrote the estimates *and* the implementation, and
+   wrote the estimates in conventional human-team units without ever calibrating them. Expect
+   anchoring on team norms rather than on observed throughput.
+5. **Favourable conditions.** The codebase was already well-factored with directly reusable
+   precedents (`LoopExecutorActor` as a sibling for the region executor; `IConnectionStringProtector`
+   as the exact shape for `ISpillProtector`). Greenfield or tangled code would compress less.
+6. **Speed is not quality.** 2,446 tests pass, but the Docker-gated paths are unexercised and the
+   scale claims are unverified. Some of the compression is real; some is deferred verification.
+
+## A.2 Estimate vs actual, per slice
+
+Phase-plan estimates were: 5.1.0 ~3 d · 5.1.1 ~2 d · 5.1.2 ~1 wk · 5.1.3 ~2 wk · 5.1.4 ~2 wk ·
+5.1.5 ~1 wk · 5.1.6 ~1 wk.
+
+| Slice group | Estimated | Actual working | Ratio | Character of the work |
+| --- | --- | --- | --- | --- |
+| 5.1.0 + 5.1.1 + 5.1.2 | 10 d (80 h) | ~1.0 h | **~78×** | Contracts, bridges, designer rendering — well-understood patterns, clear precedents |
+| 5.1.3 + 5.1.4 | 20 d (160 h) | ~7.9 h | **~20×** | Novel design: Akka spike, D25/D26, per-item contract, 9 module conversions |
+| 5.1.6 | 5 d (40 h) | ~1.3 h | **~30×** | Built to a written plan, but discovered two missing prerequisites mid-flight |
+| **Delivered total** | **35 d (280 h)** | **~11.8 h** | **~24×** | |
+| 5.1.5 | 5 d | **not started** | — | |
+
+**Calendar comparison:** 35 engineer-days is ~7 calendar weeks for one engineer. Actual calendar
+span was **7 days** — a **7× calendar compression**, against a **24× effort compression**.
+
+That gap between the two ratios is the whole finding.
+
+## A.3 🔑 The real constraint is decision latency, not implementation
+
+**93% of elapsed calendar time was waiting.** Implementation was never the bottleneck; it was
+essentially free relative to everything else.
+
+What filled the waiting time was **decisions requiring human judgement**, and this session had a
+lot of them:
+
+- 4 rounds of review on design doc `06` before a line of code was written (~20 decisions)
+- **Q6** — needed a spike to answer, and its answer (D25) *deleted* a designed subsystem
+- **Q7** — followed from Q6 and deleted `StreamCardinality`
+- **Q-A…Q-E** (spill), then a second round for **Q-C1** and **Q-E1**
+- Plus the two decisions still open today (§4.6 auditability, workload mix)
+
+Roughly **10 decision round-trips over 7 calendar days**, with gaps of 22 h, 16.5 h, 4.9 h, 47.9 h
+and 72 h between working blocks — mean ~1.4 days per round-trip.
+
+Three consequences that matter more than any effort estimate:
+
+1. **Compressing implementation further buys almost nothing.** Halving the 11.8 h saves ~3% of
+   calendar. Removing one decision round-trip saves ~20%.
+2. **Decisions that cascade cost more than decisions that don't.** Q6 → Q7 → the D26 contract change
+   were serial: none could be answered before the previous one landed. Front-loading independent
+   decisions into a single round is worth more than any implementation speedup.
+3. **Deleting designed work was the single highest-leverage act.** D25 removed a resequencer,
+   an overflow policy and a tombstone mechanism — work that had a real estimate attached and would
+   otherwise have been built, tested, documented and maintained. It was found by *checking a
+   suspicion with a spike* rather than by implementing the plan as written.
+
+## A.4 Compression is not uniform — and the pattern is legible
+
+Ordering the slices by ratio: **78× (contracts/designer) → 30× (spill) → 20× (region executor +
+scale-out)**.
+
+The slices that compressed *least* were the ones with the most unresolved design. That is consistent
+with A.3, and it is directly actionable for §4/§5, because **doc 10's own estimate already flags
+which workstreams are which** — workstreams C-4 (bindings) and C-6 (auditability) were marked
+🔴 low confidence precisely because they are specification work.
+
+> **The multiplier applies to typing, not to thinking.** Any workstream whose cost is dominated by
+> *deciding what the semantics should be* will compress roughly like 5.1.3/5.1.4 did (~20×), and its
+> calendar cost will be set by how fast a human answers, not by how fast code appears.
+
+## A.5 §4 and §5 re-stated with calibrated units
+
+**Method:** scale by relative size against the one delivered data point (35 engineer-days → 7
+calendar days, 11.8 h working), then apply a **design-heaviness penalty** — because Phase 5.1 began
+with a *fully specified* design (doc `06`, 20 decisions resolved before coding), which neither
+option below enjoys.
+
+| | Option C (full rewrite) | Option M (dual mode, realistic scope) |
+| --- | --- | --- |
+| §4/§5 estimate (conventional) | 11–20 engineer-months | 5–9 engineer-months |
+| = engineer-days (22 d/mo) | 242–440 d | 110–198 d |
+| Size relative to delivered 5.1 | 6.9× – 12.6× | 3.1× – 5.7× |
+| Naive scaled calendar | 48–88 days (7–13 wks) | 22–40 days (3–6 wks) |
+| Naive scaled working time | ~81–149 h | ~37–67 h |
+| Design-heaviness penalty | **×1.5–2** — binding language and audit model must be designed from scratch; no spec exists | **×1.25–1.5** — regions and the mode boundary exist, but branching, stateful-operator and audit semantics are undecided |
+| **Calibrated calendar** | **~11–26 weeks** | **~4–9 weeks** |
+| Decision round-trips (est.) | ~15–25 | ~7–10 |
+| **Decision-latency floor** (at observed ~1.4 d/round, partly serial) | **~4–7 weeks** | **~2–3 weeks** |
+
+**Read the last two rows first.** For Option M, the decision-latency floor (2–3 weeks) is roughly
+half the calibrated calendar (4–9 weeks). **Implementation is no longer the dominant cost — the
+schedule is set by how quickly the open questions get answered.**
+
+For Option C the floor is 4–7 weeks and the total 11–26 weeks, and the spread is wide precisely
+because a binding-language redesign has no spec to estimate against. That uncertainty is not
+reducible by working faster.
+
+### The open decisions, enumerated
+
+Option M's ~7 gating decisions, which is where its schedule actually lives:
+
+| # | Decision | Blocks | Status |
+| --- | --- | --- | --- |
+| 1 | Auditability model (§4.6: aggregate / sampled / full) | 5.1.5 monitor, all later observability | ❗ **open — asked in §7** |
+| 2 | Branching semantics inside a region (fan-out/fan-in shape) | everything in §5.3 | not raised yet |
+| 3 | Per-document error-boundary scoping | §5.3-3 | not raised yet |
+| 4 | Lifecycle flag shape (§5.4) | §5.3-4,5 | proposed, unconfirmed |
+| 5 | Stateful operator semantics (window/join memory bounds) | §5.3-7 | not raised yet |
+| 6 | Module coverage: exhaustive or on-demand? | §5.3-6 | not raised yet |
+| 7 | Mode indication in the designer | §5.3-9 | not raised yet |
+
+Decisions 2 → 3 → 5 are **serial** (you cannot scope a per-document error boundary before deciding
+what a branch inside a region means). Decisions 1, 4, 6, 7 are independent and could be batched into
+a single round.
+
+## A.6 What I'd actually do with this
+
+1. **Optimise the decision pipeline, not the build.** Batch the four independent decisions above
+   into one review round instead of discovering them one slice at a time. On the observed numbers
+   that is worth more than any implementation improvement.
+2. **Keep writing the spec first.** The 48 minutes spent on docs `01`–`09` and the ~54 minutes of
+   design review produced the specification that let 5.1.0–5.1.2 run at 78×. Doc 06's twenty
+   pre-resolved decisions are visibly *why* the implementation was fast.
+3. **Keep spiking suspicions.** Two spikes (Akka viability, Q6 ordering) cost well under an hour
+   combined. One chose the executor technology; the other **deleted an entire designed subsystem**.
+   Both had better returns than any hour spent implementing.
+4. **Don't trust the 24×.** Use the *calendar* figures in A.5 for planning and treat effort ratios
+   as a curiosity. Effort was never the binding constraint, and planning against it would optimise
+   the wrong thing.
+5. **Re-calibrate after the next slice.** 5.1.5 is scoped (~1 week estimated) and unstarted — it is
+   a clean second data point, and specifically a test of the A.4 prediction that a
+   *design-light-but-undecided* slice behaves like 5.1.3/5.1.4 rather than like 5.1.0–5.1.2.
