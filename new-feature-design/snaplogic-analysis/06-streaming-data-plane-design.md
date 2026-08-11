@@ -48,7 +48,7 @@ DotFlow's composition philosophy (explicit over implicit).
 | --- | --- | --- |
 | A. Chunked ForEach (no engine change) | producers emit pages; `foreach` over pages | ✅ works today-ish; high friction; keep as guidance |
 | B. **Stream-typed ports** | ports of type `IAsyncEnumerable<JsonElement>`-like; engine runs a streaming *region* concurrently | ✅ **recommended** |
-| C. Full document streaming (SnapLogic model) | every edge is a stream | ❌ breaks variables/staged writes/trycatch semantics; huge — see full assessment in [`09`](09-full-streaming-rewrite-assessment.md) |
+| C. Full document streaming (SnapLogic model) | every edge is a stream | ❌ breaks variables/staged writes/trycatch semantics; huge — see full assessment in [`09`](09-full-streaming-rewrite-assessment.md), and the **re-priced options + "streaming as a second mode"** analysis in [`10`](10-full-streaming-option-assessment-plan.md) |
 
 ## 3. Recommended architecture (Option B)
 

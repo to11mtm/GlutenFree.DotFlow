@@ -5,6 +5,18 @@
 > DotFlow's *native* execution semantics, rather than an opt-in region capability.
 > **This is an assessment, not a proposal.** Recommendation: §7.
 
+> ### ⚠️ Sizing here is superseded — see [`10`](10-full-streaming-option-assessment-plan.md)
+>
+> This document was written **before Phase 5.1 shipped**, so §4's effort figures price work that now
+> partly exists (the Akka.Streams graph compiler, the per-item module contract, the per-document
+> error model, the streaming designer UX, spill). Its **analysis of what breaks (§1–§3, §5–§6) is
+> still accurate and worth reading first** — only the cost and the conclusion moved.
+>
+> [`10-full-streaming-option-assessment-plan.md`](10-full-streaming-option-assessment-plan.md)
+> re-prices the rewrite against the current tree (**11–20 engineer-months**) and adds the option this
+> document didn't consider: **streaming as a second *mode* alongside batch** (~5–9 months), which is
+> now the recommendation. Your checklist answers in §8 below are carried into doc 10 §1.
+
 ## 1. What "document-streaming engine" means
 
 Today a trigger produces **one run = one traversal** of the graph with a shared context.
@@ -124,11 +136,23 @@ regions prove insufficient in practice, and (c) a breaking v2 is commercially ac
 
 ## 8. Decision checklist for stakeholders
 
+> 📌 These answers are carried forward into
+> [`10`](10-full-streaming-option-assessment-plan.md) §1, where their effect on the estimate is
+> worked through. Two remain open there.
+
 - [ ] Is >50% of target workload large-volume per-document ETL?
-- [ ] Are we willing to break every existing workflow binding (`{{nodeId.port}}`) and custom module?
-  - Yes because we are still testing 
-- [ ] Can we fund parallel maintenance of two engines during transition?
-  - We don't need to maintain both engines because this isn't released yet. 
+  - ❓ **Still unanswered** — doc 10 §7 flags this as the strongest single signal.
+- [x] Are we willing to break every existing workflow binding (`{{nodeId.port}}`) and custom module?
+  - Yes because we are still testing
+- [x] Can we fund parallel maintenance of two engines during transition?
+  - We don't need to maintain both engines because this isn't released yet.
+  - ⚠️ **Reframed in doc 10 §5.1:** this answers a question about *legacy*, but the case for keeping
+    batch turns out to be *fitness for purpose* (auditability, `{{nodeId.port}}` composition,
+    supervised control flow) rather than backward compatibility — so the question stays live.
 - [ ] Is per-run snapshot auditability expendable, or must the v2 replicate it per-document?
-  - Need clarification on this. 
-- [ ] Has the Akka.Streams-backed region executor (06 §6 phase 3) been tried first?
+  - Need clarification on this.
+  - ❗ **doc 10 §4.6** lays out the three concrete options (aggregate-only / sampled / full
+    per-document) with costs, and recommends *sampled* — which is already designed as phase 5.1.5.
+- [x] Has the Akka.Streams-backed region executor (06 §6 phase 3) been tried first?
+  - ✅ **Yes — shipped in Phase 5.1.3** and carrying real workloads. This is the main reason doc 10's
+    estimate is lower than §4 above.

@@ -32,7 +32,12 @@
 | `06-streaming-data-plane-design.md` | design: opt-in streaming regions / chunked ports | ✅ |
 | `07-reusable-error-workflow-design.md` | design: error-pipeline parity (depends on 05) | ✅ |
 | `08-always-on-serving-design.md` | design: scheduled/event triggers + queued webhooks (Ultra parity) | ✅ |
-| `09-full-streaming-rewrite-assessment.md` | stakeholder assessment: full document-streaming rewrite (Option C) | ✅ |
+| `09-full-streaming-rewrite-assessment.md` | stakeholder assessment: full document-streaming rewrite (Option C) | ✅ *(sizing superseded by `10`)* |
+| `10-full-streaming-option-assessment-plan.md` | option assessment + effort estimates: rewrite (C) vs **streaming as a second mode** (M) vs status quo (S). Re-prices `09` against the post-5.1 tree; recommends **M** | ✅ |
+
+> 🔁 **`06` is now largely implemented** — see [`phases/Phase5-1-StreamingDataPlane.md`](../../phases/Phase5-1-StreamingDataPlane.md)
+> (6 of 7 slices shipped; 5.1.5 observability outstanding). `09`/`10` are the "what next" pair:
+> `09` explains what a full rewrite would break, `10` prices the options and recommends the path.
 
 ## Comparison axes
 
