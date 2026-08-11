@@ -26,7 +26,7 @@ using Workflow.Modules.Abstractions;
 /// <c>IAsyncEnumerable&lt;StreamItem&gt;</c> (<see cref="IStreamingWorkflowModule"/>), so this can
 /// be swapped without touching a single module — which is exactly why the Q2 spike chose it: it
 /// buys backpressure, bounded concurrency, ordering and cancellation without inventing any of them.
-/// See the phase plan's D19 for the decision and its long-term reasoning~ ✨.
+/// See the phase plan's D27 for the decision and its long-term reasoning~ ✨.
 /// </para>
 /// <para>
 /// Shape in v1: a linear chain (<see cref="StreamRegion.ChainOrder"/>) of

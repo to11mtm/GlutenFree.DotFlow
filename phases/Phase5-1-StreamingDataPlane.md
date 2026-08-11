@@ -17,7 +17,17 @@ without materializing the whole set in the execution context. Batch-per-trigger 
 default semantics — streaming is an explicit, validated, designer-visible capability
 (Option B of the [design doc](../new-feature-design/snaplogic-analysis/06-streaming-data-plane-design.md)).
 
-All design-level decisions are **already resolved** — see the design doc §6 (20 decisions).
+> ### 📌 Status: 6 of 7 slices shipped
+>
+> 5.1.0–5.1.4 and 5.1.6 are complete; **5.1.5 (observability & sampling) has not been started**.
+> Full breakdown and remaining work: [Where this phase actually stands](#where-this-phase-actually-stands-) below.
+>
+> Three recorded decisions were **deleted or replaced** rather than built — worth knowing before
+> reading the decision table as gospel:
+> **D8/D9** (resequencing) → deleted by **D25**; **D11** (spill storage) and **Q1** (spill
+> encryption) → both rested on things that didn't exist, and were rebuilt in 5.1.6.
+
+All design-level decisions were **resolved up front** — see the design doc §6.
 This plan re-states only the ones that shape implementation slices, adds plan-level decisions,
 and breaks the work down with **designer UX as a first-class track**, not an afterthought.
 
@@ -25,15 +35,16 @@ and breaks the work down with **designer UX as a first-class track**, not an aft
 model changes (`PortDefinition`, `ConnectionDefinition`), and designer surface across canvas,
 properties panel, validation, and monitor.
 
-> **CopilotNote:** Hot paths — `Workflow.Core/Models/*` (StreamItem, port/connection fields),
-> `Workflow.Engine/Actors/StreamRegionExecutorActor.cs` (new, sibling of `LoopExecutorActor`),
-> `Workflow.Modules/Abstractions/` (`IStreamingWorkflowModule`), streaming variants of existing
-> modules, and `Workflow.UI.Client` (`GraphValidator`, `VariableLint`, `NodePorts`,
-> `NodeView`/`EdgeLayer`, `PropertyEditor`, `RunState`). Per the
+> **CopilotNote:** Hot paths — `Workflow.Core/Models/StreamItem.cs` (+ port/connection fields),
+> `Workflow.Engine/Streaming/{StreamRegionDetector,StreamRegionRunner}.cs` and
+> `Workflow.Engine/Actors/StreamRegionExecutor.cs` (sibling of `LoopExecutorActor`),
+> `Workflow.Modules/Abstractions/IStreamingWorkflowModule.cs` (three interfaces),
+> `Workflow.Modules/Streaming/` (guard + spill), streaming variants of existing modules, and
+> `Workflow.UI.Client` (`StreamGraph`, `GraphValidator`, `VariableLint`, `NodeView`/`EdgeLayer`,
+> `PropertiesPanel`, `RunState`). Per the
 > [Phase 2.2 Akka.Streams analysis](Phase2-2-Akka-Streams-Analysis.md), regions are exactly the
-> "linear back-pressured pipeline" shape where Streams/channels shine — the region executor may
-> use `System.Threading.Channels` (design default) or Akka.Streams internally (**Q2**), while
-> the surrounding graph stays on raw actors.
+> "linear back-pressured pipeline" shape where Streams shine — the region executor uses
+> **Akka.Streams** internally (**Q2/D27**), while the surrounding graph stays on raw actors.
 
 ### Confirmed Design Decisions ✅
 
@@ -48,10 +59,10 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 | **D5 `IStreamingWorkflowModule`** | Optional interface beside `IWorkflowModule`; sources/transforms/sinks by how they use `input`/output enumerables. |
 | **D6 Variables read-only in regions** | Snapshot at region start; `SetVariable` forbidden inside a region (validated). `{{item}}` token for per-item templating. |
 | **D7 Per-item error policy** | `fail` (default) / `skip` / streaming `error` port; error envelope = failing item + per-item error document (doc 07 §2 schema, `item`+`offset` fields). |
-| **D8 `maxWorkers` + optional resequencer** | 1:1-cardinality stages only (module `Cardinality` hint, design-time validated); `onResequenceOverflow: backpressure\|fail`; sequence tombstones from skipping stages. Designer badges "⚠ unordered". |
-| **D9 Ordering contract** | Source order iff all stages single-worker; otherwise only downstream of a resequenced stage. |
-| **D10 Bounded-accumulator policy (unified)** | `maxGroups`/`maxAccumulatorBytes` fail loudly by default; opt-in `spill` per stage; shared by aggregate, `stream.collect`, resequencer. Guards derived from host memory at engine start; calibrated in the proving slice. |
-| **D11 Spill storage** | DB/NATS providers preferred v1 (+ temp-file for tests); encrypted at rest via the secret-variable mechanism; cleanup on complete/fail/cancel + startup orphan sweep. S3 deferred. |
+| **D8 `maxWorkers` + optional resequencer** | ⚠️ **SUPERSEDED by D25** — the resequencer, `onResequenceOverflow` and sequence tombstones were **deleted**, not built. What survives: per-stage `maxWorkers`, plus the "⚠ unordered" designer badge. |
+| **D9 Ordering contract** | ⚠️ **SUPERSEDED by D25** — source order is preserved at *every* cardinality unless a stage explicitly opts out with `ordered: false`. |
+| **D10 Bounded-accumulator policy (unified)** | `maxItems` / optional `maxBytes` fail loudly by default; opt-in `spill` per stage; shared by `aggregate` and `stream.collect`. *(Property names settled as `maxItems`/`maxBytes`, not the design doc's original `maxGroups`/`maxAccumulatorBytes`. Guards derived from host memory ⏳ still outstanding — the shipped 100 000 default is an explicit placeholder pending calibration.)* |
+| **D11 Spill storage** | ⚠️ **SUPERSEDED (5.1.6)** — the preferred DB/NATS targets **didn't exist** (`Blobs` returned `null` in both providers), and there was **no secret-variable encryption** to reuse. Both were built. Current model: SQLite for fast local disk, blob (Postgres/NATS/S3) for low-IOPS nodes, directory opt-in, **no implicit default**; encryption via a dedicated `ISpillProtector` on ASP.NET Data Protection. S3 is **no longer deferred**. See [`Phase5-1-6-SpillMode-Plan.md`](Phase5-1-6-SpillMode-Plan.md). |
 | **D12 Checkpointing deferred, enablers reserved** | `SourceOffset(Token: string, Sequence: long)` on `StreamItem`; optional `StartFrom` source capability. No resume machinery in 5.1. |
 | **D13 Sampling off by default** | Monitor may sample N items/stage; per-workflow/stage config; `IsSecret`-based redaction. |
 | **D14 Region-spanning parallel out of scope** | Regions compose inside parallel branches (b) and via per-stage workers (a); streams never cross construct boundaries (c). |
@@ -67,19 +78,26 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 | **D19 Streaming category in the palette** | Bridges ship under a new **"Streaming"** category (Q4 partially answered: bridges are genuinely new *nodes*; streaming-capable *existing* modules will instead grow streaming ports and a 🌊 badge, no duplicate module ids). |
 | **D20 `IStreamTerminalModule` for stream→batch stages** | Found during 5.1.1: `ExecuteStreamAsync` can only yield items, so a stage with a streaming input but batch outputs (`stream.collect`, and every sink reporting `rowsAffected`/`itemCount`) had no way to express itself. Terminal stages implement `ExecuteTerminalAsync` returning a plain `ModuleResult`, so the engine's existing port dispatch handles the region edge with no special cases. Design doc 06 §3.3 updated. |
 | **D21 Region detection is mirrored, not shared** | `Workflow.UI.Client` deliberately has no `Workflow.Core` reference (Phase 3.3 D2 keeps a React port additive), so the designer's `StreamGraph` and the engine's future region detector are two implementations of one rule. They get a **drift-guard test** (the `SplitPreviewDriftGuardTests` pattern) in 5.1.3 rather than a shared library. |
-| **D19 Akka.Streams is the region executor** | Resolved in 5.1.3 by spike — see the Q2 entry for the evidence table and the long-term strategic reasoning (triggers/queues, Reuse-mode child stages, throttled connectors). Kept an internal detail: modules only ever see `IAsyncEnumerable<StreamItem>`. |
+| **D27 Akka.Streams is the region executor** | Resolved in 5.1.3 by spike — see the Q2 entry for the evidence table and the long-term strategic reasoning (triggers/queues, Reuse-mode child stages, throttled connectors). Kept an internal detail: modules only ever see `IAsyncEnumerable<StreamItem>`. *(Recorded as a second "D19" by mistake when it landed; renumbered to D27 so the log has no duplicate ids.)* |
 | **D22 v1 regions are linear chains** | `StreamRegion.ChainOrder()` throws on branching inside a region. Broadcast/merge inside a region waits for the operators that need it; the alternative — materializing a graph shape we can't yet validate or explain in the designer — trades a clear error for a mysterious hang. |
 | **D23 A region runs as one dispatch unit** | `WorkflowExecutor` starts the pipeline when dispatch reaches the region's **source** and no-ops for other members; the region completes or fails as a whole. Members share Running/Completed transitions so the monitor shows the pipeline lighting up together, which is what physically happens. Failure routes through the ordinary `HandleNodeFailure` path, so per-node retries, error handling and enclosing try/catch keep working unchanged. |
 | **D24 Stage progress rides the existing EventStream** | `StreamRegionProgress` is published to the Akka `EventStream`, which the Phase 3.2 `ExecutionEventBridge` already forwards to SignalR. No hub changes, and `Workflow.Engine` still has no SignalR dependency. |
 | **D25 Ordering is a stage shape, not a buffer** | Resolved by the Q6 spike: `maxWorkers` gets **one** companion knob, `ordered` (default **true** → `SelectAsync`, opt out → `SelectAsyncUnordered`). **Deleted from the design:** the resequencing buffer, `onResequenceOverflow`, and sequence tombstones. Ordering holds at every cardinality because Akka orders by input slot, and in-flight work is bounded by the parallelism, not the stream length. |
 | **D26 `maxWorkers` needs a per-item contract** | Surfaced while verifying Q6: today's `ExecuteStreamAsync(context, IAsyncEnumerable, ct)` hands the module the **whole stream**, so the module owns the loop and the engine cannot parallelise or order it. 5.1.4 therefore adds an optional per-item entry point (`ProcessAsync(StreamItem) → IEnumerable<StreamItem>`); stream-shaped modules keep working but run single-worker. Per-item is also the *simpler* contract for authors — no async-iterator boilerplate — and it's what makes D25's free ordering reachable. |
 
-### TO RESOLVE 🤔
+### TO RESOLVE 🤔 — ✅ all resolved
 
-- [ ] **Q1 Verification: secrets encryption for spill.** Confirm the secret-variable encryption
-      mechanism (docs/variables.md "Secrets — current limits") is suitable for spill-at-rest;
-      if not, pick a Data-Protection-based envelope (as 2.4.a.5 did for connections). **Blocks 5.1.6.**
-- [ ] **Q2 Region executor internals: raw channels or Akka.Streams?** ✅ **RESOLVED (5.1.3, D19):
+Every Q1–Q7 is closed. Kept in full because *how* they resolved is the useful part — three of them
+(Q1, Q2/Q6, Q7) resolved by **deleting or replacing a recorded decision** rather than by building
+what was written down.
+
+- [x] **Q1 Verification: secrets encryption for spill.** ✅ **RESOLVED (5.1.6): there was nothing
+      to verify.** The question assumed a secret-variable encryption mechanism existed; investigation
+      found `IsSecret` is a **designer-only flag** and `docs/variables.md` states globals are stored
+      in plaintext. Spill therefore built its own `ISpillProtector` on ASP.NET Data Protection
+      (purpose `Workflow.Streaming.Spill`), copying the `IConnectionStringProtector` layering.
+      Encryption is on by default and loudly announced when a host turns it off.
+- [x] **Q2 Region executor internals: raw channels or Akka.Streams?** ✅ **RESOLVED (5.1.3, D27):
       Akka.Streams.** A throwaway spike tested the five things the executor actually needs, and all
       five passed decisively:
 
@@ -133,20 +151,23 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 
       Design doc 06 §5.1/§6 updated; `SourceOffset` **stays** (it was reserved for checkpointing in
       D12, which is untouched by this).
-- [ ] **Q3 `Cardinality` placement.** ✅ **RESOLVED (5.1.0), then SUPERSEDED (5.1.4).** Shipped as a
+- [x] **Q3 `Cardinality` placement.** ✅ **RESOLVED (5.1.0), then SUPERSEDED (5.1.4).** Shipped as a
       per-module default-interface member; **deleted** once D25 removed its only purpose. See Q7.
-- [ ] ⚠️ **Q7 (new, from Q6): repurpose or remove `StreamCardinality`?** ✅ **RESOLVED (5.1.4):
+- [x] ⚠️ **Q7 (new, from Q6): repurpose or remove `StreamCardinality`?** ✅ **RESOLVED (5.1.4):
       removed.** The distinction that actually matters after D25/D26 is **per-item** (can run with
       `maxWorkers > 1`) vs **whole-stream** (owns its own iteration → single-worker), and that
       follows from *which interface a module implements* rather than a declared enum. The enum is
       gone; `ModuleSchemaDto.StreamShape` (`"perItem"`/`"wholeStream"`/null) carries the fact to
       the designer, which uses it to warn when `maxWorkers` is set on a stage that can't honour it.
       A guard test asserts the type no longer exists.
-- [ ] **Q4 Palette treatment.** ⚙️ **PARTIALLY RESOLVED (5.1.1, D19):** the two *bridges* are new
-      nodes in a new **"Streaming"** category. Still open for **existing** modules gaining
-      streaming ports (5.1.3+): a 🌊 "stream-capable" badge on the same module id (recommended)
-      vs. separate module ids.
-- [ ] **Q5 `{{item}}` in the binding picker.** ✅ **RESOLVED (5.1.2):** the picker offers `{{item}}`
+- [x] **Q4 Palette treatment.** ✅ **RESOLVED — badge, not duplicate ids.** The two *bridges* are new
+      nodes in a new **"Streaming"** category (5.1.1, D19). For **existing** modules gaining streaming
+      ports, 5.1.4 settled the open half: they keep their **same module id** and grow a 🌊
+      "stream-capable" badge in the palette. Nine modules now do this. Duplicate ids were rejected —
+      `builtin.database.query` behaving differently depending on how it's wired is one module with
+      two shapes, not two modules, and splitting it would have doubled the surface every workflow
+      author has to learn.
+- [x] **Q5 `{{item}}` in the binding picker.** ✅ **RESOLVED (5.1.2):** the picker offers `{{item}}`
       only when the node sits inside a streaming region (listed first, since it's *the* thing you
       bind to there), and the lint gives a targeted error when `{{item}}` is used outside one.
       Upstream `{{nodeId.port}}` refs were left available — they resolve to the region's inputs, and
@@ -160,13 +181,13 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 |-----------|------|-----|
 | Sub-graph orchestration pattern | `Workflow.Engine/Actors/LoopExecutorActor.cs`, `SubGraphExecutor.cs`, `ParallelExecutionCoordinator.cs` | `StreamRegionExecutorActor` is a sibling; hierarchical cancellation + `PipeTo` persistence patterns reused |
 | Port-aware dispatch | `Workflow.Engine/Actors/DispatchCore.cs`, `ModuleResult.WithActivePorts` | Region entry/exit hand-off to normal dispatch |
-| Module schema & DTOs | `Workflow.Core/Models/ModuleSchema.cs`, `Workflow.Api/Contracts/Modules/ModuleContracts.cs` | Extended with `IsStreaming`, `Cardinality` |
+| Module schema & DTOs | `Workflow.Core/Models/ModuleSchema.cs`, `Workflow.Api/Contracts/Modules/ModuleContracts.cs` | Extended with `IsStreaming`, `StreamCapable`, `StreamShape` (`Cardinality` was added then deleted — Q7) |
 | Designer graph state | `Workflow.UI.Client/Designer/State/{DesignerDocument,NodePorts,GraphValidator,VariableLint}.cs` | All four extended (5.1.2) |
 | Canvas & edges | `Designer/Components/{CanvasView,NodeView,EdgeLayer}.razor` | Diamond ports, stream edge styling, region halo |
-| Properties panel | `Designer/Components/{PropertiesPanel,PropertyEditor}.razor` | Stage knobs (maxWorkers, resequence, error policy, guards) |
+| Properties panel | `Designer/Components/{PropertiesPanel,PropertyEditor}.razor` | Stage knobs (`maxWorkers`, `ordered`, `onItemError`, `spill`) in a 🌊 Streaming section |
 | Monitor state & UI | `Execution/State/RunState.cs`, `Components/NodeInspector.razor`, SignalR `RealTimeClient.cs` | Item-count/rate metrics, region progress |
 | Bounded-accumulator prior art | `builtin.transform.aggregate` (Phase 2.6) | Wrapped by the unified guard policy |
-| Blob/persistence stores | `IBlobStore`, NATS/DB providers (Phase 2.1) | Spill storage (5.1.6) |
+| Blob/persistence stores | `IBlobStore`, NATS/DB providers (Phase 2.1) | Spill storage (5.1.6) — ⚠️ Postgres and NATS blob stores **did not exist** and were built here, along with `IBlobStore.ListAsync(prefix)` |
 
 ---
 
@@ -177,16 +198,22 @@ Carried from the design doc §6 (abbreviated — the design doc is normative):
 - [x] `StreamItem` record: `Payload` union (`JsonPayload` now, `BinaryPayload` reserved),
       `SourceOffset?(Token, Sequence)`, engine-internal tombstone flag.
       → `Workflow.Core/Models/StreamItem.cs`
+      ⚠️ *The tombstone flag was **removed** in 5.1.4 when D25 deleted the resequencer; a guard test
+      (`StreamItem_HasNoTombstoneMachinery`) stops it coming back. `SourceOffset` stays — it was
+      reserved for checkpointing (D12), which is untouched.*
 - [x] `IStreamingWorkflowModule` in `Workflow.Modules/Abstractions` (+ `Cardinality` hint per Q3).
       → `Workflow.Modules/Abstractions/IStreamingWorkflowModule.cs`; **Q3 resolved: per-module hint**
       (default-interface member, so existing modules are untouched and a module can override it
       explicitly when it filters/splits).
+      ⚠️ *The `Cardinality` hint was **deleted** in 5.1.4 (Q7). The file now holds three interfaces:
+      `IStreamingWorkflowModule`, `IStreamTerminalModule` (D20) and `IStreamItemProcessor` (D26).*
 - [x] `PortDefinition.IsStreaming` (+ `PortDefinition.CreateStreaming` factory);
       `ConnectionDefinition.BufferCapacity : int?` (typed, D3).
 - [x] Serialization round-trip + structural-equality tests for changed core records.
       → `Workflow.Tests/Core/Models/StreamingContractsTests.cs` (18 tests)
 - [x] Module contracts DTO surface (`ModuleContracts.cs`) exposes new flags to the UI:
       `PortDefinitionDto.IsStreaming`, `ModuleDetailsDto.StreamCapable` + `Cardinality`.
+      ⚠️ *`Cardinality` was later replaced by `StreamShape` (`"perItem"`/`"wholeStream"`/null) — Q7.*
 - [x] **UI wire-DTO mirrors + designer fidelity** (not in the original list, but required so the
       designer can't silently drop the new fields on save): `Workflow.UI.Client/Api/Dtos/*`,
       `DesignerConnection` FromDto/ToDto/Clone + 2 bUnit guards.
@@ -248,7 +275,7 @@ the 4 failures are the known flaky API set (all pass in isolation; unrelated fil
 
 ### 5.1.3 — Region executor proving slice ⚙️ (~2 weeks) ✅ **COMPLETE**
 
-- [x] **Q2 spike** — decided **Akka.Streams** (D19; full reasoning + spike numbers in the Q2 entry
+- [x] **Q2 spike** — decided **Akka.Streams** (D27; full reasoning + spike numbers in the Q2 entry
       above). Spike project was throwaway and has been deleted.
 - [x] Engine-side region detection → `Workflow.Engine/Streaming/StreamRegionDetector.cs`
       (`Regions`, `RegionOf`, `StreamRegion.SourceNodeIds/TerminalNodeIds/ChainOrder`). Mirrors the
@@ -284,7 +311,7 @@ The unit-suite failures are pre-existing parallel-collection flakiness — **ver
 suite with all streaming tests excluded (5 failures out of 1632) and by running every failing class
 in isolation (95/95 pass).
 
-### 5.1.4 — Scale-out: workers, errors, module coverage 🧯 (~2 weeks) 🔄 **IN PROGRESS**
+### 5.1.4 — Scale-out: workers, errors, module coverage 🧯 (~2 weeks) ✅ **COMPLETE**
 
 - [x] **Q6 resolved** ahead of the slice (D25) — resequencing buffer, overflow policy and
       tombstones are **deleted from the design**, not built. Tombstone machinery removed from
@@ -348,15 +375,16 @@ in isolation (95/95 pass).
       lifted out of the module's own settings into a 🌊 **Streaming** section, shown **only when the
       node actually sits in a region** (otherwise they'd configure nothing), with an inline warning
       explaining an unordered stage.
-- [ ] `builtin.file.xml.read` streaming source + `.xml.write` sink — deferred: XML has no
-      equivalent of a self-delimiting element stream without committing to a document shape, and
-      the CSV/JSON pair already covers the file story. Revisit on demand.
-- [ ] Docker-gated 1M-row **Postgres** test + guard-default calibration. *(Bounded memory is now
-      proven Docker-free on SQLite, CSV **and** JSON in the default suite; the Postgres run is for
-      scale numbers.)*
+- [ ] `builtin.file.xml.read` streaming source + `.xml.write` sink — **deferred by decision**: XML
+      has no equivalent of a self-delimiting element stream without committing to a document shape,
+      and the CSV/JSON pair already covers the file story. Revisit on demand.
+- [ ] ⏳ Docker-gated 1M-row **Postgres** test + guard-default calibration — **still outstanding**
+      (carried into the phase-level "remaining work" list below). *(Bounded memory is already proven
+      Docker-free on SQLite, CSV **and** JSON in the default suite; the Postgres run is for scale
+      numbers and for replacing the placeholder `maxItems = 100 000`.)*
 
-**Progress:** `Workflow.Tests` 1696/1700 · `Workflow.Tests.UI` **706/706** · builds clean;
-**110 streaming tests** green.
+**Result:** all in-scope items complete. The two unchecked boxes above are a deliberate deferral and
+an outstanding calibration task, not missing slice work.
 
 ### 5.1.5 — Observability & sampling 🔭 (~1 week)
 
@@ -407,13 +435,17 @@ gated.
 
 - **5.1.P1** Streaming child-execution stage (Reuse-mode parity — needs Phase 5.2 sub-workflows, [05](../new-feature-design/snaplogic-analysis/05-subworkflow-design.md)).
 - **5.1.P2** Source-offset checkpointing (`StartFrom`) — enablers already in D12.
-- **5.1.P3** S3 spill provider (naming/orphan-sweep design), binary payloads, per-port cardinality.
+- **5.1.P3** Binary payloads, per-port cardinality. *(~~S3 spill provider~~ — **dropped from this
+  list**: it shipped in 5.1.6. S3 arrived free through `IBlobStore`, and the orphan-sweep concern
+  that justified deferring it was solved generally with `IBlobStore.ListAsync(prefix)` rather than
+  avoided.)*
 - **5.1.P4** Region-spanning parallel (D14 revisit) — only on demonstrated demand.
 - **5.1.P5** 🔀 **`builtin.stream.sort`** — a user-facing "order by `$.field`" stage (your Q6 idea).
   Distinct from ordering repair, which D25 made unnecessary: this is a *data* operation. It must
   buffer the whole stream, so it ships under the unified bounded-accumulator policy (§4.5) with
-  `collect`, and gains real value once spill (5.1.6) exists. Pairs naturally with a future
-  `sorted: true` hint that would let `aggregate`/`join` stream instead of accumulate.
+  `collect`. **Spill now exists (5.1.6)**, so the "gains real value once spill exists" precondition
+  is met — a sort over a set larger than memory is implementable today. Pairs naturally with a
+  future `sorted: true` hint that would let `aggregate`/`join` stream instead of accumulate.
 - **5.1.P6** ➕ **Incremental (fold-based) aggregate fast path.** `builtin.transform.aggregate` is
   currently a *bounded* aggregate: it buffers every item, then reuses the batch aggregation. That's
   uniform and safe, but `sum`/`count`/`avg`/`min`/`max`/`first`/`last` are all **foldable** — they
@@ -422,15 +454,54 @@ gated.
   remove the guard from the common cases and make an aggregate over a billion rows viable.
   Deferred because the buffered version is correct today and the split adds a second code path to
   keep in agreement (the `Aggregate_StreamedAndBatched_Agree` test would need extending per op).
+- **5.1.P7** 📄 **`builtin.file.xml.read`/`.write` streaming** — deferred from 5.1.4 by decision
+  (no self-delimiting element stream without committing to a document shape).
+
+---
+
+## Where this phase actually stands 📍
+
+| Slice | Status |
+| --- | --- |
+| 5.1.0 core contracts | ✅ complete |
+| 5.1.1 bridges + guidance | ✅ complete |
+| 5.1.2 validation + designer | ✅ complete |
+| 5.1.3 region executor | ✅ complete |
+| 5.1.4 scale-out & module coverage | ✅ complete |
+| 5.1.5 observability & sampling | ⏳ **not started** — the only unbuilt MVP slice |
+| 5.1.6 spill mode | ✅ complete |
+
+**Current test state:** `Workflow.Tests` **1734 / 1734** · `Workflow.Tests.UI` **712 / 712** ·
+solution builds clean.
+
+**Sequencing note:** 5.1.6 was built *before* 5.1.5. Spill's questions were answered and its work
+was well-defined, while sampling still needs a design pass; building spill first also forced the two
+missing blob stores (Postgres, NATS) into existence, which other features want anyway.
+
+### Remaining work in this phase
+
+1. ⏳ **5.1.5 in full** — item sampling (D13), region progress panel, `IWorkflowMetrics` stage
+   counters, docs.
+2. ⏳ **Docker-gated 1M-row Postgres scale run + guard calibration.** The shipped
+   `maxItems = 100 000` is an explicit placeholder, and D10's "derive guards from host memory at
+   engine start" is designed but unimplemented. Both are blocked on the same measurements.
+3. ⏳ **Docker-gated spill integration run** (Postgres/NATS spill end-to-end, crash-cleanup sweep).
+   The blob-store tests it builds on are written and gated; Docker was unavailable on the dev host.
 
 ---
 
 ## Test & acceptance summary
 
-- Every slice: unit tests beside the code; designer behaviors get bUnit coverage.
+- Every slice: unit tests beside the code; designer behaviors get bUnit coverage. ✅ held
+  throughout — no slice deferred its designer surface (D15).
 - Proving-slice acceptance (5.1.3): 1M rows end-to-end with peak managed memory below a fixed
   budget; region cancel < 2s; monitor shows live rates.
+  ⚠️ **Partially met.** Bounded memory and cancellation are proven Docker-free (SQLite, CSV, JSON);
+  the **1M-row Postgres run is still outstanding**, and with it the guard-default calibration.
 - UX acceptance (5.1.2/5.1.4): a user cannot *draw* an invalid streaming graph (drag-time
-  refusal), and every streaming knob is discoverable in the properties panel without docs.
+  refusal), and every streaming knob is discoverable in the properties panel without docs. ✅ met.
 - Docs updated per slice: designer.md, variables.md, module-author-guide.md,
   advanced-flow-control.md, execution-monitor.md.
+  ⚠️ `execution-monitor.md` belongs to 5.1.5 and is **not** done.
+
+**Current:** `Workflow.Tests` 1734/1734 · `Workflow.Tests.UI` 712/712 · builds clean.

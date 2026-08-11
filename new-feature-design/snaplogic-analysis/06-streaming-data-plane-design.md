@@ -2,7 +2,36 @@
 
 > Closes the "streaming data plane" gap from [`02`](02-snaplogic-comparison.md) §2/§7.
 > SnapLogic parity target: per-document streaming between Snaps (bounded memory for large ETL).
-> Design-level; not implementation-ready. **Largest and riskiest of the four designs.**
+> **Largest and riskiest of the four designs.**
+
+> ### 📌 Implementation status — *mostly shipped*
+>
+> This document was written as design-level, not implementation-ready. It is now **largely
+> implemented**; it stays the normative record of *why*, with drift marked inline.
+>
+> | Slice | Status |
+> | --- | --- |
+> | 5.1.0 core contracts · 5.1.1 bridges · 5.1.2 designer · 5.1.3 region executor · 5.1.4 modules & scale-out · 5.1.6 spill | ✅ shipped |
+> | 5.1.5 observability & sampling (§4.4) | ⏳ **not started** — the only unbuilt MVP slice |
+>
+> **Where reality diverged from this document** (each marked ⚠️ **SUPERSEDED** at the point it
+> occurs, with the reasoning kept rather than overwritten):
+>
+> - **Ordering/resequencing (§5.1, D25)** — the entire resequencing design was **deleted**, not
+>   built. A spike showed Akka.Streams orders by *input slot*, so ordering holds at every
+>   cardinality for free. Tombstones, `onResequenceOverflow` and `StreamCardinality` went with it.
+> - **Spill storage & encryption (§4.5, 5.1.6)** — both recorded decisions turned out to rest on
+>   things that **didn't exist**: the preferred blob providers returned `null`, and there was no
+>   secret-variable encryption to reuse. Both were built, and the storage model was reworked around
+>   a sharper question (*what kind of disk does this host have?*).
+> - **Region executor internals (§3.2)** — Akka.Streams, not raw `System.Threading.Channels`,
+>   chosen by spike on strategic reach (triggers, queues, throttled connectors) as much as fit.
+> - **Module contract (§3.3)** — grew two interfaces beyond the original one: `IStreamTerminalModule`
+>   (5.1.1) and `IStreamItemProcessor` (5.1.4, D26).
+>
+> Detailed slice-by-slice status:
+> [`phases/Phase5-1-StreamingDataPlane.md`](../../phases/Phase5-1-StreamingDataPlane.md).
+> Spill decision record: [`phases/Phase5-1-6-SpillMode-Plan.md`](../../phases/Phase5-1-6-SpillMode-Plan.md).
 
 ## 1. Goal & explicitly-not-goals
 
@@ -39,6 +68,14 @@ A maximal connected sub-graph of stream-linked nodes forms a **streaming region*
 
 - Each node in the region runs as a long-lived stage; items flow via **bounded channels**
   (`System.Threading.Channels`) — real backpressure, no Akka mailbox flooding.
+  > ⚠️ **SUPERSEDED (5.1.3, D27):** the region executor is built on **Akka.Streams**, not raw
+  > channels. A spike tested the five things the executor actually needs — consuming
+  > `IAsyncEnumerable`, bounded backpressure, `maxWorkers`, per-item `skip` supervision, and region
+  > cancellation — and all five passed with built-in operators. The deciding argument was reach
+  > rather than this slice: the same library is the natural implementation for queue-fed and
+  > scheduled triggers ([`08`](08-always-on-serving-design.md)), Reuse-mode child stages
+  > ([`05`](05-subworkflow-design.md)), and rate-limited connectors. The choice stays **internal** —
+  > modules only ever see `IAsyncEnumerable<StreamItem>` — so it remains swappable.
 - **Channel capacity (decided):** engine-level default (**64**) overridable at two levels —
   per workflow (`Metadata`/settings) and per connection via a new typed
   `ConnectionDefinition.BufferCapacity : int?` field (validated, schema-visible; pre-1.0 so
@@ -48,6 +85,9 @@ A maximal connected sub-graph of stream-linked nodes forms a **streaming region*
   results, feed non-streaming successors).
 - Cancellation: region's CTS linked to `_executionCts` as usual. A stage fault cancels the
   region and surfaces as the region's node failure (parent trycatch applies).
+- **v1 regions are linear chains (D22, 5.1.3):** branching *inside* a region fails loudly rather
+  than materialising a graph shape the designer can't yet validate or explain. Broadcast/merge
+  inside a region waits for the operators that need it.
 
 ### 3.3 Module contract extension
 
@@ -88,11 +128,38 @@ Returning a plain `ModuleResult` means the engine's existing port dispatch takes
 region's edge with no special cases. State is safe in both methods: it lives in locals for the
 duration of the call, so singleton module instances still serve concurrent executions.
 
+**Per-item stages (added during 5.1.4 — D26):** `ExecuteStreamAsync` hands the module the *whole*
+stream, so the module owns the loop and the engine cannot parallelise or order it. Any stage that
+wants `maxWorkers > 1` therefore implements a third, per-item interface:
+
+```csharp
+public interface IStreamItemProcessor : IStreamingWorkflowModule
+{
+    Task<IReadOnlyList<StreamItem>> ProcessAsync(
+        StreamItem item,
+        ModuleExecutionContext context,
+        CancellationToken ct);   // 0 = drop, 1 = transform, N = split
+}
+```
+
+This is also the *simpler* contract for module authors — no async-iterator boilerplate — and it is
+what makes D25's free ordering reachable, because the engine can then own the `SelectAsync`.
+Whole-stream modules keep working unchanged and are pinned to one worker (with a designer warning
+rather than a silent downgrade).
+
+Which of the three a module implements is the only thing that distinguishes *per-item* from
+*whole-stream*; there is no declared cardinality enum (see §6, `StreamCardinality`).
+
 ### 3.4 First streaming-capable modules
 
 `builtin.database.query` (reader → items), `builtin.file.csv.read` / `.json.read` (array
 streaming), `builtin.transform.map` / `.query` (per-item), `builtin.database.bulkinsert` and
 `builtin.file.*.write` (sinks), plus the two bridge nodes.
+
+> ✅ **Shipped in 5.1.4** — all of the above, plus `builtin.transform.aggregate` as a *terminal*
+> stage. `builtin.file.xml.read`/`.write` were **deliberately deferred**: XML has no equivalent of a
+> self-delimiting element stream without committing to a document shape, and the CSV/JSON pair
+> already covers the file story.
 
 ### 3.5 Sub-workflows as streaming stages (Reuse-mode parity)
 
@@ -132,30 +199,60 @@ documents) should be accounted for here rather than deferred blindly:
    `IsSecret`-based redaction; revisit field-level sensitivity annotations on module schemas
    only if real use shows `IsSecret` insufficient.
 5. **Joins/aggregates over streams:** v1 restriction — `aggregate` allowed with a **bounded
-   accumulator guard**: hard `maxGroups` / `maxAccumulatorBytes` limits that **fail loudly by
-   default**, with an opt-in per-stage `spill` mode (spill accumulator state to temp storage)
-   for larger datasets (decided). Stream-stream `join` is **not** in v1 (SnapLogic's own
-   sorted-stream/hang caveats show the cost); collect-then-join instead.
+   accumulator guard**: hard limits that **fail loudly by default**, with an opt-in per-stage
+   `spill` mode for larger datasets (decided). Stream-stream `join` is **not** in v1 (SnapLogic's
+   own sorted-stream/hang caveats show the cost); collect-then-join instead.
    - **Unified policy (decided):** the guard + spill options form one reusable "bounded
      accumulator" policy shared by every unbounded-memory stage — `aggregate`,
      `builtin.stream.collect`, and any future buffering stage (a `stream.sort`, 5.1.P5).
+     *Shipped as `BoundedAccumulator` with `maxItems` (default 100 000) + optional `maxBytes`;
+     the byte ceiling is measured only when configured, so nobody pays for a limit they didn't set.*
    - **Guard defaults (decided):** derive defaults from available memory and expected
      workload rather than fixed constants; user-overridable per stage. Concrete numbers to be
      calibrated with real measurements during the proving slice (phase 3).
-   - **Spill storage (decided):** spill targets a **configured persistence provider** — v1
-     prefers **database or NATS** over S3 for simplicity (single-writer semantics make orphan
-     identification trivial; S3 multi-instance naming/sweep concerns deferred with it); a
-     **local temp-file option** remains for testing and small datasets. **Cleanup contract:**
-     spilled data is deleted on region completion, failure, *and* cancellation (tied to the
-     region's CTS/terminal path) — no resource leaks; orphan sweep on engine startup as a
-     backstop.
-   - **Spill encryption (decided):** spilled state must be recoverable (it's working data,
-     not redactable), so it is **encrypted at rest with the same mechanism used for secret
-     variables**, not redacted. ⚠ Verify the current secrets mechanism (see
-     docs/variables.md "Secrets — current limits") supports this use before phase 3.
+     ⏳ *Still outstanding — the shipped `maxItems = 100 000` is an explicit placeholder pending
+     the Docker-gated 1M-row calibration run.*
+   - **Spill still means bounded (clarified in 5.1.6):** `spill` changes **where** buffered items
+     live, not whether there is a bound. The configured ceiling continues to apply; a spill flag
+     that quietly meant "unlimited" would undo the very guarantee this policy exists to give.
+     A guard test pins this.
+   - ⚠️ **Spill storage — SUPERSEDED (5.1.6).** The original decision below ("prefer database or
+     NATS; local temp-file option") was found to be **unimplementable as written**: both
+     `PostgresPersistenceProvider.Blobs` and `NatsPersistenceProvider.Blobs` returned `null`. Those
+     stores were then built, and the storage model was reworked around a sharper question — *what
+     kind of disk does this host actually have?* See
+     [`phases/Phase5-1-6-SpillMode-Plan.md`](../../phases/Phase5-1-6-SpillMode-Plan.md) §11/§13.
+     Current model:
+
+     | Target | Use when | Why |
+     | --- | --- | --- |
+     | 🗄️ **SQLite** (one configured file) | local disk is fast | lowest latency, no network hop, one provisionable file rather than thousands of scratch files |
+     | ☁️ **Blob** (Postgres / NATS / S3) | local disk is slow or throttled (small cloud nodes, overlay FS) | scratch leaves the node for infrastructure an operator already sizes |
+     | 📁 **Directory** | explicit opt-in only | documented as "only when you know local disk is fast" |
+
+     Two changes worth flagging against the original text. **There is no implicit default** — an
+     unconfigured host fails loudly naming the setting, because a silent fallback to a temp
+     directory lands scratch on whatever filesystem the container happened to have. And **S3 is no
+     longer deferred**: it arrives free through `IBlobStore`, so the orphan-sweep concern that
+     justified deferring it was solved generally (`IBlobStore.ListAsync(prefix)`) rather than
+     avoided.
+   - **Cleanup contract (revised in 5.1.6):** eager deletion when the buffering stage disposes is
+     the *primary* mechanism; the background sweeper is a safety net for crashes. Retention keys off
+     **execution completion, not artefact age**, which is what makes it cluster-safe — any host can
+     evaluate the rule because it depends on shared execution state rather than "did I write this?".
+     A second, much longer *abandoned* threshold reclaims spill for executions whose record is stuck
+     non-terminal (a host that died mid-run), closing what would otherwise be a guaranteed leak.
+   - ⚠️ **Spill encryption — SUPERSEDED (5.1.6).** The original decision said "same mechanism used
+     for secret variables". Investigation found **there is no such mechanism**: `IsSecret` is a
+     designer-only flag and `docs/variables.md` states globals are stored in plaintext. Spill
+     therefore builds its own `ISpillProtector` on **ASP.NET Data Protection** (purpose
+     `Workflow.Streaming.Spill`), copying the `IConnectionStringProtector` layering — abstraction in
+     the modules layer, implementation supplied by the host. Encryption is **on by default**; a host
+     may opt out, but never quietly: startup logs it, every spilling execution logs it, and the
+     designer warns on stages where spill could engage.
    - **Guard-default budget (decided):** defaults derive from **host memory at engine
      start** (engine-wide cap shared by concurrent regions); a per-region budget arbiter is
-     a possible later refinement.
+     a possible later refinement. ⏳ *Not yet implemented — see the calibration item above.*
 
 ## 5. Tradeoff analyses (requested)
 
@@ -241,43 +338,59 @@ idempotent sink, or don't stream it.*
 | Aggregate memory guard | hard limits fail loudly by default; opt-in per-stage spill mode (§4.5) |
 | ~~Resequencing overflow~~ | ⚠️ **SUPERSEDED (D25)** — no resequencer, so no overflow policy and no tombstones (§5.1) |
 | Sampling redaction basis | `IsSecret`-based v1; field-level annotations only if proven insufficient (§4.4) |
-| Spill storage | configured persistence provider (S3/NATS/DB) + temp-file option; cleanup on complete/fail/cancel + startup orphan sweep (§4.5) |
-| Guard defaults | memory/workload-derived, per-stage overridable; calibrate in proving slice (§4.5) |
+| ~~Spill storage~~ | ⚠️ **SUPERSEDED (5.1.6)** — the preferred targets didn't exist (both providers returned `null` for `Blobs`). Now: SQLite for fast local disk, blob (Postgres/NATS/S3) for low-IOPS nodes, directory opt-in, **no implicit default** (§4.5) |
+| Guard defaults | memory/workload-derived, per-stage overridable; calibrate in proving slice (§4.5) — ⏳ still outstanding |
 | `stream.collect` guards | yes — one unified "bounded accumulator" policy across all buffering stages (§4.5) |
 | Doc 07 error-schema alignment | agreed — per-item variant added to doc 07 §2 |
 | ~~Resequencing scope~~ | ⚠️ **SUPERSEDED (D25)** — ordering holds at every cardinality, so there is no scope rule and the `Cardinality` hint loses its purpose (phase-plan Q7) |
-| Spill encryption | reversible encryption at rest, same mechanism as secret variables (§4.5) |
+| `StreamCardinality` | ✅ **DELETED (5.1.4, Q7)** — per-item vs whole-stream follows from *which interface a module implements*, not a declared enum. `ModuleSchemaDto.StreamShape` carries the fact to the designer; a guard test asserts the type is gone |
+| ~~Spill encryption~~ | ⚠️ **SUPERSEDED (5.1.6)** — there is no secret-variable encryption to reuse (`IsSecret` is designer-only). Spill has its own `ISpillProtector` on ASP.NET Data Protection, on by default, loudly announced when off (§4.5) |
 | Guard budget basis | host memory at engine start (engine-wide cap); per-region arbiter later if needed (§4.5) |
-| Spill providers v1 | prefer DB/NATS over S3 (simplicity, orphan-sweep safety); temp-file for testing (§4.5) |
+| ~~Spill providers v1~~ | ⚠️ **SUPERSEDED (5.1.6)** — S3 is no longer deferred; it arrives free via `IBlobStore`, and the orphan-sweep concern that justified deferring it was solved generally with `IBlobStore.ListAsync(prefix)` (§4.5) |
+| Spill is still bounded | ✅ **CLARIFIED (5.1.6)** — `spill` changes *where* buffered items live, not whether there's a ceiling. The configured limit still applies; a guard test pins it (§4.5) |
 
 ## 7. Open questions
 
 All first- and second-round questions are resolved (§6). Remaining items are
 verification/calibration tasks rather than design decisions:
 
-- [ ] Verify the secret-variable encryption mechanism is suitable for spill-at-rest use
-      (docs/variables.md notes current secrets limits) — before phase 3.
-- [ ] Decide the fate of `StreamCardinality` now that D25 removed its purpose: delete it
-      (recommended) or demote it to a designer-only "may change item counts" hint —
-      phase-plan **Q7**, during 5.1.4.
-- [ ] Calibrate guard defaults (`maxGroups`, `maxAccumulatorBytes`) from measurements —
-      during phase 3 (proving slice).
-- [ ] Revisit deferred items when triggered by demand: S3 spill provider (naming/sweep
-      design), per-region memory arbiter, field-level sensitivity annotations,
-      region-spanning parallel (§5.1c), source-offset checkpointing (§5.2),
-      `builtin.stream.sort` (5.1.P5).
+- [x] ~~Verify the secret-variable encryption mechanism is suitable for spill-at-rest use.~~
+      ✅ **Resolved (5.1.6): there is nothing to reuse.** `IsSecret` is a designer-only flag and
+      `docs/variables.md` states globals are stored in plaintext, so the question's premise was
+      false. Spill built its own protector on ASP.NET Data Protection instead (§4.5).
+- [x] ~~Decide the fate of `StreamCardinality`.~~ ✅ **Resolved (5.1.4): deleted.** Per-item vs
+      whole-stream follows from which interface a module implements; `ModuleSchemaDto.StreamShape`
+      carries it to the designer.
+- [ ] ⏳ **Calibrate guard defaults from measurements.** The shipped `maxItems = 100 000` is an
+      explicit placeholder. Needs the Docker-gated 1M-row Postgres run. *(Bounded memory itself is
+      already proven Docker-free on SQLite, CSV and JSON in the default suite — this is for scale
+      numbers, not for correctness.)* Note the property names settled as `maxItems`/`maxBytes`,
+      not the `maxGroups`/`maxAccumulatorBytes` this document originally sketched.
+- [ ] ⏳ **Host-memory-derived guard budget** (§4.5) — designed, not yet implemented; blocked on the
+      same calibration.
+- [ ] Revisit deferred items when triggered by demand: per-region memory arbiter, field-level
+      sensitivity annotations, region-spanning parallel (§5.1c), source-offset checkpointing (§5.2),
+      `builtin.stream.sort` (5.1.P5), incremental fold-based aggregate (5.1.P6),
+      `builtin.file.xml.*` streaming (§3.4), binary payloads (§3.3).
+      *(S3 spill has left this list — it shipped in 5.1.6 via `IBlobStore`.)*
 
 ## 8. Phasing
 
 > 📋 **Detailed implementation plan:**
 > [`phases/Phase5-1-StreamingDataPlane.md`](../../phases/Phase5-1-StreamingDataPlane.md) —
 > sub-phase checklists (5.1.0–5.1.6 + post-MVP), designer-UX acceptance criteria per slice,
-> and plan-level decisions D15–D18 / questions Q1–Q5. Summary below is superseded by that plan.
+> and plan-level decisions D15–D26 / questions Q1–Q7. Summary below is superseded by that plan.
 
-1. Bridge modules + Option A guidance doc (cheap, immediate).
-2. Port capability + validation + designer rendering.
-3. `StreamRegionExecutorActor` + channels + 3 modules (db.query → map → bulkinsert) as the
-   proving slice.
-4. Remaining modules, per-item error routing, per-stage `maxWorkers`.
-5. Streaming child-execution stage (Reuse-mode parity, §3.5); source-offset checkpointing if
-   demanded (§5.2).
+| # | Slice | Status |
+| --- | --- | --- |
+| 1 | Bridge modules + Option A guidance doc | ✅ 5.1.1 |
+| 2 | Port capability + validation + designer rendering | ✅ 5.1.2 |
+| 3 | Region executor + 3 modules (db.query → map → bulkinsert) as the proving slice | ✅ 5.1.3 (Akka.Streams, not raw channels — D27) |
+| 4 | Remaining modules, per-item error routing, per-stage `maxWorkers` | ✅ 5.1.4 |
+| 5 | Observability & sampling | ⏳ 5.1.5 — **not started** |
+| 6 | Spill mode | ✅ 5.1.6 |
+| — | Streaming child-execution stage (Reuse-mode parity, §3.5); source-offset checkpointing (§5.2) | 📋 post-MVP (5.1.P1 / 5.1.P2) |
+
+**Sequencing note:** 5.1.6 was built before 5.1.5. Spill was unblocked (its questions were answered)
+while observability still needs its own design pass, and building it first also forced the two
+missing blob stores into existence — which several other features want anyway.
