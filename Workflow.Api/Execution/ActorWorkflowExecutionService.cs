@@ -118,7 +118,15 @@ public sealed class ActorWorkflowExecutionService : IWorkflowExecutionService
 
         // 2️⃣ Fall back to persisted history~
         var record = await this.history.GetExecutionAsync(executionId, ct).ConfigureAwait(false);
-        return record is null ? null : FromHistory(record);
+        if (record is null)
+        {
+            return null;
+        }
+
+        // §12.2: finished executors stop, so history is the normal source for done runs — include
+        // per-node states (latest record per node; loop bodies record one per iteration)~
+        var nodes = await this.history.GetNodeExecutionsAsync(executionId, ct).ConfigureAwait(false);
+        return FromHistory(record, nodes);
     }
 
     /// <inheritdoc/>
@@ -220,12 +228,19 @@ public sealed class ActorWorkflowExecutionService : IWorkflowExecutionService
             null);
     }
 
-    private static ExecutionStatusResult FromHistory(Workflow.Persistence.Models.ExecutionRecord r)
+    private static ExecutionStatusResult FromHistory(
+        Workflow.Persistence.Models.ExecutionRecord r,
+        IReadOnlyList<Workflow.Persistence.Models.NodeExecutionRecord> nodes)
         => new(
             r.ExecutionId,
             r.State,
             r.State is ExecutionState.Completed ? 100 : 0,
-            new Dictionary<string, string>(),
+            nodes
+                .GroupBy(n => n.NodeId, StringComparer.Ordinal)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderBy(n => n.StartedAt).ThenBy(n => n.CompletedAt).Last().State.ToString(),
+                    StringComparer.Ordinal),
             r.StartedAt,
             r.CompletedAt,
             r.Error,

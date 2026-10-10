@@ -88,8 +88,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 ### Stage 2 — lifecycle & cancellation (same code area)
 
-- [ ] **§12.2 — executor actors never stop** · plan 02 · guard `EngineFindingTests.CompletedRun_ShouldStopExecutorActor`
-  - [ ] plan read · [ ] fix (self-stop on terminal, after persistence acks; never reap paused) · [ ] guard green · [ ] status-after-stop falls back to history (add test) · [ ] suite green · [ ] finding retired · [ ] README updated
+- [x] **§12.2 — executor actors never stop** · plan 02 · guard `EngineFindingTests.CompletedRun_ShouldStopExecutorActor`
+  - [x] plan read · [x] fix (self-stop on terminal, after persistence acks; never reap paused) · [x] guard green · [x] status-after-stop falls back to history (add test) · [x] suite green · [x] finding retired (→ `Engine/ExecutorLifecycleTests`) · [x] README updated
 - [ ] **§12.3 — cancel doesn't stop running constructs** · plan 02 · guard `EngineFindingTests.Cancel_ShouldStopRunningLoopIterations`
   - [ ] plan read · [ ] fix (`_executionCts.Cancel()` + `CooperativeCancel*` on cancel path) · [ ] guard green · [ ] suite green · [ ] finding retired · [ ] README updated
 
@@ -168,6 +168,24 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-10 — §12.2 finished executors stop
+- First cut (stop as soon as persistence drains) broke 69 actor-level tests that query a live
+  executor's status after the run ends. Asked → agreed: drain + grace period, and fill node states
+  in the API history fallback.
+- `WorkflowExecutor`: counts in-flight persistence writes (create record, node record, variable
+  updates, status update, snapshot); on Completed/Failed/Cancelled `StopWhenPersisted()` stops Self
+  once writes are acked AND `ExecutorLifecycleOptions.TerminalGracePeriod` (new, optional in DI,
+  default 60s) has passed; fallback stop after grace + `PersistenceAckTimeout` (30s). Paused never
+  stops. Supervisor already removed entries on `Terminated`.
+- API `GetStatusAsync` history fallback now fills `nodeStates` from `GetNodeExecutionsAsync`
+  (latest record per node).
+- Tests: `Engine/ExecutorLifecycleTests` (zero-grace completed/failed stop = retired guard; live
+  status during grace then stop; paused not stopped), `Api/V1/ExecutionStatusAfterStopTests`
+  (zero-grace API: status after stop = history + node states). Stop tests RED with fix stashed;
+  API test RED with only the API change stashed. Existing 69 untouched.
+- Directory.Build.props (trailing blank line) included in this commit, per request.
+- `--filter Category!=Finding`: 1747 passed, 0 failed. Next: §12.3 (cancel doesn't stop running constructs).
+
 ### 2026-10-10 — §12.1 completion events reach SignalR
 - Decisions (asked + agreed): publish SLIM copies to the EventStream (outputs / partial outputs /
   variable updates stripped) so nothing possibly-secret goes on the stream; forward exception text

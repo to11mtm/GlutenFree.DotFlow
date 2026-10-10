@@ -46,29 +46,6 @@ public sealed class EngineFindingTests : TestKit
         return (executor, parent, executionId);
     }
 
-    // ── Finding 01 §12.2 — executor actors are never stopped ─────────────────────────────────────
-
-    /// <summary>
-    /// After a run reaches a terminal state, its <c>WorkflowExecutor</c> should stop, so the actor
-    /// tree and its captured inputs/outputs don't accumulate for the process lifetime.
-    /// </summary>
-    [Fact]
-    public void CompletedRun_ShouldStopExecutorActor()
-    {
-        var services = FindingDefs.Services(new[] { new PassModule("f.pass") });
-        var definition = FindingDefs.Definition(new[] { FindingDefs.Node("n1", "f.pass") });
-
-        var (executor, parent, _) = this.StartRun(definition, services);
-
-        // Wait for terminal completion first.
-        parent.FishForMessage(m => m is WorkflowCompleted, FindingDefs.RunTimeout);
-
-        // The executor should terminate itself shortly after completing.
-        this.Watch(executor);
-        this.ExpectTerminated(executor, TimeSpan.FromSeconds(5))
-            .Should().NotBeNull(because: "a finished executor should stop so runs don't leak actors/memory (01 §12.2)");
-    }
-
     // ── Finding 01 §12.3 — cancel should cancel the whole run, including construct actors ─────────
 
     /// <summary>

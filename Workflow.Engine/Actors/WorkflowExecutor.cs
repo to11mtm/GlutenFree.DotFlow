@@ -89,6 +89,18 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private readonly List<string> _portValidationErrors = new();
 
+    /// <summary>§12.2: grace period + ack timeout for stopping a finished executor.</summary>
+    private readonly ExecutorLifecycleOptions _lifecycleOptions;
+
+    /// <summary>§12.2: persistence writes launched but not yet acknowledged (piped back to Self).</summary>
+    private int _pendingPersistence;
+
+    /// <summary>§12.2: set once the run is Completed/Failed/Cancelled; the actor stops when writes drain.</summary>
+    private bool _stopWhenDrained;
+
+    /// <summary>§12.2: set once <see cref="ExecutorLifecycleOptions.TerminalGracePeriod"/> has passed.</summary>
+    private bool _graceElapsed;
+
     /// <summary>
     /// Cancelable handles for pending scheduled retry messages.
     /// We track these so we can cancel them in PostStop to avoid memory leaks and
@@ -258,6 +270,8 @@ public class WorkflowExecutor : ReceiveActor
         // Try to resolve the state store from DI (optional)
         _stateStore = serviceProvider.GetService(typeof(IExecutionStateStore)) as IExecutionStateStore;
         _executionHistoryRepository = serviceProvider.GetService(typeof(IExecutionHistoryRepository)) as IExecutionHistoryRepository;
+        _lifecycleOptions = serviceProvider.GetService(typeof(ExecutorLifecycleOptions)) as ExecutorLifecycleOptions
+            ?? ExecutorLifecycleOptions.Default;
         _variableStore = serviceProvider.GetService(typeof(IVariableStore)) as IVariableStore;
         _lifecycleHooks = serviceProvider.GetService(typeof(IActorLifecycleHooks)) as IActorLifecycleHooks
             ?? NullActorLifecycleHooks.Instance;
@@ -296,6 +310,12 @@ public class WorkflowExecutor : ReceiveActor
         Receive<PersistenceExecutionStatusUpdated>(HandlePersistenceExecutionStatusUpdated);
         Receive<PersistenceSnapshotSaved>(HandlePersistenceSnapshotSaved);
         Receive<PersistenceVariableUpdatesSaved>(HandlePersistenceVariableUpdatesSaved);
+        Receive<TerminalGraceElapsed>(_ =>
+        {
+            _graceElapsed = true;
+            TryStopWhenDrained();
+        });
+        Receive<TerminalStopTimedOut>(_ => StopSelf("persistence acks timed out"));
         Receive<VariablesHydrated>(HandleVariablesHydrated);
 
         // Phase 2.2.0b: Scope messages for loop and error boundary infrastructure~ 🔁🛡️
@@ -703,6 +723,7 @@ public class WorkflowExecutor : ReceiveActor
         }
 
         StartInitialNodes();
+        OnPersistenceAck();
     }
 
     private void StartInitialNodes()
@@ -2330,6 +2351,7 @@ public class WorkflowExecutor : ReceiveActor
                 ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
                 : Option<HashMap<string, object?>>.None));
         PublishTerminal(new WorkflowFailed(_executionId, cancelled, _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
+        StopWhenPersisted();
     }
 
     #endregion
@@ -2406,6 +2428,7 @@ public class WorkflowExecutor : ReceiveActor
 
         var snapshot = _context;
 
+        _pendingPersistence++;
         Task.Run(
             async () =>
             {
@@ -2568,6 +2591,7 @@ public class WorkflowExecutor : ReceiveActor
 
         Context.Parent.Tell(new WorkflowCompleted(_executionId, outputs, _executionTimer.Elapsed));
         PublishTerminal(new WorkflowCompleted(_executionId, HashMap<string, object?>.Empty, _executionTimer.Elapsed));
+        StopWhenPersisted();
     }
 
     /// <summary>
@@ -2622,6 +2646,7 @@ public class WorkflowExecutor : ReceiveActor
                 ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
                 : Option<HashMap<string, object?>>.None));
         PublishTerminal(new WorkflowFailed(_executionId, error, _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
+        StopWhenPersisted();
     }
 
     /// <summary>
@@ -2630,6 +2655,59 @@ public class WorkflowExecutor : ReceiveActor
     /// variable updates stripped — so no possibly-secret values go on the stream (see 02 §10.6).
     /// </summary>
     private void PublishTerminal(IWorkflowMessage message) => Context.System.EventStream.Publish(message);
+
+    /// <summary>
+    /// §12.2: the run is terminal (Completed/Failed/Cancelled), so this executor stops itself once its
+    /// queued persistence writes are acknowledged — so a status query after <c>Terminated</c> finds the
+    /// final state in history — and the <see cref="ExecutorLifecycleOptions.TerminalGracePeriod"/> has
+    /// passed. Never called for Paused (resumable). A fallback timer stops it anyway if an ack never
+    /// arrives.
+    /// </summary>
+    private void StopWhenPersisted()
+    {
+        if (_stopWhenDrained)
+        {
+            return;
+        }
+
+        _stopWhenDrained = true;
+        var grace = _lifecycleOptions.TerminalGracePeriod;
+        if (grace <= TimeSpan.Zero)
+        {
+            _graceElapsed = true;
+        }
+        else
+        {
+            Context.System.Scheduler.ScheduleTellOnce(grace, Self, TerminalGraceElapsed.Instance, Self);
+        }
+
+        Context.System.Scheduler.ScheduleTellOnce(
+            (grace > TimeSpan.Zero ? grace : TimeSpan.Zero) + _lifecycleOptions.PersistenceAckTimeout,
+            Self,
+            TerminalStopTimedOut.Instance,
+            Self);
+        TryStopWhenDrained();
+    }
+
+    private void OnPersistenceAck()
+    {
+        _pendingPersistence--;
+        TryStopWhenDrained();
+    }
+
+    private void TryStopWhenDrained()
+    {
+        if (_stopWhenDrained && _graceElapsed && _pendingPersistence <= 0)
+        {
+            StopSelf("persistence drained");
+        }
+    }
+
+    private void StopSelf(string reason)
+    {
+        _log.Debug("🛑 Stopping executor for {ExecutionId} after terminal state ({Reason})", _executionId, reason);
+        Context.Stop(Self);
+    }
 
     #endregion
 
@@ -2971,6 +3049,7 @@ public class WorkflowExecutor : ReceiveActor
 
     private void QueueCreateExecutionRecord(DateTimeOffset startedAt)
     {
+        _pendingPersistence++;
         if (_executionHistoryRepository == null)
         {
             Self.Tell(new PersistenceExecutionCreated(true));
@@ -3008,6 +3087,7 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
+        _pendingPersistence++;
         Task.Run(
             async () =>
             {
@@ -3034,6 +3114,7 @@ public class WorkflowExecutor : ReceiveActor
             .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
+        _pendingPersistence++;
         Task.Run(
             async () =>
             {
@@ -3070,6 +3151,7 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
+        _pendingPersistence++;
         Task.Run(
             async () =>
             {
@@ -3092,6 +3174,7 @@ public class WorkflowExecutor : ReceiveActor
 
     private void HandlePersistenceNodeRecorded(PersistenceNodeRecorded message)
     {
+        OnPersistenceAck();
         if (!message.Success)
         {
             _log.Warning(
@@ -3104,6 +3187,7 @@ public class WorkflowExecutor : ReceiveActor
 
     private void HandlePersistenceExecutionStatusUpdated(PersistenceExecutionStatusUpdated message)
     {
+        OnPersistenceAck();
         if (!message.Success)
         {
             _log.Warning(
@@ -3116,6 +3200,7 @@ public class WorkflowExecutor : ReceiveActor
 
     private void HandlePersistenceSnapshotSaved(PersistenceSnapshotSaved message)
     {
+        OnPersistenceAck();
         if (message.Success)
         {
             _log.Debug("💾 Snapshot persisted for execution {ExecutionId}", _executionId);
@@ -3131,6 +3216,7 @@ public class WorkflowExecutor : ReceiveActor
 
     private void HandlePersistenceVariableUpdatesSaved(PersistenceVariableUpdatesSaved message)
     {
+        OnPersistenceAck();
         if (!message.Success)
         {
             _log.Warning(
@@ -3142,6 +3228,16 @@ public class WorkflowExecutor : ReceiveActor
     }
 
     private sealed record PersistenceExecutionCreated(bool Success, string? Error = null);
+
+    private sealed class TerminalGraceElapsed
+    {
+        public static readonly TerminalGraceElapsed Instance = new();
+    }
+
+    private sealed class TerminalStopTimedOut
+    {
+        public static readonly TerminalStopTimedOut Instance = new();
+    }
 
     private sealed record PersistenceNodeRecorded(string NodeId, bool Success, string? Error = null);
 
