@@ -1,8 +1,8 @@
-// <copyright file="RealtimeCompletionFindingTests.cs" company="GlutenFree">
+// <copyright file="RealtimeCompletionTests.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.Tests.Findings.Engine;
+namespace Workflow.Tests.Api.RealTime;
 
 using System;
 using System.Collections.Generic;
@@ -17,21 +17,21 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Workflow.Api.Contracts.RealTime;
 using Workflow.Core.Models;
 using Workflow.Persistence.Sqlite.Serialization;
-using Workflow.Tests.Api.RealTime;
 using Xunit;
 
 /// <summary>
-/// Finding 01 §12.1 — terminal and node-completion events don't reach SignalR.
+/// End-to-end: a real run's terminal and node-completion events reach a subscribed SignalR client.
+/// Regression guard for §12.1 (the engine never published these types to the EventStream).
 /// </summary>
 /// <remarks>
 /// The existing bridge tests publish <c>WorkflowCompleted</c> / <c>NodeExecutionCompleted</c> onto
 /// the EventStream by hand, so they can't catch that the engine never publishes those types. These
 /// tests drive a REAL run through the API and assert that a subscribed SignalR client hears the
 /// completion events. They reuse the in-memory SQLite <see cref="SignalRTestHarness"/> — no external
-/// services. They assert the correct behaviour, so a failure confirms the finding.
+/// services. The engine publishes SLIM copies (no outputs) — see
+/// <c>WorkflowExecutor.PublishTerminal</c>.
 /// </remarks>
-[Trait("Category", FindingDefs.Category)]
-public sealed class RealtimeCompletionFindingTests
+public sealed class RealtimeCompletionTests
 {
     private static readonly JsonSerializerOptions WfJson = LanguageExtJsonConverters.CreateOptions();
 

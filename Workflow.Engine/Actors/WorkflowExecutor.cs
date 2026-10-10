@@ -925,6 +925,7 @@ public class WorkflowExecutor : ReceiveActor
         // Update context: node → Completed with timing~ 🎉
         TransitionNodeState(nodeId, NodeExecutionState.Completed, now);
         _context = _context.WithNodeCompleted(nodeId, now, message.Duration);
+        PublishTerminal(message with { Outputs = HashMap<string, object?>.Empty, VariableUpdates = null });
 
         // Apply variable updates from the module result, if any~ 💾
         if (message.VariableUpdates is { Count: > 0 } varUpdates)
@@ -1141,6 +1142,8 @@ public class WorkflowExecutor : ReceiveActor
         }
 
         _nodeInputs.Remove(nodeId);
+
+        PublishTerminal(new NodeExecutionFailed(nodeId, error, _executionId, nodeDuration));
 
         // Get error handling configuration
         var nodeDef = GetNodeDefinition(nodeId);
@@ -2318,13 +2321,15 @@ public class WorkflowExecutor : ReceiveActor
 
         // Notify parent
         var partialOutputs = GatherWorkflowOutputs();
+        var cancelled = new OperationCanceledException("Workflow execution was cancelled");
         Context.Parent.Tell(new WorkflowFailed(
             _executionId,
-            new OperationCanceledException("Workflow execution was cancelled"),
+            cancelled,
             _executionTimer.Elapsed,
             partialOutputs.Count > 0
                 ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
                 : Option<HashMap<string, object?>>.None));
+        PublishTerminal(new WorkflowFailed(_executionId, cancelled, _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
     }
 
     #endregion
@@ -2562,6 +2567,7 @@ public class WorkflowExecutor : ReceiveActor
         SaveSnapshotAsync();
 
         Context.Parent.Tell(new WorkflowCompleted(_executionId, outputs, _executionTimer.Elapsed));
+        PublishTerminal(new WorkflowCompleted(_executionId, HashMap<string, object?>.Empty, _executionTimer.Elapsed));
     }
 
     /// <summary>
@@ -2615,7 +2621,15 @@ public class WorkflowExecutor : ReceiveActor
             partialOutputs.Count > 0
                 ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
                 : Option<HashMap<string, object?>>.None));
+        PublishTerminal(new WorkflowFailed(_executionId, error, _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
     }
+
+    /// <summary>
+    /// §12.1: publishes a terminal or node-completion message to the <c>EventStream</c> so the
+    /// real-time bridge (SignalR) hears it. Callers pass SLIM copies — outputs, partial outputs and
+    /// variable updates stripped — so no possibly-secret values go on the stream (see 02 §10.6).
+    /// </summary>
+    private void PublishTerminal(IWorkflowMessage message) => Context.System.EventStream.Publish(message);
 
     #endregion
 

@@ -83,8 +83,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   - [x] plan read · [x] fix (`HandleLoopCompleted`: scope from `loopBody` targets only) · [x] guard green · [x] `WhileModule` path re-checked (by code review — same handler/port; no test yet, see log) · [x] suite green · [x] finding retired (→ `Engine/LoopCompletionTests`) · [x] README updated
 - [x] **§12.5 — unregistered module id "succeeds" via stub** · plan 02 · guard `EngineFindingTests.UnregisteredModule_ShouldFailNode_NotSucceedViaStub`
   - [x] plan read · [x] fix (fail the node; reject unknown ids at validation) · [x] guard green · [x] stub-dependent tests updated · [x] suite green · [x] finding retired (→ `WorkflowExecutorTests.StartExecution_UnregisteredModule_ShouldFailNodeAndWorkflow`) · [x] README updated
-- [ ] **§12.1 — completion/node events never reach SignalR** · plan 02 · guards `RealtimeCompletionFindingTests.*` (2)
-  - [ ] plan read · [ ] fix (publish terminal messages to EventStream; mind secret outputs re §10.6) · [ ] guards green · [ ] bridge/subscription tests green · [ ] suite green · [ ] findings retired · [ ] README updated
+- [x] **§12.1 — completion/node events never reach SignalR** · plan 02 · guards `RealtimeCompletionFindingTests.*` (2)
+  - [x] plan read · [x] fix (publish terminal messages to EventStream; mind secret outputs re §10.6) · [x] guards green · [x] bridge/subscription tests green · [x] suite green · [x] findings retired (→ `Api/RealTime/RealtimeCompletionTests`) · [x] README updated
 
 ### Stage 2 — lifecycle & cancellation (same code area)
 
@@ -126,11 +126,21 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 ### Stage 6 — needs a decision before coding
 
 - [ ] **§10.6 — secrets persisted verbatim** · plan 03 · guard `SecretPersistenceFindingTests.SecretValue_…`
-  - [ ] settle the "what is secret" policy (plan 03 Finding D) · then redact at every sink (history in/out, variable store, logs, broadcast)
+  - [ ] settle the "what is secret" policy (plan 03 Finding D) · then redact at every sink (history in/out, variable store, logs, broadcast — incl. the exception text SignalR now sends in `ExecutionFailed`/`NodeFailed` since §12.1)
 - [ ] **§9.6 — spill kept forever with no history** · plan 04 · guard `SpillCleanupFindingTests.Sweep_WithNoHistory_…`
   - [ ] pick B1 (fail-fast wiring) vs B2 (artefact age) vs B3 (accept + fix comment); if B1/B3, **delete** the guard test rather than making it pass
 - [ ] **§12.7 — UseErrorHandler not implemented** · plan 02 · guard `EngineFindingTests.UseErrorHandler_…`
   - [ ] this is a **feature spec**, not a bug: agree the semantics (`ErrorNodeId` routing, `MaxConsecutiveErrors`) before implementing
+
+### Follow-ups (future work, not findings)
+
+- [ ] **Dedicated cancel event for real-time clients.** Since §12.1 a user cancel reaches SignalR as
+  `ExecutionFailed` with "Workflow execution was cancelled" — clients can only tell it apart by text.
+  Add an `ExecutionCancelled` client event (bridge mapping + hub contract), e.g. publish a distinct
+  message or map terminal `ExecutionStateChanged → Cancelled`. Update `ExecutionEventBridgeTests`.
+- [ ] **Node events from construct bodies.** Loop/branch body nodes run in `SubGraphExecutor`, which
+  doesn't publish `NodeExecutionCompleted`/`Failed`, so clients see no per-node events inside bodies.
+  Fold into the Stage 3 sub-graph parity extraction.
 
 ---
 
@@ -158,6 +168,21 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-10 — §12.1 completion events reach SignalR
+- Decisions (asked + agreed): publish SLIM copies to the EventStream (outputs / partial outputs /
+  variable updates stripped) so nothing possibly-secret goes on the stream; forward exception text
+  to clients as-is (bridge's existing contract) and track it under §10.6.
+- `WorkflowExecutor.PublishTerminal`: `WorkflowCompleted` (CompleteWorkflow), `WorkflowFailed`
+  (FailWorkflow + cancel path), `NodeExecutionCompleted` (HandleNodeExecutionCompleted),
+  `NodeExecutionFailed` (HandleNodeFailure — the shared node→Failed choke point, so every failed
+  attempt is reported, matching history + NodeStateChanged). Bridge unchanged. Only the supervisor
+  spawns executors, so no nested-run double events.
+- Guards moved to permanent `Api/RealTime/RealtimeCompletionTests`; new
+  `Engine/EventStreamPublishTests` pins the slim payloads (parent still gets full outputs). All 4
+  verified RED with the fix stashed.
+- Cancel shows as `ExecutionFailed` for now → follow-up added (dedicated cancel event).
+- `--filter Category!=Finding`: 1742 passed, 0 failed. Next: §12.2 (executor actors never stop).
+
 ### 2026-10-10 — §12.5 unregistered module id fails
 - D1: `NodeExecutor` sends `NodeExecutionFailed` ("Module 'x' is not registered.") instead of
   `ExecuteStubFallback` (removed). D2: `WorkflowSupervisor` rejects unknown module ids at submit
