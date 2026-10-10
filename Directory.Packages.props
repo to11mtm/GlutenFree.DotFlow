@@ -16,8 +16,8 @@
     <PackageVersion Include="Akka.DependencyInjection" Version="1.5.57" />
     <PackageVersion Include="Akka.Serialization.MessagePack2" Version="1.5.31" />
     <PackageVersion Include="LanguageExt.Core" Version="4.4.9" />
-    <PackageVersion Include="MessagePack" Version="3.1.4" />
-    <PackageVersion Include="MessagePack.Annotations" Version="3.1.4" />
+    <PackageVersion Include="MessagePack" Version="3.1.11" />
+    <PackageVersion Include="MessagePack.Annotations" Version="3.1.11" />
     <!--  Microsoft Extensions -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="8.0.1" />

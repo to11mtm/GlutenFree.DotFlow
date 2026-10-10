@@ -1,0 +1,181 @@
+# Findings remediation — session worklog
+
+> A standalone runbook for a fresh session to work through the confirmed architecture findings and
+> track progress. You can start here with **no prior context**. Edit this file as you go: tick the
+> checkboxes and append to the Progress log at the bottom.
+
+**Created:** 2026-09-29 · **Owner:** rotating (whoever picks up the next item)
+
+---
+
+## 0. What this is
+
+A set of real defects was found while documenting the engine, reproduced with tests, and planned.
+Everything you need is already in the repo:
+
+| Where | What |
+| --- | --- |
+| `docs/architecture/README.md` | the **findings table** (status, severity, link to each plan) — read first |
+| `docs/architecture/plans/README.md` | the **plan index** + cross-cutting threads + suggested order |
+| `docs/architecture/plans/0X-*.md` | one plan per subsystem: evidence, root cause, options, recommendation, acceptance, risk, effort |
+| `docs/architecture/00`–`04` | the deep-dive docs each plan references (how the subsystem actually works) |
+| `Workflow.Tests/Findings/` | the tests that **reproduce** each finding (`[Trait("Category","Finding")]`), plus its own README |
+
+Each finding has a **guard test** that is **red today** and should go **green** when the finding is
+fixed. That is the definition of done for the code change.
+
+---
+
+## 1. Orientation (do this once, at the start of a session)
+
+- [ ] Read `docs/architecture/plans/README.md` (5 min) — the index and the four cross-cutting threads.
+- [ ] Skim `docs/architecture/README.md#findings-at-a-glance` — the severity + status table.
+- [ ] Run the finding tests to see the current baseline (expect mostly red):
+  ```bash
+  dotnet test Workflow.Tests --filter Category=Finding --logger "trx;LogFileName=findings.trx" --results-directory TestResults
+  ```
+  The `.trx` lands in `TestResults/findings.trx` — a clean per-test pass/fail list (ignore the Akka
+  console noise).
+- [ ] Confirm the **rest** of the suite is green before you change anything, so you have a clean base:
+  ```bash
+  dotnet test Workflow.Tests --filter Category!=Finding
+  ```
+
+---
+
+## 2. The standard working loop (per finding)
+
+Pick the next unchecked item from the Work queue (§3) and:
+
+1. **Read its plan section** (`docs/architecture/plans/0X-…#finding-…`). Note the recommended option
+   and any **decision to settle first** — if the plan says a design choice is needed, raise it before
+   coding, don't guess.
+2. **Run its guard test alone** and confirm it's red for the reason the plan describes:
+   ```bash
+   dotnet test Workflow.Tests --filter "FullyQualifiedName~<TestName>"
+   ```
+3. **Implement the fix** in the smallest change that matches the recommendation.
+4. **Make the guard test green.**
+5. **Run the full suite** (`--filter Category!=Finding`) — nothing may regress. Pay attention to the
+   suites the plan's *Acceptance* section names.
+6. **Retire the finding test**: either delete it, or drop its `[Trait("Category","Finding")]` so it
+   becomes a permanent regression test (preferred when it's a good ongoing guard).
+7. **Update the status**: tick the boxes here, and remove/strike the row in
+   `docs/architecture/README.md#findings-at-a-glance`.
+8. **Commit** following the repo's existing commit conventions (look at recent `git log`). One finding
+   per commit where practical; reference the finding id (e.g. `§12.9`) in the message.
+9. **Append a Progress log entry** (§4).
+
+> Guardrails: never weaken an existing passing test to make a change fit. If the fix needs a design
+> decision the plan flagged, stop and get it decided. Keep each fix behind its guard test + the full
+> suite.
+
+---
+
+## 3. Work queue (recommended order)
+
+Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 reads the terminal events
+§12.1 adds). **§12.4 + §10.3 + §9.5 share one "sub-graph parity" change** — do them together.
+
+### Stage 1 — unblockers & high-visibility engine fixes
+
+- [ ] **§12.9 — loop `done`-port node is skipped** · plan 02 · guard `EngineFindingTests.LoopDonePort_ShouldRunPostLoopNode`
+  - [x] plan read · [x] fix (`HandleLoopCompleted`: scope from `loopBody` targets only) · [x] guard green · [x] `WhileModule` path re-checked (by code review — same handler/port; no test yet, see log) · [x] suite green · [ ] finding retired · [ ] README updated
+- [ ] **§12.5 — unregistered module id "succeeds" via stub** · plan 02 · guard `EngineFindingTests.UnregisteredModule_ShouldFailNode_NotSucceedViaStub`
+  - [ ] plan read · [ ] fix (fail the node; reject unknown ids at validation) · [ ] guard green · [ ] stub-dependent tests updated · [ ] suite green · [ ] finding retired · [ ] README updated
+- [ ] **§12.1 — completion/node events never reach SignalR** · plan 02 · guards `RealtimeCompletionFindingTests.*` (2)
+  - [ ] plan read · [ ] fix (publish terminal messages to EventStream; mind secret outputs re §10.6) · [ ] guards green · [ ] bridge/subscription tests green · [ ] suite green · [ ] findings retired · [ ] README updated
+
+### Stage 2 — lifecycle & cancellation (same code area)
+
+- [ ] **§12.2 — executor actors never stop** · plan 02 · guard `EngineFindingTests.CompletedRun_ShouldStopExecutorActor`
+  - [ ] plan read · [ ] fix (self-stop on terminal, after persistence acks; never reap paused) · [ ] guard green · [ ] status-after-stop falls back to history (add test) · [ ] suite green · [ ] finding retired · [ ] README updated
+- [ ] **§12.3 — cancel doesn't stop running constructs** · plan 02 · guard `EngineFindingTests.Cancel_ShouldStopRunningLoopIterations`
+  - [ ] plan read · [ ] fix (`_executionCts.Cancel()` + `CooperativeCancel*` on cancel path) · [ ] guard green · [ ] suite green · [ ] finding retired · [ ] README updated
+
+### Stage 3 — sub-graph parity (do as ONE change)
+
+> `SubGraphExecutor` lacks parity with `WorkflowExecutor`. Extract the shared behaviour (like
+> `DispatchCore` was) so bodies get error handling AND variable propagation at once.
+
+- [ ] **§12.4 — body nodes ignore retry/continue** · plan 02 · guard `EngineFindingTests.RetryInsideLoopBody_ShouldBeHonoured`
+- [ ] **§10.3 — body variable writes not visible after loop** · plan 03 · guard `BindingFindingTests.VariableWriteInsideLoopBody_…` (needs §12.9 done first)
+  - [ ] decide scoping (visible after construct? iteration-local? per plan 03 open question)
+- [ ] (optional) **§9.5 — no streaming regions inside bodies** · plan 04 (documented-only; add a test if tackled)
+  - [ ] plan read (02 §12.4 + 03 §10.3) · [ ] extraction done · [ ] both guards green · [ ] `SubGraphExecutorTests`/`LoopScopeTests`/`ErrorBoundaryTests` green · [ ] suite green · [ ] findings retired · [ ] README updated
+
+### Stage 4 — security (script sandbox)
+
+- [ ] **§9.1 — JS CLR interop reachable** · plan 01 · guards `ScriptSandboxFindingTests.JavaScript_*` (2)
+  - [ ] plan read · [ ] fix (drop `AllowClr()`; `Interop.AllowGetType=false`) · [ ] guards green · [ ] **all** `Workflow.Tests/Scripting/*` still green (proves `workflow.*` unaffected) · [ ] suite green · [ ] findings retired · [ ] README updated
+- [ ] **§9.2 — C# reflection bypasses blocklist** · plan 01 · guard `ScriptSandboxFindingTests.CSharp_ShouldNotAllow_ReflectionTypeResolution`
+  - [ ] plan read · [ ] mitigation (denylist additions) in **both** walkers · [ ] real fix (reference allowlist) · [ ] guard green + add mirror test for the LINQ compiler · [ ] transform/linq suites green · [ ] suite green · [ ] finding retired · [ ] README updated
+
+### Stage 5 — smaller, independent fixes
+
+- [ ] **§9.3 — active-exec count only drops for sync runs** · plan 05 · guard `ActiveExecutionCountFindingTests.AsyncRun_WhenComplete_…` (needs §12.1)
+- [ ] **§9.4 (modules) — ValidateConfiguration never called** · plan 05 · guard `ValidateConfigurationFindingTests.Validator_ShouldSurface_…`
+  - [ ] audit built-ins' `ValidateConfiguration` first (don't start rejecting valid workflows)
+- [ ] **§9.7 — package registers undeclared module ids** · plan 05 · guard `PackageExtraModulesFindingTests.Install_ShouldNotRegister_…`
+  - [ ] decide single- vs multi-module manifests first
+- [ ] **§9.4 (streaming) — pinned version ignored in region** · plan 04 · guard `StreamingFindingTests.PinnedModuleVersion_…`
+- [ ] **§10.2 — input keys shadow declared variables** · plan 03 · guard `BindingFindingTests.InputKey_ShouldNotShadow_DeclaredVariable`
+- [ ] **§10.1 — `{{nodeId.port}}` only reaches direct predecessors** · plan 03 · guard `BindingFindingTests.NonAdjacentNodeOutputReference_ShouldResolve`
+  - [ ] note: recommended fix is **docs/UX** (keep behaviour, correct `docs/variables.md` + designer picker, flip the test to assert a clear error)
+
+### Stage 6 — needs a decision before coding
+
+- [ ] **§10.6 — secrets persisted verbatim** · plan 03 · guard `SecretPersistenceFindingTests.SecretValue_…`
+  - [ ] settle the "what is secret" policy (plan 03 Finding D) · then redact at every sink (history in/out, variable store, logs, broadcast)
+- [ ] **§9.6 — spill kept forever with no history** · plan 04 · guard `SpillCleanupFindingTests.Sweep_WithNoHistory_…`
+  - [ ] pick B1 (fail-fast wiring) vs B2 (artefact age) vs B3 (accept + fix comment); if B1/B3, **delete** the guard test rather than making it pass
+- [ ] **§12.7 — UseErrorHandler not implemented** · plan 02 · guard `EngineFindingTests.UseErrorHandler_…`
+  - [ ] this is a **feature spec**, not a bug: agree the semantics (`ErrorNodeId` routing, `MaxConsecutiveErrors`) before implementing
+
+---
+
+## 4. Refuted / keep as-is (do not "fix")
+
+- **§12.6 join-skip** — refuted; the guard passed. `JoinSkipFindingTests` can be deleted (it was a
+  false alarm).
+- **Port-routing inside a loop body** — works; `EngineFindingTests.PortRoutingInsideLoopBody_…`
+  passed. Keep it as a regression test (drop the `Finding` trait).
+
+---
+
+## 5. Done criteria for the whole effort
+
+- [ ] Every Stage 1–5 finding fixed, its guard green or retired, and its README row removed.
+- [ ] Stage 6 items either resolved or converted to tracked tickets with their decision recorded.
+- [ ] `dotnet test Workflow.Tests` fully green.
+- [ ] `docs/architecture/README.md#findings-at-a-glance` reflects reality (ideally empty or only
+  parked design-decisions remain).
+
+---
+
+## 6. Progress log
+
+Append one entry per working session. Keep it short: what you touched, test status, open decisions.
+
+```
+### 2026-10-10 — §12.9 loop done-port (fix in, not yet committed)
+- Fix: `WorkflowExecutor.HandleLoopCompleted` now seeds `ComputeBodyScope` from body-port targets
+  only (matches `SpawnLoopExecutor`). `LoopCompleted` gained `LoopBodyPort` (default "loopBody"),
+  filled by `LoopExecutorActor` from `_loop.LoopBodyPort`, so custom body ports keep working.
+  Files: WorkflowExecutor.cs, LoopExecutorActor.cs, Messages/LoopMessages.cs.
+- Tests: guard `LoopDonePort_ShouldRunPostLoopNode` green; `--filter Category!=Finding` all green.
+- WhileModule: same completion path, covered by code review. A `while` + done-port end-to-end test
+  needs body variable writes to terminate the loop → add it after §10.3.
+- Remaining for §12.9: move the guard out of `EngineFindingTests` (class-level Finding trait) into a
+  permanent loop test; add the plan's acceptance e2e test (foreach body + done node contributing to
+  workflow outputs); strike the §12.9 row in docs/architecture/README.md; commit referencing §12.9.
+- Open: commit plans/finding tests/worklog (+ README edit) as a baseline commit first, then §12.9.
+- Next after §12.9: §12.5 (unregistered module id succeeds via stub).
+
+### 2026-09-29 — baseline
+- Findings reproduced: 17 confirmed red, 2 refuted (join-skip, body port-routing).
+- Plans written (docs/architecture/plans/01–05). No production code changed yet.
+- Next: §12.9 (loop done-port) — it blocks §10.3 and is a small localized fix.
+```
+
+<!-- add new entries above this line, newest first -->
