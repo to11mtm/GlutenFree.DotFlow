@@ -59,7 +59,15 @@ Pick the next unchecked item from the Work queue (§3) and:
 5. **Run the full suite** (`--filter Category!=Finding`) — nothing may regress. Pay attention to the
    suites the plan's *Acceptance* section names.
 6. **Retire the finding test**: either delete it, or drop its `[Trait("Category","Finding")]` so it
-   becomes a permanent regression test (preferred when it's a good ongoing guard).
+   becomes a permanent regression test (preferred when it's a good ongoing guard). Where the trait is
+   class-level (e.g. `EngineFindingTests`), retiring means **moving** the test to a permanent class.
+   - **Prove the new/moved tests bite.** Stash only the production change
+     (`git stash push -- <prod files>`), run the new tests and confirm they go **red**, then
+     `git stash pop` and confirm green. If the fix has several parts (e.g. a guard + an API change),
+     stash each part separately so every test is shown to guard the part it claims to. A test that
+     stays green without the fix isn't a regression test — rework it. Restore with `git stash pop`,
+     not by copying a backup file: a copy keeps the old mtime and MSBuild silently reuses the stale
+     build (touch the file and rebuild if you must copy).
 7. **Update the status**: tick the boxes here, and remove/strike the row in
    `docs/architecture/README.md#findings-at-a-glance`.
 8. **Commit** following the repo's existing commit conventions (look at recent `git log`). One finding
