@@ -58,6 +58,13 @@ public sealed class LoopExecutorActor : ReceiveActor
     private LoopContext? _activeLoopContext;
 
     /// <summary>
+    /// §10.3: workflow variables as the loop body sees them. Iterations run one at a time, so each
+    /// iteration sees the writes of the ones before it; all writes are reported to the parent when
+    /// the loop ends (also on failure — writes made before it are kept).
+    /// </summary>
+    private readonly BodyVariables _variables;
+
+    /// <summary>
     /// Initializes a new <see cref="LoopExecutorActor"/>.
     /// </summary>
     /// <param name="loopNodeId">Node ID of the loop module that requested iteration. 🆔.</param>
@@ -69,6 +76,7 @@ public sealed class LoopExecutorActor : ReceiveActor
     /// <param name="initialContext">Initial variable + input context for condition evaluation. 📦.</param>
     /// <param name="serviceProvider">DI container. 💉.</param>
     /// <param name="parentToken">Hierarchical cancellation token (2.2.0b)~ 🔗🛑.</param>
+    /// <param name="variables">§10.3: workflow variables when the loop starts (null = none).</param>
     public LoopExecutorActor(
         string loopNodeId,
         LoopRequest loop,
@@ -78,7 +86,8 @@ public sealed class LoopExecutorActor : ReceiveActor
         Guid executionId,
         IReadOnlyDictionary<string, object?> initialContext,
         IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         _loopNodeId = loopNodeId;
         _loop = loop;
@@ -91,6 +100,7 @@ public sealed class LoopExecutorActor : ReceiveActor
 
         // Seed current context from initial inputs/variables for condition evaluation
         foreach (var (k, v) in initialContext) _currentContext[k] = v;
+        _variables = new BodyVariables(variables);
 
         _linkedCts = parentToken.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(parentToken)
@@ -120,11 +130,12 @@ public sealed class LoopExecutorActor : ReceiveActor
         Guid executionId,
         IReadOnlyDictionary<string, object?> initialContext,
         IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         return Akka.Actor.Props.Create(() => new LoopExecutorActor(
             loopNodeId, loop, definition, bodyEntryNodeIds, bodyScopeNodeIds,
-            executionId, initialContext, serviceProvider, parentToken));
+            executionId, initialContext, serviceProvider, parentToken, variables));
     }
 
     #region Lifecycle
@@ -285,7 +296,8 @@ public sealed class LoopExecutorActor : ReceiveActor
                 iterInputs,
                 _serviceProvider,
                 subGraphId,
-                _linkedCts.Token),
+                _linkedCts.Token,
+                _variables.Current),
             $"loop-body-{_loopNodeId.Replace(".", "-")}-{_iterationCount}");
 
         Context.Watch(subGraphActor);
@@ -302,6 +314,7 @@ public sealed class LoopExecutorActor : ReceiveActor
     private void HandleIterationCompleted(SubGraphCompleted msg)
     {
         Context.Unwatch(Sender);
+        ApplyIterationWrites(msg.VariableUpdates);
 
         // Pop current loop scope
         if (_activeLoopContext != null)
@@ -343,6 +356,7 @@ public sealed class LoopExecutorActor : ReceiveActor
     private void HandleIterationFailed(SubGraphFailed msg)
     {
         Context.Unwatch(Sender);
+        ApplyIterationWrites(msg.VariableUpdates);
 
         if (_activeLoopContext != null)
         {
@@ -378,7 +392,7 @@ public sealed class LoopExecutorActor : ReceiveActor
             "✅ LoopExecutor '{LoopNodeId}' completed: {Count} iteration(s), {ErrCount} error(s)",
             _loopNodeId, _iterationCount, _errors.Count);
 
-        Context.Parent.Tell(new LoopCompleted(_loopNodeId, outputs, _loop.LoopBodyPort));
+        Context.Parent.Tell(new LoopCompleted(_loopNodeId, outputs, _loop.LoopBodyPort, _variables.Writes));
         Context.Stop(Self);
     }
 
@@ -389,13 +403,31 @@ public sealed class LoopExecutorActor : ReceiveActor
             "❌ LoopExecutor '{LoopNodeId}' failed at iteration {Iter}: {Error}",
             _loopNodeId, _iterationCount, error.Message);
 
-        Context.Parent.Tell(new LoopFailed(_loopNodeId, error, failedNodeId));
+        Context.Parent.Tell(new LoopFailed(_loopNodeId, error, failedNodeId, _variables.Writes));
         Context.Stop(Self);
     }
 
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// §10.3: makes an iteration's variable writes visible to later iterations — both as variables
+    /// passed to body nodes and in the context a while-style condition is evaluated against.
+    /// </summary>
+    private void ApplyIterationWrites(IReadOnlyDictionary<string, object?>? writes)
+    {
+        if (writes is null)
+        {
+            return;
+        }
+
+        _variables.Apply(writes);
+        foreach (var (name, value) in writes)
+        {
+            _currentContext[name] = value;
+        }
+    }
 
     /// <summary>
     /// Computes the scope nodes for the loop body by BFS from body entry nodes,

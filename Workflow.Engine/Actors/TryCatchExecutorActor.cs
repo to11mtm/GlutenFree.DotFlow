@@ -74,6 +74,13 @@ public sealed class TryCatchExecutorActor : ReceiveActor
     private bool _errorWasCaught;
 
     /// <summary>
+    /// §10.3: variables as the try / catch / finally bodies see them. The phases run one after
+    /// another, so catch sees try's writes (made before the failure) and finally sees both; all
+    /// writes are reported to the parent when the try/catch ends.
+    /// </summary>
+    private readonly BodyVariables _variables;
+
+    /// <summary>
     /// Initializes a new <see cref="TryCatchExecutorActor"/>~ 🛡️✨
     /// </summary>
     /// <param name="tryCatchNodeId">Node ID of the trycatch module. 🆔.</param>
@@ -82,13 +89,15 @@ public sealed class TryCatchExecutorActor : ReceiveActor
     /// <param name="executionId">Parent execution ID for history correlation. 🔑.</param>
     /// <param name="serviceProvider">DI container. 💉.</param>
     /// <param name="parentToken">Hierarchical cancellation token (2.2.0b)~ 🔗🛑.</param>
+    /// <param name="variables">§10.3: workflow variables when the try/catch starts (null = none).</param>
     public TryCatchExecutorActor(
         string tryCatchNodeId,
         TryCatchRequest request,
         WorkflowDefinition definition,
         Guid executionId,
         IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         _tryCatchNodeId = tryCatchNodeId;
         _request = request;
@@ -96,6 +105,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         _executionId = executionId;
         _serviceProvider = serviceProvider;
         _log = Context.GetLogger();
+        _variables = new BodyVariables(variables);
 
         // Phase 2.2.0b: linked CTS for cooperative cancellation~ 🔗🛑
         _linkedCts = parentToken.CanBeCanceled
@@ -119,10 +129,11 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         WorkflowDefinition definition,
         Guid executionId,
         IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         return Akka.Actor.Props.Create(() => new TryCatchExecutorActor(
-            tryCatchNodeId, request, definition, executionId, serviceProvider, parentToken));
+            tryCatchNodeId, request, definition, executionId, serviceProvider, parentToken, variables));
     }
 
     #region Lifecycle
@@ -233,7 +244,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
                 "⚠️ TryCatch '{TryCatchNodeId}': {Reason} — re-escalating error after finally~ ❗",
                 _tryCatchNodeId,
                 _errorWasCaught ? "rethrow=true" : "no catch handler handled the error");
-            Context.Parent.Tell(new TryCatchFailed(_tryCatchNodeId, _caughtException!));
+            Context.Parent.Tell(new TryCatchFailed(_tryCatchNodeId, _caughtException!, _variables.Writes));
         }
         else
         {
@@ -245,7 +256,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
             _log.Info(
                 "✅ TryCatch '{TryCatchNodeId}' sequence complete (caught={Caught}, rethrow={Rethrow})",
                 _tryCatchNodeId, _errorWasCaught, _request.Rethrow);
-            Context.Parent.Tell(new TryCatchCompleted(_tryCatchNodeId, outputs));
+            Context.Parent.Tell(new TryCatchCompleted(_tryCatchNodeId, outputs, _variables.Writes));
         }
 
         Context.Stop(Self);
@@ -257,6 +268,8 @@ public sealed class TryCatchExecutorActor : ReceiveActor
 
     private void HandleSubGraphCompleted(SubGraphCompleted message)
     {
+        _variables.Apply(message.VariableUpdates);
+
         _log.Debug(
             "🛡️ TryCatch '{TryCatchNodeId}': sub-graph '{SubGraphId}' completed (phase={Phase})",
             _tryCatchNodeId, message.SubGraphId, _phase);
@@ -290,6 +303,8 @@ public sealed class TryCatchExecutorActor : ReceiveActor
 
     private void HandleSubGraphFailed(SubGraphFailed message)
     {
+        _variables.Apply(message.VariableUpdates);
+
         _log.Warning(
             "⚡ TryCatch '{TryCatchNodeId}': sub-graph '{SubGraphId}' failed (phase={Phase}) — {Error}",
             _tryCatchNodeId, message.SubGraphId, _phase, message.Error.Message);
@@ -311,7 +326,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
 
             case Phase.RunningFinally:
                 // Finally failed — always escalate finally failures~
-                Context.Parent.Tell(new TryCatchFailed(_tryCatchNodeId, message.Error));
+                Context.Parent.Tell(new TryCatchFailed(_tryCatchNodeId, message.Error, _variables.Writes));
                 Context.Stop(Self);
                 break;
 
@@ -319,7 +334,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
                 _log.Warning(
                     "⚠️ TryCatch '{TryCatchNodeId}': SubGraphFailed in unexpected phase '{Phase}'~ ⚠️",
                     _tryCatchNodeId, _phase);
-                Context.Parent.Tell(new TryCatchFailed(_tryCatchNodeId, message.Error));
+                Context.Parent.Tell(new TryCatchFailed(_tryCatchNodeId, message.Error, _variables.Writes));
                 Context.Stop(Self);
                 break;
         }
@@ -473,7 +488,8 @@ public sealed class TryCatchExecutorActor : ReceiveActor
                 subGraphInputs,
                 _serviceProvider,
                 subGraphId: $"{subGraphId}:{_tryCatchNodeId}",
-                parentToken: _linkedCts.Token),
+                parentToken: _linkedCts.Token,
+                variables: _variables.Current),
             actorName);
 
         Context.Watch(child);

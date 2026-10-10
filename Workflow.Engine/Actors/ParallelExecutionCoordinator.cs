@@ -42,6 +42,16 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
     private readonly WorkflowDefinition _definition;
     private readonly Guid _executionId;
     private readonly IReadOnlyDictionary<string, object?> _initialContext;
+
+    /// <summary>§10.3: variables every branch starts from (the same snapshot for all branches).</summary>
+    private readonly IReadOnlyDictionary<string, object?>? _variables;
+
+    /// <summary>
+    /// §10.3: each branch's variable writes, by branch index. Branches run concurrently and don't
+    /// see each other's writes; they're merged in branch order when the parallel reports, so on a
+    /// conflict the highest branch index wins — deterministic regardless of timing.
+    /// </summary>
+    private readonly SortedDictionary<int, IReadOnlyDictionary<string, object?>> _branchWrites = new();
     private readonly IServiceProvider _serviceProvider;
     private readonly CancellationTokenSource _linkedCts;
     private readonly ILoggingAdapter _log;
@@ -65,6 +75,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
     /// <param name="initialContext">Initial variable + input context to seed branches. 📦.</param>
     /// <param name="serviceProvider">DI container. 💉.</param>
     /// <param name="parentToken">Hierarchical cancellation token (2.2.0b)~ 🔗🛑.</param>
+    /// <param name="variables">§10.3: workflow variables when the parallel starts (null = none).</param>
     public ParallelExecutionCoordinator(
         string parallelNodeId,
         ParallelRequest parallel,
@@ -72,13 +83,15 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         Guid executionId,
         IReadOnlyDictionary<string, object?> initialContext,
         IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         _parallelNodeId = parallelNodeId;
         _parallel = parallel;
         _definition = definition;
         _executionId = executionId;
         _initialContext = initialContext;
+        _variables = variables;
         _serviceProvider = serviceProvider;
         _log = Context.GetLogger();
 
@@ -104,11 +117,12 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         Guid executionId,
         IReadOnlyDictionary<string, object?> initialContext,
         IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         return Akka.Actor.Props.Create(() => new ParallelExecutionCoordinator(
             parallelNodeId, parallel, definition,
-            executionId, initialContext, serviceProvider, parentToken));
+            executionId, initialContext, serviceProvider, parentToken, variables));
     }
 
     #region Lifecycle
@@ -267,7 +281,8 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
                 branchInputs,
                 _serviceProvider,
                 subGraphId,
-                _linkedCts.Token),
+                _linkedCts.Token,
+                _variables),
             actorName);
 
         Context.Watch(subGraphActor);
@@ -289,6 +304,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         _inFlightCount--;
 
         var branchIndex = ResolveBranchIndex(Sender);
+        RecordBranchWrites(branchIndex, msg.VariableUpdates);
 
         // Strip internal sentinels for downstream consumption~
         var branchResult = msg.Outputs
@@ -327,6 +343,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         _inFlightCount--;
 
         var branchIndex = ResolveBranchIndex(Sender);
+        RecordBranchWrites(branchIndex, msg.VariableUpdates);
         _failedBranches.Add(branchIndex);
         _firstError ??= msg.Error;
         _firstFailedNodeId ??= msg.FailedNodeId;
@@ -424,7 +441,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
             "✅ ParallelCoordinator '{ParallelNodeId}' completed: {Count} branch(es) (waitForAll={WaitForAll})",
             _parallelNodeId, reportedCount, _parallel.WaitForAll);
 
-        Context.Parent.Tell(new ParallelCompleted(_parallelNodeId, outputs));
+        Context.Parent.Tell(new ParallelCompleted(_parallelNodeId, outputs, MergedBranchWrites()));
         Context.Stop(Self);
     }
 
@@ -435,13 +452,41 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
             "❌ ParallelCoordinator '{ParallelNodeId}' failed: {Error}",
             _parallelNodeId, error.Message);
 
-        Context.Parent.Tell(new ParallelFailed(_parallelNodeId, error, failedNodeId));
+        Context.Parent.Tell(new ParallelFailed(_parallelNodeId, error, failedNodeId, MergedBranchWrites()));
         Context.Stop(Self);
     }
 
     #endregion
 
     #region Helpers
+
+    private void RecordBranchWrites(int branchIndex, IReadOnlyDictionary<string, object?>? writes)
+    {
+        if (writes is { Count: > 0 })
+        {
+            _branchWrites[branchIndex] = writes;
+        }
+    }
+
+    /// <summary>§10.3: all branches' writes merged in branch order (highest index wins a conflict).</summary>
+    private IReadOnlyDictionary<string, object?>? MergedBranchWrites()
+    {
+        if (_branchWrites.Count == 0)
+        {
+            return null;
+        }
+
+        var merged = new Dictionary<string, object?>();
+        foreach (var writes in _branchWrites.Values)
+        {
+            foreach (var (name, value) in writes)
+            {
+                merged[name] = value;
+            }
+        }
+
+        return merged;
+    }
 
     /// <summary>
     /// BFS from branch entry nodes; stops when reaching the parallel node itself

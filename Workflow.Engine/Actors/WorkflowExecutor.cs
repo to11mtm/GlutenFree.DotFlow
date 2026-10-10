@@ -89,6 +89,9 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private readonly List<string> _portValidationErrors = new();
 
+    /// <summary>§12.4: shared boundary → retry / continue / fail decision (also used by SubGraphExecutor).</summary>
+    private readonly NodeFailureCore _failureCore;
+
     /// <summary>§12.2: grace period + ack timeout for stopping a finished executor.</summary>
     private readonly ExecutorLifecycleOptions _lifecycleOptions;
 
@@ -291,6 +294,16 @@ public class WorkflowExecutor : ReceiveActor
 
         // Build the execution graph from connections
         BuildExecutionGraph();
+
+        _failureCore = new NodeFailureCore(
+            getNode: GetNodeDefinition,
+            workflowErrorHandling: _definition.ErrorHandling,
+            tryHandleWithBoundary: TryHandleWithBoundary,
+            retryAttempts: nodeId => _nodeRetryAttempts.GetValueOrDefault(nodeId, 0),
+            scheduleRetry: ScheduleNodeRetry,
+            continueAfterFailure: ContinueAfterNodeFailure,
+            fail: (_, error) => FailWorkflow(error),
+            log: _log);
 
         // Set up message handlers
         Receive<StartExecution>(HandleStartExecution);
@@ -956,17 +969,7 @@ public class WorkflowExecutor : ReceiveActor
         // Apply variable updates from the module result, if any~ 💾
         if (message.VariableUpdates is { Count: > 0 } varUpdates)
         {
-            foreach (var (name, value) in varUpdates)
-            {
-                _log.Debug(
-                    "💾 Variable update from node {NodeId}: {VarName} = {VarValue}",
-                    nodeId,
-                    name,
-                    value);
-                _context = _context.WithVariable(name, value);
-            }
-
-            QueuePersistVariableUpdates(nodeId, varUpdates);
+            ApplyVariableUpdates(nodeId, varUpdates);
         }
 
         _completedNodes = _completedNodes.Add(nodeId);
@@ -1181,115 +1184,54 @@ public class WorkflowExecutor : ReceiveActor
 
         PublishTerminal(new NodeExecutionFailed(nodeId, error, _executionId, nodeDuration));
 
-        // Get error handling configuration
-        var nodeDef = GetNodeDefinition(nodeId);
-        var errorHandling = nodeDef?.ErrorHandling ?? _definition.ErrorHandling;
-        var behavior = errorHandling?.OnErrorBehavior ?? ErrorBehavior.Fail;
+        // §12.4: the boundary → retry / continue / fail decision is shared with SubGraphExecutor~ 🛡️
+        _failureCore.Handle(nodeId, error);
+    }
 
-        // Phase 2.2.0b: Walk the active error boundary stack FIRST.
-        // If a boundary catches this exception, route to catch handler instead of falling through~ 🛡️
-        if (TryHandleWithBoundary(nodeId, error))
+    /// <summary>
+    /// <see cref="NodeFailureCore"/> callback for <see cref="ErrorBehavior.Continue"/>: treat the failed
+    /// node as completed for routing so the workflow proceeds~ ⚡.
+    /// </summary>
+    private void ContinueAfterNodeFailure(string nodeId)
+    {
+        // Remove from failed set to avoid double-counting in IsWorkflowComplete~ 🔄
+        _failedNodes = _failedNodes.Remove(nodeId);
+        _completedNodes = _completedNodes.Add(nodeId);
+        if (IsWorkflowComplete())
         {
-            return;
+            // Complete with partial success
+            CompleteWorkflow();
         }
-
-        switch (behavior)
+        else
         {
-            case ErrorBehavior.Retry:
-                HandleRetryBehavior(nodeId, error, nodeDef, errorHandling);
-                break;
-
-            case ErrorBehavior.Continue:
-                _log.Warning("⚡ Continue-on-error: proceeding despite failure in node {NodeId}", nodeId);
-
-                // Treat as completed for successor execution purposes
-                // Remove from failed set to avoid double-counting in IsWorkflowComplete~ 🔄
-                _failedNodes = _failedNodes.Remove(nodeId);
-                _completedNodes = _completedNodes.Add(nodeId);
-                if (IsWorkflowComplete())
-                {
-                    // Complete with partial success
-                    CompleteWorkflow();
-                }
-                else
-                {
-                    ExecuteReadySuccessors(nodeId);
-                }
-
-                break;
-
-            case ErrorBehavior.UseErrorHandler:
-                _log.Warning(
-                    "⚠️ UseErrorHandler behavior is not yet implemented — falling back to Fail for node {NodeId}. UwU",
-                    nodeId);
-                FailWorkflow(error);
-                break;
-
-            case ErrorBehavior.Fail:
-            default:
-                _log.Error("🛑 Fail-fast: stopping workflow execution due to failure in node {NodeId}", nodeId);
-                FailWorkflow(error);
-                break;
+            ExecuteReadySuccessors(nodeId);
         }
     }
 
     /// <summary>
-    /// Handles retry behavior when a node fails with <see cref="ErrorBehavior.Retry"/>.
-    /// Computes exponential backoff delay and schedules a <see cref="RetryNode"/> message~ 🔄✨.
+    /// <see cref="NodeFailureCore"/> callback for a retry: records the attempt, marks the node
+    /// Retrying, schedules a <see cref="RetryNode"/> after the backoff delay and publishes
+    /// <see cref="NodeRetrying"/>~ 🔄.
     /// </summary>
-    /// <remarks>
-    /// CopilotNote: The retry delay uses exponential backoff:
-    /// <c>delay = baseDelay * (backoffMultiplier ^ attemptIndex)</c>, capped at <c>MaxDelayMs</c>.
-    /// Scheduling is done via <c>Context.System.Scheduler.ScheduleTellOnce</c> to avoid blocking the actor! UwU 💖.
-    /// </remarks>
-    private void HandleRetryBehavior(string nodeId, Exception error, NodeDefinition? nodeDef, ErrorHandling? errorHandling)
+    private void ScheduleNodeRetry(NodeFailureCore.RetryDecision retry)
     {
-        var retryPolicy = nodeDef?.RetryPolicy ?? RetryPolicy.Default;
-        var currentAttempt = _nodeRetryAttempts.GetValueOrDefault(nodeId, 0) + 1;
+        var nodeId = retry.NodeId;
+        _lastNodeErrors[nodeId] = retry.Error;
+        _nodeRetryAttempts[nodeId] = retry.Attempt;
 
-        _lastNodeErrors[nodeId] = error;
-
-        if (currentAttempt >= retryPolicy.MaxAttempts)
-        {
-            _log.Error(
-                "🛑 Node {NodeId} exhausted all {MaxAttempts} retry attempts. Failing workflow~ 💔",
-                nodeId,
-                retryPolicy.MaxAttempts);
-            FailWorkflow(error);
-            return;
-        }
-
-        // Compute exponential backoff delay: baseDelay * multiplier^(attempt-1), capped at MaxDelayMs~ 📈
-        var attemptIndex = currentAttempt - 1;
-        var delay = (int)Math.Min(
-            retryPolicy.DelayMs * Math.Pow(retryPolicy.BackoffMultiplier, attemptIndex),
-            retryPolicy.MaxDelayMs);
-
-        _log.Warning(
-            "🔄 Scheduling retry {Attempt}/{MaxAttempts} for node {NodeId} in {DelayMs}ms (backoff)~ UwU",
-            currentAttempt,
-            retryPolicy.MaxAttempts,
-            nodeId,
-            delay);
-
-        // Update retry tracking
-        _nodeRetryAttempts[nodeId] = currentAttempt;
-
-        // Transition node state to Retrying~ 🔄
         TransitionNodeState(nodeId, NodeExecutionState.Retrying, DateTimeOffset.UtcNow);
 
-        // Schedule the retry after backoff delay — non-blocking, idiomatic Akka.NET! ✨
-        // We track the ICancelable so we can cancel it in PostStop (fixes AK1004)~ 🧹
-        var retryMessage = new RetryNode(nodeId, _executionId, currentAttempt, retryPolicy.MaxAttempts);
+        // Non-blocking, idiomatic Akka.NET! ✨ Tracked so PostStop can cancel it (fixes AK1004)~ 🧹
+        var retryMessage = new RetryNode(nodeId, _executionId, retry.Attempt, retry.MaxAttempts);
         var cancellable = Context.System.Scheduler.ScheduleTellOnceCancelable(
-            delay: TimeSpan.FromMilliseconds(delay),
+            delay: retry.Delay,
             receiver: Self,
             message: retryMessage,
             sender: Self);
         _pendingRetryCancellations[nodeId] = cancellable;
 
         // Publish NodeRetrying event for observability~ 📡
-        var retryingEvent = new NodeRetrying(nodeId, _executionId, currentAttempt, retryPolicy.MaxAttempts, error);
+        var retryingEvent = new NodeRetrying(nodeId, _executionId, retry.Attempt, retry.MaxAttempts, retry.Error);
         Context.Parent.Tell(retryingEvent);
         Context.System.EventStream.Publish(retryingEvent);
     }
@@ -1396,7 +1338,8 @@ public class WorkflowExecutor : ReceiveActor
                 loopNodeId, loop, _definition,
                 bodyEntryNodeIds, bodyScopeIds,
                 _executionId, initialContext,
-                _serviceProvider, _executionCts.Token),
+                _serviceProvider, _executionCts.Token,
+                CurrentVariables()),
             actorName);
 
         Context.Watch(loopActor);
@@ -1416,6 +1359,9 @@ public class WorkflowExecutor : ReceiveActor
         {
             return;
         }
+
+        // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
+        ApplyConstructVariableUpdates(message.LoopNodeId, message.VariableUpdates);
 
         var loopNodeId = message.LoopNodeId;
         _pendingLoopNodes.Remove(loopNodeId);
@@ -1668,6 +1614,9 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
+        // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
+        ApplyConstructVariableUpdates(message.LoopNodeId, message.VariableUpdates);
+
         var loopNodeId = message.LoopNodeId;
         _pendingLoopNodes.Remove(loopNodeId);
         Context.Unwatch(Sender);
@@ -1799,7 +1748,8 @@ public class WorkflowExecutor : ReceiveActor
             ParallelExecutionCoordinator.Props(
                 parallelNodeId, parallel, _definition,
                 _executionId, initialContext,
-                _serviceProvider, _executionCts.Token),
+                _serviceProvider, _executionCts.Token,
+                CurrentVariables()),
             actorName);
 
         Context.Watch(coordinator);
@@ -1819,6 +1769,9 @@ public class WorkflowExecutor : ReceiveActor
         {
             return;
         }
+
+        // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
+        ApplyConstructVariableUpdates(message.ParallelNodeId, message.VariableUpdates);
 
         var parallelNodeId = message.ParallelNodeId;
         _pendingParallelNodes.Remove(parallelNodeId);
@@ -1869,6 +1822,9 @@ public class WorkflowExecutor : ReceiveActor
         {
             return;
         }
+
+        // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
+        ApplyConstructVariableUpdates(message.ParallelNodeId, message.VariableUpdates);
 
         var parallelNodeId = message.ParallelNodeId;
         _pendingParallelNodes.Remove(parallelNodeId);
@@ -1934,7 +1890,8 @@ public class WorkflowExecutor : ReceiveActor
         var tcActor = Context.ActorOf(
             TryCatchExecutorActor.Props(
                 tryCatchNodeId, request, _definition,
-                _executionId, _serviceProvider, _executionCts.Token),
+                _executionId, _serviceProvider, _executionCts.Token,
+                CurrentVariables()),
             actorName);
 
         Context.Watch(tcActor);
@@ -1957,6 +1914,9 @@ public class WorkflowExecutor : ReceiveActor
         {
             return;
         }
+
+        // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
+        ApplyConstructVariableUpdates(message.TryCatchNodeId, message.VariableUpdates);
 
         var tryCatchNodeId = message.TryCatchNodeId;
         _pendingTryCatchNodes.Remove(tryCatchNodeId);
@@ -2007,6 +1967,9 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
+        // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
+        ApplyConstructVariableUpdates(message.TryCatchNodeId, message.VariableUpdates);
+
         var tryCatchNodeId = message.TryCatchNodeId;
         _pendingTryCatchNodes.Remove(tryCatchNodeId);
         Context.Unwatch(Sender);
@@ -2056,7 +2019,8 @@ public class WorkflowExecutor : ReceiveActor
         var txnActor = Context.ActorOf(
             TransactionExecutorActor.Props(
                 transactionNodeId, request, _definition,
-                _executionId, _serviceProvider, _executionCts.Token),
+                _executionId, _serviceProvider, _executionCts.Token,
+                CurrentVariables()),
             actorName);
 
         Context.Watch(txnActor);
@@ -2075,6 +2039,9 @@ public class WorkflowExecutor : ReceiveActor
         {
             return;
         }
+
+        // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
+        ApplyConstructVariableUpdates(message.TransactionNodeId, message.VariableUpdates);
 
         var transactionNodeId = message.TransactionNodeId;
         _pendingTransactionNodes.Remove(transactionNodeId);
@@ -2117,6 +2084,9 @@ public class WorkflowExecutor : ReceiveActor
         {
             return;
         }
+
+        // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
+        ApplyConstructVariableUpdates(message.TransactionNodeId, message.VariableUpdates);
 
         var transactionNodeId = message.TransactionNodeId;
         _pendingTransactionNodes.Remove(transactionNodeId);
@@ -2731,6 +2701,46 @@ public class WorkflowExecutor : ReceiveActor
     /// variable updates stripped — so no possibly-secret values go on the stream (see 02 §10.6).
     /// </summary>
     private void PublishTerminal(IWorkflowMessage message) => Context.System.EventStream.Publish(message);
+
+    /// <summary>
+    /// Applies variable writes to the workflow context and persists them — for a top-level node's
+    /// <c>VariableUpdates</c> and (§10.3) for the writes a construct body reports when it ends~ 💾.
+    /// </summary>
+    private void ApplyVariableUpdates(string sourceNodeId, HashMap<string, object?> updates)
+    {
+        foreach (var (name, value) in updates)
+        {
+            _log.Debug(
+                "💾 Variable update from node {NodeId}: {VarName} = {VarValue}",
+                sourceNodeId,
+                name,
+                value);
+            _context = _context.WithVariable(name, value);
+        }
+
+        QueuePersistVariableUpdates(sourceNodeId, updates);
+    }
+
+    /// <summary>§10.3: applies the variable writes a construct body reported (no-op when none).</summary>
+    private void ApplyConstructVariableUpdates(string constructNodeId, IReadOnlyDictionary<string, object?>? updates)
+    {
+        if (updates is { Count: > 0 })
+        {
+            ApplyVariableUpdates(constructNodeId, updates.Select(kv => (kv.Key, kv.Value)).ToHashMap());
+        }
+    }
+
+    /// <summary>§10.3: the current workflow variables, as handed to a construct's body.</summary>
+    private IReadOnlyDictionary<string, object?> CurrentVariables()
+    {
+        var variables = new Dictionary<string, object?>();
+        foreach (var (name, value) in _context.Variables)
+        {
+            variables[name] = value;
+        }
+
+        return variables;
+    }
 
     /// <summary>
     /// §12.3: once the run is Completed/Failed/Cancelled, late node/construct results and scheduled

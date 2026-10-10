@@ -106,11 +106,11 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 > `SubGraphExecutor` lacks parity with `WorkflowExecutor`. Extract the shared behaviour (like
 > `DispatchCore` was) so bodies get error handling AND variable propagation at once.
 
-- [ ] **§12.4 — body nodes ignore retry/continue** · plan 02 · guard `EngineFindingTests.RetryInsideLoopBody_ShouldBeHonoured`
-- [ ] **§10.3 — body variable writes not visible after loop** · plan 03 · guard `BindingFindingTests.VariableWriteInsideLoopBody_…` (needs §12.9 done first)
-  - [ ] decide scoping (visible after construct? iteration-local? per plan 03 open question)
+- [x] **§12.4 — body nodes ignore retry/continue** · plan 02 · guard `EngineFindingTests.RetryInsideLoopBody_ShouldBeHonoured`
+- [x] **§10.3 — body variable writes not visible after loop** · plan 03 · guard `BindingFindingTests.VariableWriteInsideLoopBody_…` (needs §12.9 done first)
+  - [x] decide scoping (visible after construct? iteration-local? per plan 03 open question) — decided, recorded in plan 03
 - [ ] (optional) **§9.5 — no streaming regions inside bodies** · plan 04 (documented-only; add a test if tackled)
-  - [ ] plan read (02 §12.4 + 03 §10.3) · [ ] extraction done · [ ] both guards green · [ ] `SubGraphExecutorTests`/`LoopScopeTests`/`ErrorBoundaryTests` green · [ ] suite green · [ ] findings retired · [ ] README updated
+  - [x] plan read (02 §12.4 + 03 §10.3) · [x] extraction done · [x] both guards green · [x] `SubGraphExecutorTests`/`LoopScopeTests`/`ErrorBoundaryTests` green · [x] suite green · [x] findings retired (→ `Engine/SubGraphParityTests`) · [x] README updated · §9.5 not tackled (optional)
 
 ### Stage 4 — security (script sandbox)
 
@@ -147,8 +147,24 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   Add an `ExecutionCancelled` client event (bridge mapping + hub contract), e.g. publish a distinct
   message or map terminal `ExecutionStateChanged → Cancelled`. Update `ExecutionEventBridgeTests`.
 - [ ] **Node events from construct bodies.** Loop/branch body nodes run in `SubGraphExecutor`, which
-  doesn't publish `NodeExecutionCompleted`/`Failed`, so clients see no per-node events inside bodies.
-  Fold into the Stage 3 sub-graph parity extraction.
+  doesn't publish `NodeExecutionCompleted`/`Failed` (or `NodeStateChanged`/`NodeRetrying` for body
+  retries), so clients see no per-node events inside bodies. Left out of Stage 3 to keep that change
+  focused; `NodeFailureCore`'s `scheduleRetry` callback is the natural hook for retry events.
+- [ ] **Top-level run can complete while a retry is pending.** `WorkflowExecutor.IsWorkflowComplete`
+  doesn't check `_pendingRetryCancellations`: if node A is in retry backoff (counted in
+  `_failedNodes`) and sibling B finishes last, the run completes and A's retry is dropped. One-line
+  fix (`&& _pendingRetryCancellations.Count == 0`) + a test. `SubGraphExecutor.IsComplete` already
+  has the equivalent guard (added in Stage 3). Pre-existing; found while doing Stage 3.
+- [ ] **Constructs nested inside a body (loop-in-loop, try/catch in a loop, …).** `SubGraphExecutor`
+  doesn't handle `Node*ExecutionRequested`, so by code reading a nested construct runs as a plain
+  node (its body edges fire once as ordinary successors). The README's withdrawal of the
+  "flattened" claim rested on a port-routing test (not a construct) — verify with a test first.
+  Plan 02's §12.4 acceptance also asked for "try/catch nested in a loop body"; not done for this
+  reason.
+- [ ] **API test flake: SQLite "table VersionInfo already exists".** Seen in `RateLimitTests`,
+  `ModuleManagementEndpointsTests`, `WebhookApiTests` (2 of 4 full runs on 2026-10-10, green on
+  rerun). DB names are unique per factory (`TestSqlite.InMemory`), so suspect one host running
+  migrations twice concurrently. Investigate the migration runner / hosted-service startup.
 
 ---
 
@@ -176,6 +192,35 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-10 — Stage 3: sub-graph parity (§12.4 + §10.3)
+- Scoping decided (asked): sequential bodies see earlier writes and report them after the
+  construct; parallel branches isolated, merged in branch order; writes before a failure kept.
+  Plan 03's "iteration-local" recommendation was revised — it broke WhileModule's documented
+  variable-driven while. Recorded in plan 03's open question.
+- §12.4: extracted `NodeFailureCore` (boundary → retry / continue / fail) from
+  `WorkflowExecutor.HandleNodeFailure`, DispatchCore-style (state stays in the actor). Pure
+  refactor first: full suite green before touching sub-graphs. `SubGraphExecutor` now uses it
+  (no boundary stack → its owning try/catch still sees a failure), with its own retry scheduling;
+  `IsComplete` waits for pending retries.
+- §10.3: new `BodyVariables` helper. `SubGraphExecutor` passes variables to body nodes
+  (`Execute.Variables`), applies their writes, reports them on `SubGraphCompleted/Failed`
+  (new optional `VariableUpdates` on all 10 construct messages). Loop carries writes into later
+  iterations + the while condition context; parallel merges per-branch writes by index;
+  try/catch and transaction run phases sequentially. `WorkflowExecutor` hands constructs the
+  current variables and applies their reported writes via the same path as a node
+  (`ApplyVariableUpdates` → context + `QueuePersistVariableUpdates`).
+- Tests: `Engine/SubGraphParityTests` (8): retry honoured / exhausted, continue, write visible
+  after loop, later iterations see earlier writes (0,1,2 → 3), variable-driven `while` terminates
+  (the test §12.9 deferred), parallel isolation + branch-order merge, try/catch writes before
+  failure. All 8 RED with the engine changes stashed. Retired both guards.
+- Follow-ups added: node events from bodies (not folded in after all), top-level
+  complete-while-retry-pending race (pre-existing), nested constructs in bodies (unverified).
+- Flake, unrelated to the engine: API tests intermittently hit SQLite "table VersionInfo already
+  exists" (2 of the last 4 runs, different tests; green on rerun). First seen after §12.2 added
+  another WebApplicationFactory class — likely more parallel load exposing an existing migration
+  race. Added as a follow-up.
+- `--filter Category!=Finding`: 1758 passed, 0 failed. Next: Stage 4 (§9.1 JS CLR interop).
+
 ### 2026-10-10 — §12.3 cancel stops running constructs
 - Cancel path now calls `_executionCts.Cancel()` (like Complete/FailWorkflow). Every construct
   actor links its token to it, so loops/parallels/try-catch/transactions/stream regions stop

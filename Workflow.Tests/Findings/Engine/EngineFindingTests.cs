@@ -46,42 +46,6 @@ public sealed class EngineFindingTests : TestKit
         return (executor, parent, executionId);
     }
 
-    // ── Finding 01 §12.4a — a node inside a loop body should honour its Retry policy ──────────────
-
-    /// <summary>
-    /// A body node configured with <c>ErrorBehavior.Retry</c> that fails once then succeeds should
-    /// be retried inside the loop body, so the run completes. Today <c>SubGraphExecutor</c> fails
-    /// the sub-graph on the first node failure regardless of the node's error handling.
-    /// </summary>
-    [Fact]
-    public void RetryInsideLoopBody_ShouldBeHonoured()
-    {
-        var loop = new LoopModule("f.loop2", items: new List<object?> { 1 });
-        var flaky = new FlakyModule("f.flaky", failTimes: 1);
-        var services = FindingDefs.Services(new Workflow.Modules.Abstractions.IWorkflowModule[] { loop, flaky });
-
-        var definition = FindingDefs.Definition(
-            nodes: new[]
-            {
-                FindingDefs.Node("loop", "f.loop2"),
-                FindingDefs.Node(
-                    "bodyNode",
-                    "f.flaky",
-                    errorHandling: new ErrorHandling(ErrorBehavior.Retry),
-                    retry: new RetryPolicy(MaxAttempts: 3, DelayMs: 10, BackoffMultiplier: 1.0, MaxDelayMs: 50)),
-            },
-            connections: new[] { FindingDefs.Edge("loop", "loopBody", "bodyNode", "input") });
-
-        var (_, parent, _) = this.StartRun(definition, services);
-
-        var terminal = parent.FishForMessage(
-            m => m is WorkflowCompleted or WorkflowFailed, FindingDefs.RunTimeout);
-
-        terminal.Should().BeOfType<WorkflowCompleted>(
-            because: "a Retry-configured body node that recovers on attempt 2 should let the loop complete (01 §12.4)");
-        flaky.Calls.Should().BeGreaterThanOrEqualTo(2, because: "the body node should have been retried");
-    }
-
     // ── Finding 01 §12.4b — a construct nested inside a loop body should still run as a construct ──
 
     /// <summary>

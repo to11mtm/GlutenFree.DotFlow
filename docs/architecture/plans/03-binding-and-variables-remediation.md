@@ -134,6 +134,17 @@ parallel branches**, or only **after** the construct? Decide this before impleme
 propagation timing. (Recommend: visible after the construct; iteration-local otherwise, to avoid
 races in parallel branches.)
 
+> **Decided 2026-10-10 (implemented with §12.4):** the recommendation above was revised —
+> iteration-local writes would break `WhileModule`'s documented "variable-driven while" contract and
+> loop accumulators.
+> - **Sequential bodies** (loop iterations, try → catch → finally, transaction bodies): later steps
+>   see earlier writes; the construct's writes apply to the workflow when it ends.
+> - **Parallel branches:** isolated while running (each starts from the pre-parallel snapshot);
+>   merged in **branch order** when the parallel ends — on a conflict the highest branch index
+>   wins, regardless of timing.
+> - **Failures:** writes made before a body failed are kept (try/catch, rolled-back transactions,
+>   failed loops/parallels all report them), matching top-level behaviour.
+
 **Effort:** ~2–3 days standalone; less if merged with the §12.4 extraction.
 
 ---

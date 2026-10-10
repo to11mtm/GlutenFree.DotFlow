@@ -52,16 +52,30 @@ public sealed class TransactionExecutorActor : ReceiveActor
 
     private sealed record TransactionRollbackFailed(Exception Error);
 
+    /// <summary>§10.3: variables as the transaction body sees them, plus its writes.</summary>
+    private readonly BodyVariables _variables;
+
     /// <summary>
     /// Initializes a new <see cref="TransactionExecutorActor"/>~ 💼✨
     /// </summary>
+    /// <param name="transactionNodeId">Node ID of the transaction module.</param>
+    /// <param name="request">The transaction specification.</param>
+    /// <param name="definition">Full workflow definition for sub-graph scoping.</param>
+    /// <param name="executionId">Parent execution ID for history correlation.</param>
+    /// <param name="serviceProvider">DI container.</param>
+    /// <param name="parentToken">Hierarchical cancellation token.</param>
+    /// <param name="variables">
+    /// §10.3: workflow variables when the transaction starts (null = none). Body writes are reported
+    /// to the parent whether the transaction commits or rolls back (variables aren't transactional).
+    /// </param>
     public TransactionExecutorActor(
         string transactionNodeId,
         TransactionRequest request,
         WorkflowDefinition definition,
         Guid executionId,
         IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         _transactionNodeId = transactionNodeId;
         _request = request;
@@ -69,6 +83,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
         _executionId = executionId;
         _serviceProvider = serviceProvider;
         _log = Context.GetLogger();
+        _variables = new BodyVariables(variables);
         _linkedCts = parentToken.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(parentToken)
             : new CancellationTokenSource();
@@ -91,10 +106,11 @@ public sealed class TransactionExecutorActor : ReceiveActor
         WorkflowDefinition definition,
         Guid executionId,
         IServiceProvider serviceProvider,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         return Akka.Actor.Props.Create(() => new TransactionExecutorActor(
-            transactionNodeId, request, definition, executionId, serviceProvider, parentToken));
+            transactionNodeId, request, definition, executionId, serviceProvider, parentToken, variables));
     }
 
     /// <inheritdoc/>
@@ -120,7 +136,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
                 ["committed"] = false,
                 ["rolledBack"] = false,
                 ["durationMs"] = 0L,
-            }));
+            }, _variables.Writes));
             Context.Stop(Self);
             return;
         }
@@ -246,6 +262,8 @@ public sealed class TransactionExecutorActor : ReceiveActor
 
     private void HandleSubGraphCompleted(SubGraphCompleted message)
     {
+        _variables.Apply(message.VariableUpdates);
+
         _log.Info("✅ Transaction '{TransactionNodeId}': body completed; committing~", _transactionNodeId);
 
         if (_scope is null)
@@ -262,6 +280,8 @@ public sealed class TransactionExecutorActor : ReceiveActor
 
     private void HandleSubGraphFailed(SubGraphFailed message)
     {
+        _variables.Apply(message.VariableUpdates);
+
         _log.Warning(
             "⚡ Transaction '{TransactionNodeId}': body failed; rolling back — {Error}",
             _transactionNodeId, message.Error.Message);
@@ -316,7 +336,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
             ["committed"] = true,
             ["rolledBack"] = false,
             ["durationMs"] = _timer.ElapsedMilliseconds,
-        }));
+        }, _variables.Writes));
         Context.Stop(Self);
     }
 
@@ -330,7 +350,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
             ["rolledBack"] = true,
             ["error"] = WorkflowError.FromException(error, failedNodeId),
             ["durationMs"] = _timer.ElapsedMilliseconds,
-        }));
+        }, _variables.Writes));
         Context.Stop(Self);
     }
 
@@ -338,7 +358,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
     {
         _timer.Stop();
         _log.Error(error, "❌ Transaction '{TransactionNodeId}' infrastructure failure: {Error}", _transactionNodeId, error.Message);
-        CleanupScopeAsync().PipeTo(Self, success: () => new TransactionFailed(_transactionNodeId, error), failure: _ => new TransactionFailed(_transactionNodeId, error));
+        CleanupScopeAsync().PipeTo(Self, success: () => new TransactionFailed(_transactionNodeId, error, _variables.Writes), failure: _ => new TransactionFailed(_transactionNodeId, error, _variables.Writes));
         Become(() => Receive<TransactionFailed>(m => { Context.Parent.Tell(m); Context.Stop(Self); }));
     }
 
@@ -362,7 +382,8 @@ public sealed class TransactionExecutorActor : ReceiveActor
                 new Dictionary<string, object?>(),
                 _serviceProvider,
                 subGraphId: $"{SubGraphBody}:{_transactionNodeId}",
-                parentToken: _linkedCts.Token),
+                parentToken: _linkedCts.Token,
+                variables: _variables.Current),
             actorName);
 
         Context.Watch(child);

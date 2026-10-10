@@ -20,9 +20,14 @@ using System.Collections.Generic;
 /// CopilotNote: Phase 2.2.4 — WorkflowExecutor handles this by firing the <c>done</c> port
 /// successors of the trycatch node, pre-marking try/catch/finally branch nodes as skipped~ 💖.
 /// </remarks>
+/// <param name="VariableUpdates">
+/// §10.3: variable writes made inside the construct body (last write per variable), applied by
+/// the parent like a node's own updates. Null when the body wrote nothing.
+/// </param>
 public record TryCatchCompleted(
     string TryCatchNodeId,
-    IReadOnlyDictionary<string, object?> Outputs);
+    IReadOnlyDictionary<string, object?> Outputs,
+    IReadOnlyDictionary<string, object?>? VariableUpdates = null);
 
 /// <summary>
 /// 🛡️ Sent by <see cref="Workflow.Engine.Actors.TryCatchExecutorActor"/> to its parent
@@ -34,9 +39,14 @@ public record TryCatchCompleted(
 /// CopilotNote: Phase 2.2.4 — WorkflowExecutor handles this the same as a regular
 /// NodeExecutionFailed: route to outer ErrorBoundary or fail the workflow~ 💔.
 /// </remarks>
+/// <param name="VariableUpdates">
+/// §10.3: variable writes made inside the construct body (last write per variable), applied by
+/// the parent like a node's own updates. Null when the body wrote nothing.
+/// </param>
 public record TryCatchFailed(
     string TryCatchNodeId,
-    Exception Error);
+    Exception Error,
+    IReadOnlyDictionary<string, object?>? VariableUpdates = null);
 
 /// <summary>
 /// 🛡️ Sent by <see cref="Workflow.Engine.Actors.NodeExecutor"/> to <c>WorkflowExecutor</c>

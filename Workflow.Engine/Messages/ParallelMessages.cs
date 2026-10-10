@@ -20,9 +20,14 @@ using System.Collections.Generic;
 /// CopilotNote: Phase 2.2.3a — WorkflowExecutor handles this by firing the <c>done</c> port
 /// successors of the parallel node (activePorts = [parallel.DonePort])~ 💖.
 /// </remarks>
+/// <param name="VariableUpdates">
+/// §10.3: variable writes made inside the construct body (last write per variable), applied by
+/// the parent like a node's own updates. Null when the body wrote nothing.
+/// </param>
 public record ParallelCompleted(
     string ParallelNodeId,
-    IReadOnlyDictionary<string, object?> Outputs);
+    IReadOnlyDictionary<string, object?> Outputs,
+    IReadOnlyDictionary<string, object?>? VariableUpdates = null);
 
 /// <summary>
 /// Sent by <see cref="Workflow.Engine.Actors.ParallelExecutionCoordinator"/> to its parent
@@ -32,10 +37,15 @@ public record ParallelCompleted(
 /// <param name="ParallelNodeId">The node ID of the originating parallel module. 🆔.</param>
 /// <param name="Error">The exception that caused the failure. ⚠️.</param>
 /// <param name="FailedNodeId">The node ID inside a branch that triggered the failure, if known. 🔍.</param>
+/// <param name="VariableUpdates">
+/// §10.3: variable writes made inside the construct body (last write per variable), applied by
+/// the parent like a node's own updates. Null when the body wrote nothing.
+/// </param>
 public record ParallelFailed(
     string ParallelNodeId,
     Exception Error,
-    string? FailedNodeId = null);
+    string? FailedNodeId = null,
+    IReadOnlyDictionary<string, object?>? VariableUpdates = null);
 
 /// <summary>
 /// Sent by <see cref="Workflow.Engine.Actors.WorkflowExecutor"/> to

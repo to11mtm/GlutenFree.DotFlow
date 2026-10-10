@@ -13,9 +13,14 @@ using System.Collections.Generic;
 /// </summary>
 /// <param name="TransactionNodeId">The node ID of the transaction module that initiated this actor. 🆔.</param>
 /// <param name="Outputs">Result outputs stored on the transaction node and used for committed/rolledBack routing~ 📦.</param>
+/// <param name="VariableUpdates">
+/// §10.3: variable writes made inside the construct body (last write per variable), applied by
+/// the parent like a node's own updates. Null when the body wrote nothing.
+/// </param>
 public record TransactionCompleted(
     string TransactionNodeId,
-    IReadOnlyDictionary<string, object?> Outputs);
+    IReadOnlyDictionary<string, object?> Outputs,
+    IReadOnlyDictionary<string, object?>? VariableUpdates = null);
 
 /// <summary>
 /// 💼 Sent by <see cref="Workflow.Engine.Actors.TransactionExecutorActor"/> when transaction infrastructure fails
@@ -23,9 +28,14 @@ public record TransactionCompleted(
 /// </summary>
 /// <param name="TransactionNodeId">The node ID of the transaction module. 🆔.</param>
 /// <param name="Error">The infrastructure exception to raise into the workflow failure path. ⚠️.</param>
+/// <param name="VariableUpdates">
+/// §10.3: variable writes made inside the construct body (last write per variable), applied by
+/// the parent like a node's own updates. Null when the body wrote nothing.
+/// </param>
 public record TransactionFailed(
     string TransactionNodeId,
-    Exception Error);
+    Exception Error,
+    IReadOnlyDictionary<string, object?>? VariableUpdates = null);
 
 /// <summary>
 /// 💼 Sent by <see cref="Workflow.Engine.Actors.NodeExecutor"/> to <c>WorkflowExecutor</c>

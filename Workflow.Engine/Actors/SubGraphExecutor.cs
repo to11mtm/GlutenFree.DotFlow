@@ -24,7 +24,14 @@ using Workflow.Persistence.Models;
 /// <para>
 /// CopilotNote: Phase 2.2.0a — SubGraphExecutor is the primitive that loop modules (2.2.2)
 /// and parallel modules (2.2.3) use to run iteration/branch bodies. It is intentionally
-/// lean — no pause/resume/snapshot, no variable-store integration (those come in 2.2.0b+).
+/// lean — no pause/resume/snapshot, no variable-store persistence.
+/// </para>
+/// <para>
+/// §12.4 / §10.3 sub-graph parity: per-node error handling (retry / continue / fail) goes through
+/// the shared <see cref="NodeFailureCore"/>, exactly like <see cref="WorkflowExecutor"/>. Body nodes
+/// see the body's variables (passed in by the owning construct) and their <c>VariableUpdates</c> are
+/// applied and reported up on <see cref="SubGraphCompleted"/> / <see cref="SubGraphFailed"/>, where the
+/// construct (and finally the WorkflowExecutor) applies and persists them~ 💾.
 /// </para>
 /// <para>
 /// Lifecycle: construct → PreStart auto-runs entry nodes → node actors report back →
@@ -94,6 +101,18 @@ public class SubGraphExecutor : ReceiveActor
     /// </summary>
     private DispatchCore? _dispatchCore;
 
+    /// <summary>§12.4: shared boundary → retry / continue / fail decision (no boundary stack here).</summary>
+    private readonly NodeFailureCore _failureCore;
+
+    /// <summary>§12.4: retries already scheduled per node in this sub-graph run.</summary>
+    private readonly Dictionary<string, int> _retryAttempts = new();
+
+    /// <summary>§12.4: scheduled, not yet fired retries — the sub-graph is not complete while any are pending.</summary>
+    private readonly Dictionary<string, ICancelable> _pendingRetries = new();
+
+    /// <summary>§10.3: variables as this body sees them, plus the writes made inside it.</summary>
+    private readonly BodyVariables _variables;
+
     // ── Private persistence confirmation ────────────────────────────────────────────────────────
     private sealed record NodePersisted(string NodeId, bool Success);
 
@@ -116,6 +135,10 @@ public class SubGraphExecutor : ReceiveActor
     /// When non-default, the sub-graph's linked CTS is chained to this token so the parent
     /// workflow executor can cancel all in-flight sub-graph nodes cooperatively~ 🔗🛑
     /// </param>
+    /// <param name="variables">
+    /// §10.3: the workflow variables as this body should see them (null = none). Passed to every
+    /// body node, and updated by their writes.
+    /// </param>
     public SubGraphExecutor(
         Guid parentExecutionId,
         WorkflowDefinition definition,
@@ -124,7 +147,8 @@ public class SubGraphExecutor : ReceiveActor
         Dictionary<string, object?> inputs,
         IServiceProvider serviceProvider,
         string? subGraphId = null,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         _parentExecutionId = parentExecutionId;
         _definition = definition;
@@ -135,6 +159,19 @@ public class SubGraphExecutor : ReceiveActor
         _subGraphId = subGraphId;
         _log = Context.GetLogger();
         _historyRepository = serviceProvider.GetService(typeof(IExecutionHistoryRepository)) as IExecutionHistoryRepository;
+        _variables = new BodyVariables(variables);
+
+        _failureCore = new NodeFailureCore(
+            getNode: nodeId => _definition.Nodes.Find(n => n.Id == nodeId).Match(
+                Some: n => (NodeDefinition?)n,
+                None: () => null),
+            workflowErrorHandling: _definition.ErrorHandling,
+            tryHandleWithBoundary: (_, _) => false,
+            retryAttempts: nodeId => _retryAttempts.GetValueOrDefault(nodeId, 0),
+            scheduleRetry: ScheduleNodeRetry,
+            continueAfterFailure: ContinueAfterNodeFailure,
+            fail: ReportFailure,
+            log: _log);
 
         // Phase 2.2.0b: create a linked CTS so parent cancellation propagates here~ 🔗🛑
         _linkedCts = parentToken.CanBeCanceled
@@ -144,6 +181,7 @@ public class SubGraphExecutor : ReceiveActor
         // Message handlers
         Receive<NodeExecutionCompleted>(HandleNodeCompleted);
         Receive<NodeExecutionFailed>(HandleNodeFailed);
+        Receive<RetryNode>(HandleRetryNode);
         Receive<Terminated>(HandleTerminated);
         Receive<NodePersisted>(_ => { }); // fire-and-forget persistence acknowledgement
 
@@ -168,11 +206,12 @@ public class SubGraphExecutor : ReceiveActor
         Dictionary<string, object?> inputs,
         IServiceProvider serviceProvider,
         string? subGraphId = null,
-        CancellationToken parentToken = default)
+        CancellationToken parentToken = default,
+        IReadOnlyDictionary<string, object?>? variables = null)
     {
         return Akka.Actor.Props.Create(() => new SubGraphExecutor(
             parentExecutionId, definition, scopeNodeIds, entryNodeIds,
-            inputs, serviceProvider, subGraphId, parentToken));
+            inputs, serviceProvider, subGraphId, parentToken, variables));
     }
 
     #region Lifecycle
@@ -212,6 +251,11 @@ public class SubGraphExecutor : ReceiveActor
     /// <inheritdoc/>
     protected override void PostStop()
     {
+        foreach (var pending in _pendingRetries.Values)
+        {
+            pending.Cancel();
+        }
+
         // Phase 2.2.0b: dispose linked CTS to unregister from parent token — prevents leaks~ 🧹💖
         _linkedCts.Dispose();
         base.PostStop();
@@ -323,7 +367,7 @@ public class SubGraphExecutor : ReceiveActor
         Context.Watch(nodeActor);
         _nodeActors[nodeId] = nodeActor;
 
-        nodeActor.Tell(new Execute(nodeId, nodeInputs.ToHashMap(), _parentExecutionId));
+        nodeActor.Tell(new Execute(nodeId, nodeInputs.ToHashMap(), _parentExecutionId, _variables.CurrentAsHashMap()));
     }
 
     /// <summary>
@@ -403,6 +447,12 @@ public class SubGraphExecutor : ReceiveActor
             .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
+        // §10.3: later body nodes see this write; it is reported up when the sub-graph ends~ 💾
+        if (message.VariableUpdates is { Count: > 0 } varUpdates)
+        {
+            _variables.Apply(varUpdates.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
+        }
+
         // Phase 2.2.2: detect loop break/continue sentinel keys from BreakModule/ContinueModule~ ⏹️⏭️
         if (message.Outputs.ContainsKey("__loop_break__"))
         {
@@ -437,7 +487,8 @@ public class SubGraphExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Handles a node failure — reports SubGraphFailed to parent immediately (failFast)~ ❌.
+    /// Handles a node failure — records it, then lets the shared <see cref="NodeFailureCore"/> decide
+    /// (retry / continue / fail the sub-graph), honouring the node's error handling (§12.4)~ ❌.
     /// </summary>
     private void HandleNodeFailed(NodeExecutionFailed message)
     {
@@ -460,7 +511,49 @@ public class SubGraphExecutor : ReceiveActor
             message.Error.Message);
 
         QueuePersistNode(nodeId, message.Duration, NodeExecutionState.Failed, message.Error.Message);
-        ReportFailure(nodeId, message.Error);
+        _failureCore.Handle(nodeId, message.Error);
+    }
+
+    /// <summary><see cref="NodeFailureCore"/> callback: treat the failed node as done and route on~ ⚡.</summary>
+    private void ContinueAfterNodeFailure(string nodeId)
+    {
+        _failedNodes.Remove(nodeId);
+        _completedNodes.Add(nodeId);
+
+        if (IsComplete())
+        {
+            ReportSuccess();
+            return;
+        }
+
+        ExecuteReadySuccessors(nodeId);
+    }
+
+    /// <summary><see cref="NodeFailureCore"/> callback: record the attempt and re-run after the backoff~ 🔄.</summary>
+    private void ScheduleNodeRetry(NodeFailureCore.RetryDecision retry)
+    {
+        _retryAttempts[retry.NodeId] = retry.Attempt;
+        _pendingRetries[retry.NodeId] = Context.System.Scheduler.ScheduleTellOnceCancelable(
+            delay: retry.Delay,
+            receiver: Self,
+            message: new RetryNode(retry.NodeId, _parentExecutionId, retry.Attempt, retry.MaxAttempts),
+            sender: Self);
+    }
+
+    private void HandleRetryNode(RetryNode message)
+    {
+        var nodeId = message.NodeId;
+        _pendingRetries.Remove(nodeId);
+        _failedNodes.Remove(nodeId);
+
+        _log.Info(
+            "🔄 SubGraph {SubGraphId}: retrying node {NodeId} — attempt {Attempt}/{MaxAttempts}",
+            _subGraphId,
+            nodeId,
+            message.Attempt,
+            message.MaxAttempts);
+
+        ExecuteNode(nodeId);
     }
 
     /// <summary>
@@ -503,6 +596,7 @@ public class SubGraphExecutor : ReceiveActor
     private bool IsComplete()
     {
         return _runningNodes.Count == 0 &&
+               _pendingRetries.Count == 0 &&
                _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _nodeSuccessors.Count;
     }
 
@@ -529,7 +623,7 @@ public class SubGraphExecutor : ReceiveActor
             _completedNodes.Count,
             _skippedNodes.Count);
 
-        Context.Parent.Tell(new SubGraphCompleted(_subGraphId, outputs, _breakRequested, _continueRequested));
+        Context.Parent.Tell(new SubGraphCompleted(_subGraphId, outputs, _breakRequested, _continueRequested, _variables.Writes));
         Context.Stop(Self);
     }
 
@@ -551,7 +645,7 @@ public class SubGraphExecutor : ReceiveActor
             failedNodeId,
             error.Message);
 
-        Context.Parent.Tell(new SubGraphFailed(_subGraphId, error, failedNodeId));
+        Context.Parent.Tell(new SubGraphFailed(_subGraphId, error, failedNodeId, _variables.Writes));
         Context.Stop(Self);
     }
 
