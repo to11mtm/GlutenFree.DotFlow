@@ -46,44 +46,6 @@ public sealed class EngineFindingTests : TestKit
         return (executor, parent, executionId);
     }
 
-    // ── Finding 01 §12.3 — cancel should cancel the whole run, including construct actors ─────────
-
-    /// <summary>
-    /// Cancelling a run whose loop body is still iterating should stop further iterations promptly.
-    /// The loop body module counts its calls; after cancel the count must stop climbing.
-    /// </summary>
-    [Fact]
-    public void Cancel_ShouldStopRunningLoopIterations()
-    {
-        var body = new SlowCounterModule("f.slowbody", delayMs: 300);
-        var loop = new LoopModule("f.loop", items: Enumerable.Range(0, 50).Cast<object?>().ToList());
-        var services = FindingDefs.Services(new Workflow.Modules.Abstractions.IWorkflowModule[] { loop, body });
-
-        var definition = FindingDefs.Definition(
-            nodes: new[]
-            {
-                FindingDefs.Node("loop", "f.loop"),
-                FindingDefs.Node("bodyNode", "f.slowbody"),
-            },
-            connections: new[] { FindingDefs.Edge("loop", "loopBody", "bodyNode", "input") });
-
-        var (executor, _, executionId) = this.StartRun(definition, services);
-
-        // Let a few iterations run, then cancel.
-        Thread.Sleep(800);
-        executor.Tell(new CancelExecution(executionId));
-        Thread.Sleep(300);
-        var atCancel = body.Calls;
-
-        // After cancel, no meaningful number of further iterations should run.
-        Thread.Sleep(1500);
-        var afterWait = body.Calls;
-
-        afterWait.Should().BeLessThanOrEqualTo(
-            atCancel + 1,
-            because: "cancelling a run must stop in-flight loop iterations, not let all 50 run (01 §12.3)");
-    }
-
     // ── Finding 01 §12.4a — a node inside a loop body should honour its Retry policy ──────────────
 
     /// <summary>

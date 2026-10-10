@@ -90,8 +90,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 - [x] **§12.2 — executor actors never stop** · plan 02 · guard `EngineFindingTests.CompletedRun_ShouldStopExecutorActor`
   - [x] plan read · [x] fix (self-stop on terminal, after persistence acks; never reap paused) · [x] guard green · [x] status-after-stop falls back to history (add test) · [x] suite green · [x] finding retired (→ `Engine/ExecutorLifecycleTests`) · [x] README updated
-- [ ] **§12.3 — cancel doesn't stop running constructs** · plan 02 · guard `EngineFindingTests.Cancel_ShouldStopRunningLoopIterations`
-  - [ ] plan read · [ ] fix (`_executionCts.Cancel()` + `CooperativeCancel*` on cancel path) · [ ] guard green · [ ] suite green · [ ] finding retired · [ ] README updated
+- [x] **§12.3 — cancel doesn't stop running constructs** · plan 02 · guard `EngineFindingTests.Cancel_ShouldStopRunningLoopIterations`
+  - [x] plan read · [x] fix (`_executionCts.Cancel()` on cancel path — `CooperativeCancel*` not needed, see log) · [x] guard green · [x] suite green · [x] finding retired (→ `HierarchicalCancellationTests`) · [x] README updated
 
 ### Stage 3 — sub-graph parity (do as ONE change)
 
@@ -168,6 +168,24 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-10 — §12.3 cancel stops running constructs
+- Cancel path now calls `_executionCts.Cancel()` (like Complete/FailWorkflow). Every construct
+  actor links its token to it, so loops/parallels/try-catch/transactions/stream regions stop
+  cooperatively. Did NOT send `CooperativeCancel*` (they only re-cancel the same linked token) and
+  did NOT `Context.Stop` constructs (a transaction must still roll back).
+- Found while fixing: after a terminal state, late construct/node replies still mutated the run —
+  a cancelled loop's `LoopFailed` turned Cancelled → Failed (and a late `LoopCompleted` could start
+  post-loop nodes). Added `DropIfTerminal` at the top of the node/construct result handlers,
+  `HandleNodeFailure` and `HandleRetryNode` (applies to Completed/Failed/Cancelled).
+- Tests in `Engine/HierarchicalCancellationTests`: cancel stops loop iterations (retired guard),
+  cancelled run stays Cancelled with one terminal message, done-port node doesn't run after cancel.
+  Iteration + done-port tests RED with the fix stashed; the stays-Cancelled test RED with only the
+  terminal guard disabled.
+- `--filter Category!=Finding`: 1750 passed, 0 failed. One unrelated flake seen once:
+  `HttpRetryTests.Retry_ExponentialBackoff_DelaysIncrease` measured exactly 150ms vs `> 150` (module-only
+  timing test, pre-existing). Stage 2 done. Next: Stage 3 sub-graph parity
+  (§12.4 + §10.3 [+ §9.5]) — §10.3 needs the scoping decision first.
+
 ### 2026-10-10 — §12.2 finished executors stop
 - First cut (stop as soon as persistence drains) broke 69 actor-level tests that query a live
   executor's status after the run ends. Asked → agreed: drain + grace period, and fill node states

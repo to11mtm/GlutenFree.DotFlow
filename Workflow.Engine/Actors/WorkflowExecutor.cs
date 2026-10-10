@@ -934,6 +934,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleNodeExecutionCompleted(NodeExecutionCompleted message)
     {
+        if (DropIfTerminal(nameof(HandleNodeExecutionCompleted)))
+        {
+            return;
+        }
+
         var nodeId = message.NodeId;
 
         _log.Info(
@@ -1103,6 +1108,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleNodeExecutionFailed(NodeExecutionFailed message)
     {
+        if (DropIfTerminal(nameof(HandleNodeExecutionFailed)))
+        {
+            return;
+        }
+
         var nodeId = message.NodeId;
 
         _log.Error(
@@ -1120,6 +1130,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleNodeFailure(string nodeId, Exception error)
     {
+        if (DropIfTerminal(nameof(HandleNodeFailure)))
+        {
+            return;
+        }
+
         var now = DateTimeOffset.UtcNow;
 
         // Update context: node → Failed~ 💔
@@ -1397,6 +1412,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleLoopCompleted(LoopCompleted message)
     {
+        if (DropIfTerminal(nameof(HandleLoopCompleted)))
+        {
+            return;
+        }
+
         var loopNodeId = message.LoopNodeId;
         _pendingLoopNodes.Remove(loopNodeId);
         Context.Unwatch(Sender);
@@ -1536,6 +1556,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleStreamRegionCompleted(StreamRegionCompleted message)
     {
+        if (DropIfTerminal(nameof(HandleStreamRegionCompleted)))
+        {
+            return;
+        }
+
         Context.Unwatch(Sender);
 
         var now = DateTimeOffset.UtcNow;
@@ -1599,6 +1624,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleStreamRegionFailed(StreamRegionFailed message)
     {
+        if (DropIfTerminal(nameof(HandleStreamRegionFailed)))
+        {
+            return;
+        }
+
         Context.Unwatch(Sender);
 
         var now = DateTimeOffset.UtcNow;
@@ -1633,6 +1663,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleLoopFailed(LoopFailed message)
     {
+        if (DropIfTerminal(nameof(HandleLoopFailed)))
+        {
+            return;
+        }
+
         var loopNodeId = message.LoopNodeId;
         _pendingLoopNodes.Remove(loopNodeId);
         Context.Unwatch(Sender);
@@ -1780,6 +1815,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleParallelCompleted(ParallelCompleted message)
     {
+        if (DropIfTerminal(nameof(HandleParallelCompleted)))
+        {
+            return;
+        }
+
         var parallelNodeId = message.ParallelNodeId;
         _pendingParallelNodes.Remove(parallelNodeId);
         Context.Unwatch(Sender);
@@ -1825,6 +1865,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleParallelFailed(ParallelFailed message)
     {
+        if (DropIfTerminal(nameof(HandleParallelFailed)))
+        {
+            return;
+        }
+
         var parallelNodeId = message.ParallelNodeId;
         _pendingParallelNodes.Remove(parallelNodeId);
         Context.Unwatch(Sender);
@@ -1908,6 +1953,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleTryCatchCompleted(TryCatchCompleted message)
     {
+        if (DropIfTerminal(nameof(HandleTryCatchCompleted)))
+        {
+            return;
+        }
+
         var tryCatchNodeId = message.TryCatchNodeId;
         _pendingTryCatchNodes.Remove(tryCatchNodeId);
         Context.Unwatch(Sender);
@@ -1952,6 +2002,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleTryCatchFailed(TryCatchFailed message)
     {
+        if (DropIfTerminal(nameof(HandleTryCatchFailed)))
+        {
+            return;
+        }
+
         var tryCatchNodeId = message.TryCatchNodeId;
         _pendingTryCatchNodes.Remove(tryCatchNodeId);
         Context.Unwatch(Sender);
@@ -2016,6 +2071,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleTransactionCompleted(TransactionCompleted message)
     {
+        if (DropIfTerminal(nameof(HandleTransactionCompleted)))
+        {
+            return;
+        }
+
         var transactionNodeId = message.TransactionNodeId;
         _pendingTransactionNodes.Remove(transactionNodeId);
         Context.Unwatch(Sender);
@@ -2053,6 +2113,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleTransactionFailed(TransactionFailed message)
     {
+        if (DropIfTerminal(nameof(HandleTransactionFailed)))
+        {
+            return;
+        }
+
         var transactionNodeId = message.TransactionNodeId;
         _pendingTransactionNodes.Remove(transactionNodeId);
         _runningTransactions.Remove(transactionNodeId);
@@ -2193,6 +2258,11 @@ public class WorkflowExecutor : ReceiveActor
     /// </remarks>
     private void HandleRetryNode(RetryNode message)
     {
+        if (DropIfTerminal(nameof(HandleRetryNode)))
+        {
+            return;
+        }
+
         var nodeId = message.NodeId;
 
         _log.Info(
@@ -2318,6 +2388,12 @@ public class WorkflowExecutor : ReceiveActor
         _log.Info("🛑 Cancelling workflow execution {ExecutionId}", _executionId);
 
         var now = DateTimeOffset.UtcNow;
+
+        // §12.3: cancel the execution token like Complete/FailWorkflow do. Every construct actor
+        // (loop, parallel, try/catch, transaction, stream region) links its own token to this one, so
+        // in-flight iterations/branches stop cooperatively (a transaction still rolls back) — no need
+        // to Context.Stop them. Their late Completed/Failed replies are dropped by DropIfTerminal.
+        _executionCts.Cancel();
 
         // Cancel all running nodes
         foreach (var (nodeId, actor) in _nodeActors.ToList())
@@ -2655,6 +2731,27 @@ public class WorkflowExecutor : ReceiveActor
     /// variable updates stripped — so no possibly-secret values go on the stream (see 02 §10.6).
     /// </summary>
     private void PublishTerminal(IWorkflowMessage message) => Context.System.EventStream.Publish(message);
+
+    /// <summary>
+    /// §12.3: once the run is Completed/Failed/Cancelled, late node/construct results and scheduled
+    /// retries must not change it — e.g. a cancelled loop reporting <c>LoopFailed</c> would otherwise
+    /// turn Cancelled into Failed, and a late <c>LoopCompleted</c> would start post-loop nodes.
+    /// </summary>
+    /// <returns><c>true</c> when the message should be ignored.</returns>
+    private bool DropIfTerminal(string handler)
+    {
+        if (_context.State is not (ExecutionState.Completed or ExecutionState.Failed or ExecutionState.Cancelled))
+        {
+            return false;
+        }
+
+        _log.Debug(
+            "⏭️ Ignoring {Handler} for execution {ExecutionId} — already {State}",
+            handler,
+            _executionId,
+            _context.State);
+        return true;
+    }
 
     /// <summary>
     /// §12.2: the run is terminal (Completed/Failed/Cancelled), so this executor stops itself once its
