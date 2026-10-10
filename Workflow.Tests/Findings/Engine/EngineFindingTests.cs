@@ -46,50 +46,6 @@ public sealed class EngineFindingTests : TestKit
         return (executor, parent, executionId);
     }
 
-    private static NodeExecutionState NodeState(WorkflowStatusResponse status, string nodeId)
-        => status.NodeStates.Find(nodeId).IfNone(NodeExecutionState.Pending);
-
-    private WorkflowStatusResponse StatusOf(IActorRef executor, Guid executionId)
-    {
-        executor.Tell(new GetWorkflowStatus(executionId));
-        return this.ExpectMsg<WorkflowStatusResponse>(TimeSpan.FromSeconds(5));
-    }
-
-    // ── Finding 01 §12.5 — a missing module runs a stub that "succeeds" ───────────────────────────
-
-    /// <summary>
-    /// A node whose <c>ModuleId</c> is not registered should FAIL the node, not silently succeed.
-    /// Today <c>NodeExecutor.ExecuteStubFallback</c> returns a fake success.
-    /// </summary>
-    [Fact]
-    public void UnregisteredModule_ShouldFailNode_NotSucceedViaStub()
-    {
-        var services = FindingDefs.Services(Array.Empty<Workflow.Modules.Abstractions.IWorkflowModule>());
-        var definition = FindingDefs.Definition(new[] { FindingDefs.Node("only", "does.not.exist") });
-
-        var (executor, _, executionId) = this.StartRun(definition, services);
-
-        // Give the run time to settle either way.
-        WorkflowStatusResponse status = null!;
-        var deadline = DateTime.UtcNow + FindingDefs.RunTimeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            status = this.StatusOf(executor, executionId);
-            if (status.State is ExecutionState.Completed or ExecutionState.Failed)
-            {
-                break;
-            }
-
-            Thread.Sleep(100);
-        }
-
-        using var _ = new FluentAssertions.Execution.AssertionScope();
-        status.State.Should().Be(
-            ExecutionState.Failed,
-            because: "a workflow referencing an unregistered module should fail, not complete via a stub (01 §12.5)");
-        NodeState(status, "only").Should().Be(NodeExecutionState.Failed);
-    }
-
     // ── Finding 01 §12.2 — executor actors are never stopped ─────────────────────────────────────
 
     /// <summary>

@@ -20,6 +20,9 @@ using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
 using Workflow.Engine.Models;
 using Workflow.Engine.Services;
+using Workflow.Modules;
+using Workflow.Modules.Abstractions;
+using Workflow.Tests.Modules;
 using Xunit;
 
 /// <summary>
@@ -39,9 +42,13 @@ public class ExecutionStateTrackingTests : TestKit
     {
         _stateStore = new InMemoryExecutionStateStore();
 
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(new StubModule("test.module"));
+
         var services = new ServiceCollection();
         services.AddSingleton<WorkflowValidator>();
         services.AddSingleton<IExecutionStateStore>(_stateStore);
+        services.AddSingleton<IModuleRegistry>(registry);
         _serviceProvider = services.BuildServiceProvider();
     }
 

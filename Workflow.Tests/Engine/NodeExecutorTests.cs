@@ -112,10 +112,11 @@ public class NodeExecutorTests : TestKit
     }
 
     /// <summary>
-    /// Test that NodeExecutor uses fallback stub when module is not found.
+    /// Test that NodeExecutor fails the node when its module is not registered (§12.5) — it must
+    /// not fabricate a success.
     /// </summary>
     [Fact]
-    public void Execute_WithUnregisteredModule_ShouldUseFallbackStub()
+    public void Execute_WithUnregisteredModule_ShouldFailNode()
     {
         // Arrange
         var nodeId = "unknown-node";
@@ -132,11 +133,10 @@ public class NodeExecutorTests : TestKit
         // Act
         executor.Tell(new Execute(nodeId, inputs.ToHashMap(), executionId));
 
-        // Assert - Should complete with stub outputs
-        var completed = ExpectMsg<NodeExecutionCompleted>(TimeSpan.FromSeconds(5));
-        completed.NodeId.Should().Be(nodeId);
-        completed.Outputs.ContainsKey("success").Should().BeTrue();
-        completed.Outputs.Find("success").IfSome(v => v.Should().Be(true));
+        // Assert - Should fail, naming the missing module
+        var failed = ExpectMsg<NodeExecutionFailed>(TimeSpan.FromSeconds(5));
+        failed.NodeId.Should().Be(nodeId);
+        failed.Error.Message.Should().Contain("unknown.module");
     }
 
     /// <summary>

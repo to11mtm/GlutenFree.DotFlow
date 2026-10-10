@@ -81,8 +81,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 - [x] **§12.9 — loop `done`-port node is skipped** · plan 02 · guard `EngineFindingTests.LoopDonePort_ShouldRunPostLoopNode`
   - [x] plan read · [x] fix (`HandleLoopCompleted`: scope from `loopBody` targets only) · [x] guard green · [x] `WhileModule` path re-checked (by code review — same handler/port; no test yet, see log) · [x] suite green · [x] finding retired (→ `Engine/LoopCompletionTests`) · [x] README updated
-- [ ] **§12.5 — unregistered module id "succeeds" via stub** · plan 02 · guard `EngineFindingTests.UnregisteredModule_ShouldFailNode_NotSucceedViaStub`
-  - [ ] plan read · [ ] fix (fail the node; reject unknown ids at validation) · [ ] guard green · [ ] stub-dependent tests updated · [ ] suite green · [ ] finding retired · [ ] README updated
+- [x] **§12.5 — unregistered module id "succeeds" via stub** · plan 02 · guard `EngineFindingTests.UnregisteredModule_ShouldFailNode_NotSucceedViaStub`
+  - [x] plan read · [x] fix (fail the node; reject unknown ids at validation) · [x] guard green · [x] stub-dependent tests updated · [x] suite green · [x] finding retired (→ `WorkflowExecutorTests.StartExecution_UnregisteredModule_ShouldFailNodeAndWorkflow`) · [x] README updated
 - [ ] **§12.1 — completion/node events never reach SignalR** · plan 02 · guards `RealtimeCompletionFindingTests.*` (2)
   - [ ] plan read · [ ] fix (publish terminal messages to EventStream; mind secret outputs re §10.6) · [ ] guards green · [ ] bridge/subscription tests green · [ ] suite green · [ ] findings retired · [ ] README updated
 
@@ -158,6 +158,24 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-10 — §12.5 unregistered module id fails
+- D1: `NodeExecutor` sends `NodeExecutionFailed` ("Module 'x' is not registered.") instead of
+  `ExecuteStubFallback` (removed). D2: `WorkflowSupervisor` rejects unknown module ids at submit
+  (`Status.Failure`, "validation failed"), only when an `IModuleRegistry` is registered. Deliberately
+  ONLY the MA001 unknown-id check — not the full `ModuleAwareWorkflowValidator` (MA002–004 would
+  start rejecting unknown property keys / target ports at run time; out of scope).
+- Stub-dependent tests (18): fixtures in WorkflowExecutorTests, ExecutionStateTrackingTests,
+  WorkflowSupervisorTests now register `StubModule("test.module")`; PersistenceIntegrationTests'
+  `missing.module` → registered `test.pass`. Assertions unchanged. `NodeExecutorTests.
+  Execute_WithUnregisteredModule_ShouldUseFallbackStub` asserted the bug itself → inverted to
+  `..._ShouldFailNode`. Note: WorkflowSupervisorTests.GetWorkflowStatus_ForExistingWorkflow only
+  failed on some runs (raced Running vs Failed) — same root cause, same fixture fix.
+- New: `WorkflowExecutorTests.StartExecution_UnregisteredModule_ShouldFailNodeAndWorkflow` (retired
+  guard), `WorkflowSupervisorTests.CreateWorkflowInstance_WithUnknownModuleId_ShouldReturnFailure`.
+  All 3 verified RED with the fix stashed.
+- `--filter Category!=Finding`: 1738 passed, 0 failed (green on 3 consecutive runs).
+- Next: §12.1 (completion/node events → SignalR; mind secret outputs re §10.6).
+
 ### 2026-10-10 — §12.9 closed out
 - Baseline commit 4953dc2 (plans, finding tests, worklog, README table, MessagePack 3.1.11 bump).
 - Guard moved out of `EngineFindingTests` into permanent `Workflow.Tests/Engine/LoopCompletionTests.cs`

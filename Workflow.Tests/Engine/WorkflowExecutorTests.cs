@@ -15,6 +15,9 @@ using Workflow.Core.Abstractions;
 using Workflow.Core.Models;
 using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
+using Workflow.Modules;
+using Workflow.Modules.Abstractions;
+using Workflow.Tests.Modules;
 using Xunit;
 
 /// <summary>
@@ -31,8 +34,12 @@ public class WorkflowExecutorTests : TestKit
     /// </summary>
     public WorkflowExecutorTests()
     {
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(new StubModule("test.module"));
+
         var services = new ServiceCollection();
         services.AddSingleton<WorkflowValidator>();
+        services.AddSingleton<IModuleRegistry>(registry);
         _serviceProvider = services.BuildServiceProvider();
     }
 
@@ -141,6 +148,32 @@ public class WorkflowExecutorTests : TestKit
         {
             finalStatus.Progress.Should().Be(100);
         }
+    }
+
+    /// <summary>
+    /// Test that a node whose module isn't registered fails the node and the run (§12.5), instead
+    /// of completing via a fabricated stub success.
+    /// </summary>
+    [Fact]
+    public void StartExecution_UnregisteredModule_ShouldFailNodeAndWorkflow()
+    {
+        // Arrange
+        var executionId = Guid.NewGuid();
+        var single = CreateSingleNodeWorkflow();
+        var definition = single with { Nodes = Arr.create(single.Nodes[0] with { ModuleId = "does.not.exist" }) };
+        var parent = CreateTestProbe();
+        var executor = parent.ChildActorOf(
+            WorkflowExecutor.Props(executionId, definition, new Dictionary<string, object?>(), _serviceProvider));
+
+        // Act
+        executor.Tell(new StartExecution(executionId));
+        var terminal = parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, TimeSpan.FromSeconds(10));
+
+        // Assert
+        terminal.Should().BeOfType<WorkflowFailed>();
+        executor.Tell(new GetWorkflowStatus(executionId));
+        var status = ExpectMsg<WorkflowStatusResponse>(TimeSpan.FromSeconds(3));
+        status.NodeStates.Find("node_a").IfNone(NodeExecutionState.Pending).Should().Be(NodeExecutionState.Failed);
     }
 
     /// <summary>

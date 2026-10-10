@@ -15,6 +15,9 @@ using Workflow.Core.Abstractions;
 using Workflow.Core.Models;
 using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
+using Workflow.Modules;
+using Workflow.Modules.Abstractions;
+using Workflow.Tests.Modules;
 using Xunit;
 
 /// <summary>
@@ -31,8 +34,12 @@ public class WorkflowSupervisorTests : TestKit
     /// </summary>
     public WorkflowSupervisorTests()
     {
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        registry.RegisterModule(new StubModule("test.module"));
+
         var services = new ServiceCollection();
         services.AddSingleton<WorkflowValidator>();
+        services.AddSingleton<IModuleRegistry>(registry);
         this.serviceProvider = services.BuildServiceProvider();
     }
 
@@ -108,6 +115,27 @@ public class WorkflowSupervisorTests : TestKit
         var response = ExpectMsg<Status.Failure>(TimeSpan.FromSeconds(3));
         response.Cause.Should().BeOfType<InvalidOperationException>();
         response.Cause.Message.Should().Contain("validation failed");
+    }
+
+    /// <summary>
+    /// Test that a workflow referencing an unregistered module is rejected at submit time (§12.5),
+    /// rather than starting a run that fails mid-way.
+    /// </summary>
+    [Fact]
+    public void CreateWorkflowInstance_WithUnknownModuleId_ShouldReturnFailure()
+    {
+        // Arrange
+        var supervisor = Sys.ActorOf(WorkflowSupervisor.Props(this.serviceProvider));
+        var valid = CreateValidWorkflowDefinition();
+        var definition = valid with { Nodes = Arr.create(valid.Nodes[0] with { ModuleId = "does.not.exist" }) };
+
+        // Act
+        supervisor.Tell(new CreateWorkflowInstance(Guid.NewGuid(), definition, HashMap<string, object?>.Empty));
+
+        // Assert
+        var response = ExpectMsg<Status.Failure>(TimeSpan.FromSeconds(3));
+        response.Cause.Should().BeOfType<InvalidOperationException>();
+        response.Cause.Message.Should().Contain("validation failed").And.Contain("does.not.exist");
     }
 
     /// <summary>

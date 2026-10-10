@@ -26,6 +26,7 @@ using Workflow.Modules.Builtin.Flow;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 using Workflow.Persistence.Sqlite;
+using Workflow.Tests.Modules;
 using Xunit;
 
 /// <summary>
@@ -61,7 +62,7 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
         var services = BuildServiceProvider();
         var supervisor = Sys.ActorOf(WorkflowSupervisor.Props(services));
 
-        var workflow = CreateSingleNodeWorkflow(moduleId: "missing.module");
+        var workflow = CreateSingleNodeWorkflow(moduleId: "test.pass");
         var startOptions = new ExecutionStartOptions("api-user-1", VariableWriteMode.Execution);
 
         supervisor.Tell(new CreateWorkflowInstance(workflow.Id, workflow, HashMap<string, object?>.Empty, startOptions));
@@ -81,7 +82,7 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
         var services = BuildServiceProvider();
         var supervisor = Sys.ActorOf(WorkflowSupervisor.Props(services));
 
-        var workflow = CreateLinearWorkflow(moduleId: "missing.module");
+        var workflow = CreateLinearWorkflow(moduleId: "test.pass");
         supervisor.Tell(new CreateWorkflowInstance(workflow.Id, workflow, HashMap<string, object?>.Empty));
         var created = ExpectMsg<WorkflowInstanceCreated>(TimeSpan.FromSeconds(5));
 
@@ -116,12 +117,16 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
     [Fact]
     public async Task Engine_WithoutProvider_ShouldStillRun()
     {
+        var registry = new InMemoryModuleRegistry();
+        registry.RegisterModule(new StubModule("test.pass"), skipValidation: true);
+
         var services = new ServiceCollection();
         services.AddSingleton<WorkflowValidator>();
+        services.AddSingleton<IModuleRegistry>(registry);
         var serviceProvider = services.BuildServiceProvider();
 
         var executionId = Guid.NewGuid();
-        var workflow = CreateSingleNodeWorkflow(moduleId: "missing.module");
+        var workflow = CreateSingleNodeWorkflow(moduleId: "test.pass");
         var executor = Sys.ActorOf(WorkflowExecutor.Props(executionId, workflow, new Dictionary<string, object?>(), serviceProvider));
 
         executor.Tell(new StartExecution(executionId));
@@ -138,7 +143,7 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
         var services = BuildServiceProvider();
         var supervisor = Sys.ActorOf(WorkflowSupervisor.Props(services));
 
-        var workflow = CreateLinearWorkflow(moduleId: "missing.module");
+        var workflow = CreateLinearWorkflow(moduleId: "test.pass");
         supervisor.Tell(new CreateWorkflowInstance(workflow.Id, workflow, HashMap<string, object?>.Empty));
         var created = ExpectMsg<WorkflowInstanceCreated>(TimeSpan.FromSeconds(5));
 
@@ -279,6 +284,8 @@ public sealed class PersistenceIntegrationTests : TestKit, IAsyncLifetime
         services.AddSingleton<IVariableStore>(_provider.Variables);
 
         var registry = new InMemoryModuleRegistry();
+        registry.RegisterModule(new StubModule("test.pass"), skipValidation: true);
+
         if (registerFailingModule)
         {
             registry.RegisterModule(new AlwaysFailModule());

@@ -192,11 +192,10 @@ public class NodeExecutor : ReceiveActor
 
             if (module == null)
             {
-                // Module not found - use fallback stub behavior for testing
-                _log.Warning(
-                    "⚠️ Module '{ModuleId}' not found in registry, using fallback stub execution",
-                    _nodeDefinition.ModuleId);
-                ExecuteStubFallback();
+                // §12.5: an unregistered module fails the node — never fabricate a success.
+                var msg = $"Module '{_nodeDefinition.ModuleId}' is not registered.";
+                _log.Error("❌ {Error}", msg);
+                SendFailure(new InvalidOperationException(msg));
                 return;
             }
 
@@ -657,32 +656,6 @@ public class NodeExecutor : ReceiveActor
                 .ToDictionary(p => p.Name, p => ConvertJsonElement(p.Value)),
             _ => element.ToString(),
         };
-    }
-
-    /// <summary>
-    /// Fallback stub execution when module is not found.
-    /// Allows the workflow engine to work even without registered modules~ .
-    /// </summary>
-    private void ExecuteStubFallback()
-    {
-        _log.Info(" Using stub execution fallback for node {NodeId}", _nodeId);
-
-        var outputs = new Dictionary<string, object?>
-        {
-            ["result"] = $"Executed {_nodeId} (stub)",
-            ["success"] = true,
-            ["timestamp"] = DateTimeOffset.UtcNow,
-            ["moduleId"] = _nodeDefinition.ModuleId,
-        };
-
-        // Copy inputs to outputs for data flow testing
-        foreach (var (key, value) in _inputs)
-        {
-            outputs[$"input_{key}"] = value;
-        }
-
-        _timer.Stop();
-        SendSuccess(outputs);
     }
 
     /// <summary>

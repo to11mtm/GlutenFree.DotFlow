@@ -290,10 +290,13 @@ public class WorkflowSupervisor : ReceiveActor
             // Validate workflow definition
             var validator = this.serviceProvider.GetRequiredService<Workflow.Core.Abstractions.WorkflowValidator>();
             var validationResult = validator.Validate(resolution.Definition);
+            var unknownModuleErrors = this.UnknownModuleErrors(resolution.Definition);
 
-            if (!validationResult.IsValid)
+            if (!validationResult.IsValid || unknownModuleErrors.Count > 0)
             {
-                var errorMessages = string.Join(", ", validationResult.Errors.Select(e => e.ToString()));
+                var errorMessages = string.Join(
+                    ", ",
+                    validationResult.Errors.Select(e => e.ToString()).Concat(unknownModuleErrors));
                 this.log.Error(
                     "❌ Workflow validation failed for {WorkflowId}: {Errors}",
                     resolution.Message.WorkflowId,
@@ -482,5 +485,24 @@ public class WorkflowSupervisor : ReceiveActor
             ActorPath: Self.Path.ToString(),
             ActorType: nameof(WorkflowSupervisor),
             Services: this.serviceProvider);
+    }
+
+    /// <summary>
+    /// §12.5: lists nodes whose <c>ModuleId</c> isn't registered, so the run is rejected at submit
+    /// time instead of failing mid-run. Only the unknown-id check (MA001) — not the full
+    /// module-aware validation. Skipped when no <see cref="Workflow.Modules.Abstractions.IModuleRegistry"/> is registered.
+    /// </summary>
+    private List<string> UnknownModuleErrors(WorkflowDefinition definition)
+    {
+        var registry = this.serviceProvider.GetService<Workflow.Modules.Abstractions.IModuleRegistry>();
+        if (registry is null)
+        {
+            return new List<string>();
+        }
+
+        return definition.Nodes
+            .Where(n => !registry.HasModule(n.ModuleId))
+            .Select(n => $"Node '{n.Id}' references unknown ModuleId '{n.ModuleId}'")
+            .ToList();
     }
 }
