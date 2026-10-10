@@ -2561,7 +2561,9 @@ public class WorkflowExecutor : ReceiveActor
     {
         // All nodes must be in a terminal state (completed, failed-continue, or skipped),
         // AND no loop actors are still running iterations~ 🔁
+        // A node in retry backoff sits in _failedNodes, so also wait for pending retries~ 🔄
         return _runningNodes.Count == 0 &&
+               _pendingRetryCancellations.Count == 0 &&
                _pendingLoopNodes.Count == 0 &&
                _pendingParallelNodes.Count == 0 &&
                _pendingTryCatchNodes.Count == 0 &&

@@ -44,6 +44,7 @@ public class SupervisionStrategyTests : TestKit
         _moduleRegistry.RegisterModule(new AlwaysFailsModule());
         _moduleRegistry.RegisterModule(new ConfigurableFailureModule());
         _moduleRegistry.RegisterModule(new PassThroughTestModule());
+        _moduleRegistry.RegisterModule(new DelayedPassModule());
 
         var services = new ServiceCollection();
         services.AddSingleton<WorkflowValidator>();
@@ -288,6 +289,60 @@ public class SupervisionStrategyTests : TestKit
 
         status.State.Should().Be(ExecutionState.Failed);
         status.Error.IsSome.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A node in retry backoff sits in the failed set; if a sibling finishes during the backoff,
+    /// the run must not complete until the retry has run~ 🔄⏳
+    /// </summary>
+    [Fact]
+    public void RetryPending_WhenSiblingFinishesDuringBackoff_ShouldNotCompleteUntilRetryRuns()
+    {
+        // Arrange — A fails twice (300ms backoff each), B is an independent 100ms pass node
+        var testRunId = Guid.NewGuid().ToString("N");
+        ConfigurableFailureModule.ResetCounter(testRunId);
+
+        var nodeA = new NodeDefinition(
+            Id: "a",
+            ModuleId: "test.configurable-failure",
+            Name: "Retry Node",
+            Properties: CreateJsonProperties(new Dictionary<string, object>
+            {
+                ["testRunId"] = testRunId,
+                ["failCount"] = 2,
+            }),
+            Position: null,
+            ErrorHandling: new ErrorHandling(ErrorBehavior.Retry),
+            Timeout: null,
+            RetryPolicy: new RetryPolicy(MaxAttempts: 3, DelayMs: 300, BackoffMultiplier: 1.0, MaxDelayMs: 300),
+            Metadata: null);
+
+        var nodeB = new NodeDefinition(
+            Id: "b",
+            ModuleId: "test.delayed-pass",
+            Name: "Slow Sibling",
+            Properties: HashMap<string, JsonElement>.Empty,
+            Position: null,
+            ErrorHandling: null,
+            Timeout: null,
+            RetryPolicy: null,
+            Metadata: null);
+
+        var definition = CreateWorkflowDefinition(Arr.create(nodeA, nodeB), Arr<ConnectionDefinition>.Empty);
+        var executionId = Guid.NewGuid();
+        var parent = CreateTestProbe();
+        var executor = parent.ChildActorOf(
+            WorkflowExecutor.Props(executionId, definition, new Dictionary<string, object?>(), _serviceProvider));
+
+        // Act
+        executor.Tell(new StartExecution(executionId));
+        var terminal = parent.FishForMessage(
+            m => m is WorkflowCompleted or WorkflowFailed,
+            TimeSpan.FromSeconds(10));
+
+        // Assert — completed, and only after A's retries ran (2 failures + 1 success)
+        terminal.Should().BeOfType<WorkflowCompleted>();
+        ConfigurableFailureModule.GetCount(testRunId).Should().Be(3);
     }
 
     /// <summary>
@@ -768,6 +823,34 @@ public class SupervisionStrategyTests : TestKit
                 ["result"] = "passed through!",
                 ["success"] = true,
             }));
+        }
+    }
+
+    /// <summary>
+    /// Pass-through module that succeeds after a short (100ms) delay.
+    /// Used as a sibling that finishes while another node is in retry backoff~ ⏳
+    /// </summary>
+    private class DelayedPassModule : IWorkflowModule
+    {
+        public string ModuleId => "test.delayed-pass";
+        public string DisplayName => "Delayed Pass";
+        public string Category => "Testing";
+        public string Description => "Succeeds after 100ms~ ⏳";
+        public string Icon => "⏳";
+        public Version Version => new(1, 0, 0);
+
+        public ModuleSchema Schema => ModuleSchema.Empty;
+
+        /// <inheritdoc/>
+        public async Task<ModuleResult> ExecuteAsync(
+            ModuleExecutionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            return ModuleResult.Ok(new Dictionary<string, object?>
+            {
+                ["result"] = "passed through late!",
+            });
         }
     }
 

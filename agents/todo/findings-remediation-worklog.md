@@ -150,11 +150,12 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   doesn't publish `NodeExecutionCompleted`/`Failed` (or `NodeStateChanged`/`NodeRetrying` for body
   retries), so clients see no per-node events inside bodies. Left out of Stage 3 to keep that change
   focused; `NodeFailureCore`'s `scheduleRetry` callback is the natural hook for retry events.
-- [ ] **Top-level run can complete while a retry is pending.** `WorkflowExecutor.IsWorkflowComplete`
+- [x] **Top-level run can complete while a retry is pending.** `WorkflowExecutor.IsWorkflowComplete`
   doesn't check `_pendingRetryCancellations`: if node A is in retry backoff (counted in
   `_failedNodes`) and sibling B finishes last, the run completes and A's retry is dropped. One-line
   fix (`&& _pendingRetryCancellations.Count == 0`) + a test. `SubGraphExecutor.IsComplete` already
   has the equivalent guard (added in Stage 3). Pre-existing; found while doing Stage 3.
+  *Done 2026-10-10 — see Progress log.*
 - [ ] **Constructs nested inside a body (loop-in-loop, try/catch in a loop, …) — CONFIRMED, now
   finding §12.10 (High).** Guard: `Findings/Engine/NestedConstructFindingTests` (2, both red on
   2026-10-10). Loop-in-loop runs the inner body 3× instead of 6× and the run still completes. A
@@ -197,6 +198,18 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-10 — follow-up: run completing while a retry is pending
+- `WorkflowExecutor.IsWorkflowComplete` now also requires `_pendingRetryCancellations.Count == 0`
+  (mirrors `SubGraphExecutor.IsComplete`). `HandleRetryNode` removes the entry before re-executing,
+  so the retried node's completion still ends the run.
+- Test: `SupervisionStrategyTests.RetryPending_WhenSiblingFinishesDuringBackoff_ShouldNotCompleteUntilRetryRuns`
+  (A retries with 300ms backoff, sibling B finishes at ~100ms). Red without the fix (completed
+  after 1 call to A), green with it.
+- Side note: `ConfigurableFailureModule` ignores the `failCount` property (it arrives as a
+  `JsonElement`, so the default of 2 is always used); the new test sets 2 explicitly to match.
+- `--filter Category!=Finding`: 1759 passed, 0 failed (one earlier run had 2 API-test failures,
+  green in isolation and on rerun — likely the known API flake).
+
 ### 2026-10-10 — Stage 3: sub-graph parity (§12.4 + §10.3)
 - Scoping decided (asked): sequential bodies see earlier writes and report them after the
   construct; parallel branches isolated, merged in branch order; writes before a failure kept.
