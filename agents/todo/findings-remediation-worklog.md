@@ -198,6 +198,16 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-10 — test helper: ConfigurableFailureModule honours failCount
+- `ConfigurableFailureModule` now reads `failCount` when it arrives as a numeric `JsonElement`
+  (previously always fell back to the default of 2).
+- Reviewed every `test.configurable-failure` user (all in `SupervisionStrategyTests`):
+  `WithRetryPolicy_ShouldRetryAndSucceed` (2 of 3 attempts fail) and `RetryPending_…` (2, expects 3
+  calls) unchanged; `RetryExhausted_ShouldFailWorkflow` (999, MaxAttempts 2) still exhausts;
+  `NodeRetry_ShouldPublishNodeRetryingEvent` (1) still fails once, so a retry event still fires.
+  No assertions changed.
+- `--filter Category!=Finding`: 1759 passed, 0 failed.
+
 ### 2026-10-10 — follow-up: run completing while a retry is pending
 - `WorkflowExecutor.IsWorkflowComplete` now also requires `_pendingRetryCancellations.Count == 0`
   (mirrors `SubGraphExecutor.IsComplete`). `HandleRetryNode` removes the entry before re-executing,

@@ -766,7 +766,11 @@ public class SupervisionStrategyTests : TestKit
             var failCount = 2; // default
             if (context.Properties.TryGetValue("failCount", out var failObj))
             {
-                if (failObj is long l)
+                if (failObj is JsonElement { ValueKind: JsonValueKind.Number } je)
+                {
+                    failCount = je.GetInt32();
+                }
+                else if (failObj is long l)
                 {
                     failCount = (int)l;
                 }
