@@ -19,11 +19,13 @@
 | D | Unregistered module id "succeeds" via a stub (§12.5) | High | `EngineFindingTests.UnregisteredModule_ShouldFailNode_NotSucceedViaStub` |
 | E | Cancel doesn't stop running constructs (§12.3) | Med | `EngineFindingTests.Cancel_ShouldStopRunningLoopIterations` |
 | F | `UseErrorHandler` not implemented (§12.7) | Med | `EngineFindingTests.UseErrorHandler_ShouldRouteToHandler_NotFailWorkflow` |
+| G | A construct nested in a body runs as a plain node (§12.10, found 2026-10-10) | High | `NestedConstructFindingTests` (2) |
 
 > **Narrowed by testing:** port-aware routing *inside* a loop/branch body already works
 > (`PortRoutingInsideLoopBody_ShouldSkipDeactivatedBranch` passed), so only **per-node error
 > handling** is missing in bodies (Finding C), not branching. The join-skip concern (§12.6) was
-> **refuted** and is dropped.
+> **refuted** and is dropped. Routing working does *not* mean constructs nested in a body work —
+> they don't (Finding G, §12.10).
 
 ---
 
@@ -257,6 +259,112 @@ treated as a spec question, not a bug to rush. **Effort:** ~2–3 days once sema
 
 ---
 
+## Finding G (High) — a construct nested inside a body runs as a plain node (§12.10)
+
+*Found 2026-10-10 while closing Stage 3 (§12.4 / §10.3). The earlier "constructs in bodies work"
+reading rested on `PortRoutingInsideLoopBody_…`, which uses a port-routing node, not a construct, so
+it never exercised this path.*
+
+### Evidence
+`Workflow.Tests/Findings/Engine/NestedConstructFindingTests.cs`. Both tests are **red** and use the real
+`builtin.loop.foreach` / `builtin.trycatch` modules:
+
+- `ForeachNestedInForeachBody_ShouldRunInnerBodyItemsTimesOuterItems`: outer foreach `[1,2,3]`,
+  inner foreach `[a,b]`, leaf in the inner body. Expected 6 leaf runs, **got 3**: the inner loop node
+  ran once per outer iteration and its `loopBody` edge fired once as an ordinary edge. The run still
+  *completes*, so nothing tells the user the result is wrong.
+- `TryCatchInsideForeachBody_ShouldCatchPerIteration_AndLoopCompletes`: foreach `[1,2,3]` whose body
+  is a try/catch over an always-failing node. Expected the run to complete with 3 catches, **got
+  `WorkflowFailed`**: the try/catch never became a boundary, so the failure failed the body, then the
+  loop (no `continueOnError`), then the run.
+
+### Root cause
+A construct module only *describes* itself. `NodeExecutor.SendSuccess` tells its parent
+`Node{Loop,Parallel,TryCatch,Transaction}ExecutionRequested` just before `NodeExecutionCompleted`
+(the "FIFO trick"). Only `WorkflowExecutor` handles those messages: it fills its `_pending*` maps,
+then calls `Spawn*Executor` in `HandleNodeExecutionCompleted`. Inside a body the parent is
+`SubGraphExecutor`, which has **no handler** for them. The request goes unhandled (to dead letters),
+and the `NodeExecutionCompleted` that follows takes the normal path,
+`HandleNodeCompleted` → `ExecuteReadySuccessors(nodeId, ActivePorts)`. Construct modules set no
+`ActivePorts`, so **every** outgoing edge fires once: `loopBody` *and* `done`; `try`, `catch`,
+`finally` *and* `done`.
+
+The outer body's scope (`LoopExecutorActor.ComputeBodyScope`, a BFS from the body entries) already
+includes the nested construct's own body nodes. They do run in the outer sub-graph, but only once
+each, as ordinary successors. That is why the loop-in-loop case looks almost right.
+
+The fix must also cover two related gaps:
+- **Break/continue bind to the wrong loop.** `SubGraphExecutor.HandleNodeCompleted` sets
+  `_breakRequested` / `_continueRequested` from `__loop_break__` / `__loop_continue__` on *any* body
+  node. A `builtin.break` in an inner loop's body would therefore break the **outer** loop.
+- Streaming regions in bodies are a separate known gap (plan 04, "no regions inside construct
+  bodies"). A shared spawn core would be the natural place to add them later.
+
+### Options
+- **G1 (recommended): `SubGraphExecutor` spawns nested constructs through a shared spawn core.**
+  Extract what `WorkflowExecutor` does for each construct into a `ConstructSpawnCore`: resolve body
+  entries from the body port(s), compute the body scope, build the actor `Props`, and on
+  `*Completed` mark the nested body scope as handled and fire the done-port successors. Use the same
+  style as `DispatchCore` / `NodeFailureCore`: shared logic, with state kept in the actor and wired
+  in by callbacks. `SubGraphExecutor` then:
+  - stores `Node*ExecutionRequested`. On the matching completion it spawns the construct as its own
+    child instead of routing, and passes its linked CTS token and its current `BodyVariables`.
+  - handles `Loop/Parallel/TryCatch/TransactionCompleted`: applies `VariableUpdates`, stores the
+    construct's outputs, skips the nested body scope and fires the done ports. It sends `*Failed`
+    into `NodeFailureCore`, so an *outer* try/catch or `continueOnError` loop sees the failure.
+  - waits in `IsComplete` until pending nested constructs finish.
+  - honours break/continue sentinels only from nodes outside any nested loop's scope.
+
+  `WorkflowExecutor` moves to the same core as a pure refactor first, with the full suite green
+  (the template is how `NodeFailureCore` landed). Nesting depth is then unbounded by construction.
+- **G2: reject nested constructs at submit time.** `WorkflowSupervisor` fails a definition whose
+  construct body scope contains another construct node. This check would sit next to the §12.5
+  unknown-module check. It is small (~0.5 day) and honest, but it takes away a capability the
+  editor lets users build.
+- **G3: delegate up.** `SubGraphExecutor` forwards the request to `WorkflowExecutor`, which spawns
+  the construct. Rejected because the top-level executor would own an actor whose lifetime, cancel
+  scope and variables belong to one iteration of a body. Replies would also have to be routed back
+  down.
+
+### Recommendation
+**G1**, in three stages:
+1. Extract `ConstructSpawnCore` from `WorkflowExecutor` as a pure refactor.
+2. Add loop + try/catch to `SubGraphExecutor`. This turns both finding tests green.
+3. Add parallel + transaction.
+
+**G2** is a reasonable stop-gap if G1 won't land soon. It turns a silently wrong result into a clear
+error at submit time.
+
+### Decisions to settle first
+1. **G1 or G2**, or G2 now and G1 later.
+2. **History/events for nested runs.** Today body nodes are persisted through `QueuePersistNode`
+   only, without per-iteration loop metadata, and body node events are already a follow-up. Is it
+   acceptable for the first cut to run nested constructs correctly, with the same history fidelity
+   as a single level of body?
+3. **Variable scoping:** confirm that the Stage 3 rules apply recursively. A nested construct starts
+   from the body's current variables and reports its writes back to the body.
+
+### Acceptance
+Both `NestedConstructFindingTests` tests are green and retired to a permanent class. New tests cover:
+- parallel inside a loop
+- a loop inside a try
+- a break in the inner loop, which ends only the inner loop
+- a failing inner loop caught by an outer try/catch
+
+These suites still pass: `SubGraphParityTests`, `SubGraphExecutorTests`, `LoopScopeTests`,
+`ErrorBoundaryTests`, `LoopCompletionTests`, `DatabaseTransactionStructuralEngineTests`.
+
+### Risk / blast radius
+Medium-high. The change touches the spawn and completion path of every construct in both executors,
+and the refactor step must not change top-level behaviour. Transactions need care: a nested
+transaction must still roll back on cancel, because §12.3 cancels through the token, not
+`Context.Stop`.
+
+**Effort:** G1 ~4–6 days (≈1 for the refactor, 2 for loop + try/catch, 1–2 for parallel +
+transaction, plus tests). G2 ~0.5 day.
+
+---
+
 ## Sequencing
 
 1. **C2 (loop done-port)** first — it silently drops all post-loop work and blocks §10.3; small,
@@ -267,5 +375,6 @@ treated as a spec question, not a bug to rush. **Effort:** ~2–3 days once sema
 4. **C (shared failure handler)** last of the High items — largest, needs the equivalence care the
    `DispatchCore` extraction modelled.
 5. **F (UseErrorHandler)** is a feature spec, scheduled separately.
+6. **G (nested constructs)** after C — it builds on `NodeFailureCore`; needs the G1/G2 decision.
 
 Each step lands behind its finding test plus the full existing engine suite.

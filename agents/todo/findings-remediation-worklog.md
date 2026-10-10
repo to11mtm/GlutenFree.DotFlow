@@ -155,12 +155,17 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   `_failedNodes`) and sibling B finishes last, the run completes and A's retry is dropped. One-line
   fix (`&& _pendingRetryCancellations.Count == 0`) + a test. `SubGraphExecutor.IsComplete` already
   has the equivalent guard (added in Stage 3). Pre-existing; found while doing Stage 3.
-- [ ] **Constructs nested inside a body (loop-in-loop, try/catch in a loop, …).** `SubGraphExecutor`
-  doesn't handle `Node*ExecutionRequested`, so by code reading a nested construct runs as a plain
-  node (its body edges fire once as ordinary successors). The README's withdrawal of the
-  "flattened" claim rested on a port-routing test (not a construct) — verify with a test first.
-  Plan 02's §12.4 acceptance also asked for "try/catch nested in a loop body"; not done for this
-  reason.
+- [ ] **Constructs nested inside a body (loop-in-loop, try/catch in a loop, …) — CONFIRMED, now
+  finding §12.10 (High).** Guard: `Findings/Engine/NestedConstructFindingTests` (2, both red on
+  2026-10-10). Loop-in-loop runs the inner body 3× instead of 6× and the run still completes. A
+  try/catch in a loop doesn't catch, so the run fails. Cause: `SubGraphExecutor` doesn't handle
+  `Node*ExecutionRequested`, so the construct completes as a plain node and every outgoing edge
+  fires once. Also (code reading, untested): break/continue inside an inner loop would hit the outer loop.
+  Plan: [02 §G](../../docs/architecture/plans/02-engine-lifecycle-remediation.md#finding-g-high--a-construct-nested-inside-a-body-runs-as-a-plain-node-1210).
+  **Decision needed** before coding: G1 (shared `ConstructSpawnCore`, `SubGraphExecutor` spawns
+  nested constructs) vs G2 (reject at submit time as a stop-gap), plus the history/variable-scoping
+  questions listed there. Plan 02's §12.4 acceptance item "try/catch nested in a loop body" is
+  covered by this guard.
 - [ ] **API test flake: SQLite "table VersionInfo already exists".** Seen in `RateLimitTests`,
   `ModuleManagementEndpointsTests`, `WebhookApiTests` (2 of 4 full runs on 2026-10-10, green on
   rerun). DB names are unique per factory (`TestSqlite.InMemory`), so suspect one host running
