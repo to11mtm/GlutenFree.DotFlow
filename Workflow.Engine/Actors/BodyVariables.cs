@@ -1,4 +1,4 @@
-// <copyright file="BodyVariables.cs" company="GlutenFree">
+﻿// <copyright file="BodyVariables.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
