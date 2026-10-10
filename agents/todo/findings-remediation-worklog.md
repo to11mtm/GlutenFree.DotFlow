@@ -79,8 +79,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 ### Stage 1 — unblockers & high-visibility engine fixes
 
-- [ ] **§12.9 — loop `done`-port node is skipped** · plan 02 · guard `EngineFindingTests.LoopDonePort_ShouldRunPostLoopNode`
-  - [x] plan read · [x] fix (`HandleLoopCompleted`: scope from `loopBody` targets only) · [x] guard green · [x] `WhileModule` path re-checked (by code review — same handler/port; no test yet, see log) · [x] suite green · [ ] finding retired · [ ] README updated
+- [x] **§12.9 — loop `done`-port node is skipped** · plan 02 · guard `EngineFindingTests.LoopDonePort_ShouldRunPostLoopNode`
+  - [x] plan read · [x] fix (`HandleLoopCompleted`: scope from `loopBody` targets only) · [x] guard green · [x] `WhileModule` path re-checked (by code review — same handler/port; no test yet, see log) · [x] suite green · [x] finding retired (→ `Engine/LoopCompletionTests`) · [x] README updated
 - [ ] **§12.5 — unregistered module id "succeeds" via stub** · plan 02 · guard `EngineFindingTests.UnregisteredModule_ShouldFailNode_NotSucceedViaStub`
   - [ ] plan read · [ ] fix (fail the node; reject unknown ids at validation) · [ ] guard green · [ ] stub-dependent tests updated · [ ] suite green · [ ] finding retired · [ ] README updated
 - [ ] **§12.1 — completion/node events never reach SignalR** · plan 02 · guards `RealtimeCompletionFindingTests.*` (2)
@@ -158,6 +158,16 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-10 — §12.9 closed out
+- Baseline commit 4953dc2 (plans, finding tests, worklog, README table, MessagePack 3.1.11 bump).
+- Guard moved out of `EngineFindingTests` into permanent `Workflow.Tests/Engine/LoopCompletionTests.cs`
+  (own stubs, no FindingDefs dependency) + plan 02 C2 acceptance e2e test
+  `ForEachWithBodyAndDoneNode_DoneNodeContributesToWorkflowOutputs` (body runs 3×, done node's
+  `after.summary` lands in `WorkflowCompleted.Outputs`). Both verified RED with the fix stashed.
+- README §12.9 row struck. `--filter Category!=Finding`: 1736 passed, 0 failed.
+- Still open: `while` + done-port e2e test → after §10.3 (needs body variable writes).
+- Next: §12.5.
+
 ### 2026-10-10 — §12.9 loop done-port (fix in, not yet committed)
 - Fix: `WorkflowExecutor.HandleLoopCompleted` now seeds `ComputeBodyScope` from body-port targets
   only (matches `SpawnLoopExecutor`). `LoopCompleted` gained `LoopBodyPort` (default "loopBody"),

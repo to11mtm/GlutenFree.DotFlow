@@ -47,7 +47,7 @@ the code, not running it, so each one should get a failing test before it gets a
 | Engine | `WorkflowExecutor` actors are never stopped. The actor tree and memory grow with every run. | **High** | [01 §12.2](01-execution-lifecycle.md#12-findings-to-verify) |
 | Engine | Nodes inside construct bodies ignore `Retry`/`Continue` (confirmed). Branching *does* work in bodies, so the "flattened" claim is withdrawn. | **High** | [01 §12.4](01-execution-lifecycle.md#12-findings-to-verify) |
 | Engine | An unregistered module id runs a stub that *succeeds*. | **High** | [01 §12.5](01-execution-lifecycle.md#12-findings-to-verify) |
-| Engine | A node wired to a loop's `done` port is swallowed into the body scope and **skipped** — post-loop nodes never run. Found while testing §10.3. | **High** | [02 remediation](plans/02-engine-lifecycle-remediation.md) |
+| Engine | ~~A node wired to a loop's `done` port is swallowed into the body scope and **skipped** — post-loop nodes never run.~~ **Fixed (§12.9)** — `HandleLoopCompleted` scopes the body from body-port targets only; guarded by `Engine/LoopCompletionTests`. | — | [02 remediation](plans/02-engine-lifecycle-remediation.md) |
 | Engine | User cancel doesn't cancel `_executionCts`. Running loops and parallel blocks continue. | Medium | [01 §12.3](01-execution-lifecycle.md#12-findings-to-verify) |
 | Binding | Variables inside loop and branch bodies are a start-of-construct snapshot. `SetVariable` writes there are dropped. | Medium | [plan 03](plans/03-binding-and-variables-remediation.md) |
 | Binding | `{{nodeId.port}}` only resolves direct predecessors. `../variables.md` says it reaches further upstream. | Medium | [plan 03](plans/03-binding-and-variables-remediation.md) |

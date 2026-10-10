@@ -378,7 +378,7 @@ public sealed class LoopExecutorActor : ReceiveActor
             "✅ LoopExecutor '{LoopNodeId}' completed: {Count} iteration(s), {ErrCount} error(s)",
             _loopNodeId, _iterationCount, _errors.Count);
 
-        Context.Parent.Tell(new LoopCompleted(_loopNodeId, outputs));
+        Context.Parent.Tell(new LoopCompleted(_loopNodeId, outputs, _loop.LoopBodyPort));
         Context.Stop(Self);
     }
 

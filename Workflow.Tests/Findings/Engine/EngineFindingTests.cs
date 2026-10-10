@@ -16,7 +16,6 @@ using LanguageExt;
 using Workflow.Core.Models;
 using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
-using Workflow.Modules.Builtin.Flow;
 using Xunit;
 
 /// <summary>
@@ -224,49 +223,6 @@ public sealed class EngineFindingTests : TestKit
 
         onTrue.Calls.Should().Be(1, because: "the active 'true' branch inside the body should run");
         onFalse.Calls.Should().Be(0, because: "the deactivated 'false' branch inside the body should be skipped (01 §12.4)");
-    }
-
-    // ── Finding 01 §12.9 (new) — a node on a loop's done port is skipped, never run ───────────────
-
-    /// <summary>
-    /// A node wired to a loop's <c>done</c> port should run after the loop finishes. Uses the REAL
-    /// <c>builtin.loop.foreach</c> module (so this can't be blamed on a stub loop). Today
-    /// <c>WorkflowExecutor.HandleLoopCompleted</c> computes the body scope from ALL of the loop's
-    /// outgoing targets — including the done-port node — so the post-loop node is swallowed into the
-    /// body scope and marked skipped. The run completes without ever executing it. No existing test
-    /// wires loop.done → downstream through the engine, which is why this went unnoticed.
-    /// </summary>
-    [Fact]
-    public void LoopDonePort_ShouldRunPostLoopNode()
-    {
-        var foreachModule = new ForEachModule();                 // real module under test
-        var body = new PassModule("f.ldbody");                   // loop body (observer)
-        var after = new CaptureModule("f.ldafter");              // done-port node (must run)
-        var services = FindingDefs.Services(
-            new Workflow.Modules.Abstractions.IWorkflowModule[] { foreachModule, body, after });
-
-        var definition = FindingDefs.Definition(
-            nodes: new[]
-            {
-                FindingDefs.Node("loop", "builtin.loop.foreach", properties: new (string, object?)[]
-                {
-                    ("collection", (object?)new object?[] { "a", "b", "c" }),
-                }),
-                FindingDefs.Node("body", "f.ldbody"),
-                FindingDefs.Node("after", "f.ldafter"),
-            },
-            connections: new[]
-            {
-                FindingDefs.Edge("loop", "loopBody", "body", "input"),
-                FindingDefs.Edge("loop", "done", "after", "input"),
-            });
-
-        var (_, parent, _) = this.StartRun(definition, services);
-        var terminal = parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, FindingDefs.RunTimeout);
-
-        terminal.Should().BeOfType<WorkflowCompleted>(because: "the loop should finish and the run complete");
-        after.Captured.Should().NotBeEmpty(
-            because: "the node on the loop's done port should run after the loop, not be swallowed into the body scope (01 §12.9)");
     }
 
     // ── Finding 01 §12.7 — UseErrorHandler is not implemented ─────────────────────────────────────

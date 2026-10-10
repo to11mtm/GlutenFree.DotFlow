@@ -1393,13 +1393,15 @@ public class WorkflowExecutor : ReceiveActor
         // Compute the body scope (all nodes reachable from loopBody port before looping back).
         // These nodes were executed by LoopExecutorActor — WorkflowExecutor never ran them directly.
         // Mark them as skipped here so IsWorkflowComplete() counts them and we don't re-fire them~ 🔁✨
-        var allOutgoingTargets = _definition.Connections
-            .Where(c => c.SourceNodeId == loopNodeId)
+        // §12.9: seed the scope from body-port targets ONLY (matching SpawnLoopExecutor). Seeding it
+        // from every outgoing edge swallowed the done-port successors into the body and skipped them.
+        var bodyEntryTargets = _definition.Connections
+            .Where(c => c.SourceNodeId == loopNodeId && c.SourcePortName == message.LoopBodyPort)
             .Select(c => c.TargetNodeId)
             .ToList();
 
         var bodyScope = LoopExecutorActor
-            .ComputeBodyScope(_definition, loopNodeId, allOutgoingTargets)
+            .ComputeBodyScope(_definition, loopNodeId, bodyEntryTargets)
             .ToHashSet();
 
         // CopilotNote: skipping body-scope nodes prevents double-execution on the done-port routing below.

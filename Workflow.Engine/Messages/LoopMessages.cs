@@ -16,13 +16,18 @@ using System.Collections.Generic;
 /// Aggregated loop outputs: <c>results</c> (list), <c>count</c> (int), <c>errors</c> (list).
 /// Stored in <c>WorkflowExecutor._nodeOutputs[loopNodeId]</c> and forwarded as done-port payload~ 📦.
 /// </param>
+/// <param name="LoopBodyPort">
+/// The loop's body port (<c>LoopRequest.LoopBodyPort</c>). WorkflowExecutor uses it to compute the
+/// body scope from body-port targets only, so done-port successors are not swallowed into it (§12.9).
+/// </param>
 /// <remarks>
 /// CopilotNote: Phase 2.2.2 — WorkflowExecutor handles this by firing the <c>done</c> port
 /// successors of the loop node (activePorts = [loop.DonePort])~ 💖.
 /// </remarks>
 public record LoopCompleted(
     string LoopNodeId,
-    IReadOnlyDictionary<string, object?> Outputs);
+    IReadOnlyDictionary<string, object?> Outputs,
+    string LoopBodyPort = "loopBody");
 
 /// <summary>
 /// Sent by <see cref="Workflow.Engine.Actors.LoopExecutorActor"/> to its parent
