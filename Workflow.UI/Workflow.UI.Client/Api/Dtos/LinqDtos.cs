@@ -71,7 +71,14 @@ public sealed record LinqDiagnosticDto(string Id, string Severity, string Messag
 /// <param name="Success">Compilation success.</param>
 /// <param name="Errors">Errors.</param>
 /// <param name="Warnings">Warnings.</param>
-public sealed record LinqValidateResponseDto(bool Success, List<LinqDiagnosticDto> Errors, List<LinqDiagnosticDto> Warnings);
+/// <param name="SecurityFlags">§9.2: sensitive APIs that need reviewer approval before this body can compile.</param>
+/// <param name="CodeHash">§9.2: the approval hash to request review with.</param>
+public sealed record LinqValidateResponseDto(
+    bool Success,
+    List<LinqDiagnosticDto> Errors,
+    List<LinqDiagnosticDto> Warnings,
+    List<SensitiveApiFlagDto>? SecurityFlags = null,
+    string? CodeHash = null);
 
 /// <summary>👀 Preview response (sample-data run)~.</summary>
 /// <param name="Success">Compile + run success.</param>

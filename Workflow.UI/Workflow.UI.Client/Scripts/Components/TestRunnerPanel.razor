@@ -6,6 +6,7 @@
 @using Workflow.UI.Client.Api
 @using Workflow.UI.Client.Api.Dtos
 @using Workflow.UI.Client.Scripts.State
+@using Workflow.UI.Client.Shared
 
 @* 🧪 Phase 3.4.3 — The inline test runner (mockup S1 right rail): JSON inputs + config toggles →
    POST /scripts/test → result / logs / variable updates / structured error. A script error is a
@@ -52,6 +53,10 @@
                 <div class="df-runner__banner df-runner__banner--fail" data-testid="run-failure">
                     ❌ @(result.Error ?? "Script failed") <span class="df-runner__dur">@($"{result.DurationMs:0}ms")</span>
                 </div>
+                @if (result.SecurityFlags is { Count: > 0 })
+                {
+                    <SecurityReviewPanel Flags="result.SecurityFlags" CodeHash="@result.CodeHash" />
+                }
             }
 
             <details open>

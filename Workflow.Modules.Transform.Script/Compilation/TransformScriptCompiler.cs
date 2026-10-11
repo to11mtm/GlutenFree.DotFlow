@@ -71,9 +71,11 @@ public sealed class TransformScriptCompiler : ITransformScriptCompiler
             GeneratedSource: source,
             UserBody: userBody,
             ExtraReferences: null,
-            StrictWarnings: strictWarnings);
+            StrictWarnings: strictWarnings,
+            Kind: Workflow.Scripting.Roslyn.Security.ScriptSecurityAnalyzer.KindTransform);
 
         var result = this.compiler.Compile(request);
-        return new TransformScriptCompileResult(result.Success, result.AssemblyBytes, result.Diagnostics);
+        return new TransformScriptCompileResult(
+            result.Success, result.AssemblyBytes, result.Diagnostics, result.SecurityFlags, result.CodeHash, result.NeedsApproval);
     }
 }

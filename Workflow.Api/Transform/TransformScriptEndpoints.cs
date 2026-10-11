@@ -53,7 +53,7 @@ public static class TransformScriptEndpoints
     private static IResult ValidateHandler(ValidateRequest request, ITransformScriptCompiler compiler)
     {
         var result = compiler.Compile(request.Code ?? string.Empty);
-        return Results.Ok(new ValidateResponse(result.Success, ToDtos(result.Diagnostics)));
+        return Results.Ok(new ValidateResponse(result.Success, ToDtos(result.Diagnostics), Flags(result), Hash(result)));
     }
 
     private static async Task<IResult> PreviewHandler(PreviewRequest request, ITransformScriptPreviewer previewer, CancellationToken ct)
@@ -91,7 +91,7 @@ public static class TransformScriptEndpoints
         var result = compiler.Compile(request.Code ?? string.Empty);
         if (!result.Success || result.AssemblyBytes is null)
         {
-            return Results.BadRequest(new ValidateResponse(false, ToDtos(result.Diagnostics)));
+            return Results.BadRequest(new ValidateResponse(false, ToDtos(result.Diagnostics), Flags(result), Hash(result)));
         }
 
         var inputsFingerprint = string.Join(",", (request.Inputs ?? new Dictionary<string, object?>()).Keys.OrderBy(k => k));
@@ -106,6 +106,11 @@ public static class TransformScriptEndpoints
         await cache.StoreAsync(key, result.AssemblyBytes, ct).ConfigureAwait(false);
         return Results.Ok(new CompileResponse(key));
     }
+
+    private static IReadOnlyList<Workflow.Scripting.Approvals.SensitiveApiFlag>? Flags(TransformScriptCompileResult r)
+        => r.NeedsApproval ? r.SecurityFlags : null;
+
+    private static string? Hash(TransformScriptCompileResult r) => r.NeedsApproval ? r.CodeHash : null;
 
     private static IReadOnlyList<DiagnosticDto> ToDtos(IReadOnlyList<ScriptDiagnostic> diagnostics)
         => diagnostics.Select(d => new DiagnosticDto(d.Id, d.Severity.ToString(), d.Message, d.Line, d.Column)).ToList();
@@ -122,8 +127,12 @@ public static class TransformScriptEndpoints
     /// <summary>A diagnostic DTO~ 🩺.</summary>
     public record DiagnosticDto(string Id, string Severity, string Message, int? Line, int? Column);
 
-    /// <summary>Validate response~ 📤.</summary>
-    public record ValidateResponse(bool Success, IReadOnlyList<DiagnosticDto> Diagnostics);
+    /// <summary>Validate response~ 📤. §9.2: <c>SecurityFlags</c>/<c>CodeHash</c> are set when the body needs reviewer approval.</summary>
+    public record ValidateResponse(
+        bool Success,
+        IReadOnlyList<DiagnosticDto> Diagnostics,
+        IReadOnlyList<Workflow.Scripting.Approvals.SensitiveApiFlag>? SecurityFlags = null,
+        string? CodeHash = null);
 
     /// <summary>Preview response~ 📤.</summary>
     public record PreviewResponse(bool Success, object? Result, long DurationMs, IReadOnlyList<DiagnosticDto> Diagnostics);

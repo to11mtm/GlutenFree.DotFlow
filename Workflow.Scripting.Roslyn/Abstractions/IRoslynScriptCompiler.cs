@@ -15,12 +15,17 @@ using Microsoft.CodeAnalysis;
 /// <param name="UserBody">The raw user body, scanned standalone by the forbidden-syntax walker.</param>
 /// <param name="ExtraReferences">Optional additional metadata references beyond the BCL set.</param>
 /// <param name="StrictWarnings">When <c>true</c>, warnings are promoted to errors.</param>
+/// <param name="Kind">
+/// §9.2: the approval kind (<c>csharp-script</c>, <c>csharp-transform</c>) — part of the code hash,
+/// so approving a script doesn't approve the same text as a transform.
+/// </param>
 public record ScriptCompileRequest(
     string AssemblyName,
     string GeneratedSource,
     string UserBody,
     IReadOnlyList<MetadataReference>? ExtraReferences = null,
-    bool StrictWarnings = false);
+    bool StrictWarnings = false,
+    string Kind = Workflow.Scripting.Roslyn.Security.ScriptSecurityAnalyzer.KindScript);
 
 /// <summary>
 /// 🧬 The result of a compile — bytes on success, diagnostics on failure~ ✨.
@@ -28,10 +33,16 @@ public record ScriptCompileRequest(
 /// <param name="Success">Whether compilation succeeded.</param>
 /// <param name="AssemblyBytes">The emitted assembly bytes (non-null on success).</param>
 /// <param name="Diagnostics">All diagnostics (errors + warnings).</param>
+/// <param name="SecurityFlags">§9.2: every sensitive API the user code resolves to (empty when none).</param>
+/// <param name="CodeHash">§9.2: the approval hash of the analyzed code (set when it has flags).</param>
+/// <param name="NeedsApproval">§9.2: the code has flags and no approval, so it was not compiled.</param>
 public record ScriptCompileResult(
     bool Success,
     byte[]? AssemblyBytes,
-    IReadOnlyList<ScriptDiagnostic> Diagnostics);
+    IReadOnlyList<ScriptDiagnostic> Diagnostics,
+    IReadOnlyList<Workflow.Scripting.Approvals.SensitiveApiFlag>? SecurityFlags = null,
+    string? CodeHash = null,
+    bool NeedsApproval = false);
 
 /// <summary>
 /// 🧬 Domain-agnostic Roslyn compile pipeline: security-walks the user body, compiles the generated

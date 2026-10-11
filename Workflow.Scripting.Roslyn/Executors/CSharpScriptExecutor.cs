@@ -91,7 +91,11 @@ public sealed class CSharpScriptExecutor : IScriptExecutor
             {
                 sw.Stop();
                 var errors = string.Join("; ", result.Diagnostics.Where(d => d.Severity == ScriptDiagnosticSeverity.Error).Select(d => $"({d.Line},{d.Column}) {d.Message}"));
-                return ScriptExecutionResult.Fail($"C# compile failed: {errors}", context.Api.GetLogs(), sw.Elapsed);
+                return ScriptExecutionResult.Fail($"C# compile failed: {errors}", context.Api.GetLogs(), sw.Elapsed) with
+                {
+                    SecurityFlags = result.NeedsApproval ? result.SecurityFlags : null,
+                    CodeHash = result.NeedsApproval ? result.CodeHash : null,
+                };
             }
 
             bytes = result.AssemblyBytes;

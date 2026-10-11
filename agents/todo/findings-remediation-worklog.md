@@ -116,8 +116,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 - [x] **§9.1 — JS CLR interop reachable** · plan 01 · guards `ScriptSandboxFindingTests.JavaScript_*` (2)
   - [x] plan read · [x] fix (drop `AllowClr()`; `Interop.AllowGetType=false`) · [x] guards green · [x] **all** `Workflow.Tests/Scripting/*` still green (proves `workflow.*` unaffected) · [x] suite green · [x] findings retired (→ `JavaScriptScriptExecutorTests.Sandbox_*`) · [x] README updated
-- [ ] **§9.2 — C# reflection bypasses blocklist** · plan 01 · guard `ScriptSandboxFindingTests.CSharp_ShouldNotAllow_ReflectionTypeResolution`
-  - [ ] plan read · [ ] mitigation (denylist additions) in **both** walkers · [ ] real fix (reference allowlist) · [ ] guard green + add mirror test for the LINQ compiler · [ ] transform/linq suites green · [ ] suite green · [ ] finding retired · [ ] README updated
+- [x] **§9.2 — C# reflection bypasses blocklist** · plan 01 · guard `ScriptSandboxFindingTests.CSharp_ShouldNotAllow_ReflectionTypeResolution`
+  - [x] plan read · [x] mitigation in **both** compilers (semantic check + the name list as pre-filter) · [x] real fix — NOT a reference allowlist (can't work, see plan 01 "Decided design"): default-deny semantic check + reviewer approval of exact code · [x] guard green + mirror test for the LINQ compiler · [x] transform/linq suites green · [x] suite green · [x] finding retired (→ `Scripting/ScriptApprovalTests`) · [x] README updated
 
 ### Stage 5 — smaller, independent fixes
 
@@ -198,6 +198,35 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-11 — §9.2 C# sensitive-API check + reviewer approval
+- Plan 01's real fix (reference allowlist) can't work: Type, MethodInfo, Assembly, Activator and
+  File are all in System.Runtime.dll. Decided with the user instead: default-deny semantic check +
+  approval of exact code by a new ScriptApprover role (author can't self-approve), everything
+  reviewable, every flag explained in the UI. Design recorded in plan 01 "Decided design".
+- Server: `Workflow.Scripting.Roslyn/Security` (SensitiveApiCatalog: 8 categories with danger text,
+  symbol classifier; ScriptSecurityAnalyzer: walks the user body's bound symbols, name list as
+  pre-filter, P/Invoke attributes, `dynamic`; CodeHash = SHA-256(kind + normalized code)).
+  Both RoslynScriptCompiler (scripts + transforms) and WorkflowLinqCompiler deny flagged code
+  unless `IScriptApprovalGate.IsApproved(hash)`; denied compiles record a Candidate. Fail closed
+  when no gate. Old `WFSCRIPT100`/`WFLINQ100` ids kept for denials, so existing tests unchanged;
+  unsafe/pointer/stackalloc stay hard errors. `Workflow.Modules.Database.Linq` now references
+  `Workflow.Scripting.Roslyn` (shared checker).
+- Store: `Workflow.Scripting/Approvals` (ScriptApprovalStore, JSON catalog over the blob store like
+  script libraries; candidates capped at 500). API: role `ScriptApprover`, policies
+  `ScriptApprove` / `ScriptApprovalRead`, `/api/v1/script-approvals` (list/categories/get/request/
+  approve/reject); flags + hash on scripts/test, transform validate/compile, LINQ validate/compile.
+- UI: SecurityReviewPanel (Script Studio test runner, LINQ Studio validate), Script Approvals page,
+  🛡️ Approvals nav button.
+- Tests: `Scripting/ScriptApprovalTests` (29: spellings incl. global::/typeof/dynamic, IO/Net/
+  Process via reflection, categories, positions, exact-code approval, kind in hash, self-approval,
+  state machine, persistence, LINQ mirror), `Api/V1/ScriptApprovalApiTests` (4, real HTTP + roles),
+  `Tests.UI/.../ScriptApprovalUiTests` (6). Mutation check (gate forced open): 26/34 new tests RED.
+  Retired `Findings/Modules/ScriptSandboxFindingTests` (its probe is in ScriptApprovalTests).
+- Built in a separate worktree (the uncommitted G1 work in the main checkout untouched).
+  `--filter Category!=Finding`: 1795 passed, 0 failed; Workflow.Tests.UI: 718 passed, 0 failed.
+- Follow-ups: approvals can't be revoked (compiled-bytes cache); designer has no inline compile,
+  so node scripts are reviewed via the Studios / by running. Next: Stage 5, or resume G1.
+
 ### 2026-10-11 — §9.1 JS CLR interop off
 - `JavaScriptScriptExecutor`: removed `opts.AllowClr()`, added `opts.Interop.AllowGetType = false`
   (plan 01 Option A + belt). `__api` (SetValue'd) still binds — governed by Interop, not AllowClr.

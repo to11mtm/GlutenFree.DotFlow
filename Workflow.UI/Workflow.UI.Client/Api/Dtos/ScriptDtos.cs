@@ -46,13 +46,17 @@ public sealed record ScriptTestConfigDto(
 /// <param name="VariableUpdates">Variable writes the script staged.</param>
 /// <param name="DurationMs">Execution duration in milliseconds.</param>
 /// <param name="Error">The error message (when unsuccessful).</param>
+/// <param name="SecurityFlags">§9.2: sensitive APIs that need reviewer approval before this C# code can run.</param>
+/// <param name="CodeHash">§9.2: the approval hash to request review with.</param>
 public sealed record ScriptTestResultDto(
     bool Success,
     JsonElement Result,
     IReadOnlyList<ScriptLogEntryDto> Logs,
     IReadOnlyDictionary<string, JsonElement> VariableUpdates,
     double DurationMs,
-    string? Error);
+    string? Error,
+    IReadOnlyList<SensitiveApiFlagDto>? SecurityFlags = null,
+    string? CodeHash = null);
 
 /// <summary>📝 Phase 3.4.0 — Client mirror of <c>ScriptLogEntryDto</c>~ ✨.</summary>
 /// <param name="Level">The log level (Debug/Info/Warning/Error).</param>

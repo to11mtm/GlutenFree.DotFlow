@@ -42,6 +42,8 @@ builder.Services.AddScoped(sp =>
     new DatabaseLinqClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
 builder.Services.AddScoped(sp =>
     new VariablesClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
+builder.Services.AddScoped(sp =>
+    new ScriptApprovalsClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
 
 // 🔔 App services: toasts + localStorage~
 builder.Services.AddScoped<Workflow.UI.Client.Services.ToastService>();

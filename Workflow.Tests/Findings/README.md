@@ -47,7 +47,7 @@ dotnet test Workflow.Tests --filter "Category=Finding&FullyQualifiedName~Finding
 | `Modules/ActiveExecutionCountFindingTests.cs` | 04 §9.3 active count only drops for sync runs | API |
 | `Modules/ValidateConfigurationFindingTests.cs` | 04 §9.4 ValidateConfiguration never called | unit |
 | `Modules/PackageExtraModulesFindingTests.cs` | 04 §9.7 package registers undeclared module ids | packaging |
-| `Modules/ScriptSandboxFindingTests.cs` | 04 §9.1 JS CLR interop, §9.2 C# reflection bypass | scripting |
+| ~~`Modules/ScriptSandboxFindingTests.cs`~~ | 04 §9.1 JS CLR interop, §9.2 C# reflection bypass — **both fixed, file retired**: guards now in `Scripting/JavaScriptScriptExecutorTests` (`Sandbox_*`) and `Scripting/ScriptApprovalTests` | scripting |
 
 `FindingStubs.cs` holds the shared builders and stub modules; it has no tests of its own.
 

@@ -19,6 +19,8 @@
         <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
         <!-- 📦 2.4.b.2 — IBlobStore for the compiled-assembly cache~ -->
         <ProjectReference Include="..\Workflow.Persistence\Workflow.Persistence.csproj" />
+        <!-- 🛡️ §9.2 — shared semantic security checker + script approval gate (also Roslyn-only)~ -->
+        <ProjectReference Include="..\Workflow.Scripting.Roslyn\Workflow.Scripting.Roslyn.csproj" />
     </ItemGroup>
 
     <ItemGroup>

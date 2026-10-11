@@ -298,6 +298,17 @@ builder.Services.AddSingleton<Workflow.Scripting.Libraries.IScriptLibraryStore>(
         : new Workflow.Scripting.Libraries.InMemoryScriptLibraryStore();
 });
 
+// 🛡️ §9.2 — script approval catalog. The same instance is the compilers' approval gate (C# script,
+// transform and LINQ compilers deny flagged code unless it's approved here)~
+builder.Services.AddSingleton<Workflow.Scripting.Approvals.IScriptApprovalStore>(sp =>
+{
+    var blob = sp.GetService<IBlobStore>();
+    return new Workflow.Scripting.Approvals.ScriptApprovalStore(
+        blob is not null ? new Workflow.Api.Modules.BlobScriptApprovalPersistence(blob) : null);
+});
+builder.Services.AddSingleton<Workflow.Scripting.Approvals.IScriptApprovalGate>(
+    sp => sp.GetRequiredService<Workflow.Scripting.Approvals.IScriptApprovalStore>());
+
 // 🔐 Phase 2.7.7 — API authentication (API-key + JWT bearer) + named authorization policies~
 builder.Services.AddWorkflowApiAuth(builder.Configuration);
 
@@ -370,6 +381,9 @@ app.MapVariableEndpoints();
 
 // 📜 Phase 3.1.6 — Script test + language + library endpoints (/api/v1/scripts)~
 app.MapScriptEndpoints();
+
+// 🛡️ §9.2 — review/approval of C# code that uses sensitive APIs~
+app.MapScriptApprovalEndpoints();
 
 // 📊 Phase 2.7.5 — Monitoring endpoints (/api/v1/health, /status, /metrics)~
 app.MapMonitoringEndpoints();

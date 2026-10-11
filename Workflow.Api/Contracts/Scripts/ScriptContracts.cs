@@ -45,13 +45,17 @@ public sealed record ScriptTestConfig(
 /// <param name="VariableUpdates">Variable writes the script staged.</param>
 /// <param name="DurationMs">Execution duration in milliseconds.</param>
 /// <param name="Error">The error message (when unsuccessful).</param>
+/// <param name="SecurityFlags">§9.2: sensitive APIs that need reviewer approval before this C# code can run.</param>
+/// <param name="CodeHash">§9.2: the approval hash to request review with (set with <paramref name="SecurityFlags"/>).</param>
 public sealed record ScriptTestResultDto(
     bool Success,
     object? Result,
     IReadOnlyList<ScriptLogEntryDto> Logs,
     IReadOnlyDictionary<string, object?> VariableUpdates,
     double DurationMs,
-    string? Error);
+    string? Error,
+    IReadOnlyList<Workflow.Scripting.Approvals.SensitiveApiFlag>? SecurityFlags = null,
+    string? CodeHash = null);
 
 /// <summary>
 /// 📝 Phase 3.1.6 — A captured script log line DTO~ ✨.

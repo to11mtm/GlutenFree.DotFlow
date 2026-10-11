@@ -30,6 +30,12 @@ public static class AuthConstants
     /// <summary>Policy: administrative operations~ 🛡️.</summary>
     public const string AdminPolicy = "Admin";
 
+    /// <summary>Policy: approve/reject C# scripts that use sensitive APIs (§9.2)~ ✅.</summary>
+    public const string ScriptApprovePolicy = "ScriptApprove";
+
+    /// <summary>Policy: read the script approval queue — authors, viewers and approvers (§9.2)~ 👀.</summary>
+    public const string ScriptApprovalReadPolicy = "ScriptApprovalRead";
+
     /// <summary>The admin role~ 🛡️.</summary>
     public const string AdminRole = "Admin";
 
@@ -38,6 +44,12 @@ public static class AuthConstants
 
     /// <summary>The viewer role (read-only)~ 👀.</summary>
     public const string ViewerRole = "Viewer";
+
+    /// <summary>
+    /// The script approver role (§9.2): may review and approve C# scripts that use sensitive APIs.
+    /// Grants nothing else, so approval can be delegated without full admin rights~ ✅.
+    /// </summary>
+    public const string ScriptApproverRole = "ScriptApprover";
 }
 
 /// <summary>

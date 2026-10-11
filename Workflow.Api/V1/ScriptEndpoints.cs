@@ -116,7 +116,9 @@ public static class ScriptEndpoints
             result.Logs.Select(ScriptLogEntryDto.From).ToList(),
             result.VariableUpdates,
             result.Duration.TotalMilliseconds,
-            result.Error);
+            result.Error,
+            result.SecurityFlags,
+            result.CodeHash);
 
         // Script errors are returned as a 200 with success=false (D10) so callers see logs/duration~
         return Results.Ok(dto);

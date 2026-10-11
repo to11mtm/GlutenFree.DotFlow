@@ -50,7 +50,10 @@ public sealed record LinqCompileResult(
     bool Success,
     byte[]? AssemblyBytes,
     IReadOnlyList<LinqDiagnostic> Errors,
-    IReadOnlyList<LinqDiagnostic> Warnings)
+    IReadOnlyList<LinqDiagnostic> Warnings,
+    IReadOnlyList<Workflow.Scripting.Approvals.SensitiveApiFlag>? SecurityFlags = null,
+    string? CodeHash = null,
+    bool NeedsApproval = false)
 {
     /// <summary>Builds a failed result from the given diagnostics~ ✖️.</summary>
     /// <param name="errors">The fatal diagnostics.</param>

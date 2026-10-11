@@ -600,3 +600,24 @@ a.df-link:hover { text-decoration: underline; }
 .df-import-banner { background: var(--df-surface-2, #23262e); border-bottom: 1px solid var(--df-accent); padding: var(--df-space-2) var(--df-space-4); font-size: 0.82rem; display: flex; gap: var(--df-space-2); align-items: center; }
 .df-import { min-width: 460px; max-width: 620px; }
 .df-upload__drop { border: 1px dashed var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-4); text-align: center; }
+
+/* ── 🛡️ §9.2 — script approval: blocked-code review panel + reviewer queue ─────────────────── */
+.df-review { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--df-warning, #fbbf24); border-radius: 6px; background: rgba(251,191,36,0.06); }
+.df-review__title { font-weight: 600; margin-bottom: 4px; }
+.df-review__intro { opacity: 0.85; margin-bottom: 8px; }
+.df-review__category { margin: 8px 0; }
+.df-review__category-title { font-weight: 600; }
+.df-review__danger { color: var(--df-danger, #e06c75); margin: 2px 0 4px; }
+.df-review__symbols { margin: 0 0 0 18px; padding: 0; }
+.df-review__status { margin: 8px 0; }
+.df-review__hash { margin-top: 6px; font-size: 0.8em; opacity: 0.7; word-break: break-all; }
+.df-approvals { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.df-approvals__tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.df-approvals__item { padding: 12px; border: 1px solid rgba(127,127,127,0.3); border-radius: 6px; }
+.df-approvals__head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.df-approvals__kind { font-weight: 600; }
+.df-approvals__meta { font-size: 0.85em; opacity: 0.75; }
+.df-approvals__note { margin: 6px 0; }
+.df-approvals__code { max-height: 360px; overflow: auto; white-space: pre; }
+.df-approvals__actions { display: flex; gap: 8px; margin-top: 6px; }
+.df-approvals__empty { opacity: 0.7; }

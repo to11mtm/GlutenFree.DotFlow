@@ -29,16 +29,28 @@ public sealed class WorkflowLinqCompiler : IWorkflowLinqCompiler
 {
     private const string RuntimeNamespace = DynamicContextCodeGenerator.RuntimeNamespace;
 
+    /// <summary>Walker ids that stay hard errors (not approvable): unsafe, pointers, stackalloc.</summary>
+    private static readonly HashSet<string> HardWalkerIds = new(StringComparer.Ordinal)
+    {
+        "WFLINQ102", "WFLINQ103", "WFLINQ104",
+    };
+
     private readonly TableTypeResolver tableResolver;
     private readonly ILogger<WorkflowLinqCompiler> logger;
+    private readonly Workflow.Scripting.Approvals.IScriptApprovalGate approvals;
 
     /// <summary>Initializes a new instance of the <see cref="WorkflowLinqCompiler"/> class~ 🧬.</summary>
     /// <param name="tableResolver">The dual-POCO table type resolver.</param>
     /// <param name="logger">Logger (optional).</param>
-    public WorkflowLinqCompiler(TableTypeResolver tableResolver, ILogger<WorkflowLinqCompiler>? logger = null)
+    /// <param name="approvals">§9.2 approval gate; null denies every flagged body (fail closed).</param>
+    public WorkflowLinqCompiler(
+        TableTypeResolver tableResolver,
+        ILogger<WorkflowLinqCompiler>? logger = null,
+        Workflow.Scripting.Approvals.IScriptApprovalGate? approvals = null)
     {
         this.tableResolver = tableResolver ?? throw new ArgumentNullException(nameof(tableResolver));
         this.logger = logger ?? NullLogger<WorkflowLinqCompiler>.Instance;
+        this.approvals = approvals ?? Workflow.Scripting.Approvals.DenyAllScriptApprovalGate.Instance;
     }
 
     /// <inheritdoc/>
@@ -49,11 +61,11 @@ public sealed class WorkflowLinqCompiler : IWorkflowLinqCompiler
         var errors = new List<LinqDiagnostic>();
         var warnings = new List<LinqDiagnostic>();
 
-        // 1️⃣ Security blocklist over the raw user body (mitigates C1)~ 🛡️
-        var forbidden = ForbiddenSyntaxWalker.Scan(request.UserCodeBody);
+        // 1️⃣ Security blocklist over the raw user body (mitigates C1)~ 🛡️ — unsafe / pointers /
+        //    stackalloc fail fast; name/attribute hits are re-derived as reviewable flags in 5️⃣b~
+        var forbidden = ForbiddenSyntaxWalker.Scan(request.UserCodeBody).Where(v => HardWalkerIds.Contains(v.Id)).ToList();
         if (forbidden.Count > 0)
         {
-            // A forbidden-syntax body never gets compiled — fail fast with the violations~
             return Task.FromResult(LinqCompileResult.Fail(forbidden));
         }
 
@@ -98,6 +110,28 @@ public sealed class WorkflowLinqCompiler : IWorkflowLinqCompiler
                 optimizationLevel: OptimizationLevel.Release,
                 nullableContextOptions: NullableContextOptions.Enable));
 
+        // 5️⃣b 🚩 §9.2: semantic check of the user body + reviewer approval of this exact code~
+        var flags = Workflow.Scripting.Roslyn.Security.ScriptSecurityAnalyzer.Analyze(compilation, tree, request.UserCodeBody);
+        string? codeHash = null;
+        if (flags.Count > 0)
+        {
+            const string kind = Workflow.Scripting.Roslyn.Security.ScriptSecurityAnalyzer.KindLinq;
+            codeHash = Workflow.Scripting.Roslyn.Security.ScriptSecurityAnalyzer.CodeHash(kind, request.UserCodeBody);
+            if (!this.approvals.IsApproved(codeHash))
+            {
+                this.approvals.RecordCandidate(codeHash, kind, request.UserCodeBody, flags);
+                var denied = flags
+                    .Select(f => new LinqDiagnostic(
+                        "WFLINQ100",
+                        LinqDiagnosticSeverity.Error,
+                        Workflow.Scripting.Roslyn.Security.ScriptSecurityAnalyzer.DeniedMessage(f, codeHash),
+                        f.Line ?? 0,
+                        f.Column ?? 0))
+                    .ToList();
+                return Task.FromResult(new LinqCompileResult(false, null, denied, warnings, flags, codeHash, NeedsApproval: true));
+            }
+        }
+
         using var ms = new MemoryStream();
         var emit = compilation.Emit(ms, cancellationToken: ct);
 
@@ -122,10 +156,10 @@ public sealed class WorkflowLinqCompiler : IWorkflowLinqCompiler
                 request.DefinitionId,
                 request.NodeId,
                 errors.Count);
-            return Task.FromResult(LinqCompileResult.Fail(errors, warnings));
+            return Task.FromResult(new LinqCompileResult(false, null, errors, warnings, flags, codeHash));
         }
 
-        return Task.FromResult(new LinqCompileResult(true, ms.ToArray(), errors, warnings));
+        return Task.FromResult(new LinqCompileResult(true, ms.ToArray(), errors, warnings, flags, codeHash));
     }
 
     private static string BuildSource(IReadOnlyList<ResolvedTable> tables, string inputsSource, string userBody)

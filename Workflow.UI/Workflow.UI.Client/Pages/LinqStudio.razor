@@ -192,6 +192,10 @@
                     }
                 </div>
             }
+            @if (securityFlags is { Count: > 0 })
+            {
+                <Workflow.UI.Client.Shared.SecurityReviewPanel Flags="securityFlags" CodeHash="@securityHash" />
+            }
             @if (validateOk)
             {
                 <div class="df-statusbar__ok" data-testid="lq-ok">✅ Compiles cleanly.</div>
@@ -364,6 +368,8 @@
     private readonly List<ColumnRow> newColumns = new() { new ColumnRow() };
     private readonly List<InputRow> inputRows = new();
     private readonly List<LinqDiagnosticDto> diagnostics = new();
+    private List<SensitiveApiFlagDto>? securityFlags;
+    private string? securityHash;
 
     private string? nodeId;
     private CodeEditor? editor;
@@ -800,11 +806,15 @@
         validateOk = false;
         previewRows = null;
         diagnostics.Clear();
+        securityFlags = null;
+        securityHash = null;
         try
         {
             var result = await Linq.ValidateAsync(BuildRequest(withSamples: false));
             diagnostics.AddRange(result.Errors);
             diagnostics.AddRange(result.Warnings);
+            securityFlags = result.SecurityFlags;
+            securityHash = result.CodeHash;
             validateOk = result.Success;
         }
         catch (ApiException ex)

@@ -13,10 +13,16 @@ using Workflow.Scripting.Roslyn.Abstractions;
 /// <param name="Success">Whether compilation succeeded.</param>
 /// <param name="AssemblyBytes">The emitted assembly bytes (non-null on success).</param>
 /// <param name="Diagnostics">Compile diagnostics.</param>
+/// <param name="SecurityFlags">§9.2: sensitive APIs the body resolves to.</param>
+/// <param name="CodeHash">§9.2: the approval hash (set when there are flags).</param>
+/// <param name="NeedsApproval">§9.2: flagged and not approved, so not compiled.</param>
 public record TransformScriptCompileResult(
     bool Success,
     byte[]? AssemblyBytes,
-    IReadOnlyList<ScriptDiagnostic> Diagnostics);
+    IReadOnlyList<ScriptDiagnostic> Diagnostics,
+    IReadOnlyList<Workflow.Scripting.Approvals.SensitiveApiFlag>? SecurityFlags = null,
+    string? CodeHash = null,
+    bool NeedsApproval = false);
 
 /// <summary>
 /// 🧬 Wraps a user transform body into the runtime entry type and compiles it~ ✨.

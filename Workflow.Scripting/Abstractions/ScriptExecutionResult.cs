@@ -25,6 +25,15 @@ public sealed record ScriptExecutionResult(
     string? Error,
     TimeSpan Duration)
 {
+    /// <summary>
+    /// Gets the sensitive APIs that blocked a C# compile until a reviewer approves it (§9.2);
+    /// null when nothing was flagged.
+    /// </summary>
+    public IReadOnlyList<Workflow.Scripting.Approvals.SensitiveApiFlag>? SecurityFlags { get; init; }
+
+    /// <summary>Gets the approval hash of the flagged code, to request review with (§9.2).</summary>
+    public string? CodeHash { get; init; }
+
     /// <summary>Creates a successful result~ ✅.</summary>
     /// <param name="returnValue">The script's return value.</param>
     /// <param name="variableUpdates">Staged variable writes.</param>

@@ -149,6 +149,46 @@ public sealed class BlobScriptLibraryPersistence : Workflow.Scripting.Libraries.
 }
 
 /// <summary>
+/// 🛡️ §9.2 — Adapts <see cref="IBlobStore"/> to the script approval catalog persistence seam~ ✨.
+/// </summary>
+public sealed class BlobScriptApprovalPersistence : Workflow.Scripting.Approvals.IScriptApprovalPersistence
+{
+    private const string Key = "scripts/approvals.json";
+    private readonly IBlobStore blobStore;
+
+    /// <summary>Initializes a new instance of the <see cref="BlobScriptApprovalPersistence"/> class.</summary>
+    /// <param name="blobStore">The blob store.</param>
+    public BlobScriptApprovalPersistence(IBlobStore blobStore)
+    {
+        this.blobStore = blobStore ?? throw new ArgumentNullException(nameof(blobStore));
+    }
+
+    /// <inheritdoc/>
+    public async Task<string?> ReadAsync(CancellationToken ct = default)
+    {
+        var stream = await this.blobStore.GetAsync(Key, ct).ConfigureAwait(false);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        using (stream)
+        using (var reader = new StreamReader(stream))
+        {
+            return await reader.ReadToEndAsync(ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task WriteAsync(string json, CancellationToken ct = default)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+        using var stream = new MemoryStream(bytes, writable: false);
+        await this.blobStore.PutAsync(Key, stream, "application/json", ct).ConfigureAwait(false);
+    }
+}
+
+/// <summary>
 /// 🗄️ Phase 2.8 — A no-op state persistence used when no blob store is available (the state store
 /// factory then falls back to the file store)~ ✨.
 /// </summary>

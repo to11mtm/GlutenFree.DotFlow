@@ -1,0 +1,174 @@
+﻿@page "/script-approvals"
+@inject Workflow.UI.Client.Api.ScriptApprovalsClient Approvals
+@inject Workflow.UI.Client.Services.ToastService Toasts
+@using System.Linq
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+@using Workflow.UI.Client.Shared
+
+@* 🛡️ §9.2 — The review queue for C# code that uses sensitive APIs. Reviewers read the exact code
+   and each flagged API with its danger, then approve or reject. Authors can't approve their own. *@
+<PageTitle>Script approvals · DotFlow</PageTitle>
+<TopBar Subtitle="Script approvals" />
+
+<div class="df-approvals" data-testid="script-approvals">
+    <div class="df-approvals__tabs">
+        @foreach (var tab in Tabs)
+        {
+            <button class="df-btn @(status == tab ? "df-btn--primary" : "")" data-testid="@($"tab-{tab.ToLowerInvariant()}")"
+                    @onclick="() => SelectTab(tab)">@tab</button>
+        }
+    </div>
+
+    @if (loading)
+    {
+        <div data-testid="approvals-loading">Loading…</div>
+    }
+    else if (loadError is not null)
+    {
+        <div class="df-field-error" data-testid="approvals-error">@loadError</div>
+    }
+    else if (records.Count == 0)
+    {
+        <div class="df-approvals__empty" data-testid="approvals-empty">Nothing @status.ToLowerInvariant().</div>
+    }
+    else
+    {
+        @foreach (var r in records)
+        {
+            var hash = r.CodeHash;
+            <div class="df-approvals__item" data-testid="approval-item">
+                <div class="df-approvals__head">
+                    <span class="df-approvals__kind">@KindLabel(r.Kind)</span>
+                    <span>@(string.Join(", ", r.Flags.Select(f => f.Title).Distinct()))</span>
+                    <span class="df-topbar__spacer"></span>
+                    <span class="df-approvals__meta">
+                        @if (r.RequestedBy is not null)
+                        {
+                            @($"requested by {r.RequestedBy} · {r.RequestedAt:yyyy-MM-dd HH:mm}")
+                        }
+                        else
+                        {
+                            @($"first seen {r.FirstSeenAt:yyyy-MM-dd HH:mm}")
+                        }
+                    </span>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(r.RequestNote))
+                {
+                    <div class="df-approvals__note" data-testid="request-note">💬 @r.RequestNote</div>
+                }
+
+                @foreach (var group in r.Flags.GroupBy(f => f.Category))
+                {
+                    var first = group.First();
+                    <div class="df-review__category">
+                        <div class="df-review__category-title">@first.Title</div>
+                        <div class="df-review__danger" data-testid="approval-danger">⚠ @first.Danger</div>
+                        <ul class="df-review__symbols">
+                            @foreach (var flag in group)
+                            {
+                                <li><code>@flag.Symbol</code>@(flag.Line is { } line ? $" — line {line}" : string.Empty)</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <details>
+                    <summary>Code (exactly what will run)</summary>
+                    <pre class="df-approvals__code" data-testid="approval-code">@r.Code</pre>
+                </details>
+
+                @if (r.Status == "Requested")
+                {
+                    <textarea class="df-textarea" rows="2" data-testid="decision-note" placeholder="Note for the author (optional)"
+                              @bind="notes[hash]"></textarea>
+                    <div class="df-approvals__actions">
+                        <button class="df-btn df-btn--primary" data-testid="approve" disabled="@busy" @onclick="() => Decide(hash, approve: true)">✅ Approve</button>
+                        <button class="df-btn" data-testid="reject" disabled="@busy" @onclick="() => Decide(hash, approve: false)">❌ Reject</button>
+                    </div>
+                }
+                else if (r.DecidedBy is not null)
+                {
+                    <div class="df-approvals__meta">
+                        @($"{r.Status.ToLowerInvariant()} by {r.DecidedBy} · {r.DecidedAt:yyyy-MM-dd HH:mm}")
+                        @(string.IsNullOrWhiteSpace(r.DecisionNote) ? string.Empty : $" — {r.DecisionNote}")
+                    </div>
+                }
+
+                <div class="df-review__hash">code hash <code>@hash</code></div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private static readonly string[] Tabs = { "Requested", "Approved", "Rejected", "Candidate" };
+
+    private readonly Dictionary<string, string?> notes = new();
+    private List<ScriptApprovalDto> records = new();
+    private string status = "Requested";
+    private bool loading = true;
+    private bool busy;
+    private string? loadError;
+
+    protected override Task OnInitializedAsync() => this.Load();
+
+    private Task SelectTab(string tab)
+    {
+        this.status = tab;
+        return this.Load();
+    }
+
+    private async Task Load()
+    {
+        this.loading = true;
+        this.loadError = null;
+        try
+        {
+            this.records = await Approvals.ListAsync(this.status);
+            foreach (var r in this.records)
+            {
+                this.notes.TryAdd(r.CodeHash, null);
+            }
+        }
+        catch (ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+        }
+        finally
+        {
+            this.loading = false;
+        }
+    }
+
+    private async Task Decide(string hash, bool approve)
+    {
+        this.busy = true;
+        try
+        {
+            var note = this.notes.GetValueOrDefault(hash);
+            var updated = approve
+                ? await Approvals.ApproveAsync(hash, note)
+                : await Approvals.RejectAsync(hash, note);
+            Toasts.Success(approve ? "Approved — the author can run it now." : "Rejected.");
+            this.records.RemoveAll(r => r.CodeHash == updated.CodeHash);
+        }
+        catch (ApiException ex)
+        {
+            Toasts.Error(ex.Error.Summarize());
+        }
+        finally
+        {
+            this.busy = false;
+        }
+    }
+
+    private static string KindLabel(string kind) => kind switch
+    {
+        "csharp-script" => "C# script",
+        "csharp-transform" => "C# transform",
+        "linq" => "LINQ query",
+        _ => kind,
+    };
+}

@@ -106,7 +106,7 @@ public static class DatabaseLinqEndpoints
     {
         var compileRequest = await BuildCompileRequest(request, catalog, ct).ConfigureAwait(false);
         var result = await compiler.CompileAsync(compileRequest, ct).ConfigureAwait(false);
-        return Results.Ok(new ValidateResponse(result.Success, ToDtos(result.Errors), ToDtos(result.Warnings)));
+        return Results.Ok(ToValidateResponse(result));
     }
 
     private static async Task<IResult> PreviewHandler(
@@ -228,7 +228,7 @@ public static class DatabaseLinqEndpoints
         var result = await compiler.CompileAsync(compileRequest, ct).ConfigureAwait(false);
         if (!result.Success || result.AssemblyBytes is null)
         {
-            return Results.BadRequest(new ValidateResponse(false, ToDtos(result.Errors), ToDtos(result.Warnings)));
+            return Results.BadRequest(ToValidateResponse(result));
         }
 
         var key = cache.ComputeKey(
@@ -446,6 +446,14 @@ public static class DatabaseLinqEndpoints
 
     private static LinqDiagnosticDto[] ToDtos(IReadOnlyList<LinqDiagnostic> diagnostics)
         => diagnostics.Select(d => new LinqDiagnosticDto(d.Id, d.Severity.ToString(), d.Message, d.Line, d.Column)).ToArray();
+
+    private static ValidateResponse ToValidateResponse(LinqCompileResult result)
+        => new(
+            result.Success,
+            ToDtos(result.Errors),
+            ToDtos(result.Warnings),
+            result.NeedsApproval ? result.SecurityFlags : null,
+            result.NeedsApproval ? result.CodeHash : null);
 }
 
 /// <summary>⚙️ Options for the typed-linq endpoints (trusted-author gate)~ 🔐.</summary>
@@ -526,7 +534,14 @@ public sealed record LinqDiagnosticDto(string Id, string Severity, string Messag
 /// <param name="Success">Whether compilation succeeded.</param>
 /// <param name="Errors">Error diagnostics.</param>
 /// <param name="Warnings">Warning diagnostics.</param>
-public sealed record ValidateResponse(bool Success, LinqDiagnosticDto[] Errors, LinqDiagnosticDto[] Warnings);
+/// <param name="SecurityFlags">§9.2: sensitive APIs that need reviewer approval before this body can compile.</param>
+/// <param name="CodeHash">§9.2: the approval hash to request review with.</param>
+public sealed record ValidateResponse(
+    bool Success,
+    LinqDiagnosticDto[] Errors,
+    LinqDiagnosticDto[] Warnings,
+    IReadOnlyList<Workflow.Scripting.Approvals.SensitiveApiFlag>? SecurityFlags = null,
+    string? CodeHash = null);
 
 /// <summary>Response for preview~.</summary>
 /// <param name="Success">Whether compile + run succeeded.</param>

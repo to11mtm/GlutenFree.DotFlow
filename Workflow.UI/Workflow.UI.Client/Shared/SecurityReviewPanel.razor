@@ -1,0 +1,122 @@
+﻿@namespace Workflow.UI.Client.Shared
+@inject Workflow.UI.Client.Api.ScriptApprovalsClient Approvals
+@using System.Linq
+@using Workflow.UI.Client.Api
+@using Workflow.UI.Client.Api.Dtos
+
+@* 🛡️ §9.2 — Shown when C# code was blocked because it uses sensitive APIs. Explains each danger,
+   shows where the review stands, and lets the author request approval of this exact code. *@
+@if (Flags is { Count: > 0 } && !string.IsNullOrEmpty(CodeHash))
+{
+    <div class="df-review" data-testid="security-review">
+        <div class="df-review__title">🛡️ This code needs a reviewer's approval before it can run</div>
+        <div class="df-review__intro">
+            It uses APIs that can reach beyond the workflow. Someone with the ScriptApprover role has to
+            approve this exact code; any edit needs approval again.
+        </div>
+
+        @foreach (var group in Flags.GroupBy(f => f.Category))
+        {
+            var first = group.First();
+            <div class="df-review__category" data-testid="security-flag">
+                <div class="df-review__category-title">@first.Title</div>
+                <div class="df-review__danger" data-testid="security-danger">⚠ @first.Danger</div>
+                <ul class="df-review__symbols">
+                    @foreach (var flag in group)
+                    {
+                        <li><code>@flag.Symbol</code>@(flag.Line is { } line ? $" — line {line}" : string.Empty)</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="df-review__status" data-testid="security-status">
+            @switch (record?.Status)
+            {
+                case "Requested":
+                    <span>⏳ Review requested@(record.RequestedBy is { } by ? $" by {by}" : string.Empty). Waiting for a reviewer.</span>
+                    break;
+                case "Approved":
+                    <span>✅ Approved by @record.DecidedBy — run it again.</span>
+                    break;
+                case "Rejected":
+                    <span>❌ Rejected by @record.DecidedBy@(string.IsNullOrWhiteSpace(record.DecisionNote) ? "." : $": {record.DecisionNote}")</span>
+                    break;
+                default:
+                    <span>Not requested yet.</span>
+                    break;
+            }
+        </div>
+
+        @if (record?.Status is null or "Candidate" or "Rejected")
+        {
+            <textarea class="df-textarea" rows="2" data-testid="security-note"
+                      placeholder="Why does this code need these APIs? (shown to the reviewer)"
+                      @bind="note"></textarea>
+            <button class="df-btn df-btn--primary" data-testid="security-request" disabled="@busy" @onclick="Request">
+                Request approval
+            </button>
+        }
+
+        @if (error is not null)
+        {
+            <div class="df-field-error" data-testid="security-error">@error</div>
+        }
+
+        <div class="df-review__hash">code hash <code>@CodeHash</code></div>
+    </div>
+}
+
+@code {
+    private ScriptApprovalDto? record;
+    private string? loadedHash;
+    private string? note;
+    private string? error;
+    private bool busy;
+
+    /// <summary>The sensitive APIs the blocked code uses.</summary>
+    [Parameter]
+    public IReadOnlyList<SensitiveApiFlagDto>? Flags { get; set; }
+
+    /// <summary>The approval hash of the blocked code.</summary>
+    [Parameter]
+    public string? CodeHash { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrEmpty(this.CodeHash) || this.CodeHash == this.loadedHash)
+        {
+            return;
+        }
+
+        this.loadedHash = this.CodeHash;
+        this.record = null;
+        this.error = null;
+        try
+        {
+            this.record = await Approvals.GetAsync(this.CodeHash);
+        }
+        catch (ApiException ex)
+        {
+            this.error = ex.Error.Summarize();
+        }
+    }
+
+    private async Task Request()
+    {
+        this.busy = true;
+        this.error = null;
+        try
+        {
+            this.record = await Approvals.RequestAsync(this.CodeHash!, this.note);
+        }
+        catch (ApiException ex)
+        {
+            this.error = ex.Error.Summarize();
+        }
+        finally
+        {
+            this.busy = false;
+        }
+    }
+}

@@ -51,6 +51,10 @@ public static class AuthServiceCollectionExtensions
                 p, AuthConstants.AdminRole, AuthConstants.DeveloperRole));
             authz.AddPolicy(AuthConstants.AdminPolicy, p => BuildPolicy(
                 p, AuthConstants.AdminRole));
+            authz.AddPolicy(AuthConstants.ScriptApprovePolicy, p => BuildPolicy(
+                p, AuthConstants.AdminRole, AuthConstants.ScriptApproverRole));
+            authz.AddPolicy(AuthConstants.ScriptApprovalReadPolicy, p => BuildPolicy(
+                p, AuthConstants.AdminRole, AuthConstants.DeveloperRole, AuthConstants.ViewerRole, AuthConstants.ScriptApproverRole));
         });
 
         return services;

@@ -124,6 +124,64 @@ existing passing tests and any real workflows before enabling.
 
 **Effort:** A ≈ 0.5 day. B ≈ 2–4 days including finding the minimal reference set and the mirror tests.
 
+### Decided design (2026-10-11) — default-deny semantic check + reviewer approval
+
+**Option B as written doesn't work.** In the .NET 8 reference pack, `System.Type`,
+`System.Reflection.MethodInfo`, `Assembly`, `Activator` and `System.IO.File` are all defined in
+`System.Runtime.dll`, which no compilation can drop. Reflection by string therefore reaches anything
+at runtime whatever the reference set. Trimming only removes types in separate assemblies
+(`Process`, `HttpClient`) and only at compile time.
+
+Agreed instead (one change, both compilers):
+
+1. **Semantic check (default-deny).** After binding, walk the compilation's `SemanticModel` over the
+   *user body* and flag every resolved symbol in a sensitive category — reflection
+   (`System.Reflection*`, `Type.GetType(string)` / `GetMethod*` / `InvokeMember` / … , `Activator`),
+   file system (`System.IO` file/dir/stream types), network (`System.Net*`), process/environment
+   (`System.Diagnostics.Process`, `Environment`, `AppDomain`), interop/memory
+   (`System.Runtime.InteropServices`, `Marshal`, `NativeMemory`, `Unsafe`), assembly loading
+   (`System.Runtime.Loader`, `Assembly.Load*`), dynamic code (`System.Linq.Expressions.Expression.Compile`,
+   `System.Reflection.Emit`), and `dynamic`. Robust to spelling: it checks what the code *binds to*,
+   not identifiers. The existing name walkers stay as a pre-filter but their hits become **flags**
+   too (not hard errors), so everything is reviewable. `unsafe`/pointers/`stackalloc` stay hard
+   errors only because the compilation sets `allowUnsafe: false`.
+2. **Every flag carries a danger explanation** (per category: what an attacker could do with it)
+   shown in diagnostics, the API and the UI.
+3. **Approval of exact code.** A flagged script compiles only if an approval exists for its content
+   hash (SHA-256 of the normalized user body + language/kind). Any edit changes the hash → needs
+   re-review.
+4. **Who:** new `ScriptApprover` role + `ScriptApprove` policy (Admins included). Authors request
+   approval; **an author can't approve their own request**.
+5. **Store:** `IScriptApprovalStore` (pending / approved / rejected records: hash, kind, code,
+   flagged symbols + explanations, requestedBy/At, decidedBy/At, note), persisted as a JSON catalog
+   over the blob store like `PersistedScriptLibraryStore` — one implementation for every provider.
+6. **Enforcement at compile time** in both `RoslynScriptCompiler` (scripts + transforms) and
+   `WorkflowLinqCompiler`: unapproved flags → compile fails with `WFSEC2xx` diagnostics listing each
+   symbol + explanation. Shared checker/explanations live in `Workflow.Scripting.Roslyn`
+   (`Workflow.Modules.Database.Linq` gains a reference to it); the store abstraction lives in
+   `Workflow.Scripting` (no Roslyn), so the API can use it.
+7. **API:** no separate "analyze" call — a denied compile *records* the exact analyzed code as a
+   `Candidate` (so what gets reviewed is exactly what runs, including prepended script libraries),
+   and the existing compile responses (`POST /scripts/test`, transform validate/compile, LINQ
+   validate/compile) return `securityFlags` + `codeHash`. Review endpoints under
+   `/api/v1/script-approvals`: `GET ?status=`, `GET /categories` (danger legend), `GET /{hash}`,
+   `POST /{hash}/request` (WorkflowWrite), `POST /{hash}/approve|reject` (`ScriptApprove`:
+   Admin + ScriptApprover). Reads use `ScriptApprovalRead` so approvers who aren't developers can
+   see the queue. Outcomes: 404 unknown hash, 409 wrong state, 403 self-approval.
+8. **UI:** Script Studio's test runner and LINQ Studio's Validate show a review panel (each
+   category's danger once, the symbols + lines under it, status, note + "Request approval"); a
+   Script Approvals page (`/script-approvals`, 🛡️ Approvals in the top bar) shows the exact code,
+   the author's note and the dangers, with approve/reject + a note. The designer has no inline
+   compile, so a node's script is reviewed via Script/LINQ Studio or by running it.
+
+**Implemented 2026-10-11 (§9.2).** Caveat: approvals are never revoked in v1, and
+`CSharpScriptExecutor` caches compiled bytes by code, so an approval takes effect immediately but
+"un-approving" would need a cache flush — there's no un-approve action for that reason.
+
+Acceptance adds: the reflection guard green for **both** compilers; IO / Net / Process-by-reflection
+negative tests; approved hash compiles, edited code doesn't; self-approval rejected; role/policy
+tests; existing script / transform / LINQ suites green.
+
 ---
 
 ## Sequencing
