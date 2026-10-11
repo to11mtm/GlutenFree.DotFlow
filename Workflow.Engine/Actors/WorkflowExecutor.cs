@@ -133,64 +133,15 @@ public class WorkflowExecutor : ReceiveActor
     private readonly Stack<LoopContext> _loopContextStack = new();
 
     /// <summary>
-    /// CopilotNote: Phase 2.2.2 — pending loop requests received from NodeExecutor
-    /// (via <c>NodeLoopExecutionRequested</c>) before the corresponding
-    /// <c>NodeExecutionCompleted</c> arrives. Keyed by loop node ID~ 🔁.
+    /// §12.10: construct bookkeeping (requests waiting for their node to complete, construct actors
+    /// still running) shared with <see cref="SubGraphExecutor"/>. <see cref="IsWorkflowComplete"/>
+    /// waits while any construct is running~ 🧩.
     /// </summary>
-    private readonly Dictionary<string, Workflow.Core.Models.LoopRequest> _pendingLoops = new();
-
-    /// <summary>
-    /// CopilotNote: Phase 2.2.2 — node IDs of loop nodes whose <see cref="LoopExecutorActor"/>
-    /// is still running. Prevents <see cref="IsWorkflowComplete"/> from triggering prematurely
-    /// while iterations are in flight~ 🔁.
-    /// </summary>
-    private readonly System.Collections.Generic.HashSet<string> _pendingLoopNodes = new();
+    private readonly ConstructSpawnCore _constructs;
 
     // 🌊 Phase 5.1.3 — streaming regions, detected once per execution from connections + port
     // schemas. Null until first needed; empty for the overwhelming majority of workflows.
     private IReadOnlyList<Workflow.Engine.Streaming.StreamRegion>? _streamRegions;
-
-    /// <summary>
-    /// CopilotNote: Phase 2.2.3a — pending parallel requests received from NodeExecutor
-    /// (via <c>NodeParallelExecutionRequested</c>) before the corresponding
-    /// <c>NodeExecutionCompleted</c> arrives. Keyed by parallel node ID~ 🌐.
-    /// </summary>
-    private readonly Dictionary<string, Workflow.Core.Models.ParallelRequest> _pendingParallels = new();
-
-    /// <summary>
-    /// CopilotNote: Phase 2.2.3a — node IDs of parallel nodes whose
-    /// <see cref="ParallelExecutionCoordinator"/> is still running. Prevents
-    /// <see cref="IsWorkflowComplete"/> from triggering prematurely while branches are in flight~ 🌐.
-    /// </summary>
-    private readonly System.Collections.Generic.HashSet<string> _pendingParallelNodes = new();
-
-    /// <summary>
-    /// CopilotNote: Phase 2.2.4 — pending trycatch requests received from NodeExecutor
-    /// (via <c>NodeTryCatchExecutionRequested</c>) before the corresponding
-    /// <c>NodeExecutionCompleted</c> arrives. Keyed by trycatch node ID~ 🛡️.
-    /// </summary>
-    private readonly Dictionary<string, Workflow.Core.Models.TryCatchRequest> _pendingTryCatches = new();
-
-    /// <summary>
-    /// CopilotNote: Phase 2.2.4 — node IDs of trycatch nodes whose
-    /// <see cref="TryCatchExecutorActor"/> is still running. Prevents
-    /// <see cref="IsWorkflowComplete"/> from triggering prematurely while the sequence is in flight~ 🛡️.
-    /// </summary>
-    private readonly System.Collections.Generic.HashSet<string> _pendingTryCatchNodes = new();
-
-    /// <summary>
-    /// CopilotNote: pending transaction requests received from NodeExecutor before the corresponding
-    /// <c>NodeExecutionCompleted</c> arrives. Keyed by transaction node ID~ 💼.
-    /// </summary>
-    private readonly Dictionary<string, Workflow.Core.Models.TransactionRequest> _pendingTransactions = new();
-
-    /// <summary>
-    /// CopilotNote: node IDs of transaction nodes whose <see cref="TransactionExecutorActor"/>
-    /// is still running. Prevents <see cref="IsWorkflowComplete"/> from triggering prematurely~ 💼.
-    /// </summary>
-    private readonly System.Collections.Generic.HashSet<string> _pendingTransactionNodes = new();
-
-    private readonly Dictionary<string, Workflow.Core.Models.TransactionRequest> _runningTransactions = new();
 
     /// <summary>
     /// Stack of active error boundaries, innermost boundary at the top.
@@ -305,6 +256,36 @@ public class WorkflowExecutor : ReceiveActor
             fail: (_, error) => FailWorkflow(error),
             log: _log);
 
+        _constructs = new ConstructSpawnCore(
+            definition: _definition,
+            executionId: _executionId,
+            serviceProvider: _serviceProvider,
+            isSettled: nodeId => _completedNodes.Contains(nodeId) || _failedNodes.Contains(nodeId) || _skippedNodes.Contains(nodeId),
+            isSkipped: nodeId => _skippedNodes.Contains(nodeId),
+            markSkipped: nodeId => _skippedNodes = _skippedNodes.Add(nodeId),
+            executeReadySuccessors: ExecuteReadySuccessors,
+            setNodeOutputs: (nodeId, outputs) => _nodeOutputs[nodeId] = outputs,
+            spawnChild: (props, name) =>
+            {
+                var child = Context.ActorOf(props, name);
+                Context.Watch(child);
+                return child;
+            },
+            cancellationToken: () => _executionCts.Token,
+            currentVariables: CurrentVariables,
+            initialContext: () =>
+            {
+                // Snapshot current variables/inputs as the initial context for condition evaluation
+                var initialContext = new Dictionary<string, object?>(_workflowInputs);
+                foreach (var (k, v) in _context.Variables)
+                {
+                    initialContext[k] = v;
+                }
+
+                return initialContext;
+            },
+            log: _log);
+
         // Set up message handlers
         Receive<StartExecution>(HandleStartExecution);
         Receive<NodeExecutionCompleted>(HandleNodeExecutionCompleted);
@@ -338,24 +319,24 @@ public class WorkflowExecutor : ReceiveActor
         Receive<PopErrorBoundary>(HandlePopErrorBoundary);
 
         // Phase 2.2.2: Loop execution messages~ 🔁✨
-        Receive<NodeLoopExecutionRequested>(msg => _pendingLoops[msg.NodeId] = msg.Loop);
+        Receive<NodeLoopExecutionRequested>(_constructs.Request);
         Receive<LoopCompleted>(HandleLoopCompleted);
         Receive<LoopFailed>(HandleLoopFailed);
         Receive<StreamRegionCompleted>(HandleStreamRegionCompleted);
         Receive<StreamRegionFailed>(HandleStreamRegionFailed);
 
         // Phase 2.2.3a: Parallel execution messages~ 🌐✨
-        Receive<NodeParallelExecutionRequested>(msg => _pendingParallels[msg.NodeId] = msg.Parallel);
+        Receive<NodeParallelExecutionRequested>(_constructs.Request);
         Receive<ParallelCompleted>(HandleParallelCompleted);
         Receive<ParallelFailed>(HandleParallelFailed);
 
         // Phase 2.2.4: TryCatch execution messages~ 🛡️✨
-        Receive<NodeTryCatchExecutionRequested>(msg => _pendingTryCatches[msg.NodeId] = msg.TryCatch);
+        Receive<NodeTryCatchExecutionRequested>(_constructs.Request);
         Receive<TryCatchCompleted>(HandleTryCatchCompleted);
         Receive<TryCatchFailed>(HandleTryCatchFailed);
 
         // Database transaction structural execution messages~ 💼✨
-        Receive<NodeTransactionExecutionRequested>(msg => _pendingTransactions[msg.NodeId] = msg.Transaction);
+        Receive<NodeTransactionExecutionRequested>(_constructs.Request);
         Receive<TransactionCompleted>(HandleTransactionCompleted);
         Receive<TransactionFailed>(HandleTransactionFailed);
 
@@ -1018,10 +999,8 @@ public class WorkflowExecutor : ReceiveActor
 
         // Database transaction structural nodes may have no body connections; detect them before
         // workflow completion so the transaction actor can emit committed/no-op outputs~ 💼
-        if (_pendingTransactions.TryGetValue(nodeId, out var earlyTransactionRequest))
+        if (_constructs.TryStartTransaction(nodeId))
         {
-            _pendingTransactions.Remove(nodeId);
-            SpawnTransactionExecutor(nodeId, earlyTransactionRequest);
             return;
         }
 
@@ -1032,30 +1011,10 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
-        // Phase 2.2.2: if a LoopRequest arrived before this completion, spawn LoopExecutorActor
-        // instead of routing successors directly — loop actor drives 'done' port activation~ 🔁
-        if (_pendingLoops.TryGetValue(nodeId, out var loopRequest))
+        // Phase 2.2.2 / 2.2.3a / 2.2.4: a loop, parallel or trycatch node spawns its construct actor
+        // instead of routing successors directly — the construct drives its done-port activation~ 🔁🌐🛡️
+        if (_constructs.TryStartOther(nodeId))
         {
-            _pendingLoops.Remove(nodeId);
-            SpawnLoopExecutor(nodeId, loopRequest);
-            return;
-        }
-
-        // Phase 2.2.3a: same pattern for ParallelRequest — spawn coordinator and let it
-        // own all branches; we'll fire the done-port successors when ParallelCompleted arrives~ 🌐
-        if (_pendingParallels.TryGetValue(nodeId, out var parallelRequest))
-        {
-            _pendingParallels.Remove(nodeId);
-            SpawnParallelExecutor(nodeId, parallelRequest);
-            return;
-        }
-
-        // Phase 2.2.4: same pattern for TryCatchRequest — spawn TryCatchExecutorActor and let it
-        // own the try/catch/finally sequence; we fire the done-port successors when TryCatchCompleted arrives~ 🛡️
-        if (_pendingTryCatches.TryGetValue(nodeId, out var tryCatchRequest))
-        {
-            _pendingTryCatches.Remove(nodeId);
-            SpawnTryCatchExecutor(nodeId, tryCatchRequest);
             return;
         }
 
@@ -1294,63 +1253,6 @@ public class WorkflowExecutor : ReceiveActor
     // ── Phase 2.2.2: Loop Execution ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Spawns a <see cref="LoopExecutorActor"/> for a loop node and tracks it in
-    /// <c>_pendingLoopNodes</c> so <see cref="IsWorkflowComplete"/> waits for it~ 🔁✨.
-    /// </summary>
-    private void SpawnLoopExecutor(string loopNodeId, Workflow.Core.Models.LoopRequest loop)
-    {
-        // Resolve body entry nodes (targets of loopBodyPort connections from the loop node)
-        var bodyEntryNodeIds = _definition.Connections
-            .Where(c => c.SourceNodeId == loopNodeId && c.SourcePortName == loop.LoopBodyPort)
-            .Select(c => c.TargetNodeId)
-            .ToList();
-
-        if (bodyEntryNodeIds.Count == 0)
-        {
-            _log.Warning(
-                "⚠️ LoopExecutor spawn: loop node '{LoopNodeId}' has no connections via '{LoopBodyPort}' port — " +
-                "completing loop immediately with 0 iterations~ 🔁",
-                loopNodeId, loop.LoopBodyPort);
-
-            // Complete loop immediately — fire done port
-            _nodeOutputs[loopNodeId] = new Dictionary<string, object?>
-            {
-                ["results"] = new List<object?>(),
-                ["count"] = 0,
-                ["errors"] = new List<string>(),
-            };
-            ExecuteReadySuccessors(loopNodeId, new LanguageExt.Arr<string>(new[] { loop.DonePort }));
-            return;
-        }
-
-        var bodyScopeIds = LoopExecutorActor.ComputeBodyScope(_definition, loopNodeId, bodyEntryNodeIds);
-
-        // Snapshot current variables/inputs as the initial context for condition evaluation
-        var initialContext = new Dictionary<string, object?>(_workflowInputs);
-        foreach (var (k, v) in _context.Variables)
-            initialContext[k] = v;
-
-        _pendingLoopNodes.Add(loopNodeId);
-
-        var actorName = $"loop-{loopNodeId.Replace(".", "-")}";
-        var loopActor = Context.ActorOf(
-            LoopExecutorActor.Props(
-                loopNodeId, loop, _definition,
-                bodyEntryNodeIds, bodyScopeIds,
-                _executionId, initialContext,
-                _serviceProvider, _executionCts.Token,
-                CurrentVariables()),
-            actorName);
-
-        Context.Watch(loopActor);
-
-        _log.Info(
-            "🔁 Spawned LoopExecutorActor '{ActorName}' for node '{LoopNodeId}': " +
-            "{BodyEntryCount} body entry nodes, {ScopeCount} scope nodes",
-            actorName, loopNodeId, bodyEntryNodeIds.Count, bodyScopeIds.Count);
-    }
-
-    /// <summary>
     /// Handles completion of all loop iterations — fires the <c>done</c> port successors~ ✅🔁.
     /// </summary>
     private void HandleLoopCompleted(LoopCompleted message)
@@ -1362,70 +1264,9 @@ public class WorkflowExecutor : ReceiveActor
 
         // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
         ApplyConstructVariableUpdates(message.LoopNodeId, message.VariableUpdates);
-
-        var loopNodeId = message.LoopNodeId;
-        _pendingLoopNodes.Remove(loopNodeId);
         Context.Unwatch(Sender);
 
-        _log.Info("✅ Loop '{LoopNodeId}' completed with {Count} iteration(s)", loopNodeId,
-            message.Outputs.TryGetValue("count", out var cnt) ? cnt : "?");
-
-        // Store aggregated outputs so downstream 'done' nodes can read them
-        _nodeOutputs[loopNodeId] = message.Outputs
-            .ToDictionary(kv => kv.Key, kv => kv.Value);
-
-        if (IsWorkflowComplete())
-        {
-            CompleteWorkflow();
-            return;
-        }
-
-        // Compute the body scope (all nodes reachable from loopBody port before looping back).
-        // These nodes were executed by LoopExecutorActor — WorkflowExecutor never ran them directly.
-        // Mark them as skipped here so IsWorkflowComplete() counts them and we don't re-fire them~ 🔁✨
-        // §12.9: seed the scope from body-port targets ONLY (matching SpawnLoopExecutor). Seeding it
-        // from every outgoing edge swallowed the done-port successors into the body and skipped them.
-        var bodyEntryTargets = _definition.Connections
-            .Where(c => c.SourceNodeId == loopNodeId && c.SourcePortName == message.LoopBodyPort)
-            .Select(c => c.TargetNodeId)
-            .ToList();
-
-        var bodyScope = LoopExecutorActor
-            .ComputeBodyScope(_definition, loopNodeId, bodyEntryTargets)
-            .ToHashSet();
-
-        // CopilotNote: skipping body-scope nodes prevents double-execution on the done-port routing below.
-        foreach (var bodyScopeNodeId in bodyScope)
-        {
-            if (!_completedNodes.Contains(bodyScopeNodeId)
-                && !_failedNodes.Contains(bodyScopeNodeId)
-                && !_skippedNodes.Contains(bodyScopeNodeId))
-            {
-                _skippedNodes = _skippedNodes.Add(bodyScopeNodeId);
-                _log.Debug(
-                    "⏭️ Marked body-scope node '{NodeId}' as skipped (handled by LoopExecutor)~ 🔁",
-                    bodyScopeNodeId);
-            }
-        }
-
-        if (IsWorkflowComplete())
-        {
-            CompleteWorkflow();
-            return;
-        }
-
-        // Fire only connections that are NOT body-scope targets (i.e., the 'done' port out-edges)~
-        var donePorts = _definition.Connections
-            .Where(c => c.SourceNodeId == loopNodeId && !bodyScope.Contains(c.TargetNodeId))
-            .Select(c => c.SourcePortName)
-            .Distinct()
-            .ToList();
-
-        if (donePorts.Count > 0)
-        {
-            ExecuteReadySuccessors(loopNodeId, new LanguageExt.Arr<string>(donePorts));
-        }
-        // If there are no done-port edges, all reachable work is body-scope → already complete above.
+        _constructs.OnLoopCompleted(message, TryCompleteWorkflow);
     }
 
     /// <summary>
@@ -1618,7 +1459,7 @@ public class WorkflowExecutor : ReceiveActor
         ApplyConstructVariableUpdates(message.LoopNodeId, message.VariableUpdates);
 
         var loopNodeId = message.LoopNodeId;
-        _pendingLoopNodes.Remove(loopNodeId);
+        _constructs.OnFailed(loopNodeId);
         Context.Unwatch(Sender);
 
         _log.Error(
@@ -1633,134 +1474,6 @@ public class WorkflowExecutor : ReceiveActor
     // ── Phase 2.2.3a: Parallel Execution ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Spawns a <see cref="ParallelExecutionCoordinator"/> for a parallel node and tracks it in
-    /// <c>_pendingParallelNodes</c> so <see cref="IsWorkflowComplete"/> waits for it~ 🌐✨.
-    /// </summary>
-    private void SpawnParallelExecutor(string parallelNodeId, Workflow.Core.Models.ParallelRequest parallel)
-    {
-        // Pre-compute the union of branch scopes — these nodes will be driven by SubGraphExecutors,
-        // not by us; we mark them skipped here to prevent double-execution from the done-port routing
-        // that follows ParallelCompleted (same fix as Phase 2.2.2 loops)~ 🌐✨
-        var unionScope = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
-        var anyEntries = false;
-
-        // Phase 2.2.3b: detect overlap across branch scopes — convergent patterns must use FanInModule~ 🪄
-        var overlapping = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
-
-        // Phase 2.2.3b: resolve branch ports — per-item mode uses the single BranchPort,
-        // static mode uses the BranchPorts list~ 🌟🌐
-        var portsToScope = parallel.Items is not null
-            ? new[] { parallel.BranchPort }
-            : parallel.BranchPorts;
-
-        foreach (var port in portsToScope)
-        {
-            var entries = _definition.Connections
-                .Where(c => c.SourceNodeId == parallelNodeId && c.SourcePortName == port)
-                .Select(c => c.TargetNodeId)
-                .ToList();
-            if (entries.Count == 0)
-            {
-                continue;
-            }
-
-            anyEntries = true;
-            var thisBranch = new System.Collections.Generic.HashSet<string>(
-                ParallelExecutionCoordinator.ComputeBranchScope(_definition, parallelNodeId, entries),
-                StringComparer.Ordinal);
-
-            // Detect overlap with any previously-seen branch~
-            foreach (var n in thisBranch)
-            {
-                if (!unionScope.Add(n))
-                {
-                    overlapping.Add(n);
-                }
-            }
-        }
-
-        // Per-item mode: an empty Items collection is a valid no-op (0 branches), distinct from
-        // "no connections" (degenerate). Treat as immediate-complete only when the port itself is unwired~
-        if (parallel.Items is not null && parallel.Items.Count == 0)
-        {
-            _log.Info(
-                "🌟 ParallelExecutor '{NodeId}' per-item fan-out: empty items collection — completing with 0 work~",
-                parallelNodeId);
-            _nodeOutputs[parallelNodeId] = new Dictionary<string, object?>
-            {
-                ["results"] = new List<object?>(),
-                ["count"] = 0,
-            };
-            ExecuteReadySuccessors(parallelNodeId, new LanguageExt.Arr<string>(new[] { parallel.DonePort }));
-            return;
-        }
-
-        if (overlapping.Count > 0)
-        {
-            // Defensive guard (Phase 2.2.3b carry-over): branch scopes overlap.
-            // Use builtin.fanin (2.2.3b) for convergent patterns instead of letting both branches
-            // claim the same nodes (which produces ambiguous skip-marking + double execution risk)~ 🪄
-            var nodes = string.Join(", ", overlapping);
-            _log.Warning(
-                "⚠️ ParallelExecutor '{NodeId}': branch scopes overlap on node(s) [{Overlap}]. " +
-                "For convergent patterns, terminate branches at a 'builtin.fanin' barrier node instead. " +
-                "Continuing with first-branch-wins skip-marking semantics for now~ 🪄",
-                parallelNodeId, nodes);
-        }
-
-        if (!anyEntries)
-        {
-            _log.Warning(
-                "⚠️ ParallelExecutor spawn: parallel node '{NodeId}' has no branch connections — " +
-                "completing immediately with 0 branches~ 🌐",
-                parallelNodeId);
-
-            _nodeOutputs[parallelNodeId] = new Dictionary<string, object?>
-            {
-                ["results"] = new List<object?>(),
-                ["count"] = 0,
-            };
-            ExecuteReadySuccessors(parallelNodeId, new LanguageExt.Arr<string>(new[] { parallel.DonePort }));
-            return;
-        }
-
-        // Pre-mark branch-scope nodes skipped so HandleParallelCompleted's done-port routing
-        // doesn't re-fire them~
-        foreach (var nid in unionScope)
-        {
-            if (!_completedNodes.Contains(nid)
-                && !_failedNodes.Contains(nid)
-                && !_skippedNodes.Contains(nid))
-            {
-                _skippedNodes = _skippedNodes.Add(nid);
-            }
-        }
-
-        // Snapshot inputs + variables as initial branch context~
-        var initialContext = new Dictionary<string, object?>(_workflowInputs);
-        foreach (var (k, v) in _context.Variables)
-            initialContext[k] = v;
-
-        _pendingParallelNodes.Add(parallelNodeId);
-
-        var actorName = $"par-{parallelNodeId.Replace(".", "-")}";
-        var coordinator = Context.ActorOf(
-            ParallelExecutionCoordinator.Props(
-                parallelNodeId, parallel, _definition,
-                _executionId, initialContext,
-                _serviceProvider, _executionCts.Token,
-                CurrentVariables()),
-            actorName);
-
-        Context.Watch(coordinator);
-
-        _log.Info(
-            "🌐 Spawned ParallelExecutionCoordinator '{ActorName}' for node '{ParallelNodeId}': " +
-            "{BranchCount} branch(es), {ScopeCount} scope nodes pre-marked",
-            actorName, parallelNodeId, parallel.BranchPorts.Count, unionScope.Count);
-    }
-
-    /// <summary>
     /// Handles successful completion of all parallel branches — fires the <c>done</c> port successors~ ✅🌐.
     /// </summary>
     private void HandleParallelCompleted(ParallelCompleted message)
@@ -1772,45 +1485,9 @@ public class WorkflowExecutor : ReceiveActor
 
         // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
         ApplyConstructVariableUpdates(message.ParallelNodeId, message.VariableUpdates);
-
-        var parallelNodeId = message.ParallelNodeId;
-        _pendingParallelNodes.Remove(parallelNodeId);
         Context.Unwatch(Sender);
 
-        _log.Info("✅ Parallel '{ParallelNodeId}' completed with {Count} branch(es)",
-            parallelNodeId,
-            message.Outputs.TryGetValue("count", out var cnt) ? cnt : "?");
-
-        _nodeOutputs[parallelNodeId] = message.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value);
-
-        if (IsWorkflowComplete())
-        {
-            CompleteWorkflow();
-            return;
-        }
-
-        // Done-port routing: only fire connections that aren't branch-scope (those are already skipped)~
-        // We compute the union scope again to filter out branch out-edges from the source node itself~
-        var unionScope = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
-        foreach (var conn in _definition.Connections.Where(c => c.SourceNodeId == parallelNodeId))
-        {
-            // Any node we already marked skipped (pre-marked above) is in scope.
-            if (_skippedNodes.Contains(conn.TargetNodeId))
-            {
-                unionScope.Add(conn.TargetNodeId);
-            }
-        }
-
-        var donePorts = _definition.Connections
-            .Where(c => c.SourceNodeId == parallelNodeId && !unionScope.Contains(c.TargetNodeId))
-            .Select(c => c.SourcePortName)
-            .Distinct()
-            .ToList();
-
-        if (donePorts.Count > 0)
-        {
-            ExecuteReadySuccessors(parallelNodeId, new LanguageExt.Arr<string>(donePorts));
-        }
+        _constructs.OnParallelCompleted(message, TryCompleteWorkflow);
     }
 
     /// <summary>
@@ -1827,7 +1504,7 @@ public class WorkflowExecutor : ReceiveActor
         ApplyConstructVariableUpdates(message.ParallelNodeId, message.VariableUpdates);
 
         var parallelNodeId = message.ParallelNodeId;
-        _pendingParallelNodes.Remove(parallelNodeId);
+        _constructs.OnFailed(parallelNodeId);
         Context.Unwatch(Sender);
 
         _log.Error(
@@ -1839,70 +1516,6 @@ public class WorkflowExecutor : ReceiveActor
     }
 
     // ── Phase 2.2.4: TryCatch Execution ──────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Spawns a <see cref="TryCatchExecutorActor"/> for a trycatch node and tracks it in
-    /// <c>_pendingTryCatchNodes</c> so <see cref="IsWorkflowComplete"/> waits for it~ 🛡️✨.
-    /// </summary>
-    private void SpawnTryCatchExecutor(string tryCatchNodeId, Workflow.Core.Models.TryCatchRequest request)
-    {
-        // Pre-compute union of all branch scopes (try + catch + finally) and pre-mark as skipped
-        // so IsWorkflowComplete() counts them once the executor completes~ 🛡️✨
-        var allBranchPorts = new[] { request.TryPort, request.CatchPort, request.FinallyPort };
-        var unionScope = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var port in allBranchPorts)
-        {
-            var entries = _definition.Connections
-                .Where(c => c.SourceNodeId == tryCatchNodeId && c.SourcePortName == port)
-                .Select(c => c.TargetNodeId)
-                .ToList();
-
-            if (entries.Count == 0)
-            {
-                continue;
-            }
-
-            var branchScope = TryCatchExecutorActor.ComputeScope(_definition, tryCatchNodeId, entries);
-            foreach (var n in branchScope)
-            {
-                unionScope.Add(n);
-            }
-        }
-
-        // Pre-mark branch-scope nodes as skipped (TryCatchExecutorActor runs them internally)~
-        foreach (var scopeNodeId in unionScope)
-        {
-            if (!_completedNodes.Contains(scopeNodeId)
-                && !_failedNodes.Contains(scopeNodeId)
-                && !_skippedNodes.Contains(scopeNodeId))
-            {
-                _skippedNodes = _skippedNodes.Add(scopeNodeId);
-                _log.Debug(
-                    "⏭️ Pre-marked trycatch branch-scope node '{NodeId}' as skipped for '{TryCatchNodeId}'~ 🛡️",
-                    scopeNodeId, tryCatchNodeId);
-            }
-        }
-
-        _pendingTryCatchNodes.Add(tryCatchNodeId);
-
-        var actorName = $"tc-{tryCatchNodeId.Replace(".", "-")}";
-        var tcActor = Context.ActorOf(
-            TryCatchExecutorActor.Props(
-                tryCatchNodeId, request, _definition,
-                _executionId, _serviceProvider, _executionCts.Token,
-                CurrentVariables()),
-            actorName);
-
-        Context.Watch(tcActor);
-
-        _log.Info(
-            "🛡️ Spawned TryCatchExecutorActor '{ActorName}' for node '{TryCatchNodeId}' " +
-            "(rethrow={Rethrow}, catchTypes={CatchTypes}, {ScopeCount} branch-scope nodes pre-marked)",
-            actorName, tryCatchNodeId, request.Rethrow,
-            request.CatchTypes is null ? "any" : string.Join(",", request.CatchTypes),
-            unionScope.Count);
-    }
 
     /// <summary>
     /// Handles successful completion of a try/catch/finally sequence — fires the <c>done</c>
@@ -1917,43 +1530,9 @@ public class WorkflowExecutor : ReceiveActor
 
         // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
         ApplyConstructVariableUpdates(message.TryCatchNodeId, message.VariableUpdates);
-
-        var tryCatchNodeId = message.TryCatchNodeId;
-        _pendingTryCatchNodes.Remove(tryCatchNodeId);
         Context.Unwatch(Sender);
 
-        _log.Info(
-            "✅ TryCatch '{TryCatchNodeId}' sequence completed (success={Success})",
-            tryCatchNodeId,
-            message.Outputs.TryGetValue("success", out var s) ? s : "?");
-
-        // Store outputs so downstream 'done' nodes can read them~
-        _nodeOutputs[tryCatchNodeId] = message.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value);
-
-        if (IsWorkflowComplete())
-        {
-            CompleteWorkflow();
-            return;
-        }
-
-        // Fire 'done' port connections (connections from tryCatchNode that don't target the branch scopes)~
-        var allBranchPorts = new[] { "try", "catch", "finally" };
-        var branchTargets = _definition.Connections
-            .Where(c => c.SourceNodeId == tryCatchNodeId && allBranchPorts.Contains(c.SourcePortName))
-            .Select(c => c.TargetNodeId)
-            .ToHashSet(StringComparer.Ordinal);
-
-        var donePorts = _definition.Connections
-            .Where(c => c.SourceNodeId == tryCatchNodeId && !branchTargets.Contains(c.TargetNodeId))
-            .Select(c => c.SourcePortName)
-            .Distinct()
-            .ToList();
-
-        if (donePorts.Count > 0)
-        {
-            ExecuteReadySuccessors(tryCatchNodeId, new LanguageExt.Arr<string>(donePorts));
-        }
-        // If no done-port connections, all work is in branch scope → completion check above handles it~
+        _constructs.OnTryCatchCompleted(message, TryCompleteWorkflow);
     }
 
     /// <summary>
@@ -1971,7 +1550,7 @@ public class WorkflowExecutor : ReceiveActor
         ApplyConstructVariableUpdates(message.TryCatchNodeId, message.VariableUpdates);
 
         var tryCatchNodeId = message.TryCatchNodeId;
-        _pendingTryCatchNodes.Remove(tryCatchNodeId);
+        _constructs.OnFailed(tryCatchNodeId);
         Context.Unwatch(Sender);
 
         _log.Error(
@@ -1986,51 +1565,6 @@ public class WorkflowExecutor : ReceiveActor
     // ── Database Transaction Execution ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Spawns a <see cref="TransactionExecutorActor"/> for a transaction node and tracks it in
-    /// <c>_pendingTransactionNodes</c> so <see cref="IsWorkflowComplete"/> waits for it~ 💼✨.
-    /// </summary>
-    private void SpawnTransactionExecutor(string transactionNodeId, Workflow.Core.Models.TransactionRequest request)
-    {
-        var entries = _definition.Connections
-            .Where(c => c.SourceNodeId == transactionNodeId && c.SourcePortName == request.BodyPort)
-            .Select(c => c.TargetNodeId)
-            .ToList();
-
-        var bodyScope = TransactionExecutorActor.ComputeScope(_definition, transactionNodeId, entries);
-
-        // Pre-mark body-scope nodes as skipped (TransactionExecutorActor runs them internally)~
-        foreach (var scopeNodeId in bodyScope)
-        {
-            if (!_completedNodes.Contains(scopeNodeId)
-                && !_failedNodes.Contains(scopeNodeId)
-                && !_skippedNodes.Contains(scopeNodeId))
-            {
-                _skippedNodes = _skippedNodes.Add(scopeNodeId);
-                _log.Debug(
-                    "⏭️ Pre-marked transaction body-scope node '{NodeId}' as skipped for '{TransactionNodeId}'~ 💼",
-                    scopeNodeId, transactionNodeId);
-            }
-        }
-
-        _pendingTransactionNodes.Add(transactionNodeId);
-        _runningTransactions[transactionNodeId] = request;
-
-        var actorName = $"txn-{transactionNodeId.Replace(".", "-")}";
-        var txnActor = Context.ActorOf(
-            TransactionExecutorActor.Props(
-                transactionNodeId, request, _definition,
-                _executionId, _serviceProvider, _executionCts.Token,
-                CurrentVariables()),
-            actorName);
-
-        Context.Watch(txnActor);
-
-        _log.Info(
-            "💼 Spawned TransactionExecutorActor '{ActorName}' for node '{TransactionNodeId}' ({ScopeCount} body-scope nodes pre-marked)",
-            actorName, transactionNodeId, bodyScope.Count);
-    }
-
-    /// <summary>
     /// Handles transaction completion — stores outputs and fires committed/rolledBack successors~ ✅💼.
     /// </summary>
     private void HandleTransactionCompleted(TransactionCompleted message)
@@ -2042,37 +1576,9 @@ public class WorkflowExecutor : ReceiveActor
 
         // §10.3: the body's variable writes become visible before anything downstream runs~ 💾
         ApplyConstructVariableUpdates(message.TransactionNodeId, message.VariableUpdates);
-
-        var transactionNodeId = message.TransactionNodeId;
-        _pendingTransactionNodes.Remove(transactionNodeId);
         Context.Unwatch(Sender);
 
-        var request = _runningTransactions.TryGetValue(transactionNodeId, out var r)
-            ? r
-            : new Workflow.Core.Models.TransactionRequest();
-        _runningTransactions.Remove(transactionNodeId);
-
-        _log.Info(
-            "✅ Transaction '{TransactionNodeId}' completed (committed={Committed}, rolledBack={RolledBack})",
-            transactionNodeId,
-            message.Outputs.TryGetValue("committed", out var c) ? c : "?",
-            message.Outputs.TryGetValue("rolledBack", out var rb) ? rb : "?");
-
-        _nodeOutputs[transactionNodeId] = message.Outputs.ToDictionary(kv => kv.Key, kv => kv.Value);
-
-        if (IsWorkflowComplete())
-        {
-            CompleteWorkflow();
-            return;
-        }
-
-        var port = message.Outputs.TryGetValue("rolledBack", out var rolledBack)
-                   && rolledBack is bool rbBool
-                   && rbBool
-            ? request.RolledBackPort
-            : request.CommittedPort;
-
-        ExecuteReadySuccessors(transactionNodeId, new LanguageExt.Arr<string>(new[] { port }));
+        _constructs.OnTransactionCompleted(message, TryCompleteWorkflow);
     }
 
     /// <summary>
@@ -2089,8 +1595,7 @@ public class WorkflowExecutor : ReceiveActor
         ApplyConstructVariableUpdates(message.TransactionNodeId, message.VariableUpdates);
 
         var transactionNodeId = message.TransactionNodeId;
-        _pendingTransactionNodes.Remove(transactionNodeId);
-        _runningTransactions.Remove(transactionNodeId);
+        _constructs.OnFailed(transactionNodeId);
         Context.Unwatch(Sender);
 
         _log.Error(
@@ -2564,11 +2069,20 @@ public class WorkflowExecutor : ReceiveActor
         // A node in retry backoff sits in _failedNodes, so also wait for pending retries~ 🔄
         return _runningNodes.Count == 0 &&
                _pendingRetryCancellations.Count == 0 &&
-               _pendingLoopNodes.Count == 0 &&
-               _pendingParallelNodes.Count == 0 &&
-               _pendingTryCatchNodes.Count == 0 &&
-               _pendingTransactionNodes.Count == 0 &&
+               _constructs.RunningCount == 0 &&
                _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _definition.Nodes.Count;
+    }
+
+    /// <summary><see cref="ConstructSpawnCore"/> callback: completes the run if everything is done~ ✅.</summary>
+    private bool TryCompleteWorkflow()
+    {
+        if (!IsWorkflowComplete())
+        {
+            return false;
+        }
+
+        CompleteWorkflow();
+        return true;
     }
 
     /// <summary>
