@@ -288,7 +288,7 @@ it never exercised this path.*
 > its old format; no migration (`MetadataJson` takes any keys). Not done: showing the full path in
 > the API/UI, and live node events from bodies (separate follow-up). The outer body still accepts
 > `Push/PopLoopScope` and ignores them. Tests: `Workflow.Tests/Engine/NestedConstructHistoryTests`
-> (4, all red without the change).
+> (5 incl. transaction-in-loop, all red without the change).
 > **Variables:** the Stage 3 rules apply recursively (start from the body's current variables,
 > report writes back), as the "every construct passes variables in and reports writes" invariant
 > requires.
@@ -301,8 +301,14 @@ it never exercised this path.*
 > that is itself inside a loop body no longer reaches the loop. The construct now runs its branches
 > in its own sub-graph, and `TryCatchCompleted` / `ParallelCompleted` / `TransactionCompleted` carry
 > no `BreakRequested` / `ContinueRequested`. Before the fix it reached the loop only because the
-> try/catch ran as plain nodes (and then didn't catch). Also untested: a transaction nested in a body
-> (no structural test with a database yet).
+> try/catch ran as plain nodes (and then didn't catch).
+>
+> **Nested transaction** *(added 2026-10-11)*: covered by
+> `DatabaseTransactionStructuralEngineTests.TransactionNestedInLoopBody_*` (temp-file SQLite). A
+> transaction in a loop body opens and commits once per iteration (3 inserts, committed ×3,
+> rolledBack ×0), and a failing body rolls back per iteration while the loop still completes. Both
+> are red with nested-construct start disabled in `SubGraphExecutor`.
+> `NestedConstructHistoryTests.TransactionInLoop_*` checks the `loop#k/txn` scope path.
 
 ### Evidence
 `Workflow.Tests/Findings/Engine/NestedConstructFindingTests.cs` (now retired, see Status). Both tests were **red** and use the real

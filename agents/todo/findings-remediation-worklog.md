@@ -177,11 +177,12 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   because the try/catch ran as plain nodes and didn't catch.) Fix idea: carry the flags on the
   construct's completion and have `SubGraphExecutor` raise them in its own body (never across a
   nested *loop*). Add a test: foreach → trycatch → try: break.
-- [ ] **Nested constructs: history fidelity + transaction test.**
+- [x] **Nested constructs: history fidelity + transaction test.** *Done 2026-10-11.*
   - [x] history: body records carry `Metadata["scopePath"]` (every enclosing construct, outermost
     first) and `LoopId` / `LoopIteration` from the innermost loop. *Done 2026-10-11 — see Progress
     log.* Showing the full path in the API/UI is not done (only the innermost loop shows today).
-  - [ ] a transaction nested in a body has no structural test yet.
+  - [x] transaction nested in a loop body: structural SQLite tests (commit per iteration, rollback
+    per iteration) + `loop#k/txn` history path. *Done 2026-10-11 — see Progress log.*
 - [ ] **API test flake: SQLite "table VersionInfo already exists".** Seen in `RateLimitTests`,
   `ModuleManagementEndpointsTests`, `WebhookApiTests` (2 of 4 full runs on 2026-10-10, green on
   rerun). DB names are unique per factory (`TestSqlite.InMemory`), so suspect one host running
@@ -213,6 +214,16 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-11 — §12.10 follow-up: nested transaction tests
+- `DatabaseTransactionStructuralEngineTests`: `TransactionNestedInLoopBody_CommitsPerIteration`
+  (3 rows, committed ×3, rolledBack ×0) and `…_RollsBackPerIteration_AndRunCompletes` (0 rows,
+  rolledBack ×2, run completes). Both RED with `SubGraphExecutor`'s nested-construct start disabled
+  (`TryStart` short-circuited), green with it. The first version of the commit test stayed green
+  without the fix (autocommit + every edge firing looks like a commit), hence the rolledBack ×0 check.
+- `NestedConstructHistoryTests.TransactionInLoop_BodyRowsCarryLoopIterationAndTransaction`: RED
+  without the transaction actor's scope step. No production changes.
+- Suite: (`Category!=Finding`) 1809 passed, 0 failed.
+
 ### 2026-10-11 — §12.10 follow-up: scope path on nested body history
 - New `Workflow.Engine/Models/ScopeStep` (`nodeId`, `kind`, `iteration` / `branchIndex` / `branch`).
   `ConstructSpawnCore` takes a `scopePath` delegate (`WorkflowExecutor`: empty; `SubGraphExecutor`:

@@ -136,6 +136,27 @@ public class NestedConstructHistoryTests : TestKit
         rows.Should().OnlyContain(r => r.LoopId == "loop" && r.LoopIteration == ScopePath(r)[0].Iteration);
     }
 
+    /// <summary>
+    /// foreach [1,2] → body: transaction → transactionBody: leaf. Body rows carry loop#k / txn (no
+    /// transaction services registered, so the body runs without an open transaction).
+    /// </summary>
+    [Fact]
+    public void TransactionInLoop_BodyRowsCarryLoopIterationAndTransaction()
+    {
+        var definition = Workflow(
+            new[] { Foreach("loop", 1, 2), Node("txn", "h.txn"), Node("leaf", "h.leaf") },
+            new[] { Edge("loop", "loopBody", "txn"), Edge("txn", "transactionBody", "leaf") });
+
+        var txn = new StubModule(
+            "h.txn",
+            () => ModuleResult.WithTransaction(new Dictionary<string, object?>(), new TransactionRequest()),
+            "transactionBody", "committed", "rolledBack");
+        var leafRows = this.RunAndCollect(definition, "leaf", 2, new ForEachModule(), txn, Pass("h.leaf"));
+
+        leafRows.Select(PathOf).Should().BeEquivalentTo("loop#1/txn", "loop#2/txn");
+        leafRows.Should().OnlyContain(r => r.LoopId == "loop" && r.LoopIteration == ScopePath(r)[0].Iteration);
+    }
+
     private static IReadOnlyList<ScopeStep> ScopePath(NodeExecutionRecord record)
         => record.Metadata is not null && record.Metadata.TryGetValue("scopePath", out var path) && path is IEnumerable<ScopeStep> steps
             ? steps.ToList()
@@ -170,8 +191,8 @@ public class NestedConstructHistoryTests : TestKit
         var executor = parent.ChildActorOf(
             WorkflowExecutor.Props(executionId, definition, new Dictionary<string, object?>(), services.BuildServiceProvider()));
         executor.Tell(new StartExecution(executionId));
-        parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, RunTimeout)
-            .Should().BeOfType<WorkflowCompleted>();
+        var terminal = parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, RunTimeout);
+        terminal.Should().BeOfType<WorkflowCompleted>(because: (terminal as WorkflowFailed)?.Error.Message ?? string.Empty);
 
         List<NodeExecutionRecord> Matching()
         {
@@ -216,15 +237,17 @@ public class NestedConstructHistoryTests : TestKit
             Connections: connections.ToArr(),
             Variables: HashMap<string, VariableDefinition>.Empty);
 
-    /// <summary>Returns a fixed result per call.</summary>
+    /// <summary>Returns a fixed result per call; declares <c>output</c> plus any extra output ports.</summary>
     private sealed class StubModule : IWorkflowModule
     {
         private readonly Func<ModuleResult> result;
+        private readonly string[] extraOutputs;
 
-        public StubModule(string moduleId, Func<ModuleResult> result)
+        public StubModule(string moduleId, Func<ModuleResult> result, params string[] extraOutputs)
         {
             this.ModuleId = moduleId;
             this.result = result;
+            this.extraOutputs = extraOutputs;
         }
 
         public string ModuleId { get; }
@@ -241,7 +264,9 @@ public class NestedConstructHistoryTests : TestKit
 
         public ModuleSchema Schema => new(
             Inputs: new[] { PortDefinition.Create<object>("input", isRequired: false) }.ToArr(),
-            Outputs: new[] { PortDefinition.Create<object>("output", isRequired: false) }.ToArr(),
+            Outputs: new[] { "output" }.Concat(this.extraOutputs)
+                .Select(port => PortDefinition.Create<object>(port, isRequired: false))
+                .ToArr(),
             Properties: Arr<ModulePropertyDefinition>.Empty);
 
         public Task<ModuleResult> ExecuteAsync(ModuleExecutionContext context, CancellationToken cancellationToken = default)

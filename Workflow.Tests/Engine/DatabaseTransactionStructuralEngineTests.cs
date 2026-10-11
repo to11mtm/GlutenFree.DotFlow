@@ -8,6 +8,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Akka.Actor;
 using Akka.TestKit.Xunit2;
 using FluentAssertions;
@@ -20,6 +22,7 @@ using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
 using Workflow.Modules;
 using Workflow.Modules.Abstractions;
+using Workflow.Modules.Builtin.Flow;
 using Workflow.Modules.Database;
 using Workflow.Modules.Database.Abstractions;
 using Workflow.Modules.Database.Builtin;
@@ -165,6 +168,91 @@ public sealed class DatabaseTransactionStructuralEngineTests : TestKit
         }
     }
 
+    /// <summary>
+    /// §12.10: foreach [1,2,3] → body: transaction → transactionBody: insert; committed → counter.
+    /// The nested transaction opens and commits once per iteration (a fresh one each time, since the
+    /// previous one is closed), so all 3 inserts land, the committed port fires 3 times and the
+    /// rolledBack port never (run as a plain node, the transaction would fire every outgoing edge).
+    /// </summary>
+    [Fact]
+    public void TransactionNestedInLoopBody_CommitsPerIteration()
+    {
+        var dbPath = NewDbPath();
+        try
+        {
+            var committed = new CountingModule("test.committed");
+            var rolledBack = new CountingModule("test.rolledback");
+            var services = BuildServices(new[] { ("TestDb", dbPath) }, new ForEachModule(), committed, rolledBack);
+            Seed(services, "TestDb");
+
+            var definition = Workflow(
+                Node("loop", "builtin.loop.foreach", Props(("collection", new[] { 1, 2, 3 }))),
+                Node("txn", "builtin.database.transaction", Props(("connectionId", "TestDb"))),
+                Node("insert", "builtin.database.execute", Props(
+                    ("connectionId", "TestDb"),
+                    ("command", "INSERT INTO users (name) VALUES ('per-iteration')"))),
+                Node("onCommitted", "test.committed", HashMap<string, JsonElement>.Empty),
+                Node("onRolledBack", "test.rolledback", HashMap<string, JsonElement>.Empty),
+                Connections(
+                    Conn("loop", "loopBody", "txn"),
+                    Conn("txn", "transactionBody", "insert"),
+                    Conn("txn", "committed", "onCommitted"),
+                    Conn("txn", "rolledBack", "onRolledBack")));
+
+            RunWorkflow(definition, services);
+
+            CountUsers(services, "TestDb").Should().Be(3, "each iteration's transaction commits its insert~ ✅");
+            committed.Calls.Should().Be(3, "the nested transaction's committed port fires once per iteration");
+            rolledBack.Calls.Should().Be(0, "nothing failed, so the rolledBack port never fires");
+        }
+        finally
+        {
+            DeleteDb(dbPath);
+        }
+    }
+
+    /// <summary>
+    /// §12.10: foreach [1,2] → body: transaction → transactionBody: insert → failing insert;
+    /// rolledBack → counter. Each iteration rolls back on its own, the rolledBack port fires per
+    /// iteration, and the loop (and run) still completes.
+    /// </summary>
+    [Fact]
+    public void TransactionNestedInLoopBody_RollsBackPerIteration_AndRunCompletes()
+    {
+        var dbPath = NewDbPath();
+        try
+        {
+            var rolledBack = new CountingModule("test.rolledback");
+            var services = BuildServices(new[] { ("TestDb", dbPath) }, new ForEachModule(), rolledBack);
+            Seed(services, "TestDb");
+
+            var definition = Workflow(
+                Node("loop", "builtin.loop.foreach", Props(("collection", new[] { 1, 2 }))),
+                Node("txn", "builtin.database.transaction", Props(("connectionId", "TestDb"))),
+                Node("insert", "builtin.database.execute", Props(
+                    ("connectionId", "TestDb"),
+                    ("command", "INSERT INTO users (name) VALUES ('rolled')"))),
+                Node("fail", "builtin.database.execute", Props(
+                    ("connectionId", "TestDb"),
+                    ("command", "INSERT INTO missing_table (id) VALUES (1)"))),
+                Node("onRolledBack", "test.rolledback", HashMap<string, JsonElement>.Empty),
+                Connections(
+                    Conn("loop", "loopBody", "txn"),
+                    Conn("txn", "transactionBody", "insert"),
+                    Conn("insert", "success", "fail"),
+                    Conn("txn", "rolledBack", "onRolledBack")));
+
+            RunWorkflow(definition, services);
+
+            CountUsers(services, "TestDb").Should().Be(0, "every iteration's insert rolls back~ 🛡️");
+            rolledBack.Calls.Should().Be(2, "the nested transaction's rolledBack port fires once per iteration");
+        }
+        finally
+        {
+            DeleteDb(dbPath);
+        }
+    }
+
     private TransactionCompleted RunTransaction(WorkflowDefinition definition, IServiceProvider services, string connectionId)
     {
         var actor = Sys.ActorOf(Akka.Actor.Props.Create(() => new TransactionHarnessActor(TestActor, definition, services, connectionId)));
@@ -264,8 +352,16 @@ public sealed class DatabaseTransactionStructuralEngineTests : TestKit
     }
 
     private static IServiceProvider BuildServices(params (string Id, string Path)[] connections)
+        => BuildServices(connections, Array.Empty<IWorkflowModule>());
+
+    private static IServiceProvider BuildServices((string Id, string Path)[] connections, params IWorkflowModule[] extraModules)
     {
         var registry = new InMemoryModuleRegistry(skipValidation: true);
+        foreach (var module in extraModules)
+        {
+            registry.RegisterModule(module);
+        }
+
         registry.RegisterModule(new DatabaseTransactionModule());
         registry.RegisterModule(new DatabaseExecuteModule());
         registry.RegisterModule(new DatabaseQueryModule());
@@ -342,6 +438,39 @@ public sealed class DatabaseTransactionStructuralEngineTests : TestKit
         var factory = services.GetRequiredService<IDbConnectionFactory>();
         using DataConnection db = factory.CreateAsync(connectionId).AsTask().GetAwaiter().GetResult();
         return db.Execute<int>("SELECT COUNT(*) FROM users");
+    }
+
+    /// <summary>Counts its calls; used to observe how often a port's successor runs.</summary>
+    private sealed class CountingModule : IWorkflowModule
+    {
+        private int calls;
+
+        public CountingModule(string moduleId) => this.ModuleId = moduleId;
+
+        public int Calls => this.calls;
+
+        public string ModuleId { get; }
+
+        public string DisplayName => this.ModuleId;
+
+        public string Category => "Test";
+
+        public string Description => "Counting test module";
+
+        public string Icon => "🔢";
+
+        public Version Version => new(1, 0);
+
+        public ModuleSchema Schema => new(
+            Inputs: new[] { PortDefinition.Create<object>("input", isRequired: false) }.ToArr(),
+            Outputs: new[] { PortDefinition.Create<object>("output", isRequired: false) }.ToArr(),
+            Properties: Arr<ModulePropertyDefinition>.Empty);
+
+        public Task<ModuleResult> ExecuteAsync(ModuleExecutionContext context, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref this.calls);
+            return Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?> { ["output"] = "ok" }));
+        }
     }
 
     private static void DeleteDb(string path)
