@@ -156,8 +156,11 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   fix (`&& _pendingRetryCancellations.Count == 0`) + a test. `SubGraphExecutor.IsComplete` already
   has the equivalent guard (added in Stage 3). Pre-existing; found while doing Stage 3.
   *Done 2026-10-10 — see Progress log.*
-- [ ] **Constructs nested inside a body (loop-in-loop, try/catch in a loop, …) — CONFIRMED, now
-  finding §12.10 (High).** Guard: `Findings/Engine/NestedConstructFindingTests` (2, both red on
+- [x] **Constructs nested inside a body (loop-in-loop, try/catch in a loop, …) — CONFIRMED, now
+  finding §12.10 (High).** *Done 2026-10-11 with G1 — see Progress log.*
+  - [x] decision (G1) · [x] step 1 pure refactor (`ConstructSpawnCore`) · [x] step 2 `SubGraphExecutor` spawns all four constructs · [x] guards green · [x] suite green · [x] finding retired (→ `Engine/NestedConstructTests`, 7 tests, all red without the fix) · [x] README updated
+  
+  Original note: Guard: `Findings/Engine/NestedConstructFindingTests` (2, both red on
   2026-10-10). Loop-in-loop runs the inner body 3× instead of 6× and the run still completes. A
   try/catch in a loop doesn't catch, so the run fails. Cause: `SubGraphExecutor` doesn't handle
   `Node*ExecutionRequested`, so the construct completes as a plain node and every outgoing edge
@@ -167,6 +170,16 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   nested constructs) vs G2 (reject at submit time as a stop-gap), plus the history/variable-scoping
   questions listed there. Plan 02's §12.4 acceptance item "try/catch nested in a loop body" is
   covered by this guard.
+- [ ] **Break/continue inside a try/catch (or parallel/transaction) inside a loop body.** Since
+  §12.10 the nested try/catch runs its branches in its own sub-graph, and `TryCatchCompleted` /
+  `ParallelCompleted` / `TransactionCompleted` carry no `BreakRequested` / `ContinueRequested`, so a
+  `builtin.break` in a try branch no longer ends the enclosing loop. (Before §12.10 it did, but only
+  because the try/catch ran as plain nodes and didn't catch.) Fix idea: carry the flags on the
+  construct's completion and have `SubGraphExecutor` raise them in its own body (never across a
+  nested *loop*). Add a test: foreach → trycatch → try: break.
+- [ ] **Nested constructs: history fidelity + transaction test.** Nested body nodes persist like
+  single-level body nodes (no per-iteration loop metadata). Confirm with the user that this is
+  enough (plan 02 §G sub-question 2). A transaction nested in a body has no structural test yet.
 - [ ] **API test flake: SQLite "table VersionInfo already exists".** Seen in `RateLimitTests`,
   `ModuleManagementEndpointsTests`, `WebhookApiTests` (2 of 4 full runs on 2026-10-10, green on
   rerun). DB names are unique per factory (`TestSqlite.InMemory`), so suspect one host running
@@ -198,6 +211,24 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-11 — §12.10 nested constructs (G1)
+- Step 1 (commit b8a8143): `ConstructSpawnCore` extracted from `WorkflowExecutor` (request maps,
+  Spawn*/On*Completed, running-construct tracking; state stays in the actor via callbacks, like
+  `NodeFailureCore`). Pure refactor: `Category!=Finding` 1795 passed, 0 failed, no test changes.
+- Step 2 (commit 3ed7deb): `SubGraphExecutor` handles `Node*ExecutionRequested`, starts the construct
+  in `HandleNodeCompleted` (`TryStart`), handles `*Completed` (apply `VariableUpdates`, done-port
+  routing) and `*Failed` / unexpected `Terminated` (through `NodeFailureCore` / `ReportFailure`).
+  `IsComplete` waits for running constructs, and a `_finished` guard ignores late reports. All four
+  constructs are covered (plan stages 2+3 together). Suite: 1795 passed, 0 failed.
+- Guards retired → `Engine/NestedConstructTests` (7: loop-in-loop, try/catch-in-loop,
+  parallel-in-loop with done-after-branches ordering, loop-in-try, break-in-inner, failing inner
+  loop caught by outer try/catch, recursive variable propagation). All 7 RED with
+  `SubGraphExecutor` reverted to pre-fix, green with it.
+- History fidelity / variable scoping: took the plan's defaults (same fidelity as one body level;
+  Stage 3 rules recursively), recorded in plan 02 §G Status. Follow-ups added: break/continue in a
+  try/catch inside a loop (regressed by construction), history fidelity confirmation, nested
+  transaction test.
+
 ### 2026-10-11 — §9.2 C# sensitive-API check + reviewer approval
 - Plan 01's real fix (reference allowlist) can't work: Type, MethodInfo, Assembly, Activator and
   File are all in System.Runtime.dll. Decided with the user instead: default-deny semantic check +

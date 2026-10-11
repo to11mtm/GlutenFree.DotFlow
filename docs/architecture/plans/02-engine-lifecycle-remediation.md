@@ -19,13 +19,13 @@
 | D | Unregistered module id "succeeds" via a stub (§12.5) | High | `EngineFindingTests.UnregisteredModule_ShouldFailNode_NotSucceedViaStub` |
 | E | Cancel doesn't stop running constructs (§12.3) | Med | `EngineFindingTests.Cancel_ShouldStopRunningLoopIterations` |
 | F | `UseErrorHandler` not implemented (§12.7) | Med | `EngineFindingTests.UseErrorHandler_ShouldRouteToHandler_NotFailWorkflow` |
-| G | A construct nested in a body runs as a plain node (§12.10, found 2026-10-10) | High | `NestedConstructFindingTests` (2) |
+| G | ~~A construct nested in a body runs as a plain node (§12.10, found 2026-10-10)~~ **Fixed (G1)** | High | retired → `Engine/NestedConstructTests` |
 
 > **Narrowed by testing:** port-aware routing *inside* a loop/branch body already works
 > (`PortRoutingInsideLoopBody_ShouldSkipDeactivatedBranch` passed), so only **per-node error
 > handling** is missing in bodies (Finding C), not branching. The join-skip concern (§12.6) was
-> **refuted** and is dropped. Routing working does *not* mean constructs nested in a body work —
-> they don't (Finding G, §12.10).
+> **refuted** and is dropped. Routing working did *not* mean constructs nested in a body worked —
+> they didn't (Finding G, §12.10; fixed 2026-10-11).
 
 ---
 
@@ -265,8 +265,38 @@ treated as a spec question, not a bug to rush. **Effort:** ~2–3 days once sema
 reading rested on `PortRoutingInsideLoopBody_…`, which uses a port-routing node, not a construct, so
 it never exercised this path.*
 
+> **Status: fixed 2026-10-11 with G1.** The user chose G1 (2026-10-10).
+> 1. `ConstructSpawnCore` (`Workflow.Engine/Actors/ConstructSpawnCore.cs`) was extracted from
+>    `WorkflowExecutor` as a pure refactor, with the full suite green and no test changes.
+> 2. `SubGraphExecutor` uses the same core for **all four** constructs (loop, parallel, try/catch,
+>    transaction). It stores `Node*ExecutionRequested`, spawns the construct as its own child (with
+>    its linked CTS token and a copy of its current `BodyVariables`) and handles `*Completed` (applies
+>    `VariableUpdates`, then done-port routing). It sends `*Failed` and unexpected `Terminated` into
+>    `NodeFailureCore` / `ReportFailure`, and `IsComplete` waits while a nested construct runs. Stages
+>    2 and 3 of the recommendation landed together because the core already covers all four.
+> 3. Break/continue bind to the innermost loop by construction: a nested loop's body runs in that
+>    loop's own sub-graph, so its sentinels never reach the outer body.
+>
+> On the open sub-questions, the fix takes the defaults this plan proposed and adds nothing new.
+> **History:** nested body nodes are persisted like single-level body nodes (`QueuePersistNode`, no
+> per-iteration loop metadata; the outer body accepts `Push/PopLoopScope` and ignores them).
+> **Variables:** the Stage 3 rules apply recursively (start from the body's current variables,
+> report writes back), as the "every construct passes variables in and reports writes" invariant
+> requires. Confirm both with the user if more fidelity is wanted.
+>
+> Guards retired to `Workflow.Tests/Engine/NestedConstructTests` (7 tests: the 2 originals plus
+> parallel-in-loop, loop-in-try, break-in-inner, failing inner loop caught by an outer try/catch,
+> and recursive variable propagation). All 7 are red without the `SubGraphExecutor` change.
+>
+> **Known gap (follow-up):** `break` / `continue` inside a try/catch (or parallel / transaction)
+> that is itself inside a loop body no longer reaches the loop. The construct now runs its branches
+> in its own sub-graph, and `TryCatchCompleted` / `ParallelCompleted` / `TransactionCompleted` carry
+> no `BreakRequested` / `ContinueRequested`. Before the fix it reached the loop only because the
+> try/catch ran as plain nodes (and then didn't catch). Also untested: a transaction nested in a body
+> (no structural test with a database yet).
+
 ### Evidence
-`Workflow.Tests/Findings/Engine/NestedConstructFindingTests.cs`. Both tests are **red** and use the real
+`Workflow.Tests/Findings/Engine/NestedConstructFindingTests.cs` (now retired, see Status). Both tests were **red** and use the real
 `builtin.loop.foreach` / `builtin.trycatch` modules:
 
 - `ForeachNestedInForeachBody_ShouldRunInnerBodyItemsTimesOuterItems`: outer foreach `[1,2,3]`,
