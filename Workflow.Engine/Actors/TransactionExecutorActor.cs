@@ -36,6 +36,11 @@ public sealed class TransactionExecutorActor : ReceiveActor
     private readonly CancellationTokenSource _linkedCts;
     private readonly ILoggingAdapter _log;
     private readonly IReadOnlyList<ScopeStep> _scopePath;
+
+    /// <summary>§12.10: a completed body raised break / continue; reported on the completion message.</summary>
+    private bool _breakRequested;
+
+    private bool _continueRequested;
     private readonly Stopwatch _timer = new();
 
     private IWorkflowTransactionScope? _scope;
@@ -270,6 +275,10 @@ public sealed class TransactionExecutorActor : ReceiveActor
     {
         _variables.Apply(message.VariableUpdates);
 
+        // §12.10: carried out on the committed completion (a failed body has no flags)~
+        _breakRequested = message.BreakRequested;
+        _continueRequested = message.ContinueRequested;
+
         _log.Info("✅ Transaction '{TransactionNodeId}': body completed; committing~", _transactionNodeId);
 
         if (_scope is null)
@@ -342,7 +351,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
             ["committed"] = true,
             ["rolledBack"] = false,
             ["durationMs"] = _timer.ElapsedMilliseconds,
-        }, _variables.Writes));
+        }, _variables.Writes, _breakRequested, _continueRequested));
         Context.Stop(Self);
     }
 

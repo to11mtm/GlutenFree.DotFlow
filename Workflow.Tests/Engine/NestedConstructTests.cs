@@ -233,6 +233,195 @@ public class NestedConstructTests : TestKit
     }
 
     /// <summary>
+    /// foreach [1,2,3] → body: trycatch → try: leaf → break. The break inside the try branch ends the
+    /// enclosing loop after its first iteration (the try/catch carries the flag out of its branch).
+    /// </summary>
+    [Fact]
+    public void BreakInTryBranchInsideLoop_EndsTheLoop()
+    {
+        var leaf = Pass("nc.trybreakleaf");
+        var after = Pass("nc.trybreakafter");
+
+        var definition = Workflow(
+            new[]
+            {
+                Foreach("loop", 1, 2, 3),
+                Node("tc", "builtin.trycatch"),
+                Node("leaf", "nc.trybreakleaf"),
+                Node("brk", "builtin.break"),
+                Node("after", "nc.trybreakafter"),
+            },
+            new[]
+            {
+                Edge("loop", "loopBody", "tc"),
+                Edge("tc", "try", "leaf"),
+                Edge("leaf", "output", "brk"),
+                Edge("loop", "done", "after"),
+            });
+
+        var terminal = this.Run(definition, new ForEachModule(), new TryCatchModule(), new BreakModule(), leaf, after);
+
+        terminal.Should().BeOfType<WorkflowCompleted>();
+        leaf.Calls.Should().Be(1, because: "the break in the try branch ends the loop after its first iteration");
+        after.Calls.Should().Be(1);
+    }
+
+    /// <summary>
+    /// foreach [1,2,3] → body: trycatch (try: failing node, catch: handler → break). The break in the
+    /// catch branch ends the loop after the first caught failure.
+    /// </summary>
+    [Fact]
+    public void BreakInCatchBranchInsideLoop_EndsTheLoop()
+    {
+        var boom = new ScriptedModule("nc.catchbreakboom", (_, _) => Fail());
+        var handler = Pass("nc.catchbreakhandler");
+        var after = Pass("nc.catchbreakafter");
+
+        var definition = Workflow(
+            new[]
+            {
+                Foreach("loop", 1, 2, 3),
+                Node("tc", "builtin.trycatch"),
+                Node("boom", "nc.catchbreakboom"),
+                Node("handler", "nc.catchbreakhandler"),
+                Node("brk", "builtin.break"),
+                Node("after", "nc.catchbreakafter"),
+            },
+            new[]
+            {
+                Edge("loop", "loopBody", "tc"),
+                Edge("tc", "try", "boom"),
+                Edge("tc", "catch", "handler"),
+                Edge("handler", "output", "brk"),
+                Edge("loop", "done", "after"),
+            });
+
+        var terminal = this.Run(definition, new ForEachModule(), new TryCatchModule(), new BreakModule(), boom, handler, after);
+
+        terminal.Should().BeOfType<WorkflowCompleted>();
+        boom.Calls.Should().Be(1, because: "the break in the catch branch ends the loop after its first iteration");
+        handler.Calls.Should().Be(1);
+        after.Calls.Should().Be(1);
+    }
+
+    /// <summary>
+    /// foreach [1,2,3] → body: parallel (b0: leaf → break, b1: right). The break in a branch ends the
+    /// loop once the parallel completes; both branches of that one iteration still run.
+    /// </summary>
+    [Fact]
+    public void BreakInParallelBranchInsideLoop_EndsTheLoop()
+    {
+        var leaf = Pass("nc.parbreakleaf");
+        var right = Pass("nc.parbreakright");
+        var after = Pass("nc.parbreakafter");
+
+        var definition = Workflow(
+            new[]
+            {
+                Foreach("loop", 1, 2, 3),
+                Node("par", "builtin.parallel", properties: new (string, object?)[] { ("branches", new[] { "b0", "b1" }) }),
+                Node("leaf", "nc.parbreakleaf"),
+                Node("brk", "builtin.break"),
+                Node("right", "nc.parbreakright"),
+                Node("after", "nc.parbreakafter"),
+            },
+            new[]
+            {
+                Edge("loop", "loopBody", "par"),
+                Edge("par", "b0", "leaf"),
+                Edge("leaf", "output", "brk"),
+                Edge("par", "b1", "right"),
+                Edge("loop", "done", "after"),
+            });
+
+        var terminal = this.Run(definition, new ForEachModule(), new ParallelModule(), new BreakModule(), leaf, right, after);
+
+        terminal.Should().BeOfType<WorkflowCompleted>();
+        leaf.Calls.Should().Be(1, because: "the break in branch b0 ends the loop after its first iteration");
+        right.Calls.Should().Be(1, because: "the sibling branch of that iteration still runs");
+        after.Calls.Should().Be(1);
+    }
+
+    /// <summary>
+    /// foreach [1,2,3] → body: transaction → transactionBody: leaf → break. The break in the
+    /// transaction body ends the loop (no transaction services: the body runs without a transaction).
+    /// </summary>
+    [Fact]
+    public void BreakInTransactionBodyInsideLoop_EndsTheLoop()
+    {
+        var txn = new ScriptedModule(
+            "nc.txnbreak",
+            (_, _) => ModuleResult.WithTransaction(new Dictionary<string, object?>(), new TransactionRequest()),
+            extraOutputs: new[] { "transactionBody", "committed", "rolledBack" });
+        var leaf = Pass("nc.txnbreakleaf");
+        var after = Pass("nc.txnbreakafter");
+
+        var definition = Workflow(
+            new[]
+            {
+                Foreach("loop", 1, 2, 3),
+                Node("txn", "nc.txnbreak"),
+                Node("leaf", "nc.txnbreakleaf"),
+                Node("brk", "builtin.break"),
+                Node("after", "nc.txnbreakafter"),
+            },
+            new[]
+            {
+                Edge("loop", "loopBody", "txn"),
+                Edge("txn", "transactionBody", "leaf"),
+                Edge("leaf", "output", "brk"),
+                Edge("loop", "done", "after"),
+            });
+
+        var terminal = this.Run(definition, new ForEachModule(), new BreakModule(), txn, leaf, after);
+
+        terminal.Should().BeOfType<WorkflowCompleted>();
+        leaf.Calls.Should().Be(1, because: "the break in the transaction body ends the loop after its first iteration");
+        after.Calls.Should().Be(1);
+    }
+
+    /// <summary>
+    /// foreach outer [1,2] → body: foreach inner [a,b,c] → body: trycatch → try: leaf → break. The
+    /// break travels out of the try/catch to the INNER loop only: each inner loop stops after one
+    /// item, the outer loop runs both iterations.
+    /// </summary>
+    [Fact]
+    public void BreakInTryBranchInsideInnerLoop_EndsOnlyTheInnerLoop()
+    {
+        var leaf = Pass("nc.innertrybreakleaf");
+        var innerDone = Pass("nc.innertrybreakinnerdone");
+        var after = Pass("nc.innertrybreakafter");
+
+        var definition = Workflow(
+            new[]
+            {
+                Foreach("outer", 1, 2),
+                Foreach("inner", "a", "b", "c"),
+                Node("tc", "builtin.trycatch"),
+                Node("leaf", "nc.innertrybreakleaf"),
+                Node("brk", "builtin.break"),
+                Node("innerDone", "nc.innertrybreakinnerdone"),
+                Node("after", "nc.innertrybreakafter"),
+            },
+            new[]
+            {
+                Edge("outer", "loopBody", "inner"),
+                Edge("inner", "loopBody", "tc"),
+                Edge("tc", "try", "leaf"),
+                Edge("leaf", "output", "brk"),
+                Edge("inner", "done", "innerDone"),
+                Edge("outer", "done", "after"),
+            });
+
+        var terminal = this.Run(definition, new ForEachModule(), new TryCatchModule(), new BreakModule(), leaf, innerDone, after);
+
+        terminal.Should().BeOfType<WorkflowCompleted>();
+        leaf.Calls.Should().Be(2, because: "each inner loop breaks after its first item");
+        innerDone.Calls.Should().Be(2, because: "the break must not cross the inner loop into the outer one");
+        after.Calls.Should().Be(1);
+    }
+
+    /// <summary>
     /// trycatch → try: foreach [1,2,3] → body: node failing on its 2nd call. The inner loop fails on
     /// iteration 2 (no continueOnError) and the outer try/catch catches it: the loop's done successor
     /// never runs, the handler runs once and the run completes.
@@ -377,14 +566,20 @@ public class NestedConstructTests : TestKit
     {
         private readonly Func<ModuleExecutionContext, int, ModuleResult> script;
         private readonly int delayMs;
+        private readonly string[] extraOutputs;
         private readonly ConcurrentQueue<IReadOnlyDictionary<string, object?>> seen = new();
         private int calls;
 
-        public ScriptedModule(string moduleId, Func<ModuleExecutionContext, int, ModuleResult> script, int delayMs = 0)
+        public ScriptedModule(
+            string moduleId,
+            Func<ModuleExecutionContext, int, ModuleResult> script,
+            int delayMs = 0,
+            string[]? extraOutputs = null)
         {
             this.ModuleId = moduleId;
             this.script = script;
             this.delayMs = delayMs;
+            this.extraOutputs = extraOutputs ?? Array.Empty<string>();
         }
 
         public int Calls => this.calls;
@@ -403,7 +598,9 @@ public class NestedConstructTests : TestKit
 
         public ModuleSchema Schema => new(
             Inputs: new[] { PortDefinition.Create<object>("input", isRequired: false) }.ToArr(),
-            Outputs: new[] { PortDefinition.Create<object>("output", isRequired: false) }.ToArr(),
+            Outputs: new[] { "output" }.Concat(this.extraOutputs)
+                .Select(port => PortDefinition.Create<object>(port, isRequired: false))
+                .ToArr(),
             Properties: Arr<ModulePropertyDefinition>.Empty);
 
         /// <summary>Gets the value of <paramref name="name"/> each call saw in its variables, in call order.</summary>

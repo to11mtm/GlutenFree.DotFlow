@@ -53,6 +53,11 @@ public sealed class TryCatchExecutorActor : ReceiveActor
     private readonly ILoggingAdapter _log;
     private readonly IReadOnlyList<ScopeStep> _scopePath;
 
+    /// <summary>§12.10: a completed body raised break / continue; reported on the completion message.</summary>
+    private bool _breakRequested;
+
+    private bool _continueRequested;
+
     // ── Phase tracking ───────────────────────────────────────────────────────────────────
     private enum Phase { RunningTry, RunningCatch, RunningFinally }
 
@@ -262,7 +267,8 @@ public sealed class TryCatchExecutorActor : ReceiveActor
             _log.Info(
                 "✅ TryCatch '{TryCatchNodeId}' sequence complete (caught={Caught}, rethrow={Rethrow})",
                 _tryCatchNodeId, _errorWasCaught, _request.Rethrow);
-            Context.Parent.Tell(new TryCatchCompleted(_tryCatchNodeId, outputs, _variables.Writes));
+            Context.Parent.Tell(new TryCatchCompleted(
+                _tryCatchNodeId, outputs, _variables.Writes, _breakRequested, _continueRequested));
         }
 
         Context.Stop(Self);
@@ -275,6 +281,10 @@ public sealed class TryCatchExecutorActor : ReceiveActor
     private void HandleSubGraphCompleted(SubGraphCompleted message)
     {
         _variables.Apply(message.VariableUpdates);
+
+        // §12.10: break / continue in any branch (try, catch or finally) is carried out to the enclosing body~
+        _breakRequested |= message.BreakRequested;
+        _continueRequested |= message.ContinueRequested;
 
         _log.Debug(
             "🛡️ TryCatch '{TryCatchNodeId}': sub-graph '{SubGraphId}' completed (phase={Phase})",

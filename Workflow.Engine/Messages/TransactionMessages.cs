@@ -17,10 +17,17 @@ using System.Collections.Generic;
 /// §10.3: variable writes made inside the construct body (last write per variable), applied by
 /// the parent like a node's own updates. Null when the body wrote nothing.
 /// </param>
+/// <param name="BreakRequested">
+/// §12.10: a body of this construct raised <c>builtin.break</c>. The enclosing body
+/// (<c>SubGraphExecutor</c>) raises it in turn, so it reaches the nearest enclosing loop.
+/// </param>
+/// <param name="ContinueRequested">§12.10: same as <paramref name="BreakRequested"/> for <c>builtin.continue</c>.</param>
 public record TransactionCompleted(
     string TransactionNodeId,
     IReadOnlyDictionary<string, object?> Outputs,
-    IReadOnlyDictionary<string, object?>? VariableUpdates = null);
+    IReadOnlyDictionary<string, object?>? VariableUpdates = null,
+    bool BreakRequested = false,
+    bool ContinueRequested = false);
 
 /// <summary>
 /// 💼 Sent by <see cref="Workflow.Engine.Actors.TransactionExecutorActor"/> when transaction infrastructure fails

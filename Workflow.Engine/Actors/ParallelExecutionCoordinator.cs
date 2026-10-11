@@ -58,6 +58,11 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
     private readonly ILoggingAdapter _log;
     private readonly IReadOnlyList<ScopeStep> _scopePath;
 
+    /// <summary>§12.10: a completed body raised break / continue; reported on the completion message.</summary>
+    private bool _breakRequested;
+
+    private bool _continueRequested;
+
     // Per-branch state ─────────────────────────────────────────────────────────────
     private readonly Queue<BranchSpec> _pendingBranches = new();
     private readonly Dictionary<string, int> _actorNameToBranchIndex = new(StringComparer.Ordinal);
@@ -313,6 +318,10 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         var branchIndex = ResolveBranchIndex(Sender);
         RecordBranchWrites(branchIndex, msg.VariableUpdates);
 
+        // §12.10: break / continue in any completed branch is carried out to the enclosing body~
+        _breakRequested |= msg.BreakRequested;
+        _continueRequested |= msg.ContinueRequested;
+
         // Strip internal sentinels for downstream consumption~
         var branchResult = msg.Outputs
             .Where(kv => !kv.Key.StartsWith("__parallel_") && !kv.Key.StartsWith("__loop_"))
@@ -448,7 +457,8 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
             "✅ ParallelCoordinator '{ParallelNodeId}' completed: {Count} branch(es) (waitForAll={WaitForAll})",
             _parallelNodeId, reportedCount, _parallel.WaitForAll);
 
-        Context.Parent.Tell(new ParallelCompleted(_parallelNodeId, outputs, MergedBranchWrites()));
+        Context.Parent.Tell(new ParallelCompleted(
+            _parallelNodeId, outputs, MergedBranchWrites(), _breakRequested, _continueRequested));
         Context.Stop(Self);
     }
 

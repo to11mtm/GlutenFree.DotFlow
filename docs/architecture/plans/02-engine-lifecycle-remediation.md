@@ -297,11 +297,13 @@ it never exercised this path.*
 > parallel-in-loop, loop-in-try, break-in-inner, failing inner loop caught by an outer try/catch,
 > and recursive variable propagation). All 7 are red without the `SubGraphExecutor` change.
 >
-> **Known gap (follow-up):** `break` / `continue` inside a try/catch (or parallel / transaction)
-> that is itself inside a loop body no longer reaches the loop. The construct now runs its branches
-> in its own sub-graph, and `TryCatchCompleted` / `ParallelCompleted` / `TransactionCompleted` carry
-> no `BreakRequested` / `ContinueRequested`. Before the fix it reached the loop only because the
-> try/catch ran as plain nodes (and then didn't catch).
+> **Break/continue through constructs** *(gap closed 2026-10-11)*: after the G1 fix, `break` /
+> `continue` inside a try/catch (or parallel / transaction) inside a loop body no longer reached the
+> loop, because the construct ran its branches in its own sub-graph. Now `TryCatchCompleted` /
+> `ParallelCompleted` / `TransactionCompleted` carry `BreakRequested` / `ContinueRequested` (ORed
+> over the construct's completed bodies) and `SubGraphExecutor` raises them in its own body, so they
+> reach the nearest enclosing loop. `LoopCompleted` carries none, so a break never crosses a nested
+> loop. Tests: `NestedConstructTests.BreakIn*` (5, all red before).
 >
 > **Nested transaction** *(added 2026-10-11)*: covered by
 > `DatabaseTransactionStructuralEngineTests.TransactionNestedInLoopBody_*` (temp-file SQLite). A

@@ -170,7 +170,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   nested constructs) vs G2 (reject at submit time as a stop-gap), plus the history/variable-scoping
   questions listed there. Plan 02's §12.4 acceptance item "try/catch nested in a loop body" is
   covered by this guard.
-- [ ] **Break/continue inside a try/catch (or parallel/transaction) inside a loop body.** Since
+- [x] **Break/continue inside a try/catch (or parallel/transaction) inside a loop body.** *Done
+  2026-10-11 — see Progress log.* Since
   §12.10 the nested try/catch runs its branches in its own sub-graph, and `TryCatchCompleted` /
   `ParallelCompleted` / `TransactionCompleted` carry no `BreakRequested` / `ContinueRequested`, so a
   `builtin.break` in a try branch no longer ends the enclosing loop. (Before §12.10 it did, but only
@@ -214,6 +215,22 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-11 — §12.10 follow-up: break/continue through try/catch, parallel, transaction
+- `TryCatchCompleted` / `ParallelCompleted` / `TransactionCompleted` gained optional
+  `BreakRequested` / `ContinueRequested`. Each actor ORs the flags of its completed bodies (try/catch:
+  any branch; parallel: any completed branch; transaction: the committed body, a rolled-back body has
+  none). `SubGraphExecutor.OnConstructCompleted` raises them in its own body, so they reach the
+  nearest enclosing loop; `LoopCompleted` carries none, so a break never crosses a nested loop.
+  Semantics unchanged otherwise: flags only, the body still runs to the end. Top-level constructs
+  (no enclosing loop) ignore them, as before.
+- Tests: `Engine/NestedConstructTests` +5 (break in try, in catch, in a parallel branch, in a
+  transaction body — each inside a loop — and break in a try inside an inner loop ends only the inner
+  loop). All 5 RED before the change. Stashed per part: try/catch actor → the 3 try/catch tests red;
+  parallel → its test red; transaction → its test red; `SubGraphExecutor` → all 5 red.
+- Continue has no test: the loop treats `ContinueRequested` the same as a normal iteration end
+  today, so it can't be observed. The flag is carried for when it can.
+- Suite: (`Category!=Finding`) 1814 passed, 0 failed.
+
 ### 2026-10-11 — §12.10 follow-up: nested transaction tests
 - `DatabaseTransactionStructuralEngineTests`: `TransactionNestedInLoopBody_CommitsPerIteration`
   (3 rows, committed ×3, rolledBack ×0) and `…_RollsBackPerIteration_AndRunCompletes` (0 rows,

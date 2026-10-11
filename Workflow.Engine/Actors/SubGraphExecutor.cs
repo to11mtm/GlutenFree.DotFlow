@@ -251,9 +251,9 @@ public class SubGraphExecutor : ReceiveActor
         Receive<NodeTryCatchExecutionRequested>(_constructs.Request);
         Receive<NodeTransactionExecutionRequested>(_constructs.Request);
         Receive<LoopCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnLoopCompleted(m, TryReportSuccess)));
-        Receive<ParallelCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnParallelCompleted(m, TryReportSuccess)));
-        Receive<TryCatchCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnTryCatchCompleted(m, TryReportSuccess)));
-        Receive<TransactionCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnTransactionCompleted(m, TryReportSuccess)));
+        Receive<ParallelCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnParallelCompleted(m, TryReportSuccess), m.BreakRequested, m.ContinueRequested));
+        Receive<TryCatchCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnTryCatchCompleted(m, TryReportSuccess), m.BreakRequested, m.ContinueRequested));
+        Receive<TransactionCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnTransactionCompleted(m, TryReportSuccess), m.BreakRequested, m.ContinueRequested));
         Receive<LoopFailed>(m => OnConstructFailed(m.LoopNodeId, m.Error, m.VariableUpdates));
         Receive<ParallelFailed>(m => OnConstructFailed(m.ParallelNodeId, m.Error, m.VariableUpdates));
         Receive<TryCatchFailed>(m => OnConstructFailed(m.TryCatchNodeId, m.Error, m.VariableUpdates));
@@ -606,13 +606,24 @@ public class SubGraphExecutor : ReceiveActor
     /// §12.10: a nested construct completed — apply its body's writes, then let the shared
     /// <see cref="ConstructSpawnCore"/> store its outputs, skip its body and fire its done port~ ✅🧩.
     /// </summary>
-    private void OnConstructCompleted(IReadOnlyDictionary<string, object?>? variableUpdates, Action complete)
+    /// <remarks>
+    /// A break / continue raised inside a nested try/catch, parallel or transaction counts as raised in
+    /// this body, so it reaches the nearest enclosing loop. A nested LOOP never passes them on
+    /// (<see cref="LoopCompleted"/> has no flags): break binds to the innermost loop.
+    /// </remarks>
+    private void OnConstructCompleted(
+        IReadOnlyDictionary<string, object?>? variableUpdates,
+        Action complete,
+        bool breakRequested = false,
+        bool continueRequested = false)
     {
         if (_finished)
         {
             return;
         }
 
+        _breakRequested |= breakRequested;
+        _continueRequested |= continueRequested;
         _variables.Apply(variableUpdates);
         Context.Unwatch(Sender);
         complete();
