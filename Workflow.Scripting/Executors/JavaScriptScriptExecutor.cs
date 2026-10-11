@@ -92,7 +92,12 @@ public sealed class JavaScriptScriptExecutor : IScriptExecutor
             opts.LimitRecursion(RecursionLimit);
             opts.CancellationToken(ct);
             opts.Strict();
-            opts.AllowClr();
+
+            // §9.1: no AllowClr() — it put the CLR namespace root (`System.*`) in scope, letting
+            // scripts reach IO/Net/Process directly and bypass the workflow.* capability gates.
+            // The __api object below is still callable: members of explicitly SetValue'd objects
+            // are governed by Interop options, not AllowClr. Belt: no GetType() walking either.
+            opts.Interop.AllowGetType = false;
             opts.CatchClrExceptions();
             opts.ExperimentalFeatures = ExperimentalFeature.TaskInterop;
         });

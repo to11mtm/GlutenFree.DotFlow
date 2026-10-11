@@ -114,8 +114,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 ### Stage 4 — security (script sandbox)
 
-- [ ] **§9.1 — JS CLR interop reachable** · plan 01 · guards `ScriptSandboxFindingTests.JavaScript_*` (2)
-  - [ ] plan read · [ ] fix (drop `AllowClr()`; `Interop.AllowGetType=false`) · [ ] guards green · [ ] **all** `Workflow.Tests/Scripting/*` still green (proves `workflow.*` unaffected) · [ ] suite green · [ ] findings retired · [ ] README updated
+- [x] **§9.1 — JS CLR interop reachable** · plan 01 · guards `ScriptSandboxFindingTests.JavaScript_*` (2)
+  - [x] plan read · [x] fix (drop `AllowClr()`; `Interop.AllowGetType=false`) · [x] guards green · [x] **all** `Workflow.Tests/Scripting/*` still green (proves `workflow.*` unaffected) · [x] suite green · [x] findings retired (→ `JavaScriptScriptExecutorTests.Sandbox_*`) · [x] README updated
 - [ ] **§9.2 — C# reflection bypasses blocklist** · plan 01 · guard `ScriptSandboxFindingTests.CSharp_ShouldNotAllow_ReflectionTypeResolution`
   - [ ] plan read · [ ] mitigation (denylist additions) in **both** walkers · [ ] real fix (reference allowlist) · [ ] guard green + add mirror test for the LINQ compiler · [ ] transform/linq suites green · [ ] suite green · [ ] finding retired · [ ] README updated
 
@@ -198,6 +198,19 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-11 — §9.1 JS CLR interop off
+- `JavaScriptScriptExecutor`: removed `opts.AllowClr()`, added `opts.Interop.AllowGetType = false`
+  (plan 01 Option A + belt). `__api` (SetValue'd) still binds — governed by Interop, not AllowClr.
+- Guards moved to `Scripting/JavaScriptScriptExecutorTests` (`Sandbox_ClrNamespaceRoot_IsNotInScope`,
+  `Sandbox_ClrStaticCall_Fails`) + positive `Sandbox_WorkflowApi_StillWorks_WithoutClrInterop`
+  (workflow.newGuid; get/setVariable already covered). Both guards RED with the fix stashed.
+  All 68 `Workflow.Tests/Scripting/*` tests green.
+- Decision recorded (memorizer d39ba449): §12.10 nested constructs → **G1** (ConstructSpawnCore).
+  Uncommitted G1 work-in-progress (ConstructSpawnCore.cs, WorkflowExecutor.cs, SubGraphExecutor.cs)
+  was in the shared checkout and NOT part of this commit; full suite therefore run in a clean
+  worktree (HEAD + §9.1 only): 1762 passed, 0 failed.
+- Next: §9.2 (C# reflection bypasses blocklist), or resume the G1 work in progress.
+
 ### 2026-10-10 — test helper: ConfigurableFailureModule honours failCount
 - `ConfigurableFailureModule` now reads `failCount` when it arrives as a numeric `JsonElement`
   (previously always fell back to the default of 2).

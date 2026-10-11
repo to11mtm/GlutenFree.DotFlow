@@ -102,6 +102,46 @@ public sealed class JavaScriptScriptExecutorTests
         result.VariableUpdates["greeting"].Should().Be("hi");
     }
 
+    // ── §9.1: no CLR interop — only the workflow.* API reaches .NET ──────────────────────────────
+
+    /// <summary>The CLR <c>System</c> namespace root must not be in scope for scripts (§9.1).</summary>
+    [Fact]
+    public async Task Sandbox_ClrNamespaceRoot_IsNotInScope()
+    {
+        var (context, _) = ScriptTestHarness.BuildContext();
+
+        var result = await this.executor.ExecuteAsync("return (typeof System === 'undefined');", context);
+
+        result.Success.Should().BeTrue(result.Error);
+        result.ReturnValue.Should().Be(true, because: "a sandboxed script should not see the CLR 'System' namespace (§9.1)");
+    }
+
+    /// <summary>
+    /// A CLR static call from script must fail; if it worked, scripts could bypass the
+    /// network/file-system capability gates. Benign probe, no I/O (§9.1).
+    /// </summary>
+    [Fact]
+    public async Task Sandbox_ClrStaticCall_Fails()
+    {
+        var (context, _) = ScriptTestHarness.BuildContext();
+
+        var result = await this.executor.ExecuteAsync("return System.Math.Max(1, 2);", context);
+
+        result.Success.Should().BeFalse("reaching a CLR static from script would bypass the capability gates (§9.1)");
+    }
+
+    /// <summary>The workflow.* facade still binds to its CLR object without AllowClr (§9.1).</summary>
+    [Fact]
+    public async Task Sandbox_WorkflowApi_StillWorks_WithoutClrInterop()
+    {
+        var (context, _) = ScriptTestHarness.BuildContext();
+
+        var result = await this.executor.ExecuteAsync("return workflow.newGuid();", context);
+
+        result.Success.Should().BeTrue(result.Error);
+        Guid.TryParse(result.ReturnValue as string, out _).Should().BeTrue();
+    }
+
     [Fact]
     public async Task Execute_Logging_Captured()
     {

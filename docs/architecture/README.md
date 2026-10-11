@@ -41,7 +41,7 @@ the code, not running it, so each one should get a failing test before it gets a
 
 | Area | Finding | Severity | Where |
 | --- | --- | :-: | --- |
-| Security | JavaScript executor enables Jint `AllowClr()`. Scripts may reach `System.IO` / `System.Net` directly and bypass `allowNetwork` / `allowFileSystem`. | **High** | [04 §9.1](04-modules-plugins-and-scripting.md#9-findings-to-verify) |
+| Security | ~~JavaScript executor enables Jint `AllowClr()`. Scripts may reach `System.IO` / `System.Net` directly and bypass `allowNetwork` / `allowFileSystem`.~~ **Fixed (§9.1)** — `AllowClr()` removed and `Interop.AllowGetType = false`; `workflow.*` unaffected. | — | [04 §9.1](04-modules-plugins-and-scripting.md#9-findings-to-verify) |
 | Security | The C# script / LINQ "sandbox" is an identifier blocklist over the full BCL. Reflection (`Type.GetType(...).GetMethod(...).Invoke`) gets past it. | **High** | [04 §9.2](04-modules-plugins-and-scripting.md#9-findings-to-verify) |
 | Engine | ~~`WorkflowCompleted` / `Failed` and node completion events are never published to the `EventStream`, so SignalR clients don't get completion events.~~ **Fixed (§12.1)** — the executor publishes slim copies (no outputs); cancel is reported as `ExecutionFailed` for now. | — | [01 §12.1](01-execution-lifecycle.md#12-findings-to-verify) |
 | Engine | ~~`WorkflowExecutor` actors are never stopped. The actor tree and memory grow with every run.~~ **Fixed (§12.2)** — a finished executor stops once its persistence writes are acked and a grace period (`ExecutorLifecycleOptions`, default 60s) passes; paused runs never stop. | — | [01 §12.2](01-execution-lifecycle.md#12-findings-to-verify) |
