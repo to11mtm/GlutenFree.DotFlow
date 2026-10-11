@@ -1,4 +1,4 @@
-// <copyright file="ConstructSpawnCore.cs" company="GlutenFree">
+﻿// <copyright file="ConstructSpawnCore.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 

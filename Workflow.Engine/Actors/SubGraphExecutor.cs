@@ -113,6 +113,15 @@ public class SubGraphExecutor : ReceiveActor
     /// <summary>§10.3: variables as this body sees them, plus the writes made inside it.</summary>
     private readonly BodyVariables _variables;
 
+    /// <summary>
+    /// §12.10: constructs nested in this body (loop in a loop, try/catch in a loop, …) run as their
+    /// own construct actors, children of this sub-graph — shared with <see cref="WorkflowExecutor"/>~ 🧩.
+    /// </summary>
+    private readonly ConstructSpawnCore _constructs;
+
+    /// <summary>Set once <see cref="SubGraphCompleted"/> / <see cref="SubGraphFailed"/> was sent; later reports are ignored.</summary>
+    private bool _finished;
+
     // ── Private persistence confirmation ────────────────────────────────────────────────────────
     private sealed record NodePersisted(string NodeId, bool Success);
 
@@ -173,6 +182,45 @@ public class SubGraphExecutor : ReceiveActor
             fail: ReportFailure,
             log: _log);
 
+        _constructs = new ConstructSpawnCore(
+            definition: _definition,
+            executionId: _parentExecutionId,
+            serviceProvider: _serviceProvider,
+            isSettled: nodeId => _completedNodes.Contains(nodeId) || _failedNodes.Contains(nodeId) || _skippedNodes.Contains(nodeId),
+            isSkipped: nodeId => _skippedNodes.Contains(nodeId),
+            markSkipped: nodeId =>
+            {
+                // The nested construct's scope is computed over the whole definition — only nodes in
+                // this body count towards IsComplete~
+                if (_nodeSuccessors.ContainsKey(nodeId))
+                {
+                    _skippedNodes.Add(nodeId);
+                }
+            },
+            executeReadySuccessors: ExecuteReadySuccessors,
+            setNodeOutputs: (nodeId, outputs) => _nodeOutputs[nodeId] = outputs,
+            spawnChild: (props, name) =>
+            {
+                var child = Context.ActorOf(props, name);
+                Context.Watch(child);
+                return child;
+            },
+            cancellationToken: () => _linkedCts.Token,
+
+            // A copy: the construct actor's constructor runs on another thread while this body goes on~
+            currentVariables: () => new Dictionary<string, object?>(_variables.Current),
+            initialContext: () =>
+            {
+                var initialContext = new Dictionary<string, object?>(_inputs);
+                foreach (var (k, v) in _variables.Current)
+                {
+                    initialContext[k] = v;
+                }
+
+                return initialContext;
+            },
+            log: _log);
+
         // Phase 2.2.0b: create a linked CTS so parent cancellation propagates here~ 🔗🛑
         _linkedCts = parentToken.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(parentToken)
@@ -184,6 +232,25 @@ public class SubGraphExecutor : ReceiveActor
         Receive<RetryNode>(HandleRetryNode);
         Receive<Terminated>(HandleTerminated);
         Receive<NodePersisted>(_ => { }); // fire-and-forget persistence acknowledgement
+
+        // §12.10: nested constructs — same request → spawn → completion flow as WorkflowExecutor~ 🧩
+        Receive<NodeLoopExecutionRequested>(_constructs.Request);
+        Receive<NodeParallelExecutionRequested>(_constructs.Request);
+        Receive<NodeTryCatchExecutionRequested>(_constructs.Request);
+        Receive<NodeTransactionExecutionRequested>(_constructs.Request);
+        Receive<LoopCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnLoopCompleted(m, TryReportSuccess)));
+        Receive<ParallelCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnParallelCompleted(m, TryReportSuccess)));
+        Receive<TryCatchCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnTryCatchCompleted(m, TryReportSuccess)));
+        Receive<TransactionCompleted>(m => OnConstructCompleted(m.VariableUpdates, () => _constructs.OnTransactionCompleted(m, TryReportSuccess)));
+        Receive<LoopFailed>(m => OnConstructFailed(m.LoopNodeId, m.Error, m.VariableUpdates));
+        Receive<ParallelFailed>(m => OnConstructFailed(m.ParallelNodeId, m.Error, m.VariableUpdates));
+        Receive<TryCatchFailed>(m => OnConstructFailed(m.TryCatchNodeId, m.Error, m.VariableUpdates));
+        Receive<TransactionFailed>(m => OnConstructFailed(m.TransactionNodeId, m.Error, m.VariableUpdates));
+
+        // A nested loop announces its scope to its parent; loop-scope metadata is only stamped on
+        // top-level history records, so a body just accepts these~ 🔁
+        Receive<PushLoopScope>(_ => { });
+        Receive<PopLoopScope>(_ => { });
 
         // Phase 2.2.0b: cooperative cancel — cancels the linked CTS so in-flight nodes observe it~ 🛑
         Receive<CooperativeCancelSubGraph>(msg =>
@@ -477,6 +544,14 @@ public class SubGraphExecutor : ReceiveActor
         // Persist under the parent execution ID for history correlation (test 6)~
         QueuePersistNode(nodeId, message.Duration, NodeExecutionState.Completed);
 
+        // §12.10: a construct nested in this body spawns its own actor instead of routing its
+        // successors as a plain node; it fires its done port when it completes~ 🧩
+        if (_constructs.TryStart(nodeId))
+        {
+            TryReportSuccess();
+            return;
+        }
+
         if (IsComplete())
         {
             ReportSuccess();
@@ -512,6 +587,51 @@ public class SubGraphExecutor : ReceiveActor
 
         QueuePersistNode(nodeId, message.Duration, NodeExecutionState.Failed, message.Error.Message);
         _failureCore.Handle(nodeId, message.Error);
+    }
+
+    /// <summary>
+    /// §12.10: a nested construct completed — apply its body's writes, then let the shared
+    /// <see cref="ConstructSpawnCore"/> store its outputs, skip its body and fire its done port~ ✅🧩.
+    /// </summary>
+    private void OnConstructCompleted(IReadOnlyDictionary<string, object?>? variableUpdates, Action complete)
+    {
+        if (_finished)
+        {
+            return;
+        }
+
+        _variables.Apply(variableUpdates);
+        Context.Unwatch(Sender);
+        complete();
+    }
+
+    /// <summary>
+    /// §12.10: a nested construct failed — treated like a node failure, so retry / continue and an
+    /// enclosing try/catch (this sub-graph's owner) see it~ ❌🧩.
+    /// </summary>
+    private void OnConstructFailed(string constructNodeId, Exception error, IReadOnlyDictionary<string, object?>? variableUpdates)
+    {
+        if (_finished)
+        {
+            return;
+        }
+
+        _variables.Apply(variableUpdates);
+        Context.Unwatch(Sender);
+        _constructs.OnFailed(constructNodeId);
+
+        // The construct node itself completed before its actor ran; it is the construct that failed~
+        _completedNodes.Remove(constructNodeId);
+        _failedNodes.Add(constructNodeId);
+
+        _log.Error(
+            error,
+            "❌ SubGraph {SubGraphId}: nested construct '{NodeId}' failed: {Error}",
+            _subGraphId,
+            constructNodeId,
+            error.Message);
+
+        _failureCore.Handle(constructNodeId, error);
     }
 
     /// <summary><see cref="NodeFailureCore"/> callback: treat the failed node as done and route on~ ⚡.</summary>
@@ -568,6 +688,15 @@ public class SubGraphExecutor : ReceiveActor
         {
             _nodeActors.Remove(terminatedNodeId);
             ReportFailure(terminatedNodeId, new Exception($"SubGraph node '{terminatedNodeId}' terminated unexpectedly"));
+            return;
+        }
+
+        // §12.10: a nested construct actor stopped without reporting (a reporting one is unwatched first)~
+        var constructNodeId = _constructs.RunningNodeFor(terminated.ActorRef);
+        if (constructNodeId != null)
+        {
+            _constructs.OnFailed(constructNodeId);
+            ReportFailure(constructNodeId, new Exception($"SubGraph construct '{constructNodeId}' terminated unexpectedly"));
         }
     }
 
@@ -597,11 +726,36 @@ public class SubGraphExecutor : ReceiveActor
     {
         return _runningNodes.Count == 0 &&
                _pendingRetries.Count == 0 &&
+               _constructs.RunningCount == 0 &&
                _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _nodeSuccessors.Count;
+    }
+
+    /// <summary><see cref="ConstructSpawnCore"/> callback: reports success if the body is done~ ✅.</summary>
+    private bool TryReportSuccess()
+    {
+        if (_finished)
+        {
+            return true;
+        }
+
+        if (!IsComplete())
+        {
+            return false;
+        }
+
+        ReportSuccess();
+        return true;
     }
 
     private void ReportSuccess()
     {
+        if (_finished)
+        {
+            return;
+        }
+
+        _finished = true;
+
         // Aggregate outputs from all terminal nodes (nodes with no in-scope successors)
         var outputs = new Dictionary<string, object?>();
         var terminalNodes = _nodeSuccessors.Where(kv => kv.Value.Count == 0).Select(kv => kv.Key);
@@ -629,7 +783,14 @@ public class SubGraphExecutor : ReceiveActor
 
     private void ReportFailure(string? failedNodeId, Exception error)
     {
-        // Stop all remaining running node actors
+        if (_finished)
+        {
+            return;
+        }
+
+        _finished = true;
+
+        // Stop all remaining running node actors (nested construct actors stop with this actor)
         foreach (var (_, actor) in _nodeActors.ToList())
         {
             Context.Unwatch(actor);
