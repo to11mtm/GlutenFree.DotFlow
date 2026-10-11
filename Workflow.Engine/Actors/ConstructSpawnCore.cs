@@ -13,6 +13,7 @@ using Akka.Event;
 using LanguageExt;
 using Workflow.Core.Models;
 using Workflow.Engine.Messages;
+using Workflow.Engine.Models;
 
 /// <summary>
 /// Shared construct lifecycle (loop / parallel / try-catch / transaction): remember the request a
@@ -48,6 +49,7 @@ internal sealed class ConstructSpawnCore
     private readonly Func<CancellationToken> _cancellationToken;
     private readonly Func<IReadOnlyDictionary<string, object?>> _currentVariables;
     private readonly Func<Dictionary<string, object?>> _initialContext;
+    private readonly Func<IReadOnlyList<ScopeStep>> _scopePath;
     private readonly ILoggingAdapter _log;
 
     // Requests sent by a construct node just before its NodeExecutionCompleted (the "FIFO trick")~
@@ -75,6 +77,10 @@ internal sealed class ConstructSpawnCore
     /// <param name="cancellationToken">The owner's token, which the construct actor links to.</param>
     /// <param name="currentVariables">The variables the construct's body should start from.</param>
     /// <param name="initialContext">Inputs + variables for loop conditions and parallel branches.</param>
+    /// <param name="scopePath">
+    /// The constructs the owner runs inside (empty for <see cref="WorkflowExecutor"/>); each construct
+    /// adds its own step for the history records of its bodies.
+    /// </param>
     /// <param name="log">The owner's logger.</param>
     public ConstructSpawnCore(
         WorkflowDefinition definition,
@@ -89,6 +95,7 @@ internal sealed class ConstructSpawnCore
         Func<CancellationToken> cancellationToken,
         Func<IReadOnlyDictionary<string, object?>> currentVariables,
         Func<Dictionary<string, object?>> initialContext,
+        Func<IReadOnlyList<ScopeStep>> scopePath,
         ILoggingAdapter log)
     {
         _definition = definition;
@@ -103,6 +110,7 @@ internal sealed class ConstructSpawnCore
         _cancellationToken = cancellationToken;
         _currentVariables = currentVariables;
         _initialContext = initialContext;
+        _scopePath = scopePath;
         _log = log;
     }
 
@@ -221,7 +229,7 @@ internal sealed class ConstructSpawnCore
                 bodyEntryNodeIds, bodyScopeIds,
                 _executionId, _initialContext(),
                 _serviceProvider, _cancellationToken(),
-                _currentVariables()),
+                _currentVariables(), _scopePath()),
             actorName);
 
         _log.Info(
@@ -404,7 +412,7 @@ internal sealed class ConstructSpawnCore
                 parallelNodeId, parallel, _definition,
                 _executionId, _initialContext(),
                 _serviceProvider, _cancellationToken(),
-                _currentVariables()),
+                _currentVariables(), _scopePath()),
             actorName);
 
         _log.Info(
@@ -501,7 +509,7 @@ internal sealed class ConstructSpawnCore
             TryCatchExecutorActor.Props(
                 tryCatchNodeId, request, _definition,
                 _executionId, _serviceProvider, _cancellationToken(),
-                _currentVariables()),
+                _currentVariables(), _scopePath()),
             actorName);
 
         _log.Info(
@@ -585,7 +593,7 @@ internal sealed class ConstructSpawnCore
             TransactionExecutorActor.Props(
                 transactionNodeId, request, _definition,
                 _executionId, _serviceProvider, _cancellationToken(),
-                _currentVariables()),
+                _currentVariables(), _scopePath()),
             actorName);
 
         _log.Info(

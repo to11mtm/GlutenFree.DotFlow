@@ -177,9 +177,11 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   because the try/catch ran as plain nodes and didn't catch.) Fix idea: carry the flags on the
   construct's completion and have `SubGraphExecutor` raise them in its own body (never across a
   nested *loop*). Add a test: foreach → trycatch → try: break.
-- [ ] **Nested constructs: history fidelity + transaction test.** Nested body nodes persist like
-  single-level body nodes (no per-iteration loop metadata). Confirm with the user that this is
-  enough (plan 02 §G sub-question 2). A transaction nested in a body has no structural test yet.
+- [ ] **Nested constructs: history fidelity + transaction test.**
+  - [x] history: body records carry `Metadata["scopePath"]` (every enclosing construct, outermost
+    first) and `LoopId` / `LoopIteration` from the innermost loop. *Done 2026-10-11 — see Progress
+    log.* Showing the full path in the API/UI is not done (only the innermost loop shows today).
+  - [ ] a transaction nested in a body has no structural test yet.
 - [ ] **API test flake: SQLite "table VersionInfo already exists".** Seen in `RateLimitTests`,
   `ModuleManagementEndpointsTests`, `WebhookApiTests` (2 of 4 full runs on 2026-10-10, green on
   rerun). DB names are unique per factory (`TestSqlite.InMemory`), so suspect one host running
@@ -211,6 +213,18 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-10-11 — §12.10 follow-up: scope path on nested body history
+- New `Workflow.Engine/Models/ScopeStep` (`nodeId`, `kind`, `iteration` / `branchIndex` / `branch`).
+  `ConstructSpawnCore` takes a `scopePath` delegate (`WorkflowExecutor`: empty; `SubGraphExecutor`:
+  its own). The four construct actors take the parent path as an optional Props param, add their
+  step and pass it to `SubGraphExecutor.Props` (new optional `scopePath`).
+- `SubGraphExecutor.QueuePersistNode` writes `Metadata["scopePath"]` and `LoopId` / `LoopIteration`
+  from the innermost loop step. `subGraphId` unchanged; no migration.
+- Tests: `Engine/NestedConstructHistoryTests` (4: loop, loop-in-loop 6 pairs, try/catch-in-loop catch
+  path, parallel-in-loop branch path). All 4 RED with the production files stashed, green with them.
+  Suite (`Category!=Finding`): 1806 passed, 0 failed.
+- Open: API/UI for the full path; body node events (separate follow-up); nested transaction test.
+
 ### 2026-10-11 — §12.10 nested constructs (G1)
 - Step 1 (commit b8a8143): `ConstructSpawnCore` extracted from `WorkflowExecutor` (request maps,
   Spawn*/On*Completed, running-construct tracking; state stays in the actor via callbacks, like

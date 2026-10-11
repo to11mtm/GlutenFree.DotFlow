@@ -12,6 +12,7 @@ using Akka.Actor;
 using Akka.Event;
 using Workflow.Core.Models;
 using Workflow.Engine.Messages;
+using Workflow.Engine.Models;
 
 /// <summary>
 /// 🛡️ Orchestrates the try → catch? → finally? sequence for a <c>builtin.trycatch</c> node~
@@ -50,6 +51,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
     private readonly IServiceProvider _serviceProvider;
     private readonly CancellationTokenSource _linkedCts;
     private readonly ILoggingAdapter _log;
+    private readonly IReadOnlyList<ScopeStep> _scopePath;
 
     // ── Phase tracking ───────────────────────────────────────────────────────────────────
     private enum Phase { RunningTry, RunningCatch, RunningFinally }
@@ -90,6 +92,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
     /// <param name="serviceProvider">DI container. 💉.</param>
     /// <param name="parentToken">Hierarchical cancellation token (2.2.0b)~ 🔗🛑.</param>
     /// <param name="variables">§10.3: workflow variables when the try/catch starts (null = none).</param>
+    /// <param name="scopePath">§12.10 follow-up: the constructs this try/catch runs inside (null = none).</param>
     public TryCatchExecutorActor(
         string tryCatchNodeId,
         TryCatchRequest request,
@@ -97,7 +100,8 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         Guid executionId,
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         _tryCatchNodeId = tryCatchNodeId;
         _request = request;
@@ -106,6 +110,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         _serviceProvider = serviceProvider;
         _log = Context.GetLogger();
         _variables = new BodyVariables(variables);
+        _scopePath = scopePath ?? ScopeStep.EmptyPath;
 
         // Phase 2.2.0b: linked CTS for cooperative cancellation~ 🔗🛑
         _linkedCts = parentToken.CanBeCanceled
@@ -130,10 +135,11 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         Guid executionId,
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         return Akka.Actor.Props.Create(() => new TryCatchExecutorActor(
-            tryCatchNodeId, request, definition, executionId, serviceProvider, parentToken, variables));
+            tryCatchNodeId, request, definition, executionId, serviceProvider, parentToken, variables, scopePath));
     }
 
     #region Lifecycle
@@ -489,7 +495,8 @@ public sealed class TryCatchExecutorActor : ReceiveActor
                 _serviceProvider,
                 subGraphId: $"{subGraphId}:{_tryCatchNodeId}",
                 parentToken: _linkedCts.Token,
-                variables: _variables.Current),
+                variables: _variables.Current,
+                scopePath: ScopeStep.Append(_scopePath, new ScopeStep(_tryCatchNodeId, ScopeStep.TryCatch, Branch: subGraphId))),
             actorName);
 
         Context.Watch(child);

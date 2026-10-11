@@ -284,6 +284,9 @@ public class WorkflowExecutor : ReceiveActor
 
                 return initialContext;
             },
+
+            // Top level: constructs started here run inside nothing~
+            scopePath: () => ScopeStep.EmptyPath,
             log: _log);
 
         // Set up message handlers

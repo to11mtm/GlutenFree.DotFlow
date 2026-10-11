@@ -48,6 +48,7 @@ public sealed class LoopExecutorActor : ReceiveActor
     private readonly IServiceProvider _serviceProvider;
     private readonly CancellationTokenSource _linkedCts;
     private readonly ILoggingAdapter _log;
+    private readonly IReadOnlyList<ScopeStep> _scopePath;
 
     // ── Iteration state ──────────────────────────────────────────────────────────────────────────
     private IEnumerator<object?>? _itemEnumerator;      // non-null = ForEach-style
@@ -77,6 +78,7 @@ public sealed class LoopExecutorActor : ReceiveActor
     /// <param name="serviceProvider">DI container. 💉.</param>
     /// <param name="parentToken">Hierarchical cancellation token (2.2.0b)~ 🔗🛑.</param>
     /// <param name="variables">§10.3: workflow variables when the loop starts (null = none).</param>
+    /// <param name="scopePath">§12.10 follow-up: the constructs this loop runs inside (null = none).</param>
     public LoopExecutorActor(
         string loopNodeId,
         LoopRequest loop,
@@ -87,7 +89,8 @@ public sealed class LoopExecutorActor : ReceiveActor
         IReadOnlyDictionary<string, object?> initialContext,
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         _loopNodeId = loopNodeId;
         _loop = loop;
@@ -101,6 +104,7 @@ public sealed class LoopExecutorActor : ReceiveActor
         // Seed current context from initial inputs/variables for condition evaluation
         foreach (var (k, v) in initialContext) _currentContext[k] = v;
         _variables = new BodyVariables(variables);
+        _scopePath = scopePath ?? ScopeStep.EmptyPath;
 
         _linkedCts = parentToken.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(parentToken)
@@ -131,11 +135,12 @@ public sealed class LoopExecutorActor : ReceiveActor
         IReadOnlyDictionary<string, object?> initialContext,
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         return Akka.Actor.Props.Create(() => new LoopExecutorActor(
             loopNodeId, loop, definition, bodyEntryNodeIds, bodyScopeNodeIds,
-            executionId, initialContext, serviceProvider, parentToken, variables));
+            executionId, initialContext, serviceProvider, parentToken, variables, scopePath));
     }
 
     #region Lifecycle
@@ -297,7 +302,8 @@ public sealed class LoopExecutorActor : ReceiveActor
                 _serviceProvider,
                 subGraphId,
                 _linkedCts.Token,
-                _variables.Current),
+                _variables.Current,
+                ScopeStep.Append(_scopePath, new ScopeStep(_loopNodeId, ScopeStep.Loop, Iteration: _iterationCount))),
             $"loop-body-{_loopNodeId.Replace(".", "-")}-{_iterationCount}");
 
         Context.Watch(subGraphActor);

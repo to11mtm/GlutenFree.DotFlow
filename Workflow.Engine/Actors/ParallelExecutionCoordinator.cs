@@ -12,6 +12,7 @@ using Akka.Actor;
 using Akka.Event;
 using Workflow.Core.Models;
 using Workflow.Engine.Messages;
+using Workflow.Engine.Models;
 
 /// <summary>
 /// 🌐 Orchestrates concurrent execution of multiple parallel branches~
@@ -55,6 +56,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
     private readonly IServiceProvider _serviceProvider;
     private readonly CancellationTokenSource _linkedCts;
     private readonly ILoggingAdapter _log;
+    private readonly IReadOnlyList<ScopeStep> _scopePath;
 
     // Per-branch state ─────────────────────────────────────────────────────────────
     private readonly Queue<BranchSpec> _pendingBranches = new();
@@ -76,6 +78,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
     /// <param name="serviceProvider">DI container. 💉.</param>
     /// <param name="parentToken">Hierarchical cancellation token (2.2.0b)~ 🔗🛑.</param>
     /// <param name="variables">§10.3: workflow variables when the parallel starts (null = none).</param>
+    /// <param name="scopePath">§12.10 follow-up: the constructs this parallel runs inside (null = none).</param>
     public ParallelExecutionCoordinator(
         string parallelNodeId,
         ParallelRequest parallel,
@@ -84,7 +87,8 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         IReadOnlyDictionary<string, object?> initialContext,
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         _parallelNodeId = parallelNodeId;
         _parallel = parallel;
@@ -92,6 +96,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         _executionId = executionId;
         _initialContext = initialContext;
         _variables = variables;
+        _scopePath = scopePath ?? ScopeStep.EmptyPath;
         _serviceProvider = serviceProvider;
         _log = Context.GetLogger();
 
@@ -118,11 +123,12 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         IReadOnlyDictionary<string, object?> initialContext,
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         return Akka.Actor.Props.Create(() => new ParallelExecutionCoordinator(
             parallelNodeId, parallel, definition,
-            executionId, initialContext, serviceProvider, parentToken, variables));
+            executionId, initialContext, serviceProvider, parentToken, variables, scopePath));
     }
 
     #region Lifecycle
@@ -282,7 +288,8 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
                 _serviceProvider,
                 subGraphId,
                 _linkedCts.Token,
-                _variables),
+                _variables,
+                ScopeStep.Append(_scopePath, new ScopeStep(_parallelNodeId, ScopeStep.Parallel, BranchIndex: spec.Index))),
             actorName);
 
         Context.Watch(subGraphActor);

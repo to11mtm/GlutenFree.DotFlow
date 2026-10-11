@@ -15,6 +15,7 @@ using Akka.Event;
 using Akka.Pattern;
 using Workflow.Core.Models;
 using Workflow.Engine.Messages;
+using Workflow.Engine.Models;
 using Workflow.Modules.Abstractions;
 
 /// <summary>
@@ -34,6 +35,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
     private readonly IServiceProvider _serviceProvider;
     private readonly CancellationTokenSource _linkedCts;
     private readonly ILoggingAdapter _log;
+    private readonly IReadOnlyList<ScopeStep> _scopePath;
     private readonly Stopwatch _timer = new();
 
     private IWorkflowTransactionScope? _scope;
@@ -68,6 +70,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
     /// §10.3: workflow variables when the transaction starts (null = none). Body writes are reported
     /// to the parent whether the transaction commits or rolls back (variables aren't transactional).
     /// </param>
+    /// <param name="scopePath">§12.10 follow-up: the constructs this transaction runs inside (null = none).</param>
     public TransactionExecutorActor(
         string transactionNodeId,
         TransactionRequest request,
@@ -75,7 +78,8 @@ public sealed class TransactionExecutorActor : ReceiveActor
         Guid executionId,
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         _transactionNodeId = transactionNodeId;
         _request = request;
@@ -84,6 +88,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
         _serviceProvider = serviceProvider;
         _log = Context.GetLogger();
         _variables = new BodyVariables(variables);
+        _scopePath = scopePath ?? ScopeStep.EmptyPath;
         _linkedCts = parentToken.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(parentToken)
             : new CancellationTokenSource();
@@ -107,10 +112,11 @@ public sealed class TransactionExecutorActor : ReceiveActor
         Guid executionId,
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         return Akka.Actor.Props.Create(() => new TransactionExecutorActor(
-            transactionNodeId, request, definition, executionId, serviceProvider, parentToken, variables));
+            transactionNodeId, request, definition, executionId, serviceProvider, parentToken, variables, scopePath));
     }
 
     /// <inheritdoc/>
@@ -383,7 +389,8 @@ public sealed class TransactionExecutorActor : ReceiveActor
                 _serviceProvider,
                 subGraphId: $"{SubGraphBody}:{_transactionNodeId}",
                 parentToken: _linkedCts.Token,
-                variables: _variables.Current),
+                variables: _variables.Current,
+                scopePath: ScopeStep.Append(_scopePath, new ScopeStep(_transactionNodeId, ScopeStep.Transaction))),
             actorName);
 
         Context.Watch(child);

@@ -14,6 +14,7 @@ using LanguageExt;
 using Microsoft.Extensions.DependencyInjection;
 using Workflow.Core.Models;
 using Workflow.Engine.Messages;
+using Workflow.Engine.Models;
 using Workflow.Persistence.Abstractions;
 using Workflow.Persistence.Models;
 
@@ -58,6 +59,9 @@ public class SubGraphExecutor : ReceiveActor
     private readonly string? _subGraphId;
     private readonly ILoggingAdapter _log;
     private readonly IExecutionHistoryRepository? _historyRepository;
+
+    /// <summary>§12.10 follow-up: the constructs this body runs inside, outermost first (empty = none known).</summary>
+    private readonly IReadOnlyList<ScopeStep> _scopePath;
 
     /// <summary>
     /// CopilotNote: Phase 2.2.0b hierarchical cancellation — linked to the parent executor's token.
@@ -148,6 +152,11 @@ public class SubGraphExecutor : ReceiveActor
     /// §10.3: the workflow variables as this body should see them (null = none). Passed to every
     /// body node, and updated by their writes.
     /// </param>
+    /// <param name="scopePath">
+    /// §12.10 follow-up: the constructs this body runs inside, outermost first, ending with the step
+    /// of the construct that spawned it (null = empty). Stamped on every history record and passed on
+    /// to constructs nested in this body.
+    /// </param>
     public SubGraphExecutor(
         Guid parentExecutionId,
         WorkflowDefinition definition,
@@ -157,7 +166,8 @@ public class SubGraphExecutor : ReceiveActor
         IServiceProvider serviceProvider,
         string? subGraphId = null,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         _parentExecutionId = parentExecutionId;
         _definition = definition;
@@ -169,6 +179,7 @@ public class SubGraphExecutor : ReceiveActor
         _log = Context.GetLogger();
         _historyRepository = serviceProvider.GetService(typeof(IExecutionHistoryRepository)) as IExecutionHistoryRepository;
         _variables = new BodyVariables(variables);
+        _scopePath = scopePath ?? ScopeStep.EmptyPath;
 
         _failureCore = new NodeFailureCore(
             getNode: nodeId => _definition.Nodes.Find(n => n.Id == nodeId).Match(
@@ -219,6 +230,7 @@ public class SubGraphExecutor : ReceiveActor
 
                 return initialContext;
             },
+            scopePath: () => _scopePath,
             log: _log);
 
         // Phase 2.2.0b: create a linked CTS so parent cancellation propagates here~ 🔗🛑
@@ -247,8 +259,8 @@ public class SubGraphExecutor : ReceiveActor
         Receive<TryCatchFailed>(m => OnConstructFailed(m.TryCatchNodeId, m.Error, m.VariableUpdates));
         Receive<TransactionFailed>(m => OnConstructFailed(m.TransactionNodeId, m.Error, m.VariableUpdates));
 
-        // A nested loop announces its scope to its parent; loop-scope metadata is only stamped on
-        // top-level history records, so a body just accepts these~ 🔁
+        // A nested loop announces its scope to its parent; a body's history records get their loop
+        // metadata from the scope path instead (see QueuePersistNode), so it just accepts these~ 🔁
         Receive<PushLoopScope>(_ => { });
         Receive<PopLoopScope>(_ => { });
 
@@ -274,11 +286,12 @@ public class SubGraphExecutor : ReceiveActor
         IServiceProvider serviceProvider,
         string? subGraphId = null,
         CancellationToken parentToken = default,
-        IReadOnlyDictionary<string, object?>? variables = null)
+        IReadOnlyDictionary<string, object?>? variables = null,
+        IReadOnlyList<ScopeStep>? scopePath = null)
     {
         return Akka.Actor.Props.Create(() => new SubGraphExecutor(
             parentExecutionId, definition, scopeNodeIds, entryNodeIds,
-            inputs, serviceProvider, subGraphId, parentToken, variables));
+            inputs, serviceProvider, subGraphId, parentToken, variables, scopePath));
     }
 
     #region Lifecycle
@@ -819,6 +832,8 @@ public class SubGraphExecutor : ReceiveActor
     /// Stamps <c>Metadata["subGraphId"]</c> so history queries can correlate sub-graph records~ 🗂️.
     /// CopilotNote: Phase 2.2.3-followup — subGraphId tagging. The Metadata dictionary is also the
     /// extensibility hook for future keys (parallelId, branchIndex, etc.)~ 💖.
+    /// §12.10 follow-up: also stamps <c>Metadata["scopePath"]</c> (every construct the body runs
+    /// inside, outermost first) and <c>LoopId</c> / <c>LoopIteration</c> from the innermost loop step.
     /// </summary>
     private void QueuePersistNode(string nodeId, TimeSpan duration, NodeExecutionState state, string? error = null)
     {
@@ -854,7 +869,14 @@ public class SubGraphExecutor : ReceiveActor
             metadataDict["branchIndex"] = branchIdx;
         }
 
+        if (_scopePath.Count > 0)
+        {
+            metadataDict["scopePath"] = _scopePath;
+        }
+
         IReadOnlyDictionary<string, object?>? metadata = metadataDict.Count > 0 ? metadataDict : null;
+
+        var innermostLoop = _scopePath.LastOrDefault(step => step.Kind == ScopeStep.Loop);
 
         var now = DateTimeOffset.UtcNow;
         var record = new NodeExecutionRecord(
@@ -867,6 +889,8 @@ public class SubGraphExecutor : ReceiveActor
             Outputs: outputs,
             Error: error,
             Duration: duration,
+            LoopId: innermostLoop?.NodeId,
+            LoopIteration: innermostLoop?.Iteration,
             Metadata: metadata);
 
         Task.Run(async () =>

@@ -278,11 +278,20 @@ it never exercised this path.*
 >    loop's own sub-graph, so its sentinels never reach the outer body.
 >
 > On the open sub-questions, the fix takes the defaults this plan proposed and adds nothing new.
-> **History:** nested body nodes are persisted like single-level body nodes (`QueuePersistNode`, no
-> per-iteration loop metadata; the outer body accepts `Push/PopLoopScope` and ignores them).
+> **History:** *(updated 2026-10-11, scope-path follow-up)* every body history record now says
+> where it ran. Each construct passes a scope path down to the bodies it starts (`ScopeStep`:
+> `nodeId`, `kind` loop / parallel / trycatch / transaction, plus `iteration` / `branchIndex` /
+> `branch` where it applies); `WorkflowExecutor` starts from an empty path, `SubGraphExecutor`
+> passes its own (via `ConstructSpawnCore`). `SubGraphExecutor.QueuePersistNode` writes the path to
+> `Metadata["scopePath"]` (outermost first, so a loop-in-loop leaf reads `outer#2/inner#1`) and the
+> innermost loop step to `LoopId` / `LoopIteration`, which the UI already shows. `subGraphId` keeps
+> its old format; no migration (`MetadataJson` takes any keys). Not done: showing the full path in
+> the API/UI, and live node events from bodies (separate follow-up). The outer body still accepts
+> `Push/PopLoopScope` and ignores them. Tests: `Workflow.Tests/Engine/NestedConstructHistoryTests`
+> (4, all red without the change).
 > **Variables:** the Stage 3 rules apply recursively (start from the body's current variables,
 > report writes back), as the "every construct passes variables in and reports writes" invariant
-> requires. Confirm both with the user if more fidelity is wanted.
+> requires.
 >
 > Guards retired to `Workflow.Tests/Engine/NestedConstructTests` (7 tests: the 2 originals plus
 > parallel-in-loop, loop-in-try, break-in-inner, failing inner loop caught by an outer try/catch,
