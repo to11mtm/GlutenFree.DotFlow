@@ -228,7 +228,14 @@ hold spill, looks each one up in execution history, and decides:
 
 - **Delete (completed):** the execution is terminal and past `RetentionAfterCompletion`.
 - **Delete (abandoned):** the execution is non-terminal and not updated for `AbandonedThreshold`.
-- **Keep:** anything else. This includes every execution when no history repository is registered.
+- **Keep:** anything else.
+
+**With no history repository** (persistence not configured), there's no run state to go on. The
+sweeper falls back to the spill's own age instead (§9.6). Spill that nothing has written to for
+longer than `AbandonedThreshold` is deleted. Each store reports its last write: file times, blob
+`LastModified`, and SQLite's `written_at` column. Unknown age is kept. The host logs a warning at
+startup in this setup, because a run that goes longer than the threshold without spilling again
+could lose its spill.
 
 ---
 
@@ -271,9 +278,9 @@ Its recommendation is streaming as a second mode, at about 5–9 engineer-months
    `GetModule(moduleId)` without the version that `NodeExecutor` honours.
 5. **No regions inside construct bodies.** `SubGraphExecutor` doesn't run region detection, so
    streaming edges inside a loop or branch body run as ordinary batch hops.
-6. **Spill is kept forever when there is no history.** The comment in
-   `SpillCleanupHostedService.DecideAsync` says to fall back to the abandoned threshold, but the
-   code returns `Keep`.
+6. ~~**Spill is kept forever when there is no history.**~~ **Fixed (§9.6):** with no history,
+   abandoned spill is reclaimed by its own age (last write older than `AbandonedThreshold`), and the
+   host warns at startup. See §7.
 7. **`Blob` spill can quietly land in memory.**
    - What the code does: the `Blob` store throws when no `IBlobStore` is registered. But
      `Program.cs` always registers an `InMemoryBlobStore` fallback (`TryAddSingleton`), so the

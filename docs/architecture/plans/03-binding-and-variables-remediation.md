@@ -253,6 +253,22 @@ missing a sink — enumerate them (history inputs, history outputs, variable sto
 
 **Effort:** ~2 days.
 
+### Decided 2026-11-08 (asked) — names **and** values
+- **Chosen: redact by name and by value.**
+  - Any key equal to a declared `IsSecret` variable name is replaced with a mask.
+  - The secret's actual **value** is also replaced wherever it appears in a string, so a secret put
+    into a URL, header or echoed output is caught too.
+  - Values shorter than 4 characters are only redacted by name, to avoid false matches.
+  - Sinks: node history inputs/outputs, variable-write records, debug logs, and the error text sent
+    to live clients.
+- **Pivot options kept on file** (user asked to keep them documented):
+  - **Names only** (option A as originally written): simpler and predictable. It misses a secret
+    once it's inside another value.
+  - **Names + values, plus at rest:** also stop secret variables being saved in plain text to the
+    workflow/global variable store ("Save for future runs"). Overlaps the planned secrets-storage
+    work.
+  - Options B (don't persist I/O) and C (encrypt history) above stay rejected/orthogonal.
+
 ---
 
 ## Cross-cutting theme

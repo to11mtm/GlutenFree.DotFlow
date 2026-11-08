@@ -43,7 +43,7 @@ dotnet test Workflow.Tests --filter "Category=Finding&FullyQualifiedName~Finding
 | ~~`Binding/BindingFindingTests.cs`~~ | 02 §10.1 non-adjacent refs, §10.2 shadowing — **both fixed, file retired**: now `Engine/UpstreamReferenceTests` and `Engine/VariableShadowingTests` | actor + binder |
 | `Binding/SecretPersistenceFindingTests.cs` | 02 §10.6 secrets in history | actor + capturing repo |
 | ~~`Streaming/StreamingFindingTests.cs`~~ | 03 §9.4 pinned version ignored in a region — **fixed, file retired**: now `Engine/Streaming/StreamRegionPinnedVersionTests` | actor |
-| `Streaming/SpillCleanupFindingTests.cs` | 03 §9.6 spill kept forever with no history | unit |
+| ~~`Streaming/SpillCleanupFindingTests.cs`~~ | 03 §9.6 spill kept forever with no history — **fixed (B2), file retired**: now `Streaming/SpillAgeRetentionTests` | unit |
 | ~~`Modules/ActiveExecutionCountFindingTests.cs`~~ | 04 §9.3 active count only drops for sync runs — **fixed, file retired**: now `Api/V1/ExecutionMetricsTests` | API |
 | ~~`Modules/ValidateConfigurationFindingTests.cs`~~ | 04 §9.4 ValidateConfiguration never called — **fixed, file retired**: now `Modules/ModuleConfigurationValidationTests` (agreed policy: warn on save, block on run) | unit |
 | ~~`Modules/PackageExtraModulesFindingTests.cs`~~ | 04 §9.7 package registers undeclared module ids — **fixed, file retired**: now `Api/V1/MultiModulePackageTests` | packaging |
@@ -76,5 +76,6 @@ current behaviour is actually right, delete the test instead of "fixing" the cod
 
 - `SecretPersistenceFindingTests` assumes secret-flagged values should be redacted before they reach
   execution history. No redaction policy exists yet.
-- `SpillCleanupFindingTests` follows the comment inside `DecideAsync` ("fall back to the abandoned
-  threshold … keeping forever would be a guaranteed leak"), which the code contradicts.
+- ~~`SpillCleanupFindingTests`~~ followed the comment inside `DecideAsync`. Fixed with B2 (age from
+  the store). Its fake store reported no age, which the fix deliberately keeps, so the permanent tests
+  give the store an age instead.

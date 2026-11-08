@@ -69,6 +69,23 @@ public interface ISpillStore
     /// lookup per execution, not per segment~ 🧹
     /// </remarks>
     IAsyncEnumerable<Guid> ListExecutionsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// §9.6 — when the given execution's spill was last written to, or null if the store can't
+    /// tell~ ⏱️.
+    /// </summary>
+    /// <param name="executionId">The execution.</param>
+    /// <param name="ct">A cancellation token.</param>
+    /// <returns>The most recent write time, or null when unknown (or there is no spill).</returns>
+    /// <remarks>
+    /// CopilotNote: Retention normally keys off the execution's history record. A host with spill
+    /// but no execution history has nothing else to go on, so the sweeper falls back to this: spill
+    /// nothing has written to for longer than the abandoned threshold is reclaimed. The last write
+    /// (not the first) is used on purpose — a long run that is still spilling is never taken for an
+    /// abandoned one. Unknown means kept~ 🕸️
+    /// </remarks>
+    Task<DateTimeOffset?> GetLastWrittenAsync(Guid executionId, CancellationToken ct = default)
+        => Task.FromResult<DateTimeOffset?>(null);
 }
 
 /// <summary>

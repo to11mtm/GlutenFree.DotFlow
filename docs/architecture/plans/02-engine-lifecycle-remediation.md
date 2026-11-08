@@ -257,6 +257,22 @@ the intended semantics first (route to `ErrorNodeId` as a catch-style handler? b
 errors?), then implement. Until then, the finding test encodes one reasonable reading and should be
 treated as a spec question, not a bug to rush. **Effort:** ~2–3 days once semantics are agreed.
 
+**Decided 2026-11-08 (asked): catch-style handler.**
+- When a node with `UseErrorHandler` fails (after its retries), the engine runs `ErrorNodeId` with
+  the error available as `{{Variable.error}}`.
+- The failing node's downstream is skipped.
+- The run continues unless the handler fails.
+- `MaxConsecutiveErrors` fails the run after N handled failures of that node in a row (e.g. across
+  loop iterations).
+
+Detail questions are to be asked before coding: handler-as-entry-node, handler successors,
+workflow-level `ErrorNodeId`.
+
+**Alternatives considered (kept on file):**
+- retire the setting in favour of Try/Catch;
+- handler-then-continue-downstream;
+- a workflow-level "on run failure" hook only.
+
 ---
 
 ## Finding G (High) — a construct nested inside a body runs as a plain node (§12.10)

@@ -93,6 +93,32 @@ rewrite the test rather than "fixing the code" to match it.
 
 **Effort:** B1 ≈ 0.5 day. B2 ≈ 1–2 days (store schema + sweeper change).
 
+### Decided 2026-11-08 (asked) — B2, plus a clear warning
+- **Chosen: B2.** Each spill artefact gets its own creation time, so with no history store the
+  sweeper reclaims artefacts older than `AbandonedThreshold`. That makes `Sweep_WithNoHistory_…`
+  pass.
+- **Also warn clearly:** at startup, when spill is on and no history store is configured, log a
+  prominent warning. Cleanup then falls back to file age, so a run longer than the threshold could
+  lose its spill.
+- Fix the contradictory comment.
+- **Fixed 2026-11-08:**
+  - `ISpillStore.GetLastWrittenAsync`: a default interface method that returns null ("unknown",
+    so the spill is kept).
+  - Directory store: file times. Blob store: newest `LastModified`. SQLite store: a new
+    `written_at` column, added with `ALTER TABLE` to older scratch files, whose old rows count as
+    unknown.
+  - The sweeper uses the last write, not the first, so a long run that is still spilling is never
+    reclaimed.
+  - Startup warning in `SpillCleanupHostedService.ExecuteAsync`.
+  - Tests: `Streaming/SpillAgeRetentionTests` (10). The guard is retired: its fake store had no
+    age, which is now kept by design.
+- **Pivot options kept on file** (user asked to keep them documented):
+  - **B1 refuse:** fail at startup when spill is on without history.
+  - **B1-lite warn:** start, warn, keep files.
+  - **B3 accept:** keep forever and fix the comment.
+
+  For B1 / B1-lite / B3, delete the finding test rather than making it pass.
+
 ---
 
 ## Documented-only streaming items (no test yet)

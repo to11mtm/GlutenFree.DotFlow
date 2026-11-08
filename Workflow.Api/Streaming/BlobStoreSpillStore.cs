@@ -100,6 +100,22 @@ public sealed class BlobStoreSpillStore : ISpillStore
     }
 
     /// <inheritdoc/>
+    public async Task<DateTimeOffset?> GetLastWrittenAsync(Guid executionId, CancellationToken ct = default)
+    {
+        // §9.6 — the newest segment's LastModified~
+        DateTimeOffset? newest = null;
+        await foreach (var info in this.blobs.ListAsync(SpillSessionKey.PrefixFor(executionId), ct).ConfigureAwait(false))
+        {
+            if (newest is null || info.LastModified > newest)
+            {
+                newest = info.LastModified;
+            }
+        }
+
+        return newest;
+    }
+
+    /// <inheritdoc/>
     public async IAsyncEnumerable<Guid> ListExecutionsAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
         var seen = new HashSet<Guid>();

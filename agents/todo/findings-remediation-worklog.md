@@ -143,8 +143,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 - [ ] **§10.6 — secrets persisted verbatim** · plan 03 · guard `SecretPersistenceFindingTests.SecretValue_…`
   - [ ] settle the "what is secret" policy (plan 03 Finding D) · then redact at every sink (history in/out, variable store, logs, broadcast — incl. the exception text SignalR now sends in `ExecutionFailed`/`NodeFailed` since §12.1)
-- [ ] **§9.6 — spill kept forever with no history** · plan 04 · guard `SpillCleanupFindingTests.Sweep_WithNoHistory_…`
-  - [ ] pick B1 (fail-fast wiring) vs B2 (artefact age) vs B3 (accept + fix comment); if B1/B3, **delete** the guard test rather than making it pass
+- [x] **§9.6 — spill kept forever with no history** · plan 04 · guard `SpillCleanupFindingTests.Sweep_WithNoHistory_…` — fixed (B2), retired → `Streaming/SpillAgeRetentionTests`
+  - [x] pick B1 / B2 / B3 — **B2** (artefact age) + startup warning; B1/B3 kept on file in plan 04
 - [ ] **§12.7 — UseErrorHandler not implemented** · plan 02 · guard `EngineFindingTests.UseErrorHandler_…`
   - [ ] this is a **feature spec**, not a bug: agree the semantics (`ErrorNodeId` routing, `MaxConsecutiveErrors`) before implementing
 
@@ -228,6 +228,23 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — Stage 6 decisions + §9.6 spill reclaimed by age without history
+- Stage 6 decisions (asked), recorded in the plans with the alternatives kept on file:
+  - §10.6: redact secrets by name **and value**.
+  - §9.6: **B2** plus a warning.
+  - §12.7: **catch-style** handler. Detail questions are to be asked before coding.
+- §9.6:
+  - `ISpillStore.GetLastWrittenAsync` (default null = unknown, kept), implemented by the Directory,
+    Blob and SQLite stores. SQLite gets a `written_at` column, added with ALTER to older scratch
+    files.
+  - The sweeper falls back to age (last write older than `AbandonedThreshold`) when there's no
+    history, and warns at startup.
+  - Fixed the contradictory comment, and updated docs `03-streaming-and-spill.md` §7/§8.
+- Tests: `Streaming/SpillAgeRetentionTests` (10); 5 mutants killed (sweeper, warning, each store).
+  Retired `Findings/Streaming/SpillCleanupFindingTests`: its fake store reported no age, and that
+  case is now kept on purpose. The intent is covered with an aged store.
+- `--filter Category!=Finding`: 1873 passed, 0 failed (UI unchanged this commit).
+
 ### 2026-11-08 — §10.1 {{nodeId.port}} reaches any finished ancestor (across bodies)
 - Decided (asked, after an options diagram): **A2 across bodies**, not the plan's A1.
   - `{{nodeId.port}}` resolves for any ancestor (any connection path in) that has run, including

@@ -123,6 +123,18 @@ public sealed class SpillCleanupHostedService : BackgroundService
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (this.history is null)
+        {
+            // §9.6 — say clearly what retention means on this host~ 📢
+            this.logger.LogWarning(
+                "🧹 Spill store '{Store}' is configured but there is no execution history store, so spill can't be "
+                + "tied to its run's completion. Spill nothing has written to for longer than the abandoned threshold "
+                + "({Threshold}) will be reclaimed by age — a run that goes that long without spilling again could lose "
+                + "its spill. Configure persistence to key retention to execution completion instead~",
+                this.store.Name,
+                this.options.AbandonedThreshold);
+        }
+
         // CopilotNote: sweep at startup as well as on the timer — a host that just came back from a
         // crash is exactly the host most likely to be holding abandoned scratch~ 🧹
         await this.SafeSweepAsync(stoppingToken).ConfigureAwait(false);
@@ -164,9 +176,23 @@ public sealed class SpillCleanupHostedService : BackgroundService
     {
         if (this.history is null)
         {
-            // CopilotNote: with no execution history there is nothing to key retention to, so fall
-            // back to the abandoned threshold. Keeping forever would be a guaranteed leak~
-            return SweepDecision.Keep;
+            // §9.6 (B2): with no execution history there is nothing to key retention to, so fall back
+            // to the spill's own age — reclaim what nothing has written to for longer than the
+            // abandoned threshold. Unknown age (a store that can't tell) is kept~ ⏱️
+            DateTimeOffset? lastWritten;
+            try
+            {
+                lastWritten = await this.store.GetLastWrittenAsync(executionId, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                this.logger.LogDebug(ex, "🧹 Could not read the spill age of execution {ExecutionId}~", executionId);
+                return SweepDecision.Keep;
+            }
+
+            return lastWritten is { } written && now - written > this.options.AbandonedThreshold
+                ? SweepDecision.DeleteAbandoned
+                : SweepDecision.Keep;
         }
 
         ExecutionRecord? record;

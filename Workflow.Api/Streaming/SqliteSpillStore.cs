@@ -79,6 +79,18 @@ public sealed class SqliteSpillStore : ISpillStore, IAsyncDisposable
                 ON spill_segments (execution_id, region_index, node_id, seq);
             """;
         pragma.ExecuteNonQuery();
+
+        // §9.6 — each segment records when it was written (unix ms) so a host with no execution
+        // history can still reclaim abandoned spill by age. Scratch files from before this column
+        // existed get it added; their old rows stay NULL ("age unknown" → kept, as before)~ ⏱️
+        using var columns = this.keepAlive.CreateCommand();
+        columns.CommandText = "SELECT COUNT(*) FROM pragma_table_info('spill_segments') WHERE name = 'written_at';";
+        if (Convert.ToInt64(columns.ExecuteScalar(), CultureInfo.InvariantCulture) == 0)
+        {
+            using var alter = this.keepAlive.CreateCommand();
+            alter.CommandText = "ALTER TABLE spill_segments ADD COLUMN written_at INTEGER NULL;";
+            alter.ExecuteNonQuery();
+        }
     }
 
     /// <inheritdoc/>
@@ -98,6 +110,21 @@ public sealed class SqliteSpillStore : ISpillStore, IAsyncDisposable
         cmd.CommandText = "DELETE FROM spill_segments WHERE execution_id = $e;";
         cmd.Parameters.AddWithValue("$e", executionId.ToString("N", CultureInfo.InvariantCulture));
         return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task<DateTimeOffset?> GetLastWrittenAsync(Guid executionId, CancellationToken ct = default)
+    {
+        await using var conn = new SqliteConnection(this.connectionString);
+        await conn.OpenAsync(ct).ConfigureAwait(false);
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT MAX(written_at) FROM spill_segments WHERE execution_id = $e;";
+        cmd.Parameters.AddWithValue("$e", executionId.ToString("N", CultureInfo.InvariantCulture));
+        var value = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        return value is null or DBNull
+            ? null
+            : DateTimeOffset.FromUnixTimeMilliseconds(Convert.ToInt64(value, CultureInfo.InvariantCulture));
     }
 
     /// <inheritdoc/>
@@ -152,13 +179,14 @@ public sealed class SqliteSpillStore : ISpillStore, IAsyncDisposable
             var conn = await this.EnsureConnectionAsync(ct).ConfigureAwait(false);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText =
-                "INSERT INTO spill_segments (execution_id, region_index, node_id, seq, payload) " +
-                "VALUES ($e, $r, $n, $s, $p);";
+                "INSERT INTO spill_segments (execution_id, region_index, node_id, seq, payload, written_at) " +
+                "VALUES ($e, $r, $n, $s, $p, $w);";
             cmd.Parameters.AddWithValue("$e", this.executionId);
             cmd.Parameters.AddWithValue("$r", this.key.RegionIndex);
             cmd.Parameters.AddWithValue("$n", this.key.NodeId);
             cmd.Parameters.AddWithValue("$s", this.sequence++);
             cmd.Parameters.AddWithValue("$p", payload.ToArray());
+            cmd.Parameters.AddWithValue("$w", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 

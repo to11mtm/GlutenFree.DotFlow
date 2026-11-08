@@ -68,6 +68,29 @@ public sealed class DirectorySpillStore : ISpillStore
     }
 
     /// <inheritdoc/>
+    public Task<DateTimeOffset?> GetLastWrittenAsync(Guid executionId, CancellationToken ct = default)
+    {
+        // §9.6 — the newest file write under the execution's directory (the directory's own time
+        // when it holds no files yet)~
+        var dir = new DirectoryInfo(Path.Combine(this.root, executionId.ToString("N")));
+        if (!dir.Exists)
+        {
+            return Task.FromResult<DateTimeOffset?>(null);
+        }
+
+        var newest = dir.LastWriteTimeUtc;
+        foreach (var file in dir.EnumerateFiles("*", SearchOption.AllDirectories))
+        {
+            if (file.LastWriteTimeUtc > newest)
+            {
+                newest = file.LastWriteTimeUtc;
+            }
+        }
+
+        return Task.FromResult<DateTimeOffset?>(new DateTimeOffset(DateTime.SpecifyKind(newest, DateTimeKind.Utc)));
+    }
+
+    /// <inheritdoc/>
     public async IAsyncEnumerable<Guid> ListExecutionsAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
         foreach (var dir in Directory.EnumerateDirectories(this.root))
