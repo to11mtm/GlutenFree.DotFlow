@@ -565,7 +565,11 @@ static string NormalizeSqliteConnectionString(string? connectionString)
 {
     if (string.Equals(connectionString, ":memory:", StringComparison.OrdinalIgnoreCase))
     {
-        return "Data Source=:memory:;Cache=Shared;Mode=Memory";
+        // A uniquely NAMED shared-cache in-memory database per provider. A bare shared-cache
+        // ":memory:" is one database per *process*, so every host in a process (test hosts,
+        // composite roles) shared it and raced each other's migrations ("table VersionInfo already
+        // exists"). Shared cache still lets this provider's connections see one database~
+        return $"Data Source=file:dotflow-{Guid.NewGuid():N};Mode=Memory;Cache=Shared";
     }
 
     if (string.IsNullOrWhiteSpace(connectionString))

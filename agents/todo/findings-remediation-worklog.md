@@ -187,10 +187,12 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 - [ ] **Stale sample workflows.** `examples/definitions/*.json` don't load: `example-workflow.json`
   uses retired module ids (`builtin.http`, `builtin.transform`, `builtin.database`); the other two
   have non-GUID ids. Found during the §9.4 audit.
-- [ ] **API test flake: SQLite "table VersionInfo already exists".** Seen in `RateLimitTests`,
-  `ModuleManagementEndpointsTests`, `WebhookApiTests` (2 of 4 full runs on 2026-10-10, green on
-  rerun). DB names are unique per factory (`TestSqlite.InMemory`), so suspect one host running
-  migrations twice concurrently. Investigate the migration runner / hosted-service startup.
+- [x] **API test flake: SQLite "table VersionInfo already exists".** *Fixed 2026-11-08.* Not one
+  host migrating twice: the app's default `:memory:` normalized to a shared-cache `:memory:`, which
+  is ONE database per process, so every default-config test host (plain
+  `WebApplicationFactory<Program>`, `WithWebHostBuilder`) shared it and raced migrations. Now each
+  provider gets a uniquely named in-memory DB (`NormalizeSqliteConnectionString`). Guard:
+  `Api/V1/InMemoryPersistenceIsolationTests`.
 
 ---
 
@@ -218,6 +220,21 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — SQLite "VersionInfo already exists" test flake fixed
+- Root cause: `NormalizeSqliteConnectionString` turned the default `:memory:` into
+  `Data Source=:memory:;Cache=Shared;Mode=Memory` — a shared-cache `:memory:` is one database per
+  process. Every test host on default settings shared it; parallel hosts raced FluentMigrator
+  (check-then-create of VersionInfo; also the "UndeterminableConnection / ArgumentOutOfRange"
+  variant) and saw each other's data. Composite providers with several `:memory:` roles had the same
+  race (they initialize in parallel).
+- Fix: `:memory:` now normalizes to `Data Source=file:dotflow-{guid};Mode=Memory;Cache=Shared` —
+  one private in-memory DB per provider; a single-host process behaves as before.
+- Tests: `Api/V1/InMemoryPersistenceIsolationTests` — two default hosts don't share data (RED
+  without the fix, deterministic), 8 hosts starting concurrently all healthy (smoke; the race
+  itself isn't deterministic).
+- Before: a DB startup error in 3 of the last 5 full runs. After: 3 consecutive full runs,
+  1832/1832 each, 0 DB startup errors. Next: §9.7 (manifest decision first).
+
 ### 2026-11-08 — §9.4 module config checks: warn on save, block on run
 - Audit of 44 `ValidateConfiguration` implementations (summary in plan 05 "Audit"): value checks
   are low risk; required-property checks would block saving drafts as errors; LINQ/Transform
