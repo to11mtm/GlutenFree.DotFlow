@@ -68,12 +68,12 @@ public sealed class ValidateDataModule : IWorkflowModule
 
         if (hasRules && hasSchema)
         {
-            return ValidationResult.Failure(new ValidationError("RULES_XOR_SCHEMA", "set either rules or schema, not both~ 💔"));
+            return ValidationResult.Failure(new ValidationError("RULES_XOR_SCHEMA", "set either rules or schema, not both~ 💔", PropertyName: "rules"));
         }
 
         if (!hasRules && !hasSchema)
         {
-            return ValidationResult.Failure(new ValidationError("RULES_OR_SCHEMA_REQUIRED", "one of rules or schema is required~ 💔"));
+            return ValidationResult.Failure(new ValidationError("RULES_OR_SCHEMA_REQUIRED", "one of rules or schema is required~ 💔", PropertyName: "rules"));
         }
 
         return ValidationResult.Success();

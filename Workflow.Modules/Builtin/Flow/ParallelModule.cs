@@ -129,13 +129,13 @@ public class ParallelModule : IWorkflowModule
         if (error is not null)
         {
             return ValidationResult.Failure(
-                new ValidationError("INVALID_BRANCHES", $"Cannot resolve branches: {error}~ 💔", "branches"));
+                new ValidationError("INVALID_BRANCHES", $"Cannot resolve branches: {error}~ 💔", PropertyName: "branches"));
         }
 
         if (branches is null || branches.Count == 0)
         {
             return ValidationResult.Failure(
-                new ValidationError("EMPTY_BRANCHES", "At least one branch is required~ 💔", "branches"));
+                new ValidationError("EMPTY_BRANCHES", "At least one branch is required~ 💔", PropertyName: "branches"));
         }
 
         // Detect duplicates~
@@ -143,7 +143,7 @@ public class ParallelModule : IWorkflowModule
         if (distinct != branches.Count)
         {
             return ValidationResult.Failure(
-                new ValidationError("DUPLICATE_BRANCHES", "Branch port names must be unique~ 💔", "branches"));
+                new ValidationError("DUPLICATE_BRANCHES", "Branch port names must be unique~ 💔", PropertyName: "branches"));
         }
 
         return ValidationResult.Success();

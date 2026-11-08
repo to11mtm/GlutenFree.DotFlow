@@ -99,6 +99,33 @@ audit is the de-risking step.
 
 **Effort:** ~1–2 days including the built-in audit.
 
+**Audit (2026-11-08), 44 implementations:**
+- *Value checks only when present* (Delay, End, Log, Start, Get/SetVariable, FanIn, FanOut, Throw,
+  HTTP, DB timeouts, File read/write options, Compress format) — low risk; only a `{{template}}` in
+  an enum-style field would be misjudged.
+- *Required properties* (File/CSV/JSON/XML read+write, Compress/Decompress, S3, Azure Blob, DB
+  query/execute/bulk/transaction, Script, Switch, Partition, Parallel, Split, DataMap, DataJoin,
+  Aggregate/JSON/String transforms, JsonQuery, XmlQuery, JsonValue, ValidateData, WebhookTrigger)
+  — they match each schema's `IsRequired`, and modules read these only from properties (never from
+  input ports), so they'd fail at run time anyway. Risk: as save-time *errors* they'd block saving
+  half-built workflows (create/update return 422 on errors).
+- *Set after save*: LINQ query + Transform Script require `compiledAssemblyKey` ("compile at
+  publish first") — wrong as a save-time check.
+- *Bugs*: FanIn, Parallel, Partition, Switch, Split passed the property name in the `NodeId` slot;
+  ValidateData set no property.
+- Probe (B1 wired in temporarily, run-time-shaped config): 0 rejections across the 1820-test
+  suite. `examples/definitions/*.json` couldn't be checked — they're stale (non-GUID ids, retired
+  module ids).
+
+**Decided + fixed 2026-11-08.** Policy (asked): **warn on save, block on run**; `compiledAssemblyKey`
+checked **only at run**. `Workflow.Modules/Validation/ModuleConfigurationChecker` builds the config
+like run time (JSON → CLR as NodeExecutor does, schema defaults as the binder applies them), ignores
+errors on `{{…}}`-valued properties, and skips `RunOnlyProperties` on save.
+`ModuleAwareWorkflowValidator` adds its findings as **warnings**; `WorkflowSupervisor` adds them as
+**errors** at submit (API → 400 with the module's message; webhook → launch error). The five
+NodeId-slot bugs and ValidateData's missing property are fixed. B2 (NodeExecutor) not done — the
+submit check covers the API and webhooks. Tests: `Modules/ModuleConfigurationValidationTests` (10).
+
 ---
 
 ## Finding C — a package registers modules its manifest didn't declare (§9.7)

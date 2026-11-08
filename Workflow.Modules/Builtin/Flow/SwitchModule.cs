@@ -125,20 +125,20 @@ public class SwitchModule : IWorkflowModule
         if (!configuration.TryGetValue("cases", out var casesRaw) || casesRaw is null)
         {
             return ValidationResult.Failure(
-                new ValidationError("MISSING_CASES", "The 'cases' property is required~ 💔", "cases"));
+                new ValidationError("MISSING_CASES", "The 'cases' property is required~ 💔", PropertyName: "cases"));
         }
 
         var cases = ParseCases(casesRaw, out var parseError);
         if (parseError is not null)
         {
             return ValidationResult.Failure(
-                new ValidationError("INVALID_CASES", $"Cannot parse 'cases': {parseError}~ 💔", "cases"));
+                new ValidationError("INVALID_CASES", $"Cannot parse 'cases': {parseError}~ 💔", PropertyName: "cases"));
         }
 
         if (cases is null || cases.Count == 0)
         {
             return ValidationResult.Failure(
-                new ValidationError("EMPTY_CASES", "The 'cases' array must contain at least one entry~ 💔", "cases"));
+                new ValidationError("EMPTY_CASES", "The 'cases' array must contain at least one entry~ 💔", PropertyName: "cases"));
         }
 
         return ValidationResult.Success();

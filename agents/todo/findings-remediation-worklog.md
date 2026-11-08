@@ -122,8 +122,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 ### Stage 5 — smaller, independent fixes
 
 - [x] **§9.3 — active-exec count only drops for sync runs** · plan 05 · guard `ActiveExecutionCountFindingTests.AsyncRun_WhenComplete_…` (needs §12.1) — fixed, retired → `Api/V1/ExecutionMetricsTests`
-- [ ] **§9.4 (modules) — ValidateConfiguration never called** · plan 05 · guard `ValidateConfigurationFindingTests.Validator_ShouldSurface_…`
-  - [ ] audit built-ins' `ValidateConfiguration` first (don't start rejecting valid workflows)
+- [x] **§9.4 (modules) — ValidateConfiguration never called** · plan 05 · guard `ValidateConfigurationFindingTests.Validator_ShouldSurface_…` — fixed, retired → `Modules/ModuleConfigurationValidationTests`
+  - [x] audit built-ins' `ValidateConfiguration` first (don't start rejecting valid workflows) — see plan 05 "Audit"
 - [ ] **§9.7 — package registers undeclared module ids** · plan 05 · guard `PackageExtraModulesFindingTests.Install_ShouldNotRegister_…`
   - [ ] decide single- vs multi-module manifests first
 - [ ] **§9.4 (streaming) — pinned version ignored in region** · plan 04 · guard `StreamingFindingTests.PinnedModuleVersion_…`
@@ -184,6 +184,9 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
     log.* Showing the full path in the API/UI is not done (only the innermost loop shows today).
   - [x] transaction nested in a loop body: structural SQLite tests (commit per iteration, rollback
     per iteration) + `loop#k/txn` history path. *Done 2026-10-11 — see Progress log.*
+- [ ] **Stale sample workflows.** `examples/definitions/*.json` don't load: `example-workflow.json`
+  uses retired module ids (`builtin.http`, `builtin.transform`, `builtin.database`); the other two
+  have non-GUID ids. Found during the §9.4 audit.
 - [ ] **API test flake: SQLite "table VersionInfo already exists".** Seen in `RateLimitTests`,
   `ModuleManagementEndpointsTests`, `WebhookApiTests` (2 of 4 full runs on 2026-10-10, green on
   rerun). DB names are unique per factory (`TestSqlite.InMemory`), so suspect one host running
@@ -215,6 +218,26 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — §9.4 module config checks: warn on save, block on run
+- Audit of 44 `ValidateConfiguration` implementations (summary in plan 05 "Audit"): value checks
+  are low risk; required-property checks would block saving drafts as errors; LINQ/Transform
+  Script `compiledAssemblyKey` is set at publish; 5 modules put the property name in the NodeId
+  slot. Probe with B1 wired in: 0 rejections across the suite.
+- Decided (asked): warn on save, block on run; `compiledAssemblyKey` only at run. Note: the old
+  guard asserted save-time *invalid* (plan's B1) — replaced by tests for the agreed policy.
+- `ModuleConfigurationChecker` (Workflow.Modules/Validation): run-time-shaped config (JSON → CLR,
+  schema defaults), ignores errors on `{{…}}` values, `RunOnlyProperties` skipped on save.
+  Validator → warnings; `WorkflowSupervisor` → submit errors (API 400). Fixed the NodeId-slot bugs.
+- Tests: `Modules/ModuleConfigurationValidationTests` (10). 6 RED with validator/supervisor/module
+  fixes stashed; the 4 "no false alarm" tests RED against a naive checker (no defaults / template
+  skip / run-only skip) — one was strengthened (templated `readAs`) after it survived that check.
+- Flakes seen once each, green on rerun: FluentMigrator connection at host startup
+  (WebhookApiActorTests), HttpRetry 150ms timing.
+- Follow-up: `examples/definitions/*.json` are stale (non-GUID ids, retired module ids).
+- `--filter Category!=Finding`: 1830 passed, 0 failed (2nd run; 1st hit the SQLite VersionInfo flake
+  twice). Workflow.Tests.UI: 718/718. Next: §9.7 (needs a single- vs multi-module
+  manifest decision first).
+
 ### 2026-11-08 — §9.3 metrics count every run's outcome
 - Picked back up after a break: full suite green first (Workflow.Tests 1814/1814, Workflow.Tests.UI
   718/718), pushed feature/FSL (c18b134..83f55cc).

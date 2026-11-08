@@ -104,7 +104,7 @@ public sealed class FanInModule : IWorkflowModule
             return ValidationResult.Failure(
                 new ValidationError("INVALID_MODE",
                     $"FanInModule: 'mode' must be one of Concat, Merge, Named, First, Last (got '{modeStr}')~ 💔",
-                    "mode"));
+                    PropertyName: "mode"));
         }
 
         if (configuration.TryGetValue("meta", out var metaRaw2) && metaRaw2 is string metaStr
@@ -114,7 +114,7 @@ public sealed class FanInModule : IWorkflowModule
             return ValidationResult.Failure(
                 new ValidationError("INVALID_META",
                     $"FanInModule: 'meta' must be one of separate, embedded, hidden (got '{metaStr}')~ 💔",
-                    "meta"));
+                    PropertyName: "meta"));
         }
 
         return ValidationResult.Success();

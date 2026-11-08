@@ -291,6 +291,7 @@ public class WorkflowSupervisor : ReceiveActor
             var validator = this.serviceProvider.GetRequiredService<Workflow.Core.Abstractions.WorkflowValidator>();
             var validationResult = validator.Validate(resolution.Definition);
             var unknownModuleErrors = this.UnknownModuleErrors(resolution.Definition);
+            unknownModuleErrors.AddRange(this.ModuleConfigurationErrors(resolution.Definition));
 
             if (!validationResult.IsValid || unknownModuleErrors.Count > 0)
             {
@@ -504,5 +505,33 @@ public class WorkflowSupervisor : ReceiveActor
             .Where(n => !registry.HasModule(n.ModuleId))
             .Select(n => $"Node '{n.Id}' references unknown ModuleId '{n.ModuleId}'")
             .ToList();
+    }
+
+    /// <summary>
+    /// §9.4: each node's module checks its own configuration before a run starts (on save these are
+    /// only warnings). Unknown modules are reported by <see cref="UnknownModuleErrors"/> instead.
+    /// </summary>
+    private IEnumerable<string> ModuleConfigurationErrors(WorkflowDefinition definition)
+    {
+        var registry = this.serviceProvider.GetService<Workflow.Modules.Abstractions.IModuleRegistry>();
+        if (registry is null)
+        {
+            yield break;
+        }
+
+        foreach (var node in definition.Nodes)
+        {
+            var module = registry.GetModule(node.ModuleId);
+            if (module is null)
+            {
+                continue;
+            }
+
+            foreach (var e in Workflow.Modules.Validation.ModuleConfigurationChecker.Check(node, module, atRunTime: true))
+            {
+                var property = e.PropertyName is { } p ? $" '{p}'" : string.Empty;
+                yield return $"Node '{node.Id}'{property}: {e.Message}";
+            }
+        }
     }
 }

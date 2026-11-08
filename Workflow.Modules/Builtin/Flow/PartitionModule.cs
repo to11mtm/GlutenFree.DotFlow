@@ -67,26 +67,26 @@ public sealed class PartitionModule : IWorkflowModule
         if (!configuration.TryGetValue("rules", out var rulesRaw) || rulesRaw is null)
         {
             return ValidationResult.Failure(
-                new ValidationError("MISSING_RULES", "The 'rules' property is required~ 💔", "rules"));
+                new ValidationError("MISSING_RULES", "The 'rules' property is required~ 💔", PropertyName: "rules"));
         }
 
         var rules = ParseRules(rulesRaw, out var parseError);
         if (parseError is not null)
         {
             return ValidationResult.Failure(
-                new ValidationError("INVALID_RULES", $"Cannot parse 'rules': {parseError}~ 💔", "rules"));
+                new ValidationError("INVALID_RULES", $"Cannot parse 'rules': {parseError}~ 💔", PropertyName: "rules"));
         }
 
         if (rules is null || rules.Count == 0)
         {
             return ValidationResult.Failure(
-                new ValidationError("EMPTY_RULES", "The 'rules' array must contain at least one entry~ 💔", "rules"));
+                new ValidationError("EMPTY_RULES", "The 'rules' array must contain at least one entry~ 💔", PropertyName: "rules"));
         }
 
         if (rules.Any(r => !r.TryGetValue("port", out var portObj) || portObj is not string port || string.IsNullOrWhiteSpace(port)))
         {
             return ValidationResult.Failure(
-                new ValidationError("INVALID_RULE_PORT", "Each rule entry must include a non-blank 'port'~ 💔", "rules"));
+                new ValidationError("INVALID_RULE_PORT", "Each rule entry must include a non-blank 'port'~ 💔", PropertyName: "rules"));
         }
 
         return ValidationResult.Success();

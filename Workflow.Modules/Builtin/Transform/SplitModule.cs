@@ -74,39 +74,39 @@ public sealed class SplitModule : IWorkflowModule
         if (!configuration.TryGetValue("keys", out var keysRaw) || keysRaw is null)
         {
             return ValidationResult.Failure(
-                new ValidationError("MISSING_KEYS", "The 'keys' property is required~ 💔", "keys"));
+                new ValidationError("MISSING_KEYS", "The 'keys' property is required~ 💔", PropertyName: "keys"));
         }
 
         var keys = ParseKeys(keysRaw, out var parseError);
         if (parseError is not null)
         {
             return ValidationResult.Failure(
-                new ValidationError("INVALID_KEYS", $"Cannot parse 'keys': {parseError}~ 💔", "keys"));
+                new ValidationError("INVALID_KEYS", $"Cannot parse 'keys': {parseError}~ 💔", PropertyName: "keys"));
         }
 
         if (keys is null || keys.Count == 0)
         {
             return ValidationResult.Failure(
-                new ValidationError("EMPTY_KEYS", "The 'keys' array must contain at least one entry~ 💔", "keys"));
+                new ValidationError("EMPTY_KEYS", "The 'keys' array must contain at least one entry~ 💔", PropertyName: "keys"));
         }
 
         if (keys.Any(string.IsNullOrWhiteSpace))
         {
             return ValidationResult.Failure(
-                new ValidationError("INVALID_KEY", "Each key must be a non-blank string~ 💔", "keys"));
+                new ValidationError("INVALID_KEY", "Each key must be a non-blank string~ 💔", PropertyName: "keys"));
         }
 
         if (keys.GroupBy(k => k, StringComparer.Ordinal).Any(g => g.Count() > 1))
         {
             return ValidationResult.Failure(
-                new ValidationError("DUPLICATE_KEYS", "The 'keys' array must not contain duplicates~ 💔", "keys"));
+                new ValidationError("DUPLICATE_KEYS", "The 'keys' array must not contain duplicates~ 💔", PropertyName: "keys"));
         }
 
         if (configuration.TryGetValue("restPort", out var restRaw) && restRaw is string restPort && !string.IsNullOrWhiteSpace(restPort)
             && keys.Contains(restPort.Trim(), StringComparer.Ordinal))
         {
             return ValidationResult.Failure(
-                new ValidationError("RESTPORT_COLLIDES", "The 'restPort' must not match any key output port~ 💔", "restPort"));
+                new ValidationError("RESTPORT_COLLIDES", "The 'restPort' must not match any key output port~ 💔", PropertyName: "restPort"));
         }
 
         return ValidationResult.Success();

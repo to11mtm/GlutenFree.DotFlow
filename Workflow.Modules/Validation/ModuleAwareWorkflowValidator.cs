@@ -136,6 +136,16 @@ public sealed class ModuleAwareWorkflowValidator
 
                 // ✅ Check 2: Configured property keys must be known to the module schema~
                 ValidateNodeProperties(node, module, errors);
+
+                // ⚠️ Check 2b (§9.4): the module's own configuration rules. Warnings on save so
+                //    half-built workflows stay saveable; the supervisor blocks a RUN on them~
+                foreach (var e in ModuleConfigurationChecker.Check(node, module, atRunTime: false))
+                {
+                    warnings.Add(new ValidationWarning(
+                        e.Code,
+                        e.PropertyName is { } property ? $"'{property}': {e.Message}" : e.Message,
+                        node.Id));
+                }
             }
         }
 
