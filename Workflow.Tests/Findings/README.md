@@ -42,7 +42,7 @@ dotnet test Workflow.Tests --filter "Category=Finding&FullyQualifiedName~Finding
 | ~~`Engine/NestedConstructFindingTests.cs`~~ | §12.10 (plan 02 §G) constructs nested in a body run as plain nodes. **Fixed, file retired**: guards now in `Engine/NestedConstructTests` | actor + built-in modules |
 | `Binding/BindingFindingTests.cs` | 02 §10.1 non-adjacent refs, §10.2 shadowing, §10.3 loop-body variable writes | actor + binder |
 | `Binding/SecretPersistenceFindingTests.cs` | 02 §10.6 secrets in history | actor + capturing repo |
-| `Streaming/StreamingFindingTests.cs` | 03 §9.4 pinned version ignored in a region | actor |
+| ~~`Streaming/StreamingFindingTests.cs`~~ | 03 §9.4 pinned version ignored in a region — **fixed, file retired**: now `Engine/Streaming/StreamRegionPinnedVersionTests` | actor |
 | `Streaming/SpillCleanupFindingTests.cs` | 03 §9.6 spill kept forever with no history | unit |
 | ~~`Modules/ActiveExecutionCountFindingTests.cs`~~ | 04 §9.3 active count only drops for sync runs — **fixed, file retired**: now `Api/V1/ExecutionMetricsTests` | API |
 | ~~`Modules/ValidateConfigurationFindingTests.cs`~~ | 04 §9.4 ValidateConfiguration never called — **fixed, file retired**: now `Modules/ModuleConfigurationValidationTests` (agreed policy: warn on save, block on run) | unit |

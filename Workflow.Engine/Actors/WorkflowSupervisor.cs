@@ -521,7 +521,9 @@ public class WorkflowSupervisor : ReceiveActor
 
         foreach (var node in definition.Nodes)
         {
-            var module = registry.GetModule(node.ModuleId);
+            // Check the version the node will actually run (§9.4 — pins included). Unknown modules are
+            // reported by UnknownModuleErrors; a missing pinned version fails the node at run time~
+            var module = Workflow.Modules.ModuleResolution.Resolve(registry, node).Module;
             if (module is null)
             {
                 continue;

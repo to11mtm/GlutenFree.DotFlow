@@ -123,8 +123,16 @@ public sealed class StreamRegionExecutor : ReceiveActor
                     return;
                 }
 
-                var registry = this.serviceProvider.GetService<IModuleRegistry>();
-                if (registry?.GetModule(nodeDefinition.ModuleId) is not IStreamingWorkflowModule module)
+                // §9.4: honour a pinned module version exactly like the batch path (NodeExecutor)~
+                var resolution = Workflow.Modules.ModuleResolution.Resolve(
+                    this.serviceProvider.GetService<IModuleRegistry>(), nodeDefinition);
+                if (resolution.Module is null)
+                {
+                    this.Fail(parent, new InvalidOperationException(resolution.Error));
+                    return;
+                }
+
+                if (resolution.Module is not IStreamingWorkflowModule module)
                 {
                     this.Fail(
                         parent,

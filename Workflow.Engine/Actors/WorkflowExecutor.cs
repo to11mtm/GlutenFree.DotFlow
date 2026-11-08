@@ -1292,7 +1292,8 @@ public class WorkflowExecutor : ReceiveActor
                 nodeId =>
                 {
                     var node = GetNodeDefinition(nodeId);
-                    return node is null ? null : registry?.GetModule(node.ModuleId)?.Schema;
+                    // §9.4: detect regions from the version the node will actually run (pins included)~
+                    return node is null ? null : Workflow.Modules.ModuleResolution.Resolve(registry, node).Module?.Schema;
                 });
 
             if (_streamRegions.Count > 0)

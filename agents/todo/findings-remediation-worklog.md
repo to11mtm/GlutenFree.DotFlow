@@ -134,7 +134,7 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   - [x] audit built-ins' `ValidateConfiguration` first (don't start rejecting valid workflows) — see plan 05 "Audit"
 - [x] **§9.7 — package registers undeclared module ids** · plan 05 · guard `PackageExtraModulesFindingTests.Install_ShouldNotRegister_…` — fixed, retired → `Api/V1/MultiModulePackageTests`
   - [x] decide single- vs multi-module manifests first — multi-module (`modules` list), see plan 05
-- [ ] **§9.4 (streaming) — pinned version ignored in region** · plan 04 · guard `StreamingFindingTests.PinnedModuleVersion_…`
+- [x] **§9.4 (streaming) — pinned version ignored in region** · plan 04 · guard `StreamingFindingTests.PinnedModuleVersion_…` — fixed, retired → `Engine/Streaming/StreamRegionPinnedVersionTests`
 - [ ] **§10.2 — input keys shadow declared variables** · plan 03 · guard `BindingFindingTests.InputKey_ShouldNotShadow_DeclaredVariable`
 - [ ] **§10.1 — `{{nodeId.port}}` only reaches direct predecessors** · plan 03 · guard `BindingFindingTests.NonAdjacentNodeOutputReference_ShouldResolve`
   - [ ] note: recommended fix is **docs/UX** (keep behaviour, correct `docs/variables.md` + designer picker, flip the test to assert a clear error)
@@ -228,6 +228,17 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — §9.4 (streaming) pinned module version honoured in regions
+- New `Workflow.Modules.ModuleResolution` — the single pin-aware module lookup (batch node, region
+  executor, region detection, run-time config check, validator). Same clear error for a
+  pinned-but-missing version on both paths.
+- Found + fixed: region detection read the latest version's ports, so a pin to a non-streaming
+  version still formed a region and then failed.
+- Tests: `Engine/Streaming/StreamRegionPinnedVersionTests` (4). Bite-proved separately: detection
+  change stashed → detection test RED; region-executor change stashed → region test + guard RED.
+  Retired `Findings/Streaming/StreamingFindingTests`.
+- `--filter Category!=Finding`: 1845 passed, 0 failed; Workflow.Tests.UI 718/718. Stage 5 left: §10.2, §10.1 (docs/UX).
+
 ### 2026-11-08 — §9.7 multi-module package manifests
 - Decided (asked): multi-module manifests (`modules: [ids]`, absent → just `id`); every declared
   module must exist and report the manifest version; uninstalling one module of a multi-module

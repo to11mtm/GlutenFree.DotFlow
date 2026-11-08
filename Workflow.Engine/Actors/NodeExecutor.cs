@@ -174,28 +174,15 @@ public class NodeExecutor : ReceiveActor
 
         try
         {
-            // Look up the module (honouring an optional pinned version — Phase 2.8.2 / D6).
-            var moduleRegistry = _serviceProvider.GetService<IModuleRegistry>();
-            var pinnedVersion = ResolvePinnedVersion(_nodeDefinition);
-            var module = pinnedVersion is not null
-                ? moduleRegistry?.GetModule(_nodeDefinition.ModuleId, pinnedVersion)
-                : moduleRegistry?.GetModule(_nodeDefinition.ModuleId);
-
-            if (module == null && pinnedVersion is not null && moduleRegistry?.HasModule(_nodeDefinition.ModuleId) == true)
-            {
-                // The module exists but the pinned version is missing/disabled — fail clearly.
-                var msg = $"Module '{_nodeDefinition.ModuleId}' version {pinnedVersion} is not available (missing or disabled).";
-                _log.Error("❌ {Error}", msg);
-                SendFailure(new InvalidOperationException(msg));
-                return;
-            }
-
+            // Look up the module, honouring an optional pinned version (Phase 2.8.2 / D6) — shared with
+            // streaming regions + validation via ModuleResolution (§9.4). A pinned-but-unavailable
+            // version or an unregistered module (§12.5) fails the node; never fabricate a success.
+            var resolution = Workflow.Modules.ModuleResolution.Resolve(_serviceProvider.GetService<IModuleRegistry>(), _nodeDefinition);
+            var module = resolution.Module;
             if (module == null)
             {
-                // §12.5: an unregistered module fails the node — never fabricate a success.
-                var msg = $"Module '{_nodeDefinition.ModuleId}' is not registered.";
-                _log.Error("❌ {Error}", msg);
-                SendFailure(new InvalidOperationException(msg));
+                _log.Error("❌ {Error}", resolution.Error);
+                SendFailure(new InvalidOperationException(resolution.Error));
                 return;
             }
 
@@ -549,30 +536,6 @@ public class NodeExecutor : ReceiveActor
         // {{input.path}} template root (plain input keys are *also* overlaid as variables above,
         // which predates the root and stays for compatibility).
         return new PropertyBindingContext(variables, nodeOutputs, _serviceProvider, _inputs);
-    }
-
-    /// <summary>
-    /// 🔢 Phase 2.8.2 — Reads an optional pinned module version from the node's metadata
-    /// (<c>Metadata["moduleVersion"]</c>). Returns <c>null</c> when unset or unparseable (falls back
-    /// to latest-enabled resolution)~ ✨.
-    /// </summary>
-    /// <param name="node">The node definition.</param>
-    /// <returns>The pinned version, or <c>null</c>.</returns>
-    private static Version? ResolvePinnedVersion(NodeDefinition node)
-    {
-        if (node.Metadata is null)
-        {
-            return null;
-        }
-
-        var metadata = node.Metadata.Value;
-        if (!metadata.ContainsKey("moduleVersion"))
-        {
-            return null;
-        }
-
-        var pin = metadata["moduleVersion"];
-        return Version.TryParse(pin, out var parsed) ? parsed : null;
     }
 
     /// <summary>

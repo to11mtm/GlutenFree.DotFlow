@@ -47,6 +47,14 @@ error as the batch path; existing `StreamRegionExecutionTests` green.
 
 **Effort:** ~0.5 day.
 
+**Fixed 2026-11-08 (A1).** New `Workflow.Modules.ModuleResolution` (`PinnedVersion(node)`,
+`Resolve(registry, node)`) is the one resolution path, used by `NodeExecutor`, `StreamRegionExecutor`,
+`WorkflowExecutor` region detection, `WorkflowSupervisor`'s run-time config check and
+`ModuleAwareWorkflowValidator`. Found while fixing: region **detection** also used the latest version's
+ports, so a pin to a non-streaming version could still build a region and then fail ("isn't a
+streaming module") — detection now uses the pinned version's schema too. Tests:
+`Engine/Streaming/StreamRegionPinnedVersionTests` (4); guard retired.
+
 ---
 
 ## Finding B — spill kept forever with no history (§9.6)
