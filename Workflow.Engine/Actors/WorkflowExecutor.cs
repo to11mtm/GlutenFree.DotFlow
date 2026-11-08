@@ -287,6 +287,7 @@ public class WorkflowExecutor : ReceiveActor
 
             // Top level: constructs started here run inside nothing~
             scopePath: () => ScopeStep.EmptyPath,
+            outerOutputs: () => NodeAncestry.Snapshot(_nodeOutputs),
             log: _log);
 
         // Set up message handlers
@@ -817,7 +818,12 @@ public class WorkflowExecutor : ReceiveActor
 
         // Send execute message (convert Dictionary to HashMap for immutability)
         var inputsHashMap = nodeInputs.ToHashMap();
-        nodeActor.Tell(new Execute(nodeId, inputsHashMap, _executionId, _context.Variables));
+        nodeActor.Tell(new Execute(
+            nodeId,
+            inputsHashMap,
+            _executionId,
+            _context.Variables,
+            NodeAncestry.ViewFor(_definition, nodeId, _nodeOutputs)));
     }
 
     /// <summary>

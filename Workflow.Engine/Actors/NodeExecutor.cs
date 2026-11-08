@@ -58,6 +58,9 @@ public class NodeExecutor : ReceiveActor
     private readonly CancellationToken _parentToken;
 
     private HashMap<string, object?> _workflowVariables;
+
+    // §10.1 — ancestors' outputs for {{nodeId.port}} binding (null = direct predecessors only).
+    private UpstreamView? _upstream;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isExecuting;
 
@@ -164,6 +167,7 @@ public class NodeExecutor : ReceiveActor
             : new CancellationTokenSource();
 
         _workflowVariables = message.Variables;
+        _upstream = message.Upstream;
 
         _log.Info("⚡ Executing node {NodeId} (module: {ModuleId})", _nodeId, _nodeDefinition.ModuleId);
 
@@ -527,9 +531,38 @@ public class NodeExecutor : ReceiveActor
             }
         }
 
+        // 🧬 §10.1 — any ancestor that has run is bindable, not just direct predecessors (whose
+        // values, carried in the inputs, win). Bodies see ancestors outside their construct too.
+        if (_upstream is { } upstream)
+        {
+            foreach (var (nodeId, outputs) in upstream.Outputs)
+            {
+                nodeOutputs.TryAdd(nodeId, outputs);
+            }
+        }
+
         // 🔌 HTTP-input plan D4 — the node's own gathered inputs power the {{input}} /
         // {{input.path}} template root (and the "that's an input, not a variable" hint, §10.2).
-        return new PropertyBindingContext(variables, nodeOutputs, _serviceProvider, _inputs);
+        return new PropertyBindingContext(variables, nodeOutputs, _serviceProvider, _inputs)
+        {
+            ExplainMissingNode = this.ExplainMissingNode,
+        };
+    }
+
+    /// <summary>§10.1 — why <c>{{nodeId.port}}</c> can't resolve: not upstream, or didn't run.</summary>
+    private string? ExplainMissingNode(string nodeId)
+    {
+        if (_upstream is not { } upstream)
+        {
+            return null;
+        }
+
+        return upstream.Ancestors.Any(a => string.Equals(a, nodeId, StringComparison.OrdinalIgnoreCase))
+            ? $"node '{nodeId}' is upstream of this node but hasn't produced output in this run "
+              + "(it was skipped, or failed and the run continued past it)."
+            : $"node '{nodeId}' isn't upstream of this node — no connection path leads from it to here, so "
+              + "its output isn't guaranteed to exist when this node runs. Wire it in, or pass the value "
+              + "through a variable.";
     }
 
     /// <summary>

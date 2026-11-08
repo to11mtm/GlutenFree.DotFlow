@@ -639,9 +639,13 @@ public class PropertyBinder : IPropertyBinder
                 k.Equals(nodeId, StringComparison.OrdinalIgnoreCase));
             if (match == null)
             {
+                // §10.1: say *why* — not upstream of this node, or upstream but it didn't run~
+                var why = context.ExplainMissingNode?.Invoke(nodeId);
                 return ReferenceResolution.Failed(new List<string>
                 {
-                    $"Input '{portName}': node '{nodeId}' not found in binding context node outputs.",
+                    why is null
+                        ? $"Input '{portName}': node '{nodeId}' not found in binding context node outputs."
+                        : $"Input '{portName}': {why}",
                 });
             }
 

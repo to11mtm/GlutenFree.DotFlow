@@ -37,6 +37,9 @@ public sealed class TransactionExecutorActor : ReceiveActor
     private readonly ILoggingAdapter _log;
     private readonly IReadOnlyList<ScopeStep> _scopePath;
 
+    // §10.1 — outer nodes' outputs for body binding (see NodeAncestry)~
+    private readonly IReadOnlyDictionary<string, Dictionary<string, object?>>? _outerOutputs;
+
     /// <summary>§12.10: a completed body raised break / continue; reported on the completion message.</summary>
     private bool _breakRequested;
 
@@ -84,7 +87,8 @@ public sealed class TransactionExecutorActor : ReceiveActor
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         _transactionNodeId = transactionNodeId;
         _request = request;
@@ -94,6 +98,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
         _log = Context.GetLogger();
         _variables = new BodyVariables(variables);
         _scopePath = scopePath ?? ScopeStep.EmptyPath;
+        _outerOutputs = outerOutputs;
         _linkedCts = parentToken.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(parentToken)
             : new CancellationTokenSource();
@@ -118,10 +123,11 @@ public sealed class TransactionExecutorActor : ReceiveActor
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         return Akka.Actor.Props.Create(() => new TransactionExecutorActor(
-            transactionNodeId, request, definition, executionId, serviceProvider, parentToken, variables, scopePath));
+            transactionNodeId, request, definition, executionId, serviceProvider, parentToken, variables, scopePath, outerOutputs));
     }
 
     /// <inheritdoc/>
@@ -399,7 +405,7 @@ public sealed class TransactionExecutorActor : ReceiveActor
                 subGraphId: $"{SubGraphBody}:{_transactionNodeId}",
                 parentToken: _linkedCts.Token,
                 variables: _variables.Current,
-                scopePath: ScopeStep.Append(_scopePath, new ScopeStep(_transactionNodeId, ScopeStep.Transaction))),
+                scopePath: ScopeStep.Append(_scopePath, new ScopeStep(_transactionNodeId, ScopeStep.Transaction)), outerOutputs: _outerOutputs),
             actorName);
 
         Context.Watch(child);

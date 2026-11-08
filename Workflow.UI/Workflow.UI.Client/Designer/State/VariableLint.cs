@@ -393,6 +393,16 @@ public static class VariableLint
                     + @"'{{', escape it as '\{\{'.",
                     node.Id);
             }
+            else if (reference.Name != node.Id && !VariableTokens.UpstreamOf(doc, node.Id).Contains(reference.Name))
+            {
+                // 🧬 §10.1 — only ancestors (any connection path in, across bodies) are bindable~
+                yield return new GraphIssue(
+                    IssueSeverity.Error,
+                    $"'{node.Name}' → {reference.PropertyName}: {reference.Token} reads "
+                    + $"'{doc.FindNode(reference.Name)!.Name}', which isn't upstream of this node, so this node will "
+                    + "fail at run time. Wire it in, or pass the value through a variable.",
+                    node.Id);
+            }
 
             yield break;
         }

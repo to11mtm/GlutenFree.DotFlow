@@ -149,6 +149,9 @@ public sealed class ModuleAwareWorkflowValidator
 
                 // ⚠️ Check 2c (§10.2): {{Variable.x}} where 'x' is also a wired input port~
                 warnings.AddRange(VariableClashChecker.Check(workflow, node, module));
+
+                // ⚠️ Check 2d (§10.1): {{nodeId.port}} to a node that isn't upstream of this one~
+                warnings.AddRange(NodeReferenceChecker.Check(workflow, node, module));
             }
         }
 

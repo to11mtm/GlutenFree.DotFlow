@@ -63,6 +63,9 @@ public class SubGraphExecutor : ReceiveActor
     /// <summary>§12.10 follow-up: the constructs this body runs inside, outermost first (empty = none known).</summary>
     private readonly IReadOnlyList<ScopeStep> _scopePath;
 
+    // §10.1 — outer nodes' outputs for body binding (see NodeAncestry)~
+    private readonly IReadOnlyDictionary<string, Dictionary<string, object?>>? _outerOutputs;
+
     /// <summary>
     /// CopilotNote: Phase 2.2.0b hierarchical cancellation — linked to the parent executor's token.
     /// When the parent workflow completes/fails, the linked CTS fires and in-flight node modules
@@ -167,7 +170,8 @@ public class SubGraphExecutor : ReceiveActor
         string? subGraphId = null,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         _parentExecutionId = parentExecutionId;
         _definition = definition;
@@ -180,6 +184,7 @@ public class SubGraphExecutor : ReceiveActor
         _historyRepository = serviceProvider.GetService(typeof(IExecutionHistoryRepository)) as IExecutionHistoryRepository;
         _variables = new BodyVariables(variables);
         _scopePath = scopePath ?? ScopeStep.EmptyPath;
+        _outerOutputs = outerOutputs;
 
         _failureCore = new NodeFailureCore(
             getNode: nodeId => _definition.Nodes.Find(n => n.Id == nodeId).Match(
@@ -231,6 +236,7 @@ public class SubGraphExecutor : ReceiveActor
                 return initialContext;
             },
             scopePath: () => _scopePath,
+            outerOutputs: () => NodeAncestry.Snapshot(_outerOutputs, _nodeOutputs),
             log: _log);
 
         // Phase 2.2.0b: create a linked CTS so parent cancellation propagates here~ 🔗🛑
@@ -287,11 +293,12 @@ public class SubGraphExecutor : ReceiveActor
         string? subGraphId = null,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         return Akka.Actor.Props.Create(() => new SubGraphExecutor(
             parentExecutionId, definition, scopeNodeIds, entryNodeIds,
-            inputs, serviceProvider, subGraphId, parentToken, variables, scopePath));
+            inputs, serviceProvider, subGraphId, parentToken, variables, scopePath, outerOutputs));
     }
 
     #region Lifecycle
@@ -447,7 +454,12 @@ public class SubGraphExecutor : ReceiveActor
         Context.Watch(nodeActor);
         _nodeActors[nodeId] = nodeActor;
 
-        nodeActor.Tell(new Execute(nodeId, nodeInputs.ToHashMap(), _parentExecutionId, _variables.CurrentAsHashMap()));
+        nodeActor.Tell(new Execute(
+            nodeId,
+            nodeInputs.ToHashMap(),
+            _parentExecutionId,
+            _variables.CurrentAsHashMap(),
+            NodeAncestry.ViewFor(_definition, nodeId, _outerOutputs, _nodeOutputs)));
     }
 
     /// <summary>

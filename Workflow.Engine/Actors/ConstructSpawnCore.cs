@@ -37,6 +37,7 @@ using Workflow.Engine.Models;
 /// </remarks>
 internal sealed class ConstructSpawnCore
 {
+    private readonly Func<IReadOnlyDictionary<string, Dictionary<string, object?>>>? _outerOutputs;
     private readonly WorkflowDefinition _definition;
     private readonly Guid _executionId;
     private readonly IServiceProvider _serviceProvider;
@@ -82,6 +83,7 @@ internal sealed class ConstructSpawnCore
     /// adds its own step for the history records of its bodies.
     /// </param>
     /// <param name="log">The owner's logger.</param>
+    /// <param name="outerOutputs">§10.1: completed nodes' outputs (outer scopes included) handed to construct bodies.</param>
     public ConstructSpawnCore(
         WorkflowDefinition definition,
         Guid executionId,
@@ -96,7 +98,8 @@ internal sealed class ConstructSpawnCore
         Func<IReadOnlyDictionary<string, object?>> currentVariables,
         Func<Dictionary<string, object?>> initialContext,
         Func<IReadOnlyList<ScopeStep>> scopePath,
-        ILoggingAdapter log)
+        ILoggingAdapter log,
+        Func<IReadOnlyDictionary<string, Dictionary<string, object?>>>? outerOutputs = null)
     {
         _definition = definition;
         _executionId = executionId;
@@ -111,6 +114,7 @@ internal sealed class ConstructSpawnCore
         _currentVariables = currentVariables;
         _initialContext = initialContext;
         _scopePath = scopePath;
+        _outerOutputs = outerOutputs;
         _log = log;
     }
 
@@ -229,7 +233,7 @@ internal sealed class ConstructSpawnCore
                 bodyEntryNodeIds, bodyScopeIds,
                 _executionId, _initialContext(),
                 _serviceProvider, _cancellationToken(),
-                _currentVariables(), _scopePath()),
+                _currentVariables(), _scopePath(), _outerOutputs?.Invoke()),
             actorName);
 
         _log.Info(
@@ -412,7 +416,7 @@ internal sealed class ConstructSpawnCore
                 parallelNodeId, parallel, _definition,
                 _executionId, _initialContext(),
                 _serviceProvider, _cancellationToken(),
-                _currentVariables(), _scopePath()),
+                _currentVariables(), _scopePath(), _outerOutputs?.Invoke()),
             actorName);
 
         _log.Info(
@@ -509,7 +513,7 @@ internal sealed class ConstructSpawnCore
             TryCatchExecutorActor.Props(
                 tryCatchNodeId, request, _definition,
                 _executionId, _serviceProvider, _cancellationToken(),
-                _currentVariables(), _scopePath()),
+                _currentVariables(), _scopePath(), _outerOutputs?.Invoke()),
             actorName);
 
         _log.Info(
@@ -593,7 +597,7 @@ internal sealed class ConstructSpawnCore
             TransactionExecutorActor.Props(
                 transactionNodeId, request, _definition,
                 _executionId, _serviceProvider, _cancellationToken(),
-                _currentVariables(), _scopePath()),
+                _currentVariables(), _scopePath(), _outerOutputs?.Invoke()),
             actorName);
 
         _log.Info(

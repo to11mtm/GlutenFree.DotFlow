@@ -53,6 +53,9 @@ public sealed class TryCatchExecutorActor : ReceiveActor
     private readonly ILoggingAdapter _log;
     private readonly IReadOnlyList<ScopeStep> _scopePath;
 
+    // §10.1 — outer nodes' outputs for body binding (see NodeAncestry)~
+    private readonly IReadOnlyDictionary<string, Dictionary<string, object?>>? _outerOutputs;
+
     /// <summary>§12.10: a completed body raised break / continue; reported on the completion message.</summary>
     private bool _breakRequested;
 
@@ -106,7 +109,8 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         _tryCatchNodeId = tryCatchNodeId;
         _request = request;
@@ -116,6 +120,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         _log = Context.GetLogger();
         _variables = new BodyVariables(variables);
         _scopePath = scopePath ?? ScopeStep.EmptyPath;
+        _outerOutputs = outerOutputs;
 
         // Phase 2.2.0b: linked CTS for cooperative cancellation~ 🔗🛑
         _linkedCts = parentToken.CanBeCanceled
@@ -141,10 +146,11 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         return Akka.Actor.Props.Create(() => new TryCatchExecutorActor(
-            tryCatchNodeId, request, definition, executionId, serviceProvider, parentToken, variables, scopePath));
+            tryCatchNodeId, request, definition, executionId, serviceProvider, parentToken, variables, scopePath, outerOutputs));
     }
 
     #region Lifecycle
@@ -510,7 +516,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
                 variables: bodyContext is { } ctx
                     ? BodyVariables.WithBodyContext(_variables.Current, ctx)
                     : _variables.Current,
-                scopePath: ScopeStep.Append(_scopePath, new ScopeStep(_tryCatchNodeId, ScopeStep.TryCatch, Branch: subGraphId))),
+                scopePath: ScopeStep.Append(_scopePath, new ScopeStep(_tryCatchNodeId, ScopeStep.TryCatch, Branch: subGraphId)), outerOutputs: _outerOutputs),
             actorName);
 
         Context.Watch(child);

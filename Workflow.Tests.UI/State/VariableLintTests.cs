@@ -135,6 +135,9 @@ public class VariableLintTests
         var doc = DocWithNode("url", "{{up1.output}}");
         doc.Nodes.Add(new DesignerNode { Id = "up1", ModuleId = "m", Name = "Up" });
 
+        // §10.1: the reference resolves because up1 is upstream (any connection path in).
+        doc.Connections.Add(new DesignerConnection { SourceNodeId = "up1", SourcePortName = "output", TargetNodeId = "n1", TargetPortName = "input" });
+
         VariableLint.Validate(doc).Should().BeEmpty();
     }
 

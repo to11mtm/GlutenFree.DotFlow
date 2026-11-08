@@ -117,7 +117,16 @@ embedded in longer text interpolates to a string.
 `input` is a **reserved root**: it always means *this node's own incoming value*, so you can wire
 any step into (say) an HTTP Request and use `{{input.orderId}}` in the URL or body without knowing
 the upstream node's id. (`{{nodeId.port}}` still works when you want to be explicit, and it's the
-only way to reach nodes further upstream.) `{{input}}` requires a connection into the node's
+way to reach nodes further upstream.)
+
+**Which nodes `{{nodeId.port}}` can reach:** any node *upstream* of this one, meaning any node with
+a connection path into it, however many steps back, once that node has run. This includes reaching
+out of a loop / branch / try body. A node inside a For Each body can read `{{auth.token}}` from a
+step that ran before the loop. A node that isn't upstream (a parallel sibling branch, or anything
+downstream) can't be read. Its output isn't guaranteed to exist yet, so the reference fails the
+node, and the designer says so. The designer offers to **wire it in** (connect it to a free input
+port) or **pass it via a variable** (add a Set Variable after it). A reference to an upstream node
+that was skipped in this run also fails, with a message saying so. `{{input}}` requires a connection into the node's
 `input` port — without one it fails the node, per the rule below.
 
 **Values arriving on a node's ports are not variables.** `{{Variable.count}}` always means the
@@ -186,6 +195,7 @@ The designer lints bindings as you edit:
 | Nothing declares or writes it | ❌ error — this node will fail at run time |
 | Declared, but no initial value and nothing sets it | ⚠️ warning — starts as `null` |
 | `{{…}}` naming a node that doesn't exist | ❌ error, with an offer to escape it as `\{\{` |
+| `{{nodeId.port}}` naming a node that isn't upstream of this one | ❌ error, with optional fixes: wire it in / pass it via a variable |
 | `{{Variable.x}}` in a node whose input port `x` is wired | ⚠️ warning if `x` is a variable, ❌ error if not — with fixes: use the incoming value / keep the variable / rename it |
 | `{{Variable.item}}` / `index` / `error` inside the matching body | clean |
 

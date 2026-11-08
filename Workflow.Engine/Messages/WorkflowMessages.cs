@@ -273,12 +273,29 @@ public record WorkflowFailed(
 /// <param name="Inputs">Input values for the node (immutable HashMap).</param>
 /// <param name="ExecutionId">The parent execution ID for correlation.</param>
 /// <param name="Variables">Current workflow-level variables for module access. 💾.</param>
+/// <param name="Upstream">
+/// §10.1 — the outputs of this node's ancestors that have run, for <c>{{nodeId.port}}</c> binding
+/// only (never merged into <paramref name="Inputs"/>, so node history doesn't grow). Null = only the
+/// direct predecessors' outputs carried in the inputs are bindable.
+/// </param>
 [MessagePackObject(keyAsPropertyName: true)]
 public record Execute(
     string NodeId,
     HashMap<string, object?> Inputs,
     Guid ExecutionId,
-    HashMap<string, object?> Variables = default) : IWorkflowMessage;
+    HashMap<string, object?> Variables = default,
+    UpstreamView? Upstream = null) : IWorkflowMessage;
+
+/// <summary>
+/// 🧬 §10.1 — what a node may bind <c>{{nodeId.port}}</c> against: its ancestors (every node with a
+/// connection path into it, across construct bodies) and the outputs of those that have run.
+/// </summary>
+/// <param name="Outputs">Ancestor id → its outputs, for ancestors that have run.</param>
+/// <param name="Ancestors">Every ancestor id (to tell "not upstream" from "didn't run").</param>
+[MessagePackObject(keyAsPropertyName: true)]
+public sealed record UpstreamView(
+    System.Collections.Generic.IReadOnlyDictionary<string, System.Collections.Generic.IReadOnlyDictionary<string, object?>> Outputs,
+    System.Collections.Generic.IReadOnlyCollection<string> Ancestors);
 
 /// <summary>
 /// Message sent when a node completes execution successfully.

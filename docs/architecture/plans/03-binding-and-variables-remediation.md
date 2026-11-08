@@ -56,6 +56,43 @@ non-adjacent ref yields a clear "not a direct input" binding error (not a bare "
 
 **Effort:** ~0.5–1 day (docs + picker + error message).
 
+### Decided 2026-11-08 (asked, after an options walkthrough) — A2 across bodies — fixed
+The plan recommended A1; the user chose **A2, including across construct bodies**:
+- `{{nodeId.port}}` resolves for **any ancestor**, meaning any node with a connection path into this
+  node in the definition, once it has run. This holds inside loop / branch / try / transaction bodies
+  too, so a body node can read nodes that ran before its construct (e.g. `{{auth.token}}` inside a
+  For Each). Direct-predecessor values are unchanged.
+- **Still unresolvable:** a non-ancestor (a sibling branch, a downstream node), and an ancestor that
+  didn't run (skipped branch). Both fail the node with a message that says which case it is.
+- **Designer:** the picker already offers ancestors, including across bodies, so it stays. The lint
+  adds an **error** for a reference to an existing node that isn't an ancestor. It keeps the error
+  as the default and offers two optional fixes:
+  - **wire it in:** connect the referenced port into a free input port of this node, so it becomes
+    an ancestor.
+  - **via a variable:** insert a SetVariable after the source that stores the value, and rewrite the
+    token to `{{Variable.x}}`.
+- **Save time:** the validator warns on the same case.
+- **Engine:** `Execute` carries the ancestors' outputs for binding only (not merged into node
+  inputs, so history doesn't grow). Bodies get a snapshot of the outer outputs when the construct
+  starts, threaded the same way as the §10.3 variables.
+
+Implementation:
+- **Engine:** `NodeAncestry` (cached ancestor sets, `ViewFor`, `Snapshot`) and `Execute.Upstream`
+  (`UpstreamView`). Construct actors and `SubGraphExecutor` take an `outerOutputs` parameter.
+  `PropertyBindingContext.ExplainMissingNode` produces the "not upstream" vs "didn't run" messages.
+- **Designer:** `UpstreamReferences` (`Find` / `WireItIn` / `ViaVariable`), a lint error in
+  `VariableLint`, buttons in `PropertyEditor`, and `PropertiesPanel.SchemaFor` (from the designer's
+  `EnsureSchema`).
+- **Server:** `NodeReferenceChecker` (VB002).
+
+Tests:
+- `Engine/UpstreamReferenceTests` (5)
+- `Modules/NodeReferenceValidationTests` (3)
+- UI `State/UpstreamReferencesTests` (6) and `Components/NonUpstreamReferencePanelTests` (4)
+
+`VariableLintTests.KnownNodeReference_IsClean` now wires its node in: before, it endorsed a
+reference that fails at run time. The guard is retired, which removes `BindingFindingTests`.
+
 ---
 
 ## Finding B — input keys shadow declared variables (§10.2)

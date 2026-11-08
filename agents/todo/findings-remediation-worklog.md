@@ -136,8 +136,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   - [x] decide single- vs multi-module manifests first — multi-module (`modules` list), see plan 05
 - [x] **§9.4 (streaming) — pinned version ignored in region** · plan 04 · guard `StreamingFindingTests.PinnedModuleVersion_…` — fixed, retired → `Engine/Streaming/StreamRegionPinnedVersionTests`
 - [x] **§10.2 — input keys shadow declared variables** · plan 03 · guard `BindingFindingTests.InputKey_ShouldNotShadow_DeclaredVariable` — fixed, retired → `Engine/VariableShadowingTests` (+ designer clash fixes, see plan 03)
-- [ ] **§10.1 — `{{nodeId.port}}` only reaches direct predecessors** · plan 03 · guard `BindingFindingTests.NonAdjacentNodeOutputReference_ShouldResolve`
-  - [ ] note: recommended fix is **docs/UX** (keep behaviour, correct `docs/variables.md` + designer picker, flip the test to assert a clear error)
+- [x] **§10.1 — `{{nodeId.port}}` only reaches direct predecessors** · plan 03 · guard `BindingFindingTests.NonAdjacentNodeOutputReference_ShouldResolve` — fixed, retired → `Engine/UpstreamReferenceTests`
+  - [x] ~~note: recommended fix is **docs/UX**~~ — user chose **A2 across bodies** instead (any finished ancestor, bodies included); see plan 03
 
 ### Stage 6 — needs a decision before coding
 
@@ -228,6 +228,27 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — §10.1 {{nodeId.port}} reaches any finished ancestor (across bodies)
+- Decided (asked, after an options diagram): **A2 across bodies**, not the plan's A1.
+  - `{{nodeId.port}}` resolves for any ancestor (any connection path in) that has run, including
+    from inside construct bodies.
+  - Non-ancestors and skipped ancestors fail with distinct messages.
+  - Designer error defaults on, with optional "wire it in" / "via a variable" fixes. Save warning VB002.
+- Engine: `NodeAncestry` + `Execute.Upstream`; `outerOutputs` threaded through
+  ConstructSpawnCore → Loop/Parallel/TryCatch/Transaction → SubGraphExecutor (nested bodies too).
+  Binding only; node inputs/history unchanged.
+- UI: `UpstreamReferences`, a lint error, PropertyEditor buttons, `PropertiesPanel.SchemaFor`. The
+  picker already offered ancestors.
+- Tests: `Engine/UpstreamReferenceTests` (5), `Modules/NodeReferenceValidationTests` (3), UI
+  `UpstreamReferencesTests` (6) + `NonUpstreamReferencePanelTests` (4). All 7 mutants killed
+  (merge, body view, nested hand-off, explainer, lint, Find, validator).
+- Changed an existing test: `VariableLintTests.KnownNodeReference_IsClean` now connects `up1 → n1`.
+  It used to assert "clean" for a reference to an unconnected node, which fails at run time. The
+  assertion is unchanged.
+- Retired `Findings/Binding/BindingFindingTests.cs` (both guards fixed).
+- `--filter Category!=Finding`: 1863 passed, 0 failed; Workflow.Tests.UI 749/749; open finding tests 3 (§9.6, §10.6, §12.7 — expected). **Stage 5 complete.** Stage 6 needs decisions: §10.6,
+  §9.6, §12.7.
+
 ### 2026-11-08 — §10.2 port values no longer shadow variables
 - Decided (asked): B1 — port values aren't variables. Body values seeded as body-scoped variables:
   `item`/`index` (For Each, Fan Out) and `error` (catch). Designer flags `{{Variable.x}}` vs a wired

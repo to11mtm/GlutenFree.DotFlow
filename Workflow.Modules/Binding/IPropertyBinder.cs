@@ -115,6 +115,12 @@ public record PropertyBindingContext(
     IReadOnlyDictionary<string, object?>? SelfInputs = null)
 {
     /// <summary>
+    /// §10.1 — explains why a <c>{{nodeId.port}}</c> node isn't in <see cref="NodeOutputs"/> (not
+    /// upstream, or upstream but didn't run). Null = the generic message.
+    /// </summary>
+    public Func<string, string?>? ExplainMissingNode { get; init; }
+
+    /// <summary>
     /// Creates an empty context with no variables or node outputs.
     /// Useful for simple binding scenarios and testing. 🧪.
     /// </summary>

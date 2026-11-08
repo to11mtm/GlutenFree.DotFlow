@@ -50,6 +50,9 @@ public sealed class LoopExecutorActor : ReceiveActor
     private readonly ILoggingAdapter _log;
     private readonly IReadOnlyList<ScopeStep> _scopePath;
 
+    // §10.1 — outer nodes' outputs for body binding (see NodeAncestry)~
+    private readonly IReadOnlyDictionary<string, Dictionary<string, object?>>? _outerOutputs;
+
     // ── Iteration state ──────────────────────────────────────────────────────────────────────────
     private IEnumerator<object?>? _itemEnumerator;      // non-null = ForEach-style
     private int _iterationCount;
@@ -90,7 +93,8 @@ public sealed class LoopExecutorActor : ReceiveActor
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         _loopNodeId = loopNodeId;
         _loop = loop;
@@ -105,6 +109,7 @@ public sealed class LoopExecutorActor : ReceiveActor
         foreach (var (k, v) in initialContext) _currentContext[k] = v;
         _variables = new BodyVariables(variables);
         _scopePath = scopePath ?? ScopeStep.EmptyPath;
+        _outerOutputs = outerOutputs;
 
         _linkedCts = parentToken.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(parentToken)
@@ -136,11 +141,12 @@ public sealed class LoopExecutorActor : ReceiveActor
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         return Akka.Actor.Props.Create(() => new LoopExecutorActor(
             loopNodeId, loop, definition, bodyEntryNodeIds, bodyScopeNodeIds,
-            executionId, initialContext, serviceProvider, parentToken, variables, scopePath));
+            executionId, initialContext, serviceProvider, parentToken, variables, scopePath, outerOutputs));
     }
 
     #region Lifecycle
@@ -306,7 +312,7 @@ public sealed class LoopExecutorActor : ReceiveActor
                 item != null
                     ? BodyVariables.WithBodyContext(_variables.Current, ("item", item), ("index", iterationIndex))
                     : _variables.Current,
-                ScopeStep.Append(_scopePath, new ScopeStep(_loopNodeId, ScopeStep.Loop, Iteration: _iterationCount))),
+                ScopeStep.Append(_scopePath, new ScopeStep(_loopNodeId, ScopeStep.Loop, Iteration: _iterationCount)), outerOutputs: _outerOutputs),
             $"loop-body-{_loopNodeId.Replace(".", "-")}-{_iterationCount}");
 
         Context.Watch(subGraphActor);

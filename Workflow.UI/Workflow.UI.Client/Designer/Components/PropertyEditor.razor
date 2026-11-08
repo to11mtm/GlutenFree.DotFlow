@@ -144,6 +144,25 @@
             </div>
         }
 
+        @* 🧬 §10.1 — {{node.port}} where 'node' isn't upstream: explain, and offer (never force) a fix. *@
+        @foreach (var reference in NonUpstream ?? System.Array.Empty<UpstreamReferences.NonUpstreamReference>())
+        {
+            <div class="df-clash df-clash--bad" data-testid="nonupstream-@Property.Name-@reference.SourceNodeId">
+                <div class="df-clash__message">⛔ @NonUpstreamMessage?.Invoke(reference)</div>
+                <div class="df-clash__actions">
+                    @if (reference.WirePort is not null)
+                    {
+                        <button type="button" class="df-btn df-btn--small" data-testid="nonupstream-wire-@Property.Name-@reference.SourceNodeId"
+                                title="Connect @(reference.SourceNodeId).@reference.SourcePort into this node's '@reference.WirePort' port"
+                                @onclick="() => WireItIn.InvokeAsync(reference)">wire it in</button>
+                    }
+                    <button type="button" class="df-btn df-btn--small" data-testid="nonupstream-var-@Property.Name-@reference.SourceNodeId"
+                            title="Add a Set Variable after @reference.SourceNodeId that stores the value, and read the variable here"
+                            @onclick="() => ViaVariable.InvokeAsync(reference)">pass it via a variable</button>
+                </div>
+            </div>
+        }
+
         @* 🔀 §10.2 — {{Variable.x}} where 'x' is also a wired input port: say which one the token
            reads, and let the author pick (or rename the variable out of the way). *@
         @foreach (var clash in Clashes ?? System.Array.Empty<VariableLint.VariableClash>())
@@ -296,6 +315,22 @@
     /// </summary>
     [Parameter]
     public Func<VariableLint.VariableClash, string, string?>? RenameVariable { get; set; }
+
+    /// <summary>§10.1 — <c>{{node.port}}</c> references to nodes that aren't upstream of this one.</summary>
+    [Parameter]
+    public IReadOnlyList<UpstreamReferences.NonUpstreamReference>? NonUpstream { get; set; }
+
+    /// <summary>§10.1 — renders the explanation for a non-upstream reference (needs node names).</summary>
+    [Parameter]
+    public Func<UpstreamReferences.NonUpstreamReference, string>? NonUpstreamMessage { get; set; }
+
+    /// <summary>§10.1 — "wire it in": connect the source port into a free input port.</summary>
+    [Parameter]
+    public EventCallback<UpstreamReferences.NonUpstreamReference> WireItIn { get; set; }
+
+    /// <summary>§10.1 — "pass it via a variable": add a Set Variable and read the variable instead.</summary>
+    [Parameter]
+    public EventCallback<UpstreamReferences.NonUpstreamReference> ViaVariable { get; set; }
 
     private string? renaming;
     private string renameText = string.Empty;

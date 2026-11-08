@@ -40,7 +40,7 @@ dotnet test Workflow.Tests --filter "Category=Finding&FullyQualifiedName~Finding
 | `Engine/RealtimeCompletionFindingTests.cs` | 01 §12.1 terminal/node events to SignalR | API + SignalR |
 | `Engine/JoinSkipFindingTests.cs` | 01 §12.6 join skipped with a completed input | actor |
 | ~~`Engine/NestedConstructFindingTests.cs`~~ | §12.10 (plan 02 §G) constructs nested in a body run as plain nodes. **Fixed, file retired**: guards now in `Engine/NestedConstructTests` | actor + built-in modules |
-| `Binding/BindingFindingTests.cs` | 02 §10.1 non-adjacent refs, §10.3 loop-body variable writes (§10.2 shadowing — **fixed, test retired**: now `Engine/VariableShadowingTests`) | actor + binder |
+| ~~`Binding/BindingFindingTests.cs`~~ | 02 §10.1 non-adjacent refs, §10.2 shadowing — **both fixed, file retired**: now `Engine/UpstreamReferenceTests` and `Engine/VariableShadowingTests` | actor + binder |
 | `Binding/SecretPersistenceFindingTests.cs` | 02 §10.6 secrets in history | actor + capturing repo |
 | ~~`Streaming/StreamingFindingTests.cs`~~ | 03 §9.4 pinned version ignored in a region — **fixed, file retired**: now `Engine/Streaming/StreamRegionPinnedVersionTests` | actor |
 | `Streaming/SpillCleanupFindingTests.cs` | 03 §9.6 spill kept forever with no history | unit |

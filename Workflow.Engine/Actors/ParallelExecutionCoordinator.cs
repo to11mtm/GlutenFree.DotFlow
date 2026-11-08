@@ -58,6 +58,9 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
     private readonly ILoggingAdapter _log;
     private readonly IReadOnlyList<ScopeStep> _scopePath;
 
+    // §10.1 — outer nodes' outputs for body binding (see NodeAncestry)~
+    private readonly IReadOnlyDictionary<string, Dictionary<string, object?>>? _outerOutputs;
+
     /// <summary>§12.10: a completed body raised break / continue; reported on the completion message.</summary>
     private bool _breakRequested;
 
@@ -93,7 +96,8 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         _parallelNodeId = parallelNodeId;
         _parallel = parallel;
@@ -102,6 +106,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         _initialContext = initialContext;
         _variables = variables;
         _scopePath = scopePath ?? ScopeStep.EmptyPath;
+        _outerOutputs = outerOutputs;
         _serviceProvider = serviceProvider;
         _log = Context.GetLogger();
 
@@ -129,11 +134,12 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
         IServiceProvider serviceProvider,
         CancellationToken parentToken = default,
         IReadOnlyDictionary<string, object?>? variables = null,
-        IReadOnlyList<ScopeStep>? scopePath = null)
+        IReadOnlyList<ScopeStep>? scopePath = null,
+        IReadOnlyDictionary<string, Dictionary<string, object?>>? outerOutputs = null)
     {
         return Akka.Actor.Props.Create(() => new ParallelExecutionCoordinator(
             parallelNodeId, parallel, definition,
-            executionId, initialContext, serviceProvider, parentToken, variables, scopePath));
+            executionId, initialContext, serviceProvider, parentToken, variables, scopePath, outerOutputs));
     }
 
     #region Lifecycle
@@ -297,7 +303,7 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
                 _parallel.Items is not null
                     ? BodyVariables.WithBodyContext(_variables, ("item", spec.Item), ("index", spec.ItemIndex))
                     : _variables,
-                ScopeStep.Append(_scopePath, new ScopeStep(_parallelNodeId, ScopeStep.Parallel, BranchIndex: spec.Index))),
+                ScopeStep.Append(_scopePath, new ScopeStep(_parallelNodeId, ScopeStep.Parallel, BranchIndex: spec.Index)), outerOutputs: _outerOutputs),
             actorName);
 
         Context.Watch(subGraphActor);

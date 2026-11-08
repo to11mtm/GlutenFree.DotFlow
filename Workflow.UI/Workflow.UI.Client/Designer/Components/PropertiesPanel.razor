@@ -189,6 +189,10 @@
                                 UseIncomingValue="c => UseIncomingValue(prop.Name, c)"
                                 KeepVariable="KeepVariable"
                                 RenameVariable="RenameClashingVariable"
+                                NonUpstream="@NonUpstreamFor(prop.Name)"
+                                NonUpstreamMessage="r => r.Message(Document)"
+                                WireItIn="WireItIn"
+                                ViaVariable="r => ViaVariable(prop.Name, r)"
                                 Focused="name => lastFocusedProperty = name"
                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
             }
@@ -221,6 +225,10 @@
                                         UseIncomingValue="c => UseIncomingValue(prop.Name, c)"
                                         KeepVariable="KeepVariable"
                                         RenameVariable="RenameClashingVariable"
+                                        NonUpstream="@NonUpstreamFor(prop.Name)"
+                                        NonUpstreamMessage="r => r.Message(Document)"
+                                        WireItIn="WireItIn"
+                                        ViaVariable="r => ViaVariable(prop.Name, r)"
                                         Focused="name => lastFocusedProperty = name"
                                         ValueChanged="v => OnValueChanged(prop.Name, v)" />
                     }
@@ -399,6 +407,10 @@
                                 UseIncomingValue="c => UseIncomingValue(prop.Name, c)"
                                 KeepVariable="KeepVariable"
                                 RenameVariable="RenameClashingVariable"
+                                NonUpstream="@NonUpstreamFor(prop.Name)"
+                                NonUpstreamMessage="r => r.Message(Document)"
+                                WireItIn="WireItIn"
+                                ViaVariable="r => ViaVariable(prop.Name, r)"
                                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
                             }
                         }
@@ -576,6 +588,47 @@
                propertyName,
                JsonValues.ToText(this.ValueFor(propertyName)),
                this.GlobalVariableNames);
+
+    /// <summary>
+    /// 🧬 §10.1 — resolves module schemas (the designer's cache), so a node added by a quick-fix
+    /// arrives with its ports and properties. Null = add it without a schema.
+    /// </summary>
+    [Parameter]
+    public Func<string, Task<ModuleSchemaDto?>>? SchemaFor { get; set; }
+
+    /// <summary>🧬 §10.1 — references in a property to nodes that aren't upstream of the selected node~.</summary>
+    private IReadOnlyList<UpstreamReferences.NonUpstreamReference>? NonUpstreamFor(string propertyName)
+        => this.SelectedNode is { } node
+           && node.Schema?.Properties?.FirstOrDefault(p => p.Name == propertyName) is { SupportsTemplates: true }
+            ? UpstreamReferences.Find(this.Document, node, propertyName, JsonValues.ToText(this.ValueFor(propertyName)))
+            : null;
+
+    /// <summary>🧬 §10.1 — "wire it in": one undoable connection; the token then resolves as written~.</summary>
+    private void WireItIn(UpstreamReferences.NonUpstreamReference reference)
+    {
+        if (this.SelectedNode is { } node && UpstreamReferences.WireItIn(node, reference) is { } command)
+        {
+            this.Commands.Execute(command);
+        }
+    }
+
+    /// <summary>
+    /// 🧬 §10.1 — "pass it via a variable": a Set Variable fed by the source, and the token rewritten
+    /// to read the variable — one undoable step; the edit buffer follows~.
+    /// </summary>
+    private async Task ViaVariable(string propertyName, UpstreamReferences.NonUpstreamReference reference)
+    {
+        if (this.SelectedNode is not { } node)
+        {
+            return;
+        }
+
+        var schema = this.SchemaFor is null ? null : await this.SchemaFor(UpstreamReferences.SetVariableModuleId);
+        var (command, _, rewritten) = UpstreamReferences.ViaVariable(
+            this.Document, node, reference, JsonValues.ToText(this.ValueFor(propertyName)), schema);
+        this.Commands.Execute(command);
+        this.OnValueChanged(propertyName, JsonValues.FromString(rewritten));
+    }
 
     /// <summary>🔀 §10.2 — the {{Variable.x}} / wired-port name clashes in a property's current value~.</summary>
     private IReadOnlyList<VariableLint.VariableClash>? ClashesFor(string propertyName)
