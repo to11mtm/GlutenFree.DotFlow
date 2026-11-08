@@ -102,6 +102,25 @@ public class ModuleDiscovery : IModuleDiscovery
 
     /// <inheritdoc />
     public int DiscoverAndRegister(Assembly assembly, IModuleRegistry registry, IServiceProvider? services = null)
+        => this.DiscoverAndRegister(assembly, registry, services, include: null, excludedModuleIds: null);
+
+    /// <summary>
+    /// §9.7 — discovers modules and registers only those <paramref name="include"/> accepts (e.g. the
+    /// ids a package manifest declares). Rejected module ids are added to
+    /// <paramref name="excludedModuleIds"/> so the caller can report them~ 🧩.
+    /// </summary>
+    /// <param name="assembly">The assembly to scan.</param>
+    /// <param name="registry">The registry to register into.</param>
+    /// <param name="services">Optional DI provider for module construction.</param>
+    /// <param name="include">Which discovered modules to register; null registers all.</param>
+    /// <param name="excludedModuleIds">Receives the ids of discovered modules that were not included.</param>
+    /// <returns>The number of modules registered.</returns>
+    public int DiscoverAndRegister(
+        Assembly assembly,
+        IModuleRegistry registry,
+        IServiceProvider? services,
+        Func<IWorkflowModule, bool>? include,
+        ICollection<string>? excludedModuleIds)
     {
         ArgumentNullException.ThrowIfNull(assembly);
         ArgumentNullException.ThrowIfNull(registry);
@@ -150,6 +169,17 @@ public class ModuleDiscovery : IModuleDiscovery
                         module.ModuleId,
                         type.FullName,
                         errors);
+                    continue;
+                }
+
+                // §9.7: only what the caller asked for (e.g. a package manifest's declared ids)~
+                if (include is not null && !include(module))
+                {
+                    excludedModuleIds?.Add(module.ModuleId);
+                    _logger.LogInformation(
+                        "⏭️ Module '{ModuleId}' (type: {TypeName}) was not requested — not registering~",
+                        module.ModuleId,
+                        type.FullName);
                     continue;
                 }
 

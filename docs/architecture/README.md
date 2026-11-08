@@ -61,7 +61,7 @@ the code, not running it, so each one should get a failing test before it gets a
 | Binding | Plain input keys (incl. port values) shadow real variables of the same name. | Low | [plan 03](plans/03-binding-and-variables-remediation.md) |
 | Engine | ~~A join can be skipped despite a completed input.~~ **Refuted** — did not reproduce. | — | [01 §12.6](01-execution-lifecycle.md#12-findings-to-verify) |
 | Modules | ~~`IWorkflowModule.ValidateConfiguration` is implemented by many modules but never called.~~ **Fixed (§9.4)** — warnings on save, errors when a run is submitted (`ModuleConfigurationChecker`). | — | [plan 05](plans/05-modules-and-plugins-remediation.md) |
-| Modules | An uploaded assembly can register more module ids than its manifest declares. | Low | [plan 05](plans/05-modules-and-plugins-remediation.md) |
+| Modules | ~~An uploaded assembly can register more module ids than its manifest declares.~~ **Fixed (§9.7)** — a package registers exactly its declared modules (manifest `id`, or the new `modules` list); others are skipped with a warning. | — | [plan 05](plans/05-modules-and-plugins-remediation.md) |
 | Streaming | No timeout for regions. Pinned versions are ignored. No regions inside construct bodies. | Low | [plan 04](plans/04-streaming-and-spill-remediation.md) |
 | Streaming | `StreamRegionProgress` isn't forwarded to SignalR. Spill is kept forever when no history is registered. | Low | [plan 04](plans/04-streaming-and-spill-remediation.md) |
 | Binding | `ConnectionDefinition.Condition` / `Priority` are never read. Expression evaluation blocks the node actor. | Low | [plan 03](plans/03-binding-and-variables-remediation.md) |

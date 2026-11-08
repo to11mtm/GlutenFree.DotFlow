@@ -6,6 +6,7 @@ namespace Workflow.Modules.Abstractions;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// 🔍 Registry for discovering and accessing workflow modules.
@@ -29,6 +30,14 @@ public interface IModuleRegistry
     /// </summary>
     /// <returns>All registered modules.</returns>
     public IReadOnlyList<IWorkflowModule> GetAllModules();
+
+    /// <summary>
+    /// Gets every registered module id, INCLUDING ids whose versions are all disabled (which
+    /// <see cref="GetAllModules"/> leaves out). Use it to persist or list enabled/disabled state~ 🗂️.
+    /// </summary>
+    /// <returns>All registered module ids.</returns>
+    public IReadOnlyList<string> GetAllModuleIds()
+        => this.GetAllModules().Select(m => m.ModuleId).ToList();
 
     /// <summary>
     /// Get a specific module by ID. 🔍.

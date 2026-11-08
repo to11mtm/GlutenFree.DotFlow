@@ -58,8 +58,15 @@ public sealed class AssemblyModuleLoader : IModuleLoader
 
     /// <inheritdoc />
     public ModuleLoadResult LoadFromAssembly(string assemblyPath)
+        => this.LoadFromAssembly(assemblyPath, onlyModuleIds: null);
+
+    /// <inheritdoc />
+    public ModuleLoadResult LoadFromAssembly(string assemblyPath, IReadOnlyCollection<string>? onlyModuleIds)
     {
         ArgumentException.ThrowIfNullOrEmpty(assemblyPath);
+        var wanted = onlyModuleIds is null
+            ? null
+            : new HashSet<string>(onlyModuleIds, StringComparer.OrdinalIgnoreCase);
 
         var fullPath = Path.GetFullPath(assemblyPath);
 
@@ -106,7 +113,13 @@ public sealed class AssemblyModuleLoader : IModuleLoader
             using var subscription = _registry.Subscribe(new RegistrationCapture(registeredIds));
 
             // 🔍 Use ModuleDiscovery to scan + register all valid modules~
-            var count = _discovery.DiscoverAndRegister(assembly, _registry);
+            var excludedIds = new List<string>();
+            var count = _discovery.DiscoverAndRegister(
+                assembly,
+                _registry,
+                services: null,
+                include: wanted is null ? null : m => wanted.Contains(m.ModuleId),
+                excludedModuleIds: excludedIds);
 
             _logger.LogInformation(
                 "✅ Loaded {Count} module(s) from '{Path}'~",
@@ -126,7 +139,10 @@ public sealed class AssemblyModuleLoader : IModuleLoader
             // 🗂️ Track the loaded context for later unloading~
             _loaded[fullPath] = new LoadedAssemblyEntry(alc, registeredIds.ToList());
 
-            return ModuleLoadResult.Ok(fullPath, loadedModules, errors.Count > 0 ? errors : null);
+            return ModuleLoadResult.Ok(fullPath, loadedModules, errors.Count > 0 ? errors : null) with
+            {
+                ExcludedModuleIds = excludedIds,
+            };
         }
         catch (Exception ex)
         {

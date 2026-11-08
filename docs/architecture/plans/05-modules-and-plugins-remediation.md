@@ -168,6 +168,27 @@ release notes.
 
 **Effort:** ~1–2 days depending on the single- vs multi-module decision.
 
+**Decided + fixed 2026-11-08 — multi-module manifests (C1).** Decisions (asked):
+- **Manifest:** optional `modules: [ids]`. Absent/empty → the package provides exactly `id` (the
+  original format, unchanged). When present, `id` is the *package* id (install directory, uninstall
+  key) and needn't be a module id. Duplicates / blank entries rejected (MP010, MP011).
+- **Registration:** `AssemblyModuleLoader.LoadFromAssembly(path, onlyModuleIds)` →
+  `ModuleDiscovery.DiscoverAndRegister(..., include, excludedModuleIds)` registers only declared
+  ids — at install and at rehydrate. Undeclared modules in the assembly are skipped and listed in a
+  warning. The `IModuleLoader` overload fails closed (throws) for loaders that can't filter.
+- **All declared modules must exist and report the manifest version** (one release = one version;
+  side-by-side installs and pinning stay keyed by id + version). Otherwise the install fails and
+  rolls back.
+- **Disabling one module:** the existing `POST /modules/{id}/disable[?version=]` works per module,
+  so a module inside a package can be switched off on its own. Found + fixed while testing this:
+  disabled state was never actually persisted for a module whose only version was disabled
+  (`GetAllModules` skips those), so it came back enabled after a restart — persistence now uses the
+  new `IModuleRegistry.GetAllModuleIds()`.
+- **Uninstall:** by package id removes all its modules (the "others depend on it" check covers every
+  module in the package). Uninstalling a module that's one of several in a package → **409** pointing
+  to `/modules/{id}/disable` or the package.
+Tests: `Api/V1/MultiModulePackageTests` (9). Docs: module author guide → `modules`.
+
 ---
 
 ## Related (in other plans)

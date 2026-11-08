@@ -234,7 +234,8 @@ public sealed record ModuleDetailsDto(
 /// </summary>
 /// <param name="Module">The installed module's details.</param>
 /// <param name="Warnings">Non-fatal advisories (missing hashes, schema-compat, signature).</param>
-public sealed record ModuleInstallResultDto(ModuleDetailsDto Module, IReadOnlyList<string> Warnings);
+/// <param name="Modules">§9.7: every module id the package installed (one for a single-module package).</param>
+public sealed record ModuleInstallResultDto(ModuleDetailsDto Module, IReadOnlyList<string> Warnings, IReadOnlyList<string>? Modules = null);
 
 /// <summary>
 /// 🔘 Phase 2.8.5 — The result of an enable/disable toggle~ ✨.

@@ -67,6 +67,15 @@ public class InMemoryModuleRegistry : IModuleRegistry
     }
 
     /// <inheritdoc />
+    public IReadOnlyList<string> GetAllModuleIds()
+    {
+        lock (_lock)
+        {
+            return _modules.Keys.ToList().AsReadOnly();
+        }
+    }
+
+    /// <inheritdoc />
     public IWorkflowModule? GetModule(string moduleId)
     {
         lock (_lock)

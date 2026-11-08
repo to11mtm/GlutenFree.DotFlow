@@ -46,6 +46,20 @@ public interface IModuleLoader
     public ModuleLoadResult LoadFromAssembly(string assemblyPath);
 
     /// <summary>
+    /// §9.7 — loads an assembly but registers only the given module ids (a package manifest's
+    /// declared modules). Other modules in the assembly are skipped and reported in
+    /// <see cref="ModuleLoadResult.ExcludedModuleIds"/>. Loaders that can't filter must not silently
+    /// register everything, so the default fails closed when a filter is given~ 🧩.
+    /// </summary>
+    /// <param name="assemblyPath">Path to the assembly.</param>
+    /// <param name="onlyModuleIds">The module ids to register (case-insensitive); null registers all.</param>
+    /// <returns>The load result.</returns>
+    public ModuleLoadResult LoadFromAssembly(string assemblyPath, IReadOnlyCollection<string>? onlyModuleIds)
+        => onlyModuleIds is null
+            ? this.LoadFromAssembly(assemblyPath)
+            : throw new NotSupportedException($"{this.GetType().Name} can't restrict which modules it registers.");
+
+    /// <summary>
     /// Scans a directory for <c>*.dll</c> files and attempts to load each one,
     /// returning one <see cref="ModuleLoadResult"/> per DLL file found~ 📁.
     /// </summary>
@@ -116,6 +130,12 @@ public record ModuleLoadResult(
     IReadOnlyList<string> Errors,
     bool Success)
 {
+    /// <summary>
+    /// Gets the ids of modules found in the assembly but not registered because they weren't
+    /// requested (§9.7 — not declared in the package manifest).
+    /// </summary>
+    public IReadOnlyList<string> ExcludedModuleIds { get; init; } = Array.Empty<string>();
+
     /// <summary>
     /// Creates a successful load result with the given loaded modules and optional errors~ ✅.
     /// </summary>

@@ -432,6 +432,9 @@ my-module.wfmod  (ZIP)
   "author": "MyCompany",
   "minEngineVersion": "1.0.0",          // optional — see the engine gate below
   "entryAssembly": "lib/MyCompany.MyModule.dll",
+  "modules": [                          // optional — see "Several modules in one package" below
+    "mycompany.mymodule"
+  ],
   "dependencies": [                     // optional — other modules this one needs
     { "id": "builtin.http.request", "minVersion": "1.0.0", "maxVersion": "2.0.0" }
   ],
@@ -440,6 +443,30 @@ my-module.wfmod  (ZIP)
   }
 }
 ```
+
+### 🧩 Several modules in one package (`modules`)
+
+By default a package provides exactly one module: the one whose `ModuleId` equals the manifest `id`.
+To ship several modules from one assembly, list them in `modules`; `id` then names the **package**
+(it doesn't have to be a module id):
+
+```jsonc
+{
+  "id": "mycompany.toolkit",
+  "version": "1.2.0",
+  "entryAssembly": "lib/MyCompany.Toolkit.dll",
+  "modules": [ "mycompany.toolkit.csv", "mycompany.toolkit.ftp" ]
+}
+```
+
+- **Only declared modules are registered.** Any other `IWorkflowModule` in the assembly is skipped
+  and the install response lists it under `warnings`.
+- **Every declared module must be in the assembly and report the manifest `version`**, or the
+  install fails and nothing is registered.
+- **Disable one module** with `POST /api/v1/modules/{moduleId}/disable` — the rest of the package
+  keeps working, and the setting survives restarts.
+- **Uninstall the package** with `DELETE /api/v1/modules/{packageId}` (removes all its modules).
+  Deleting one module of a multi-module package is refused (`409`) — disable it instead.
 
 ### 🔢 Engine version gate (`minEngineVersion`)
 

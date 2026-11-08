@@ -124,8 +124,8 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 - [x] **§9.3 — active-exec count only drops for sync runs** · plan 05 · guard `ActiveExecutionCountFindingTests.AsyncRun_WhenComplete_…` (needs §12.1) — fixed, retired → `Api/V1/ExecutionMetricsTests`
 - [x] **§9.4 (modules) — ValidateConfiguration never called** · plan 05 · guard `ValidateConfigurationFindingTests.Validator_ShouldSurface_…` — fixed, retired → `Modules/ModuleConfigurationValidationTests`
   - [x] audit built-ins' `ValidateConfiguration` first (don't start rejecting valid workflows) — see plan 05 "Audit"
-- [ ] **§9.7 — package registers undeclared module ids** · plan 05 · guard `PackageExtraModulesFindingTests.Install_ShouldNotRegister_…`
-  - [ ] decide single- vs multi-module manifests first
+- [x] **§9.7 — package registers undeclared module ids** · plan 05 · guard `PackageExtraModulesFindingTests.Install_ShouldNotRegister_…` — fixed, retired → `Api/V1/MultiModulePackageTests`
+  - [x] decide single- vs multi-module manifests first — multi-module (`modules` list), see plan 05
 - [ ] **§9.4 (streaming) — pinned version ignored in region** · plan 04 · guard `StreamingFindingTests.PinnedModuleVersion_…`
 - [ ] **§10.2 — input keys shadow declared variables** · plan 03 · guard `BindingFindingTests.InputKey_ShouldNotShadow_DeclaredVariable`
 - [ ] **§10.1 — `{{nodeId.port}}` only reaches direct predecessors** · plan 03 · guard `BindingFindingTests.NonAdjacentNodeOutputReference_ShouldResolve`
@@ -220,6 +220,23 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — §9.7 multi-module package manifests
+- Decided (asked): multi-module manifests (`modules: [ids]`, absent → just `id`); every declared
+  module must exist and report the manifest version; uninstalling one module of a multi-module
+  package → 409 pointing to disable; per-module disable must exist (it did — and needed a fix).
+- Loader/discovery register only declared ids (install + rehydrate); undeclared modules in the
+  assembly are skipped with a warning. Package lookup (`FindPackage` / `FindPackageDeclaring`) for
+  uninstall; dependency check covers every module in the package. Upload response gains `modules`.
+- Found + fixed: a disabled module wasn't persisted when all its versions were disabled
+  (`GetAllModules` skips them) → came back enabled after restart. New
+  `IModuleRegistry.GetAllModuleIds()` (default impl for other registries).
+- Tests: `Api/V1/MultiModulePackageTests` (9) — all RED with the production files stashed; the
+  restart/disable test alone is RED with only the persistence fix stashed. Retired
+  `Findings/Modules/PackageExtraModulesFindingTests`. Module author guide documents `modules`.
+- Earlier today: SQLite VersionInfo flake fixed (608cfed).
+- `--filter Category!=Finding`: 1841 passed, 0 failed; Workflow.Tests.UI 718/718. Stage 5 left: §9.4 (streaming) pinned version in
+  region, §10.2, §10.1 (docs/UX).
+
 ### 2026-11-08 — SQLite "VersionInfo already exists" test flake fixed
 - Root cause: `NormalizeSqliteConnectionString` turned the default `:memory:` into
   `Data Source=:memory:;Cache=Shared;Mode=Memory` — a shared-cache `:memory:` is one database per

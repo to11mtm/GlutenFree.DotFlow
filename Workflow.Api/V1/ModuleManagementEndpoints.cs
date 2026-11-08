@@ -87,14 +87,18 @@ public static class ModuleManagementEndpoints
             return MapInstallFailure(result);
         }
 
-        var module = registry.GetModule(result.ModuleId!, result.Version);
-        var versions = registry.GetModuleVersions(result.ModuleId!).Select(v => v.ToString()).ToList();
+        // §9.7 — a multi-module package's id needn't be a module id; describe its first module then~
+        var primaryId = result.ModuleIds.Contains(result.ModuleId!, StringComparer.OrdinalIgnoreCase) || result.ModuleIds.Count == 0
+            ? result.ModuleId!
+            : result.ModuleIds[0];
+        var module = registry.GetModule(primaryId, result.Version);
+        var versions = registry.GetModuleVersions(primaryId).Select(v => v.ToString()).ToList();
         var details = module is null
             ? null
             : ModuleDetailsDto.From(module, enabled: true, versions);
 
-        var dto = new ModuleInstallResultDto(details!, result.Warnings);
-        return Results.Created($"/api/v1/modules/{result.ModuleId}", dto);
+        var dto = new ModuleInstallResultDto(details!, result.Warnings, result.ModuleIds);
+        return Results.Created($"/api/v1/modules/{primaryId}", dto);
     }
 
     private static async Task<IResult> ToggleHandler(HttpContext http, string moduleId, string? version, bool enabled)
@@ -143,14 +147,16 @@ public static class ModuleManagementEndpoints
         }
 
         var records = new List<Workflow.Modules.State.ModuleStateRecord>();
-        foreach (var module in registry.GetAllModules())
+        // GetAllModuleIds, not GetAllModules: the latter skips modules whose only version is
+        // disabled, so a disabled module was never saved and came back enabled after a restart~
+        foreach (var moduleId in registry.GetAllModuleIds())
         {
-            foreach (var v in registry.GetModuleVersions(module.ModuleId))
+            foreach (var v in registry.GetModuleVersions(moduleId))
             {
                 records.Add(new Workflow.Modules.State.ModuleStateRecord(
-                    module.ModuleId,
+                    moduleId,
                     v.ToString(),
-                    registry.IsModuleEnabled(module.ModuleId, v)));
+                    registry.IsModuleEnabled(moduleId, v)));
             }
         }
 
@@ -173,13 +179,34 @@ public static class ModuleManagementEndpoints
             return ApiResults.ServiceUnavailableProblem("Module management is not configured.");
         }
 
-        if (!registry.HasModule(moduleId))
+        // §9.7 — uninstall works on packages. A module that's one of several in a package can't be
+        // removed on its own (its package is one assembly); point to disable or the package instead~
+        var package = installer.FindPackage(moduleId);
+        if (package is null)
         {
-            return ApiResults.NotFoundProblem($"Module '{moduleId}' was not found.");
+            var owner = installer.FindPackageDeclaring(moduleId);
+            if (owner is not null)
+            {
+                return ApiResults.ConflictProblem(
+                    $"Module '{moduleId}' is part of package '{owner.PackageId}'. Disable it with POST /api/v1/modules/{moduleId}/disable, " +
+                    $"or uninstall the whole package '{owner.PackageId}'.");
+            }
+
+            if (!registry.HasModule(moduleId))
+            {
+                return ApiResults.NotFoundProblem($"Module '{moduleId}' was not found.");
+            }
         }
 
-        // 🔗 Refuse if other modules depend on this one (D11)~
-        var dependents = new ModuleDependencyResolver().GetDependents(moduleId, registry.GetAllModules());
+        // 🔗 Refuse if other modules depend on anything this package provides (D11)~
+        var removing = package?.ModuleIds ?? new[] { moduleId };
+        var resolver = new ModuleDependencyResolver();
+        var allModules = registry.GetAllModules();
+        var dependents = removing
+            .SelectMany(id => resolver.GetDependents(id, allModules))
+            .Where(d => !removing.Contains(d, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         if (dependents.Count > 0)
         {
             return ApiResults.ConflictProblem($"Module '{moduleId}' cannot be uninstalled — it is required by: {string.Join(", ", dependents)}.");

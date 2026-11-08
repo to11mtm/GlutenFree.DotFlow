@@ -41,10 +41,22 @@ public sealed record ModuleManifest
     public string EntryAssembly { get; init; } = string.Empty;
 
     /// <summary>
+    /// Gets the module ids this package provides (§9.7). Optional: when absent or empty the package
+    /// provides exactly one module, <see cref="Id"/> (the original single-module format). Only these
+    /// ids are registered; any other module in the entry assembly is skipped with a warning.
+    /// </summary>
+    public IReadOnlyList<string>? Modules { get; init; }
+
+    /// <summary>
     /// Gets the optional map of package-relative file path → base64 SHA-256 hash. When present it is
     /// validated on import; when absent, import trips a warning (Q7)~ 🔐.
     /// </summary>
     public IReadOnlyDictionary<string, string>? ContentHashes { get; init; }
+
+    /// <summary>Gets the module ids this package registers: <see cref="Modules"/>, or <see cref="Id"/> alone~ 🧩.</summary>
+    /// <returns>The declared module ids.</returns>
+    public IReadOnlyList<string> DeclaredModuleIds()
+        => this.Modules is { Count: > 0 } modules ? modules : new[] { this.Id };
 
     /// <summary>Parses <see cref="Version"/> into a <see cref="System.Version"/>~ 🏷️.</summary>
     /// <returns>The parsed version, or <c>null</c> when unparseable.</returns>
@@ -93,6 +105,19 @@ public sealed record ModuleManifest
         else if (PackagePath.EscapesRoot(this.EntryAssembly))
         {
             errors.Add(new ValidationError("MP006", $"Manifest 'entryAssembly' ('{this.EntryAssembly}') must stay within the package."));
+        }
+
+        // §9.7 — the declared module list (optional)~
+        if (this.Modules is { Count: > 0 } declared)
+        {
+            if (declared.Any(string.IsNullOrWhiteSpace))
+            {
+                errors.Add(new ValidationError("MP010", "Manifest 'modules' entries must be non-empty module ids."));
+            }
+            else if (declared.Distinct(StringComparer.OrdinalIgnoreCase).Count() != declared.Count)
+            {
+                errors.Add(new ValidationError("MP011", "Manifest 'modules' must not list the same module id twice."));
+            }
         }
 
         foreach (var dep in this.Dependencies)

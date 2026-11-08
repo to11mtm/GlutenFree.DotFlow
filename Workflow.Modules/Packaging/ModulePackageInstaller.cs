@@ -164,35 +164,58 @@ public sealed class ModulePackageInstaller
             warnings.AddRange(verification.Messages);
         }
 
-        // 🧷 Phase 2.8.2 (Q5) — Capture the current latest version's schema for a compat diff after load~
-        var priorModule = this.registry.GetModule(manifest.Id);
+        // §9.7 — the module ids this package provides (manifest 'modules', or just its 'id')~
+        var declaredIds = manifest.DeclaredModuleIds();
 
-        // 🔌 Load through the existing loader~
-        var loadResult = this.loader.LoadFromAssembly(entryDll);
+        // 🧷 Phase 2.8.2 (Q5) — Capture each module's current latest schema for a compat diff after load~
+        var priorModules = declaredIds
+            .Select(id => this.registry.GetModule(id))
+            .Where(m => m is not null)
+            .ToDictionary(m => m!.ModuleId, m => m!, StringComparer.OrdinalIgnoreCase);
+
+        // 🔌 Load through the existing loader — registering ONLY the declared modules (§9.7)~
+        var loadResult = this.loader.LoadFromAssembly(entryDll, declaredIds);
         if (!loadResult.Success)
         {
             SafeDelete(targetDir);
             return ModuleInstallResult.Fail(ModuleInstallFailureReason.LoadFailed, loadResult.Errors.ToArray());
         }
 
-        // ✅ Verify the loaded module matches the manifest~
-        var loaded = loadResult.LoadedModules.FirstOrDefault(m => string.Equals(m.ModuleId, manifest.Id, StringComparison.OrdinalIgnoreCase));
-        if (loaded is null)
+        // ✅ Verify every declared module loaded, at the manifest's version~
+        var loadedById = loadResult.LoadedModules.ToDictionary(m => m.ModuleId, StringComparer.OrdinalIgnoreCase);
+        var missing = declaredIds.Where(id => !loadedById.ContainsKey(id)).ToList();
+        if (missing.Count > 0)
         {
             this.loader.UnloadAssembly(entryDll);
             SafeDelete(targetDir);
             return ModuleInstallResult.Fail(
                 ModuleInstallFailureReason.ManifestMismatch,
-                $"The package did not contain a module with id '{manifest.Id}'.");
+                missing.Count == 1 && declaredIds.Count == 1
+                    ? $"The package did not contain a module with id '{missing[0]}'."
+                    : $"The package did not contain declared module(s): {string.Join(", ", missing)}.");
         }
 
-        if (loaded.Version != version)
+        // One package release = one version: every module it provides must report it~
+        var wrongVersion = declaredIds
+            .Select(id => loadedById[id])
+            .Where(m => m.Version != version)
+            .ToList();
+        if (wrongVersion.Count > 0)
         {
             this.loader.UnloadAssembly(entryDll);
             SafeDelete(targetDir);
             return ModuleInstallResult.Fail(
                 ModuleInstallFailureReason.ManifestMismatch,
-                $"Manifest version {version} does not match the loaded module version {loaded.Version}.");
+                wrongVersion.Count == 1 && declaredIds.Count == 1
+                    ? $"Manifest version {version} does not match the loaded module version {wrongVersion[0].Version}."
+                    : $"Manifest version {version} does not match: {string.Join(", ", wrongVersion.Select(m => $"{m.ModuleId} is {m.Version}"))}.");
+        }
+
+        if (loadResult.ExcludedModuleIds.Count > 0)
+        {
+            warnings.Add(
+                $"Not registered — the entry assembly also contains module(s) the manifest doesn't declare: {string.Join(", ", loadResult.ExcludedModuleIds)}. " +
+                "List them in the manifest's 'modules' to install them.");
         }
 
         // 🗄️ Optional archival (Q1)~
@@ -210,16 +233,24 @@ public sealed class ModulePackageInstaller
         }
 
         // 🧷 Phase 2.8.2 (Q5) — Surface (never block) schema-compatibility warnings on version upgrades~
-        if (priorModule is not null && priorModule.Version != version)
+        foreach (var id in declaredIds)
         {
-            foreach (var w in Workflow.Modules.Versioning.ModuleSchemaComparer.Compare(priorModule.Schema, loaded.Schema))
+            if (priorModules.TryGetValue(id, out var prior) && prior.Version != version)
             {
-                warnings.Add($"Schema change vs v{priorModule.Version}: {w}");
+                var prefix = declaredIds.Count == 1 ? string.Empty : $"{id}: ";
+                foreach (var w in Workflow.Modules.Versioning.ModuleSchemaComparer.Compare(prior.Schema, loadedById[id].Schema))
+                {
+                    warnings.Add($"{prefix}Schema change vs v{prior.Version}: {w}");
+                }
             }
         }
 
-        this.logger.LogInformation("📦 Installed module {ModuleId} {Version}~", manifest.Id, version);
-        return ModuleInstallResult.Ok(manifest.Id, version, warnings);
+        this.logger.LogInformation(
+            "📦 Installed package {PackageId} {Version} ({Modules})~",
+            manifest.Id,
+            version,
+            string.Join(", ", declaredIds));
+        return ModuleInstallResult.Ok(manifest.Id, version, warnings) with { ModuleIds = declaredIds };
     }
 
     /// <summary>Uninstalls an installed package version (unload + delete)~ 🗑️.</summary>
@@ -300,7 +331,7 @@ public sealed class ModulePackageInstaller
                     continue;
                 }
 
-                var result = this.loader.LoadFromAssembly(entryDll);
+                var result = this.loader.LoadFromAssembly(entryDll, manifest.DeclaredModuleIds());
                 if (result.Success)
                 {
                     loaded += result.LoadedModules.Count;
@@ -395,6 +426,43 @@ public sealed class ModulePackageInstaller
         }
     }
 
+    /// <summary>
+    /// §9.7 — finds an installed package by its package id (the manifest <c>id</c>)~ 📦.
+    /// </summary>
+    /// <param name="packageId">The package id.</param>
+    /// <returns>The package and the module ids it provides, or null when not installed.</returns>
+    public InstalledPackage? FindPackage(string packageId)
+        => this.InstalledPackages().FirstOrDefault(p => string.Equals(p.PackageId, packageId, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// §9.7 — finds the installed package that provides <paramref name="moduleId"/> as one of its
+    /// declared modules (which may be a different id than the package's own)~ 🔍.
+    /// </summary>
+    /// <param name="moduleId">The module id.</param>
+    /// <returns>The owning package, or null.</returns>
+    public InstalledPackage? FindPackageDeclaring(string moduleId)
+        => this.InstalledPackages().FirstOrDefault(p => p.ModuleIds.Contains(moduleId, StringComparer.OrdinalIgnoreCase));
+
+    private IEnumerable<InstalledPackage> InstalledPackages()
+    {
+        var root = Path.GetFullPath(this.options.PackagesPath);
+        if (!Directory.Exists(root))
+        {
+            yield break;
+        }
+
+        foreach (var moduleDir in Directory.GetDirectories(root))
+        {
+            var manifest = Directory.GetDirectories(moduleDir)
+                .Select(TryReadInstalledManifest)
+                .FirstOrDefault(m => m is not null);
+            if (manifest is not null)
+            {
+                yield return new InstalledPackage(manifest.Id, manifest.DeclaredModuleIds());
+            }
+        }
+    }
+
     private bool EngineTooOld(ModuleManifest manifest, out string? error)
     {
         error = null;
@@ -454,6 +522,12 @@ public sealed record ModuleInstallResult(
     IReadOnlyList<string> Warnings,
     ModuleInstallFailureReason Reason)
 {
+    /// <summary>
+    /// Gets the module ids the package installed (§9.7). For a single-module package this is just
+    /// <see cref="ModuleId"/>, which is then both the package id and the module id.
+    /// </summary>
+    public IReadOnlyList<string> ModuleIds { get; init; } = Array.Empty<string>();
+
     /// <summary>Creates a successful install result~ ✅.</summary>
     /// <param name="moduleId">The installed module id.</param>
     /// <param name="version">The installed version.</param>
@@ -499,3 +573,8 @@ public enum ModuleInstallFailureReason
     /// <summary>The assembly is unsigned/untrusted and signing is required → 422.</summary>
     Untrusted,
 }
+
+/// <summary>§9.7 — an installed package and the module ids it provides~ 📦.</summary>
+/// <param name="PackageId">The package id (manifest <c>id</c>; also the install directory name).</param>
+/// <param name="ModuleIds">The module ids it registers (manifest <c>modules</c>, or just the id).</param>
+public sealed record InstalledPackage(string PackageId, IReadOnlyList<string> ModuleIds);
