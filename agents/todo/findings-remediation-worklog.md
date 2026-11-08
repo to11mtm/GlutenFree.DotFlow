@@ -28,6 +28,9 @@ fixed. That is the definition of done for the code change.
 
 ## 1. Orientation (do this once, at the start of a session)
 
+- [ ] **Search memorizer** for the area you're about to touch (DotFlow workspace — ids and rules in
+  the repo-root `CLAUDE.md`, "Long-term memory"). Engine invariants, gotchas and past decisions live
+  there, not in this file.
 - [ ] Read `docs/architecture/plans/README.md` (5 min) — the index and the four cross-cutting threads.
 - [ ] Skim `docs/architecture/README.md#findings-at-a-glance` — the severity + status table.
 - [ ] Run the finding tests to see the current baseline (expect mostly red):
@@ -73,6 +76,11 @@ Pick the next unchecked item from the Work queue (§3) and:
 8. **Commit** following the repo's existing commit conventions (look at recent `git log`). One finding
    per commit where practical; reference the finding id (e.g. `§12.9`) in the message.
 9. **Append a Progress log entry** (§4).
+10. **Update memorizer** (see `CLAUDE.md` → "Long-term memory"): store or update any rule, gotcha or
+    user decision from this finding that a future session would need and couldn't get quickly from
+    the code or this log. Search first — edit an existing memory rather than adding a near-duplicate.
+    If memorizer is unreachable, list the memories under a "Memories to store" heading in your
+    progress-log entry and store them later.
 
 > Guardrails: never weaken an existing passing test to make a change fit. If the fix needs a design
 > decision the plan flagged, stop and get it decided. Keep each fix behind its guard test + the full
