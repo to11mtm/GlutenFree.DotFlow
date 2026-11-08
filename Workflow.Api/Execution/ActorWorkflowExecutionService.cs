@@ -166,7 +166,6 @@ public sealed class ActorWorkflowExecutionService : IWorkflowExecutionService
             var status = await this.GetStatusAsync(start.ExecutionId, ct).ConfigureAwait(false);
             if (status is not null && IsTerminal(status.State))
             {
-                this.RecordTerminal(status.State);
                 return (start, status, false);
             }
 
@@ -177,7 +176,6 @@ public sealed class ActorWorkflowExecutionService : IWorkflowExecutionService
         var last = await this.GetStatusAsync(start.ExecutionId, ct).ConfigureAwait(false);
         if (last is not null && IsTerminal(last.State))
         {
-            this.RecordTerminal(last.State);
             return (start, last, false);
         }
 
@@ -189,24 +187,10 @@ public sealed class ActorWorkflowExecutionService : IWorkflowExecutionService
 
     private StartResult OnStarted(Guid executionId)
     {
+        // Terminal outcomes are recorded for every run by ExecutionMetricsRecorder (§9.3), not here —
+        // recording them on the wait path too would double-count sync runs~
         this.metrics.RecordStarted();
         return new StartResult(true, executionId, Array.Empty<string>());
-    }
-
-    private void RecordTerminal(ExecutionState state)
-    {
-        switch (state)
-        {
-            case ExecutionState.Completed:
-                this.metrics.RecordCompleted();
-                break;
-            case ExecutionState.Failed:
-                this.metrics.RecordFailed();
-                break;
-            case ExecutionState.Cancelled:
-                this.metrics.RecordCancelled();
-                break;
-        }
     }
 
     private static ExecutionStatusResult FromLiveStatus(WorkflowStatusResponse s)

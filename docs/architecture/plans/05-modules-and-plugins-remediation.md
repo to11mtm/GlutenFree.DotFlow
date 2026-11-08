@@ -55,6 +55,14 @@ succeeds after an async run has completed (ties to the reload path).
 
 **Effort:** ~1 day (on top of §12.1).
 
+**Status — fixed 2026-11-08 (A1).** `Workflow.Api/Observability/ExecutionMetricsRecorder` (hosted)
+subscribes to `WorkflowCompleted` / `WorkflowFailed` on the EventStream and records completed /
+failed / cancelled (a cancel is `WorkflowFailed` + `OperationCanceledException`) for every run.
+"Started" stays at submission — `ActorWorkflowExecutionService.StartAsync` and now
+`ActorWorkflowLauncher` (webhooks, which recorded nothing before). The wait-for-result path no
+longer records terminal outcomes, so sync runs aren't double-counted. Tests:
+`Api/V1/ExecutionMetricsTests` (async, sync-once, webhook, failed, cancelled, drain gate).
+
 ---
 
 ## Finding B — `ValidateConfiguration` is never called (§9.4)

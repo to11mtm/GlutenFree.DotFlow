@@ -41,6 +41,7 @@ public sealed class ActorWorkflowLauncher : IWorkflowLauncher
     private readonly WorkflowSupervisorActorRef _supervisorRef;
     private readonly IWorkflowRepository _workflowRepo;
     private readonly ILogger<ActorWorkflowLauncher> _logger;
+    private readonly Workflow.Api.Observability.IWorkflowMetrics? _metrics;
 
     /// <summary>
     /// Initialises the launcher~ .
@@ -48,14 +49,20 @@ public sealed class ActorWorkflowLauncher : IWorkflowLauncher
     /// <param name="supervisorRef">DI wrapper around the supervisor actor reference.</param>
     /// <param name="workflowRepo">Repository used to load the workflow definition by ID.</param>
     /// <param name="logger">Logger for operation traces and error details.</param>
+    /// <param name="metrics">
+    /// §9.3: execution metrics — a launched run counts as started here; its terminal outcome is
+    /// recorded by <see cref="Workflow.Api.Observability.ExecutionMetricsRecorder"/>.
+    /// </param>
     public ActorWorkflowLauncher(
         WorkflowSupervisorActorRef supervisorRef,
         IWorkflowRepository workflowRepo,
-        ILogger<ActorWorkflowLauncher> logger)
+        ILogger<ActorWorkflowLauncher> logger,
+        Workflow.Api.Observability.IWorkflowMetrics? metrics = null)
     {
         _supervisorRef = supervisorRef ?? throw new ArgumentNullException(nameof(supervisorRef));
         _workflowRepo = workflowRepo ?? throw new ArgumentNullException(nameof(workflowRepo));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _metrics = metrics;
     }
 
     /// <inheritdoc />
@@ -152,6 +159,7 @@ public sealed class ActorWorkflowLauncher : IWorkflowLauncher
                 _logger.LogInformation(
                     " Workflow {DefinitionId} launched as execution {ExecutionId} via webhook '{WebhookId}'~",
                     registration.WorkflowDefinitionId, created.ExecutionId, registration.WebhookId);
+                _metrics?.RecordStarted();
                 return created.ExecutionId;
 
             case WorkflowInstanceCreationFailed failed:

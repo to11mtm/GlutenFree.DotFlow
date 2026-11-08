@@ -121,7 +121,7 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 ### Stage 5 — smaller, independent fixes
 
-- [ ] **§9.3 — active-exec count only drops for sync runs** · plan 05 · guard `ActiveExecutionCountFindingTests.AsyncRun_WhenComplete_…` (needs §12.1)
+- [x] **§9.3 — active-exec count only drops for sync runs** · plan 05 · guard `ActiveExecutionCountFindingTests.AsyncRun_WhenComplete_…` (needs §12.1) — fixed, retired → `Api/V1/ExecutionMetricsTests`
 - [ ] **§9.4 (modules) — ValidateConfiguration never called** · plan 05 · guard `ValidateConfigurationFindingTests.Validator_ShouldSurface_…`
   - [ ] audit built-ins' `ValidateConfiguration` first (don't start rejecting valid workflows)
 - [ ] **§9.7 — package registers undeclared module ids** · plan 05 · guard `PackageExtraModulesFindingTests.Install_ShouldNotRegister_…`
@@ -215,6 +215,25 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — §9.3 metrics count every run's outcome
+- Picked back up after a break: full suite green first (Workflow.Tests 1814/1814, Workflow.Tests.UI
+  718/718), pushed feature/FSL (c18b134..83f55cc).
+- Fix (plan 05 A1): hosted `ExecutionMetricsRecorder` listens to `WorkflowCompleted` /
+  `WorkflowFailed` on the EventStream (published since §12.1) and records completed / failed /
+  cancelled for every run. Started stays at submission; `ActorWorkflowLauncher` (webhooks) now
+  records it too (it recorded nothing). Removed the wait path's own terminal recording — keeping
+  it would double-count sync runs.
+- Tests: `Api/V1/ExecutionMetricsTests` (6): async completes → active 0; sync counted once; webhook
+  started + completed; failed; cancelled (not failed); hot-reload drain gate clears. 5/6 RED with
+  the production files stashed; the sync-once test (green either way, old code counted sync once)
+  was shown to catch a re-added wait-path count (completed = 2). Retired
+  `Findings/Modules/ActiveExecutionCountFindingTests`.
+- First full run caught a shutdown bug in the new recorder: hosted services stop in reverse
+  registration order, so Akka can be gone before `StopAsync` → NRE in 8 API test teardowns.
+  Now idempotent and skips stopping once the actor system has terminated.
+- `--filter Category!=Finding`: 1820 passed, 0 failed. Next: §9.4 (modules) — audit built-ins'
+  ValidateConfiguration before wiring it in.
+
 ### 2026-10-11 — §12.10 follow-up: break/continue through try/catch, parallel, transaction
 - `TryCatchCompleted` / `ParallelCompleted` / `TransactionCompleted` gained optional
   `BreakRequested` / `ContinueRequested`. Each actor ORs the flags of its completed bodies (try/catch:

@@ -63,6 +63,9 @@ builder.Services.AddSingleton<Workflow.Core.Abstractions.WorkflowValidator>();
 
 // 📈 Phase 2.7.5 — Execution metrics seam + health checks (persistence + actor-system liveness)~
 builder.Services.AddSingleton<Workflow.Api.Observability.IWorkflowMetrics, Workflow.Api.Observability.InMemoryWorkflowMetrics>();
+
+// 📈 §9.3 — terminal outcomes for every run (async, sync, webhook) from the engine's EventStream~
+builder.Services.AddHostedService<Workflow.Api.Observability.ExecutionMetricsRecorder>();
 builder.Services.AddHealthChecks()
     .AddCheck<Workflow.Api.Observability.PersistenceHealthCheck>(
         "persistence", tags: new[] { Workflow.Api.V1.MonitoringEndpoints.ReadyTag })

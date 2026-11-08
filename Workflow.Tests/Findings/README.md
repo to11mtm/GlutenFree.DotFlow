@@ -44,7 +44,7 @@ dotnet test Workflow.Tests --filter "Category=Finding&FullyQualifiedName~Finding
 | `Binding/SecretPersistenceFindingTests.cs` | 02 §10.6 secrets in history | actor + capturing repo |
 | `Streaming/StreamingFindingTests.cs` | 03 §9.4 pinned version ignored in a region | actor |
 | `Streaming/SpillCleanupFindingTests.cs` | 03 §9.6 spill kept forever with no history | unit |
-| `Modules/ActiveExecutionCountFindingTests.cs` | 04 §9.3 active count only drops for sync runs | API |
+| ~~`Modules/ActiveExecutionCountFindingTests.cs`~~ | 04 §9.3 active count only drops for sync runs — **fixed, file retired**: now `Api/V1/ExecutionMetricsTests` | API |
 | `Modules/ValidateConfigurationFindingTests.cs` | 04 §9.4 ValidateConfiguration never called | unit |
 | `Modules/PackageExtraModulesFindingTests.cs` | 04 §9.7 package registers undeclared module ids | packaging |
 | ~~`Modules/ScriptSandboxFindingTests.cs`~~ | 04 §9.1 JS CLR interop, §9.2 C# reflection bypass — **both fixed, file retired**: guards now in `Scripting/JavaScriptScriptExecutorTests` (`Sandbox_*`) and `Scripting/ScriptApprovalTests` | scripting |
