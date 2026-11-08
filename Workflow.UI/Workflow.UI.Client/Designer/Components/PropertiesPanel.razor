@@ -185,6 +185,10 @@
                                 TokenOptions="@NodeTokenOptions"
                                 UnresolvableBinding="@IsUnresolvable(prop.Name)"
                                 CanEscapeLiteral="@CanEscapeLiteral(prop.Name)"
+                                Clashes="@ClashesFor(prop.Name)"
+                                UseIncomingValue="c => UseIncomingValue(prop.Name, c)"
+                                KeepVariable="KeepVariable"
+                                RenameVariable="RenameClashingVariable"
                                 Focused="name => lastFocusedProperty = name"
                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
             }
@@ -213,6 +217,10 @@
                                         TokenOptions="@NodeTokenOptions"
                                         UnresolvableBinding="@IsUnresolvable(prop.Name)"
                                         CanEscapeLiteral="@CanEscapeLiteral(prop.Name)"
+                                        Clashes="@ClashesFor(prop.Name)"
+                                        UseIncomingValue="c => UseIncomingValue(prop.Name, c)"
+                                        KeepVariable="KeepVariable"
+                                        RenameVariable="RenameClashingVariable"
                                         Focused="name => lastFocusedProperty = name"
                                         ValueChanged="v => OnValueChanged(prop.Name, v)" />
                     }
@@ -387,6 +395,10 @@
                                                 TokenOptions="@NodeTokenOptions"
                                 UnresolvableBinding="@IsUnresolvable(prop.Name)"
                                 CanEscapeLiteral="@CanEscapeLiteral(prop.Name)"
+                                Clashes="@ClashesFor(prop.Name)"
+                                UseIncomingValue="c => UseIncomingValue(prop.Name, c)"
+                                KeepVariable="KeepVariable"
+                                RenameVariable="RenameClashingVariable"
                                                 ValueChanged="v => OnValueChanged(prop.Name, v)" />
                             }
                         }
@@ -564,6 +576,63 @@
                propertyName,
                JsonValues.ToText(this.ValueFor(propertyName)),
                this.GlobalVariableNames);
+
+    /// <summary>🔀 §10.2 — the {{Variable.x}} / wired-port name clashes in a property's current value~.</summary>
+    private IReadOnlyList<VariableLint.VariableClash>? ClashesFor(string propertyName)
+        => this.SelectedNode is { } node
+           && node.Schema?.Properties?.FirstOrDefault(p => p.Name == propertyName) is { SupportsTemplates: true }
+            ? VariableLint.Clashes(this.Document, node, propertyName, JsonValues.ToText(this.ValueFor(propertyName)), this.GlobalVariableNames)
+            : null;
+
+    /// <summary>🔀 §10.2 — "use the incoming value": rewrite the token in the edit buffer (applied with the rest)~.</summary>
+    private void UseIncomingValue(string propertyName, VariableLint.VariableClash clash)
+        => this.OnValueChanged(
+            propertyName,
+            JsonValues.FromString(VariableLint.UseIncomingValue(JsonValues.ToText(this.ValueFor(propertyName)), clash)));
+
+    /// <summary>🔀 §10.2 — "keep the variable": remember the choice on the node, undoably~.</summary>
+    private void KeepVariable(VariableLint.VariableClash clash)
+    {
+        if (this.SelectedNode is not { } node)
+        {
+            return;
+        }
+
+        var before = node.Metadata.TryGetValue(VariableLint.ClashAckKey, out var current) ? current : null;
+        this.Commands.Execute(new EditNodeMetadataCommand(node.Id, VariableLint.ClashAckKey, before, VariableLint.AcknowledgedWith(node, clash)));
+    }
+
+    /// <summary>
+    /// 🔀 §10.2 — "rename the variable": rename the declaration and every reference as one undoable
+    /// step, then bring this panel's unapplied edits along. Returns an error to show, or null.
+    /// </summary>
+    private string? RenameClashingVariable(VariableLint.VariableClash clash, string newName)
+    {
+        var oldName = this.Document.Variables.Keys.FirstOrDefault(k => string.Equals(k, clash.Name, StringComparison.OrdinalIgnoreCase));
+        if (oldName is null)
+        {
+            return $"'{clash.Name}' isn't declared on this workflow.";
+        }
+
+        if (WorkflowVariables.ValidateName(newName, this.Document.Variables.Keys, oldName) is { } error)
+        {
+            return error;
+        }
+
+        var trimmed = newName.Trim();
+        this.Commands.Execute(WorkflowVariables.RenameWithReferences(this.Document, oldName, trimmed));
+        foreach (var (key, value) in this.buffer.ToList())
+        {
+            if (value.ValueKind == JsonValueKind.String)
+            {
+                this.buffer[key] = JsonValues.FromString(WorkflowVariables.RenameReferences(value.GetString() ?? string.Empty, oldName, trimmed));
+            }
+        }
+
+        // A plain callback (it returns the error), so the panel re-renders itself~
+        this.StateHasChanged();
+        return null;
+    }
 
     /// <summary>📤 G6 — the schema description for an output port (tooltip)~.</summary>
     private string? OutputDescriptionFor(string port)

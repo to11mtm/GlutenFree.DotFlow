@@ -345,6 +345,12 @@ a.df-link:hover { text-decoration: underline; }
 .df-props__multi { color: var(--df-text-dim); padding: var(--df-space-4); }
 .df-required { color: var(--df-state-failed); }
 .df-field-error { color: var(--df-state-failed); font-size: 0.75rem; margin-top: var(--df-space-1); }
+
+/* 🔀 §10.2 — {{Variable.x}} vs a wired input port 'x' */
+.df-clash { border-left: 3px solid var(--df-state-warning, #c98a00); padding: 4px 8px; margin: var(--df-space-1) 0; font-size: 0.75rem; line-height: 1.4; }
+.df-clash--bad { border-left-color: var(--df-state-failed); }
+.df-clash__actions, .df-clash__rename { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.df-clash__rename .df-input { flex: 1 1 8rem; min-width: 0; }
 .df-input--mono { font-family: var(--df-mono); }
 .df-code-editor__monaco { height: 200px; border: 1px solid var(--df-border); border-radius: var(--df-radius); }
 .df-hidden { display: none; }

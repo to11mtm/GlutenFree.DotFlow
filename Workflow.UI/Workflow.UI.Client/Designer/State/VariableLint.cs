@@ -37,6 +37,12 @@ public static class VariableLint
     /// <summary>The reserved root meaning "the item currently flowing through a region"~ 🌊.</summary>
     public const string StreamItemRoot = "item";
 
+    /// <summary>
+    /// §10.2 — node metadata key recording "keep the variable" choices for name clashes, as
+    /// comma-separated <c>name@sourceNodeId.sourcePort</c> entries (so a rewire raises it again).
+    /// </summary>
+    public const string ClashAckKey = "variableClashAck";
+
     private const string VariablePrefix = "Variable.";
 
     /// <summary>Matches an unescaped <c>{{ … }}</c> token, exactly as the binder does.</summary>
@@ -67,8 +73,28 @@ public static class VariableLint
 
         foreach (var node in doc.Nodes)
         {
+            var clashes = TemplatedValues(node)
+                .SelectMany(p => Clashes(doc, node, p.Name, p.Value, globals))
+                .ToList();
+            foreach (var clash in clashes)
+            {
+                issues.Add(new GraphIssue(
+                    clash.VariableExists ? IssueSeverity.Warning : IssueSeverity.Error,
+                    $"'{node.Name}' → {clash.PropertyName}: {clash.Message}",
+                    node.Id));
+            }
+
             foreach (var reference in ReferencesIn(node))
             {
+                // Already reported, with a better message, as a clash~
+                if (reference.Kind == ReferenceKind.Variable
+                    && clashes.Any(c => !c.VariableExists
+                        && c.PropertyName == reference.PropertyName
+                        && string.Equals(c.Name, reference.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
                 issues.AddRange(Judge(doc, node, reference, globals, writers));
             }
         }
@@ -158,6 +184,160 @@ public static class VariableLint
             .Select(r => r.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// §10.2 — a <c>{{Variable.x}}</c> in a node whose input port <c>x</c> is wired: the token reads
+    /// the variable, never the value on the port. Easy to mix up, so the designer asks~ 🔀.
+    /// </summary>
+    /// <param name="PropertyName">The property holding the token.</param>
+    /// <param name="Name">The clashing name (as wired: the port's spelling).</param>
+    /// <param name="SourceNodeId">The node wired into that port.</param>
+    /// <param name="SourcePortName">Its output port.</param>
+    /// <param name="VariableExists">Whether a variable of that name exists (declared, global, set, body value).</param>
+    /// <param name="IsDeclared">Whether it's declared on this workflow (so it can be renamed here).</param>
+    public sealed record VariableClash(
+        string PropertyName,
+        string Name,
+        string SourceNodeId,
+        string SourcePortName,
+        bool VariableExists,
+        bool IsDeclared)
+    {
+        /// <summary>Gets the token that reads the incoming value instead.</summary>
+        public string IncomingToken => VariableTokens.OutputToken(this.SourceNodeId, this.SourcePortName);
+
+        /// <summary>Gets the acknowledgement entry stored in <see cref="ClashAckKey"/>.</summary>
+        public string AckEntry => $"{this.Name}@{this.SourceNodeId}.{this.SourcePortName}";
+
+        /// <summary>Gets the explanation shown in the designer.</summary>
+        public string Message => this.VariableExists
+            ? $"{{{{Variable.{this.Name}}}}} reads the variable '{this.Name}', not the value wired into this "
+              + $"node's '{this.Name}' port ({this.IncomingToken}). Pick which one you mean."
+            : $"{{{{Variable.{this.Name}}}}} reads a variable, and there's no variable '{this.Name}' — the "
+              + $"value wired into the '{this.Name}' port is {this.IncomingToken}. This node will fail at run time.";
+    }
+
+    /// <summary>
+    /// §10.2 — the unacknowledged name clashes in one property value: a <c>{{Variable.x}}</c> where
+    /// <c>x</c> is also one of the node's wired input ports~ 🔀.
+    /// </summary>
+    /// <param name="doc">The document.</param>
+    /// <param name="node">The node.</param>
+    /// <param name="propertyName">The property name.</param>
+    /// <param name="value">The property value text.</param>
+    /// <param name="globals">Known global variable names.</param>
+    /// <returns>One clash per clashing name.</returns>
+    public static IReadOnlyList<VariableClash> Clashes(
+        DesignerDocument doc,
+        DesignerNode node,
+        string propertyName,
+        string? value,
+        IReadOnlyCollection<string>? globals = null)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        ArgumentNullException.ThrowIfNull(node);
+
+        var names = ParseReferences(propertyName, value)
+            .Where(r => r.Kind == ReferenceKind.Variable)
+            .Select(r => r.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (names.Count == 0)
+        {
+            return [];
+        }
+
+        var acknowledged = AcknowledgedEntries(node);
+        Dictionary<string, List<string>>? writers = null;
+        var clashes = new List<VariableClash>();
+        foreach (var name in names)
+        {
+            var wire = doc.Connections.FirstOrDefault(c =>
+                c.TargetNodeId == node.Id && string.Equals(c.TargetPortName, name, StringComparison.OrdinalIgnoreCase));
+            if (wire is null)
+            {
+                continue;
+            }
+
+            writers ??= SetVariableWriters(doc);
+            var declared = doc.Variables.Keys.Contains(name, StringComparer.OrdinalIgnoreCase);
+            var exists = declared
+                || (globals?.Contains(name, StringComparer.OrdinalIgnoreCase) ?? false)
+                || writers.ContainsKey(name)
+                || VariableTokens.BodyValuesFor(doc, node.Id).Any(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
+            var clash = new VariableClash(propertyName, wire.TargetPortName, wire.SourceNodeId, wire.SourcePortName, exists, declared);
+            if (!acknowledged.Contains(clash.AckEntry))
+            {
+                clashes.Add(clash);
+            }
+        }
+
+        return clashes;
+    }
+
+    /// <summary>"Use the incoming value": rewrites <c>Variable.x</c> to <c>sourceNode.port</c> inside tokens~ 🔀.</summary>
+    /// <param name="value">The property value text.</param>
+    /// <param name="clash">The clash being resolved.</param>
+    /// <returns>The rewritten text (paths below the root are kept: <c>Variable.x.a</c> → <c>src.port.a</c>).</returns>
+    public static string UseIncomingValue(string value, VariableClash clash)
+    {
+        ArgumentNullException.ThrowIfNull(clash);
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        var reference = new Regex(
+            $@"(?<![A-Za-z0-9_.])Variable\.{Regex.Escape(clash.Name)}(?![A-Za-z0-9_])",
+            RegexOptions.IgnoreCase);
+        return TokenPattern.Replace(
+            value,
+            token => reference.Replace(token.Value, $"{clash.SourceNodeId}.{clash.SourcePortName}"));
+    }
+
+    /// <summary>"Keep the variable": the node's <see cref="ClashAckKey"/> value with this clash added~ ✅.</summary>
+    /// <param name="node">The node.</param>
+    /// <param name="clash">The clash being acknowledged.</param>
+    /// <returns>The new metadata value.</returns>
+    public static string AcknowledgedWith(DesignerNode node, VariableClash clash)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(clash);
+
+        var entries = AcknowledgedEntries(node).ToList();
+        if (!entries.Contains(clash.AckEntry, StringComparer.OrdinalIgnoreCase))
+        {
+            entries.Add(clash.AckEntry);
+        }
+
+        return string.Join(",", entries);
+    }
+
+    private static HashSet<string> AcknowledgedEntries(DesignerNode node)
+        => node.Metadata.TryGetValue(ClashAckKey, out var raw) && !string.IsNullOrWhiteSpace(raw)
+            ? raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    private static IEnumerable<(string Name, string? Value)> TemplatedValues(DesignerNode node)
+    {
+        var templated = node.Schema?.Properties?
+            .Where(p => p.SupportsTemplates)
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (templated is null || templated.Count == 0)
+        {
+            yield break;
+        }
+
+        foreach (var (name, value) in node.Properties)
+        {
+            if (value.ValueKind == JsonValueKind.String && templated.Contains(name))
+            {
+                yield return (name, value.GetString());
+            }
+        }
+    }
+
     /// <summary>A single <c>{{…}}</c> reference found in a property~ 🔗.</summary>
     /// <param name="PropertyName">The property it was found in.</param>
     /// <param name="Token">The literal token text.</param>
@@ -218,6 +398,13 @@ public static class VariableLint
         }
 
         if (doc.Variables.Keys.Contains(reference.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        // 🔁 §10.2 — item / index / error, handed to this node by the loop / branch / catch around it~
+        if (VariableTokens.BodyValuesFor(doc, node.Id)
+            .Any(v => string.Equals(v.Name, reference.Name, StringComparison.OrdinalIgnoreCase)))
         {
             yield break;
         }

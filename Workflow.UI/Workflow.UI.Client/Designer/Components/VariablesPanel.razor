@@ -280,61 +280,24 @@
         else
         {
             var previous = this.Document.Variables.TryGetValue(this.editingName, out var raw) ? raw : (JsonElement?)null;
-            var edit = new EditVariableCommand(
-                this.editingName,
-                previous ?? WorkflowVariables.ToJson(declaration),
-                name,
-                WorkflowVariables.ToJson(declaration, previous));
+            var after = WorkflowVariables.ToJson(declaration, previous);
 
             var isRename = !string.Equals(this.editingName, name, StringComparison.Ordinal);
-            if (isRename && this.renameReferences
-                && WorkflowVariables.ReferencingNodes(this.Document, this.editingName) is { Count: > 0 })
+            if (isRename && this.renameReferences)
             {
-                // One undoable unit: the declaration and every token that points at it move together,
-                // so undo can't leave references dangling.
-                this.Commands.Execute(new CompositeCommand(
-                    $"Rename variable {this.editingName} → {name}",
-                    [edit, .. this.ReferenceRewrites(this.editingName, name)]));
+                // One undoable unit: the declaration and every token that points at it move together.
+                this.Commands.Execute(WorkflowVariables.RenameWithReferences(this.Document, this.editingName, name, after));
             }
             else
             {
-                this.Commands.Execute(edit);
+                this.Commands.Execute(new EditVariableCommand(
+                    this.editingName,
+                    previous ?? WorkflowVariables.ToJson(declaration),
+                    name,
+                    after));
             }
         }
 
         this.editing = false;
-    }
-
-    private List<IDesignerCommand> ReferenceRewrites(string oldName, string newName)
-    {
-        var rewrites = new List<IDesignerCommand>();
-        foreach (var nodeId in WorkflowVariables.ReferencingNodes(this.Document, oldName))
-        {
-            var node = this.Document.FindNode(nodeId);
-            if (node is null)
-            {
-                continue;
-            }
-
-            var before = new Dictionary<string, JsonElement>(node.Properties);
-            var after = new Dictionary<string, JsonElement>(node.Properties);
-            foreach (var (key, value) in before)
-            {
-                if (value.ValueKind != JsonValueKind.String)
-                {
-                    continue;
-                }
-
-                var rewritten = WorkflowVariables.RenameReferences(value.GetString() ?? string.Empty, oldName, newName);
-                if (!string.Equals(rewritten, value.GetString(), StringComparison.Ordinal))
-                {
-                    after[key] = JsonValues.FromString(rewritten);
-                }
-            }
-
-            rewrites.Add(new EditNodePropertiesCommand(nodeId, before, after));
-        }
-
-        return rewrites;
     }
 }

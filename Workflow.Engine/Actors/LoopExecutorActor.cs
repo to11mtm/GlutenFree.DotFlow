@@ -302,7 +302,10 @@ public sealed class LoopExecutorActor : ReceiveActor
                 _serviceProvider,
                 subGraphId,
                 _linkedCts.Token,
-                _variables.Current,
+                // §10.2: the current item / index are body variables ({{Variable.item}})~
+                item != null
+                    ? BodyVariables.WithBodyContext(_variables.Current, ("item", item), ("index", iterationIndex))
+                    : _variables.Current,
                 ScopeStep.Append(_scopePath, new ScopeStep(_loopNodeId, ScopeStep.Loop, Iteration: _iterationCount))),
             $"loop-body-{_loopNodeId.Replace(".", "-")}-{_iterationCount}");
 

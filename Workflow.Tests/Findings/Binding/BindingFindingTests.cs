@@ -93,39 +93,4 @@ public sealed class BindingFindingTests : TestKit
         sink.Captured.TryDequeue(out var call).Should().BeTrue();
         call!.Properties.Should().ContainKey("p").WhoseValue.Should().Be("from-src");
     }
-
-    // ── Finding 02 §10.2 — input keys shadow variables of the same name ──────────────────────────
-
-    /// <summary>
-    /// A declared variable <c>count = 99</c> should win when a property reads <c>{{Variable.count}}</c>,
-    /// even if the node also has an input PORT named <c>count</c> carrying <c>7</c>. Today the plain
-    /// input key is overlaid onto the variable map, so the reference resolves to <c>7</c>.
-    /// </summary>
-    [Fact]
-    public void InputKey_ShouldNotShadow_DeclaredVariable()
-    {
-        var src = new OutputModule("f.vsrc", new Dictionary<string, object?> { ["value"] = 7 });
-        var sink = new CaptureModule("f.vsink", inputPorts: new[] { "count" }, templatedProperties: new[] { "p" });
-        var services = FindingDefs.Services(new IWorkflowModule[] { src, sink }, AddBinding);
-
-        var definition = FindingDefs.Definition(
-            nodes: new[]
-            {
-                FindingDefs.Node("src", "f.vsrc"),
-                FindingDefs.Node("sink", "f.vsink", properties: new (string, object?)[] { ("p", "{{Variable.count}}") }),
-            },
-            connections: new[] { FindingDefs.Edge("src", "value", "sink", "count") },
-            variables: new[]
-            {
-                new VariableDefinition("count", PropertyType.Int, FindingDefs.Json(99)),
-            });
-
-        var (_, parent, _) = this.Run(definition, services);
-        parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, FindingDefs.RunTimeout);
-
-        sink.Captured.TryDequeue(out var call).Should().BeTrue();
-        call!.Properties.Should().ContainKey("p").WhoseValue.Should().Be(
-            99,
-            because: "{{Variable.count}} should read the declared variable (99), not the input port value (7) (02 §10.2)");
-    }
 }

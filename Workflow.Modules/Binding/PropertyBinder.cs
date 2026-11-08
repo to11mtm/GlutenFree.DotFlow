@@ -528,9 +528,16 @@ public class PropertyBinder : IPropertyBinder
                 k.Equals(rootName, StringComparison.OrdinalIgnoreCase));
             if (match == null)
             {
+                // §10.2: port values used to double as variables. Point at the right syntax when
+                // the name is one of this node's incoming values~
+                var hint = context.SelfInputs is { } self
+                    && self.Keys.Any(k => k.Equals(rootName, StringComparison.OrdinalIgnoreCase))
+                    ? $" '{rootName}' is a value arriving on this node's input, not a variable — use "
+                      + "{{input…}} for the 'input' port or {{nodeId.port}} for an upstream output."
+                    : string.Empty;
                 return ReferenceResolution.Failed(new List<string>
                 {
-                    $"Input '{portName}': variable '{rootName}' not found in binding context.",
+                    $"Input '{portName}': variable '{rootName}' not found in binding context.{hint}",
                 });
             }
 

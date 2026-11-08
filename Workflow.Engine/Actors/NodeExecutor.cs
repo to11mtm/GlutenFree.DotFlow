@@ -496,12 +496,12 @@ public class NodeExecutor : ReceiveActor
     /// </remarks>
     private PropertyBindingContext BuildBindingContext()
     {
-        // Start from the execution's actual variables. 💾
-        // CopilotNote: Phase 3.5 (V4) — this used to build the variable map purely from _inputs,
-        // which meant {{Variable.x}} could only ever resolve against a *run input* that had been
-        // copied into every node. A variable declared on the workflow, hydrated from the store, or
-        // written mid-run by a SetVariable node was invisible to the binder. The plain _inputs keys
-        // are still overlaid below so nothing that resolved before stops resolving~ ✨
+        // The execution's actual variables — and only those (§10.2). 💾
+        // CopilotNote: Phase 3.5 (V4) moved the variable map off _inputs; the plain _inputs keys were
+        // still overlaid as variables for compatibility, so an input PORT named like a declared
+        // variable silently hid it. Run inputs are already a variable layer (InitialVariables), and
+        // construct-body values (item / index / error) are seeded as body variables, so the overlay
+        // only ever added port values — reach those with {{input…}} or {{nodeId.port}}~ ✨
         var variables = ConvertHashMapToDictionary(_workflowVariables) is { } seeded
             ? new Dictionary<string, object?>(seeded)
             : new Dictionary<string, object?>();
@@ -525,16 +525,10 @@ public class NodeExecutor : ReceiveActor
 
                 ((Dictionary<string, object?>)outputs)[portName] = value;
             }
-            else
-            {
-                // Plain key — treat as a variable.
-                variables[key] = value;
-            }
         }
 
         // 🔌 HTTP-input plan D4 — the node's own gathered inputs power the {{input}} /
-        // {{input.path}} template root (plain input keys are *also* overlaid as variables above,
-        // which predates the root and stays for compatibility).
+        // {{input.path}} template root (and the "that's an input, not a variable" hint, §10.2).
         return new PropertyBindingContext(variables, nodeOutputs, _serviceProvider, _inputs);
     }
 

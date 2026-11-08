@@ -146,6 +146,9 @@ public sealed class ModuleAwareWorkflowValidator
                         e.PropertyName is { } property ? $"'{property}': {e.Message}" : e.Message,
                         node.Id));
                 }
+
+                // ⚠️ Check 2c (§10.2): {{Variable.x}} where 'x' is also a wired input port~
+                warnings.AddRange(VariableClashChecker.Check(workflow, node, module));
             }
         }
 

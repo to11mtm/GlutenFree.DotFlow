@@ -60,6 +60,30 @@ internal sealed class BodyVariables
         }
     }
 
+    /// <summary>
+    /// §10.2: the variables a construct body starts with, plus the values the construct hands it
+    /// (<c>item</c> / <c>index</c> for loops and parallel items, <c>error</c> for catch). They're
+    /// body-scoped: visible as <c>{{Variable.item}}</c> inside the body (shadowing a declared variable
+    /// of the same name there), but they aren't writes, so they're never reported up or persisted~
+    /// </summary>
+    /// <param name="variables">The variables the body would otherwise start with (may be null).</param>
+    /// <param name="bodyContext">The construct-supplied values.</param>
+    /// <returns>A new map; the inputs are not modified.</returns>
+    public static IReadOnlyDictionary<string, object?> WithBodyContext(
+        IReadOnlyDictionary<string, object?>? variables,
+        params (string Name, object? Value)[] bodyContext)
+    {
+        var seeded = variables is null
+            ? new Dictionary<string, object?>()
+            : new Dictionary<string, object?>(variables);
+        foreach (var (name, value) in bodyContext)
+        {
+            seeded[name] = value;
+        }
+
+        return seeded;
+    }
+
     /// <summary>Gets the current variables as the <see cref="HashMap{K, V}"/> NodeExecutor expects.</summary>
     /// <returns>The current variables.</returns>
     public HashMap<string, object?> CurrentAsHashMap()

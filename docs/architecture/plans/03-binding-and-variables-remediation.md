@@ -91,6 +91,31 @@ variables) now shadows real variables whenever an input **port** shares a name.
 `InputKey_ShouldNotShadow_DeclaredVariable` green; existing `PropertyBinderTests`,
 `PropertyTemplateIntegrationTests`, `VariableSeedingIntegrationTests` green.
 
+### Decided 2026-11-08 (asked) — fixed
+- **Runtime: B1.** Port values are no longer copied into the variable map; `{{Variable.x}}` only
+  ever means a variable (global / workflow / declared / run input / SetVariable).
+- **Construct-body values stay reachable on purpose:** ForEach/While and Parallel bodies get
+  `item` / `index`, and catch bodies get `error`, **seeded as body-scoped variables** (that
+  iteration / branch only, never persisted). Inside the body they shadow a declared variable of the
+  same name. Designer picker and lint learn to offer and accept them inside bodies.
+- **Designer clash help.** When a property uses `{{Variable.x}}` and `x` is also one of the node's
+  wired input ports:
+  - **error** if there's no variable `x` (the run would fail);
+  - **warning** if there is one.
+  Quick-fixes:
+  - *Use the incoming value*: rewrite to `{{sourceNode.sourcePort}}`.
+  - *Keep the variable*: acknowledge it in node `Metadata["variableClashAck"]` (comma-separated
+    names). The warning comes back if the wiring or names change.
+  - *Rename the variable*: rename it and update every `{{Variable.x}}` reference in the workflow.
+- **Save time:** the server validator gives the same warning, and honours the acknowledgement.
+- **Run time:** an undeclared `{{Variable.x}}` where `x` is one of the node's input ports fails
+  with a hint to use `{{input…}}` / `{{nodeId.port}}`.
+
+Tests: `Engine/VariableShadowingTests` (6), `Modules/VariableClashValidationTests` (4), UI
+`State/VariableClashTests` (15) + `Components/VariableClashPanelTests` (6). Guard retired.
+Found along the way: the docs' catch example `{{error.message}}` names a node called `error`, so it
+never resolved — it's `{{Variable.error.message}}`.
+
 **Effort:** ~1 day including a sweep for shim-dependent tests.
 
 ---

@@ -120,6 +120,22 @@ the upstream node's id. (`{{nodeId.port}}` still works when you want to be expli
 only way to reach nodes further upstream.) `{{input}}` requires a connection into the node's
 `input` port — without one it fails the node, per the rule below.
 
+**Values arriving on a node's ports are not variables.** `{{Variable.count}}` always means the
+variable `count` — even when the node also has an input port called `count`. Read the value on a
+port with `{{input…}}` (the `input` port) or `{{nodeId.port}}` (the upstream output wired into it).
+The designer flags a `{{Variable.x}}` in a node whose port `x` is wired and offers to **use the
+incoming value**, **keep the variable**, or **rename the variable**; saving warns about it too.
+
+**Inside a construct body** the construct hands its body a few values as *body variables* — visible
+only inside that body, never saved, and shadowing a workflow variable of the same name there:
+
+| Body | Variables |
+| --- | --- |
+| For Each `loopBody`, Fan Out `branch` | `{{Variable.item}}` (the current item), `{{Variable.index}}` (from 0) |
+| Try/Catch `catch` | `{{Variable.error}}` — e.g. `{{Variable.error.message}}`, `{{Variable.error.errorType}}` |
+
+The picker lists them under **This body**.
+
 `item` is the other reserved root: inside a **streaming region** it means *the item currently
 flowing through*. It's offered by the picker only there, and using it outside a region is a
 design-time error — see [streaming regions](designer.md#streaming-regions-) in the designer guide.
@@ -170,6 +186,8 @@ The designer lints bindings as you edit:
 | Nothing declares or writes it | ❌ error — this node will fail at run time |
 | Declared, but no initial value and nothing sets it | ⚠️ warning — starts as `null` |
 | `{{…}}` naming a node that doesn't exist | ❌ error, with an offer to escape it as `\{\{` |
+| `{{Variable.x}}` in a node whose input port `x` is wired | ⚠️ warning if `x` is a variable, ❌ error if not — with fixes: use the incoming value / keep the variable / rename it |
+| `{{Variable.item}}` / `index` / `error` inside the matching body | clean |
 
 Bound values show a 🔗 badge; unresolvable ones show ⚠️ **unresolved** instead, so a broken binding
 never looks wired up. When *every* reference in a value is unresolvable — a Mustache template

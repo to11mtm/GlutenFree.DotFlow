@@ -208,7 +208,7 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         // Inject the WorkflowError as the 'error' input for catch handler nodes~
         var catchInputs = new Dictionary<string, object?> { ["error"] = error };
         var scope = ComputeBranchScope(_request.CatchPort);
-        SpawnSubGraph(SubGraphCatch, entryNodes, scope, inputs: catchInputs);
+        SpawnSubGraph(SubGraphCatch, entryNodes, scope, inputs: catchInputs, bodyContext: ("error", error));
     }
 
     private void RunFinallyPhase()
@@ -490,7 +490,8 @@ public sealed class TryCatchExecutorActor : ReceiveActor
         string subGraphId,
         List<string> entryNodes,
         IReadOnlyCollection<string> scope,
-        Dictionary<string, object?>? inputs)
+        Dictionary<string, object?>? inputs,
+        (string Name, object? Value)? bodyContext = null)
     {
         var subGraphInputs = inputs ?? new Dictionary<string, object?>();
         var actorName = $"tc-{subGraphId}-{_tryCatchNodeId.Replace(".", "-")}";
@@ -505,7 +506,10 @@ public sealed class TryCatchExecutorActor : ReceiveActor
                 _serviceProvider,
                 subGraphId: $"{subGraphId}:{_tryCatchNodeId}",
                 parentToken: _linkedCts.Token,
-                variables: _variables.Current,
+                // §10.2: the catch body sees the caught error as {{Variable.error}}~
+                variables: bodyContext is { } ctx
+                    ? BodyVariables.WithBodyContext(_variables.Current, ctx)
+                    : _variables.Current,
                 scopePath: ScopeStep.Append(_scopePath, new ScopeStep(_tryCatchNodeId, ScopeStep.TryCatch, Branch: subGraphId))),
             actorName);
 

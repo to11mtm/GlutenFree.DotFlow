@@ -38,6 +38,59 @@ public static class VariableTokens
     /// <summary>The literal token for the item flowing through a streaming region~ 🌊.</summary>
     public const string StreamItemToken = "{{item}}";
 
+    /// <summary>The picker group name for values a construct hands its body (item, index, error)~ 🔁.</summary>
+    public const string BodyValuesCategory = "This body";
+
+    /// <summary>A value a construct hands the nodes in its body, as a body-scoped variable (§10.2)~ 🔁.</summary>
+    /// <param name="Name">The variable name (<c>item</c>, <c>index</c>, <c>error</c>).</param>
+    /// <param name="Detail">What it holds, for the picker.</param>
+    /// <param name="OwnerNodeId">The construct node that supplies it.</param>
+    public sealed record BodyValue(string Name, string Detail, string OwnerNodeId);
+
+    /// <summary>
+    /// §10.2 — the body-scoped variables visible to a node: <c>item</c> / <c>index</c> inside a For
+    /// Each body or a Fan Out branch, <c>error</c> inside a catch body. Mirrors the engine
+    /// (LoopExecutorActor, ParallelExecutionCoordinator, TryCatchExecutorActor)~ 🔁.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="nodeId">The node.</param>
+    /// <returns>The values, innermost-last; empty outside any such body.</returns>
+    public static IReadOnlyList<BodyValue> BodyValuesFor(DesignerDocument document, string nodeId)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
+        var values = new List<BodyValue>();
+        foreach (var edge in document.Connections
+                     .Select(c => (c.SourceNodeId, c.SourcePortName))
+                     .Distinct())
+        {
+            var owner = document.FindNode(edge.SourceNodeId);
+            var supplied = SuppliedBy(owner?.ModuleId, edge.SourcePortName);
+            if (supplied.Length == 0
+                || !StructuralRegions.BodyScope(document, edge.SourceNodeId, edge.SourcePortName).Contains(nodeId))
+            {
+                continue;
+            }
+
+            foreach (var (name, detail) in supplied)
+            {
+                values.RemoveAll(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
+                values.Add(new BodyValue(name, $"{detail} — from {owner!.Name}", owner.Id));
+            }
+        }
+
+        return values;
+    }
+
+    private static (string Name, string Detail)[] SuppliedBy(string? moduleId, string port)
+        => (moduleId, port) switch
+        {
+            ("builtin.loop.foreach", "loopBody") => [("item", "the current item"), ("index", "its position, from 0")],
+            ("builtin.fanout", "branch") => [("item", "this branch's item"), ("index", "its position, from 0")],
+            ("builtin.trycatch", "catch") => [("error", "the caught error (message, errorType, nodeId…)")],
+            _ => [],
+        };
+
     /// <summary>A pickable binding token~ 🎫.</summary>
     /// <param name="Token">The literal token text to insert (e.g. <c>{{Variable.count}}</c>).</param>
     /// <param name="Label">The display label.</param>
@@ -110,6 +163,12 @@ public static class VariableTokens
             {
                 options.Add(new TokenOption(key.Token, key.Label, SelfInputCategory, Detail(key)));
             }
+        }
+
+        // 🔁 §10.2 — what the enclosing loop / branch / catch hands this body~
+        foreach (var value in BodyValuesFor(document, nodeId))
+        {
+            options.Add(new TokenOption(VariableToken(value.Name), value.Name, BodyValuesCategory, value.Detail));
         }
 
         foreach (var (name, raw) in document.Variables.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))

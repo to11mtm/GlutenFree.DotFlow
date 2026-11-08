@@ -252,6 +252,63 @@ public static class WorkflowVariables
             .ToList();
     }
 
+    /// <summary>
+    /// Renames a declared variable and rewrites every <c>{{Variable.old}}</c> token in the workflow,
+    /// as one undoable unit (so undo can't leave references dangling)~ ✏️.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <param name="oldName">The declared variable's current name.</param>
+    /// <param name="newName">The new name (already validated).</param>
+    /// <param name="newDeclaration">The new declaration; null keeps the current one.</param>
+    /// <returns>The command to execute.</returns>
+    public static IDesignerCommand RenameWithReferences(
+        DesignerDocument document,
+        string oldName,
+        string newName,
+        JsonElement? newDeclaration = null)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+
+        if (!document.Variables.TryGetValue(oldName, out var previous))
+        {
+            throw new ArgumentException($"No declared variable '{oldName}'.", nameof(oldName));
+        }
+
+        var declaration = newDeclaration ?? ToJson(Parse(oldName, previous) with { Name = newName }, previous);
+        var edit = new Commands.EditVariableCommand(oldName, previous, newName, declaration);
+
+        var rewrites = new List<IDesignerCommand>();
+        foreach (var nodeId in ReferencingNodes(document, oldName))
+        {
+            if (document.FindNode(nodeId) is not { } node)
+            {
+                continue;
+            }
+
+            var before = new Dictionary<string, JsonElement>(node.Properties);
+            var after = new Dictionary<string, JsonElement>(node.Properties);
+            foreach (var (key, value) in before)
+            {
+                if (value.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var rewritten = RenameReferences(value.GetString() ?? string.Empty, oldName, newName);
+                if (!string.Equals(rewritten, value.GetString(), StringComparison.Ordinal))
+                {
+                    after[key] = JsonValues.FromString(rewritten);
+                }
+            }
+
+            rewrites.Add(new Commands.EditNodePropertiesCommand(nodeId, before, after));
+        }
+
+        return rewrites.Count == 0
+            ? edit
+            : new Commands.CompositeCommand($"Rename variable {oldName} → {newName}", [edit, .. rewrites]);
+    }
+
     /// <summary>Rewrites references to <paramref name="oldName"/> so they point at <paramref name="newName"/>~ ✏️.</summary>
     /// <param name="value">The property value text.</param>
     /// <param name="oldName">The current variable name.</param>

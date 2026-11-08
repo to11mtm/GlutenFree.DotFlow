@@ -135,7 +135,7 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 - [x] **§9.7 — package registers undeclared module ids** · plan 05 · guard `PackageExtraModulesFindingTests.Install_ShouldNotRegister_…` — fixed, retired → `Api/V1/MultiModulePackageTests`
   - [x] decide single- vs multi-module manifests first — multi-module (`modules` list), see plan 05
 - [x] **§9.4 (streaming) — pinned version ignored in region** · plan 04 · guard `StreamingFindingTests.PinnedModuleVersion_…` — fixed, retired → `Engine/Streaming/StreamRegionPinnedVersionTests`
-- [ ] **§10.2 — input keys shadow declared variables** · plan 03 · guard `BindingFindingTests.InputKey_ShouldNotShadow_DeclaredVariable`
+- [x] **§10.2 — input keys shadow declared variables** · plan 03 · guard `BindingFindingTests.InputKey_ShouldNotShadow_DeclaredVariable` — fixed, retired → `Engine/VariableShadowingTests` (+ designer clash fixes, see plan 03)
 - [ ] **§10.1 — `{{nodeId.port}}` only reaches direct predecessors** · plan 03 · guard `BindingFindingTests.NonAdjacentNodeOutputReference_ShouldResolve`
   - [ ] note: recommended fix is **docs/UX** (keep behaviour, correct `docs/variables.md` + designer picker, flip the test to assert a clear error)
 
@@ -228,6 +228,24 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — §10.2 port values no longer shadow variables
+- Decided (asked): B1 — port values aren't variables. Body values seeded as body-scoped variables:
+  `item`/`index` (For Each, Fan Out) and `error` (catch). Designer flags `{{Variable.x}}` vs a wired
+  port `x` (warning, or error if no variable `x`) with fixes: use incoming value / keep the variable
+  (`Metadata["variableClashAck"]`, `name@src.port`) / rename the variable (+ references, undoable).
+  Same warning on save (`VariableClashChecker`, VB001). Run-time failure hints at `{{input…}}`.
+- Engine: `NodeExecutor.BuildBindingContext` no longer copies input keys into variables;
+  `BodyVariables.WithBodyContext` used by loop / parallel / try-catch. Binder hint in `PropertyBinder`.
+- UI: `VariableLint.Clashes` / `UseIncomingValue` / `AcknowledgedWith`, `VariableTokens.BodyValuesFor`
+  (picker "This body", lint accepts them), `WorkflowVariables.RenameWithReferences` (VariablesPanel now
+  uses it too), clash panel in `PropertyEditor`.
+- Tests: `Engine/VariableShadowingTests` (6, each production piece stashed alone → RED),
+  `Modules/VariableClashValidationTests` (4), UI `VariableClashTests` (15) + `VariableClashPanelTests` (6);
+  lint/body/validator mutants all killed. Guard retired.
+- Docs: variables.md (ports vs variables, body variables, lint table); advanced-flow-control catch
+  example fixed (`{{error.message}}` never resolved → `{{Variable.error.message}}`).
+- `--filter Category!=Finding`: 1855 passed, 0 failed; Workflow.Tests.UI 739/739; open finding tests 4 (all expected). Stage 5 left: §10.1 (docs/UX).
+
 ### 2026-11-08 — §9.4 (streaming) pinned module version honoured in regions
 - New `Workflow.Modules.ModuleResolution` — the single pin-aware module lookup (batch node, region
   executor, region detection, run-time config check, validator). Same clear error for a

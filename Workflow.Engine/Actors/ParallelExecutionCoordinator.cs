@@ -293,7 +293,10 @@ public sealed class ParallelExecutionCoordinator : ReceiveActor
                 _serviceProvider,
                 subGraphId,
                 _linkedCts.Token,
-                _variables,
+                // §10.2: per-item fan-out — item / index are branch variables ({{Variable.item}})~
+                _parallel.Items is not null
+                    ? BodyVariables.WithBodyContext(_variables, ("item", spec.Item), ("index", spec.ItemIndex))
+                    : _variables,
                 ScopeStep.Append(_scopePath, new ScopeStep(_parallelNodeId, ScopeStep.Parallel, BranchIndex: spec.Index))),
             actorName);
 

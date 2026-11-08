@@ -143,6 +143,49 @@
                 }
             </div>
         }
+
+        @* 🔀 §10.2 — {{Variable.x}} where 'x' is also a wired input port: say which one the token
+           reads, and let the author pick (or rename the variable out of the way). *@
+        @foreach (var clash in Clashes ?? System.Array.Empty<VariableLint.VariableClash>())
+        {
+            <div class="df-clash @(clash.VariableExists ? "df-clash--warn" : "df-clash--bad")"
+                 data-testid="clash-@Property.Name-@clash.Name">
+                <div class="df-clash__message">@(clash.VariableExists ? "⚠️" : "⛔") @clash.Message</div>
+                <div class="df-clash__actions">
+                    <button type="button" class="df-btn df-btn--small" data-testid="clash-use-incoming-@Property.Name-@clash.Name"
+                            title="Replace the token with @clash.IncomingToken"
+                            @onclick="() => UseIncomingValue.InvokeAsync(clash)">use the incoming value</button>
+                    @if (clash.VariableExists)
+                    {
+                        <button type="button" class="df-btn df-btn--small" data-testid="clash-keep-@Property.Name-@clash.Name"
+                                title="Keep reading the variable and stop warning about this"
+                                @onclick="() => KeepVariable.InvokeAsync(clash)">keep the variable</button>
+                    }
+                    @if (clash.IsDeclared && RenameVariable is not null)
+                    {
+                        <button type="button" class="df-btn df-btn--small" data-testid="clash-rename-@Property.Name-@clash.Name"
+                                title="Rename the variable (and every reference to it) so the names no longer collide"
+                                @onclick="() => StartRename(clash)">rename the variable…</button>
+                    }
+                </div>
+                @if (renaming == clash.Name)
+                {
+                    <div class="df-clash__rename">
+                        <input class="df-input" value="@renameText" placeholder="new variable name"
+                               data-testid="clash-rename-input-@Property.Name-@clash.Name"
+                               @oninput="e => renameText = e.Value?.ToString() ?? string.Empty" />
+                        <button type="button" class="df-btn df-btn--small df-btn--primary"
+                                data-testid="clash-rename-apply-@Property.Name-@clash.Name"
+                                @onclick="() => ApplyRename(clash)">rename</button>
+                        <button type="button" class="df-btn df-btn--small" @onclick="() => renaming = null">cancel</button>
+                    </div>
+                    @if (renameError is not null)
+                    {
+                        <div class="df-field-error" data-testid="clash-rename-error-@Property.Name-@clash.Name">⚠ @renameError</div>
+                    }
+                }
+            </div>
+        }
     }
 
     @* ƒx G8 — expression builder modal: hints + Variable/input builders. *@
@@ -234,6 +277,45 @@
     /// </summary>
     [Parameter]
     public bool CanEscapeLiteral { get; set; }
+
+    /// <summary>§10.2 — unacknowledged <c>{{Variable.x}}</c> / input-port name clashes in this value.</summary>
+    [Parameter]
+    public IReadOnlyList<VariableLint.VariableClash>? Clashes { get; set; }
+
+    /// <summary>§10.2 — "use the incoming value": the host rewrites the token to the wired output.</summary>
+    [Parameter]
+    public EventCallback<VariableLint.VariableClash> UseIncomingValue { get; set; }
+
+    /// <summary>§10.2 — "keep the variable": the host records the choice on the node.</summary>
+    [Parameter]
+    public EventCallback<VariableLint.VariableClash> KeepVariable { get; set; }
+
+    /// <summary>
+    /// §10.2 — "rename the variable": the host renames it (and its references); returns an error
+    /// message to show, or null on success. Null hides the option.
+    /// </summary>
+    [Parameter]
+    public Func<VariableLint.VariableClash, string, string?>? RenameVariable { get; set; }
+
+    private string? renaming;
+    private string renameText = string.Empty;
+    private string? renameError;
+
+    private void StartRename(VariableLint.VariableClash clash)
+    {
+        this.renaming = clash.Name;
+        this.renameText = string.Empty;
+        this.renameError = null;
+    }
+
+    private void ApplyRename(VariableLint.VariableClash clash)
+    {
+        this.renameError = this.RenameVariable?.Invoke(clash, this.renameText);
+        if (this.renameError is null)
+        {
+            this.renaming = null;
+        }
+    }
 
     private Task EscapeLiteralBraces()
         => this.ValueChanged.InvokeAsync(

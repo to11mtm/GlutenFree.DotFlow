@@ -675,7 +675,7 @@ inputs → Condition(isValid) ─true→ continue...
 ForEach(items) [continueOnError: true]
   └─ loopBody → TryCatch
                   ├─ try     → process_item
-                  ├─ catch   → Log("skipped: {{error.message}}")
+                  ├─ catch   → Log("skipped: {{Variable.error.message}}")
                   ├─ finally → audit_log
                   └─ done    → (next iteration)
 ```
