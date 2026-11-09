@@ -13,6 +13,8 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 using LanguageExt;
 using Workflow.Core.Models;
 
@@ -30,6 +32,13 @@ using Workflow.Core.Models;
 /// 4. Convert to expected <see cref="PortDefinition.DataType"/>.
 /// 5. Validate the final value type matches schema.
 /// 6. Accumulate errors, never short-circuit! UwU ✨.
+/// </para>
+/// <para>
+/// Binding is asynchronous all the way down (the "Async binding" follow-up to Stage 7.9): an inline
+/// expression awaits the <see cref="Workflow.Core.Abstractions.IExpressionEvaluator"/> and never
+/// blocks on it. A caller on an actor thread must still start binding off that thread
+/// (<c>Task.Run</c>): an evaluator may finish synchronously (DynamicExpresso does; Jint offloads,
+/// but the contract doesn't promise it), and token resolution always runs on the caller's thread.
 /// </para>
 /// </remarks>
 public class PropertyBinder : IPropertyBinder
@@ -112,10 +121,11 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <inheritdoc />
-    public PropertyBindingResult BindProperties(
+    public async ValueTask<PropertyBindingResult> BindPropertiesAsync(
         IReadOnlyDictionary<string, object?> rawValues,
         Arr<PortDefinition> schema,
-        PropertyBindingContext context)
+        PropertyBindingContext context,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(rawValues);
         ArgumentNullException.ThrowIfNull(context);
@@ -160,7 +170,7 @@ public class PropertyBinder : IPropertyBinder
             {
                 if (ReferencePattern.IsMatch(stringValue))
                 {
-                    var resolution = ResolveReferences(stringValue, context, portName);
+                    var resolution = await ResolveReferencesAsync(stringValue, context, portName, cancellationToken: cancellationToken).ConfigureAwait(false);
                     if (resolution.HasErrors)
                     {
                         errors.AddRange(resolution.Errors);
@@ -209,10 +219,11 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <inheritdoc />
-    public PropertyBindingResult BindModuleProperties(
+    public async ValueTask<PropertyBindingResult> BindModulePropertiesAsync(
         IReadOnlyDictionary<string, object?> rawValues,
         Arr<ModulePropertyDefinition> schema,
-        PropertyBindingContext context)
+        PropertyBindingContext context,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(rawValues);
         ArgumentNullException.ThrowIfNull(context);
@@ -237,7 +248,7 @@ public class PropertyBinder : IPropertyBinder
             object? resolvedValue = stringValue;
             if (ReferencePattern.IsMatch(stringValue))
             {
-                var resolution = ResolveReferences(stringValue, context, name, PropertyKind);
+                var resolution = await ResolveReferencesAsync(stringValue, context, name, PropertyKind, cancellationToken).ConfigureAwait(false);
                 if (resolution.HasErrors)
                 {
                     errors.AddRange(resolution.Errors);
@@ -300,11 +311,12 @@ public class PropertyBinder : IPropertyBinder
     /// references mixed with text (e.g., <c>"Hello {{Variable.Name}}!"</c>), the result
     /// is always a string with interpolated values. Smart and kawaii. 💖.
     /// </remarks>
-    private ReferenceResolution ResolveReferences(
+    private async ValueTask<ReferenceResolution> ResolveReferencesAsync(
         string stringValue,
         PropertyBindingContext context,
         string portName,
-        string kind = "Input")
+        string kind = "Input",
+        CancellationToken cancellationToken = default)
     {
         var matches = ReferencePattern.Matches(stringValue);
         if (matches.Count == 0)
@@ -316,28 +328,38 @@ public class PropertyBinder : IPropertyBinder
         if (matches.Count == 1 && matches[0].Value == stringValue.Trim())
         {
             var innerExpr = matches[0].Groups[1].Value.Trim();
-            var resolution = ResolveSingleReference(innerExpr, context, portName);
+            var resolution = await ResolveSingleReferenceAsync(innerExpr, context, portName, cancellationToken).ConfigureAwait(false);
             return Relabel(resolution, kind);
         }
 
-        // Multiple references or mixed text — interpolate as string. 📝
+        // Multiple references or mixed text — interpolate as string, one match at a time (a match
+        // may await an expression, so Regex.Replace's callback won't do). 📝
         var errors = new List<string>();
-        var result = ReferencePattern.Replace(stringValue, match =>
+        var result = new StringBuilder(stringValue.Length);
+        var cursor = 0;
+        foreach (Match match in matches)
         {
+            result.Append(stringValue, cursor, match.Index - cursor);
             var innerExpr = match.Groups[1].Value.Trim();
-            var resolution = ResolveSingleReference(innerExpr, context, portName);
+            var resolution = await ResolveSingleReferenceAsync(innerExpr, context, portName, cancellationToken).ConfigureAwait(false);
             if (resolution.HasErrors)
             {
                 errors.AddRange(resolution.Errors);
-                return match.Value; // Leave unresolved in output
+                result.Append(match.Value); // Leave unresolved in output
+            }
+            else
+            {
+                result.Append(resolution.ResolvedValue?.ToString() ?? string.Empty);
             }
 
-            return resolution.ResolvedValue?.ToString() ?? string.Empty;
-        });
+            cursor = match.Index + match.Length;
+        }
+
+        result.Append(stringValue, cursor, stringValue.Length - cursor);
 
         return errors.Count > 0
             ? Relabel(ReferenceResolution.Failed(errors), kind)
-            : ReferenceResolution.Resolved(result);
+            : ReferenceResolution.Resolved(result.ToString());
     }
 
     /// <summary>
@@ -364,7 +386,35 @@ public class PropertyBinder : IPropertyBinder
     /// Resolves a single reference expression (the part inside <c>{{ }}</c>).
     /// Routes to variable resolution or node output resolution. 🔀.
     /// </summary>
-    private ReferenceResolution ResolveSingleReference(
+    private ValueTask<ReferenceResolution> ResolveSingleReferenceAsync(
+        string expression,
+        PropertyBindingContext context,
+        string portName,
+        CancellationToken cancellationToken)
+    {
+        // 🧮 Phase 3.1.7 — Non-pure-reference templates are evaluated as expressions when enabled
+        // (the only part that awaits; everything else resolves synchronously)~
+        if (_enableExpressions
+            && _evaluator is not null
+            && !PureReferencePattern.IsMatch(expression)
+            && !IsBareSelfInput(expression, context))
+        {
+            return EvaluateExpressionAsync(expression, context, portName, cancellationToken);
+        }
+
+        return new ValueTask<ReferenceResolution>(ResolveReference(expression, context, portName));
+    }
+
+    /// <summary>Whether the expression is the bare <c>{{input}}</c> root (resolved, never evaluated)~ 🔌.</summary>
+    private static bool IsBareSelfInput(string expression, PropertyBindingContext context)
+        => context.SelfInputs is not null
+           && string.Equals(expression, SelfInputRoot, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolves a reference that isn't evaluated as an expression: <c>{{input…}}</c>,
+    /// <c>{{Variable.X}}</c> or <c>{{NodeId.Output}}</c>. 🔀.
+    /// </summary>
+    private static ReferenceResolution ResolveReference(
         string expression,
         PropertyBindingContext context,
         string portName)
@@ -372,21 +422,9 @@ public class PropertyBinder : IPropertyBinder
         // 🔌 Bare {{input}} — the node's own 'input' port value. Checked before the pure-reference
         // gate because a single undotted identifier isn't a "pure reference" and would otherwise
         // fall into expression evaluation (where 'input' is an unknown identifier)~
-        if (context.SelfInputs is not null
-            && string.Equals(expression, SelfInputRoot, StringComparison.OrdinalIgnoreCase))
+        if (IsBareSelfInput(expression, context))
         {
             return ResolveSelfInputReference(string.Empty, context, portName);
-        }
-
-        // 🧮 Phase 3.1.7 — Non-pure-reference templates are evaluated as expressions when enabled~
-        if (!PureReferencePattern.IsMatch(expression))
-        {
-            if (_enableExpressions && _evaluator is not null)
-            {
-                return EvaluateExpression(expression, context, portName);
-            }
-
-            // No evaluator → fall through to the reference error below (pre-3.1 behavior).
         }
 
         // Check for Variable.X pattern. 💾
@@ -429,10 +467,11 @@ public class PropertyBinder : IPropertyBinder
     /// variables; tokens that don't resolve (e.g. <c>Math.max</c>, <c>JSON.parse</c>) are left intact
     /// for the evaluator to interpret~ ✨.
     /// </summary>
-    private ReferenceResolution EvaluateExpression(
+    private async ValueTask<ReferenceResolution> EvaluateExpressionAsync(
         string expression,
         PropertyBindingContext context,
-        string portName)
+        string portName,
+        CancellationToken cancellationToken)
     {
         var tokens = _tokenCache.GetOrAdd(expression, PrepareTokenSpans);
         var scope = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -450,7 +489,7 @@ public class PropertyBinder : IPropertyBinder
             {
                 builder.Append(expression, cursor, token.Start - cursor);
 
-                var resolution = ResolveSingleReference(token.Text, context, portName);
+                var resolution = await ResolveSingleReferenceAsync(token.Text, context, portName, cancellationToken).ConfigureAwait(false);
                 if (resolution.HasErrors)
                 {
                     // Not a workflow reference (e.g. Math.max, JSON.parse) — leave for the evaluator. 🔧
@@ -472,11 +511,12 @@ public class PropertyBinder : IPropertyBinder
 
         try
         {
-            var value = _evaluator!.EvaluateAsync(rewritten, scope).AsTask().GetAwaiter().GetResult();
+            var value = await _evaluator!.EvaluateAsync(rewritten, scope, cancellationToken).ConfigureAwait(false);
             return ReferenceResolution.Resolved(value);
         }
         catch (Exception ex)
         {
+            cancellationToken.ThrowIfCancellationRequested(); // a cancel isn't a bad expression~
             return ReferenceResolution.Failed(new List<string>
             {
                 $"Input '{portName}': expression '{{{{{expression}}}}}' failed to evaluate: {ex.Message}",
@@ -485,7 +525,11 @@ public class PropertyBinder : IPropertyBinder
     }
 
     /// <inheritdoc/>
-    public ConditionResult EvaluateCondition(string expression, PropertyBindingContext context, object? value)
+    public async ValueTask<ConditionResult> EvaluateConditionAsync(
+        string expression,
+        PropertyBindingContext context,
+        object? value,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (_evaluator is null)
@@ -512,7 +556,7 @@ public class PropertyBinder : IPropertyBinder
         {
             builder.Append(text, cursor, token.Start - cursor);
             var root = token.Text[..token.Text.IndexOf('.', StringComparison.Ordinal)];
-            ReferenceResolution? resolution = root == "value" ? null : ResolveSingleReference(token.Text, context, "condition");
+            ReferenceResolution? resolution = root == "value" ? null : await ResolveSingleReferenceAsync(token.Text, context, "condition", cancellationToken).ConfigureAwait(false);
             if (resolution is { HasErrors: false } resolved)
             {
                 var safeName = "__ref_" + token.Text.Replace('.', '_');
@@ -532,10 +576,11 @@ public class PropertyBinder : IPropertyBinder
         object? result;
         try
         {
-            result = _evaluator.EvaluateAsync(builder.ToString(), scope).AsTask().GetAwaiter().GetResult();
+            result = await _evaluator.EvaluateAsync(builder.ToString(), scope, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
+            cancellationToken.ThrowIfCancellationRequested(); // a cancel isn't a bad condition~
             return ConditionResult.Error($"'{text}' failed to evaluate: {ex.Message}");
         }
 

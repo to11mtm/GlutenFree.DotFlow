@@ -39,49 +39,49 @@ public class PropertyTemplateBindingTests
         => new(name, name, typeof(string));
 
     [Fact]
-    public void TemplatedProperty_ResolvesVariableReference()
+    public async Task TemplatedProperty_ResolvesVariableReference()
     {
         // The headline fix: an HTTP url built from a variable finally reaches the module resolved.
         var raw = new Dictionary<string, object?> { ["url"] = "{{Variable.host}}/orders" };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Templated("url")), Context(("host", "https://api.example.com")));
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Templated("url")), Context(("host", "https://api.example.com")));
 
         result.Success.Should().BeTrue();
         result.BoundValues["url"].Should().Be("https://api.example.com/orders");
     }
 
     [Fact]
-    public void WholeTokenProperty_PreservesTheResolvedType()
+    public async Task WholeTokenProperty_PreservesTheResolvedType()
     {
         var raw = new Dictionary<string, object?> { ["retries"] = "{{Variable.count}}" };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Templated("retries")), Context(("count", 5)));
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Templated("retries")), Context(("count", 5)));
 
         result.BoundValues["retries"].Should().Be(5, because: "a whole-token reference keeps its type");
     }
 
     [Fact]
-    public void NonTemplatedProperty_IsLeftExactlyAsAuthored()
+    public async Task NonTemplatedProperty_IsLeftExactlyAsAuthored()
     {
         // SQL text, script bodies and connection strings must never be rewritten — values bind
         // through parameters instead (D7).
         const string sql = "SELECT * FROM Orders WHERE Host = {{Variable.host}}";
         var raw = new Dictionary<string, object?> { ["query"] = sql };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Literal("query")), Context(("host", "evil")));
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Literal("query")), Context(("host", "evil")));
 
         result.Success.Should().BeTrue();
         result.BoundValues["query"].Should().Be(sql);
     }
 
     [Fact]
-    public void UnresolvableReference_InATemplatedProperty_FailsTheBinding()
+    public async Task UnresolvableReference_InATemplatedProperty_FailsTheBinding()
     {
         // Q4: fail hard. Silently passing "{{Variable.typo}}" downstream produced bugs that only
         // surfaced much later, and much less legibly.
         var raw = new Dictionary<string, object?> { ["url"] = "{{Variable.typo}}/orders" };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Templated("url")), Context(("host", "x")));
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Templated("url")), Context(("host", "x")));
 
         result.Success.Should().BeFalse();
         result.Errors.Count.Should().Be(1);
@@ -89,56 +89,56 @@ public class PropertyTemplateBindingTests
     }
 
     [Fact]
-    public void PropertyErrors_ReadAsPropertiesNotInputs()
+    public async Task PropertyErrors_ReadAsPropertiesNotInputs()
     {
         var raw = new Dictionary<string, object?> { ["url"] = "{{Variable.missing}}" };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Templated("url")), Context());
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Templated("url")), Context());
 
         result.Errors[0].Should().StartWith("Property 'url'");
     }
 
     [Fact]
-    public void EscapedBraces_ProduceALiteralAndDoNotResolve()
+    public async Task EscapedBraces_ProduceALiteralAndDoNotResolve()
     {
         // Q12: the escape hatch that makes fail-hard survivable for values that genuinely contain
         // "{{" — a Mustache template being written to a file, say.
         var raw = new Dictionary<string, object?> { ["body"] = @"Hello \{\{name}}" };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Templated("body")), Context());
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Templated("body")), Context());
 
         result.Success.Should().BeTrue();
         result.BoundValues["body"].Should().Be("Hello {{name}}");
     }
 
     [Fact]
-    public void EscapedAndRealReferences_CanCoexist()
+    public async Task EscapedAndRealReferences_CanCoexist()
     {
         var raw = new Dictionary<string, object?> { ["body"] = @"{{Variable.greeting}} \{\{literal}}" };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Templated("body")), Context(("greeting", "hi")));
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Templated("body")), Context(("greeting", "hi")));
 
         result.BoundValues["body"].Should().Be("hi {{literal}}");
     }
 
     [Fact]
-    public void NonStringProperties_PassThroughUntouched()
+    public async Task NonStringProperties_PassThroughUntouched()
     {
         var raw = new Dictionary<string, object?> { ["retries"] = 3, ["enabled"] = true };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Templated("retries"), Templated("enabled")), Context());
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Templated("retries"), Templated("enabled")), Context());
 
         result.BoundValues["retries"].Should().Be(3);
         result.BoundValues["enabled"].Should().Be(true);
     }
 
     [Fact]
-    public void PropertiesNotInTheSchema_PassThrough()
+    public async Task PropertiesNotInTheSchema_PassThrough()
     {
         // Reserved designer properties like outputMode aren't in the module schema.
         var raw = new Dictionary<string, object?> { ["outputMode"] = "merged" };
 
-        var result = Binder.BindModuleProperties(raw, Schema(Templated("url")), Context());
+        var result = await Binder.BindModulePropertiesAsync(raw, Schema(Templated("url")), Context());
 
         result.BoundValues["outputMode"].Should().Be("merged");
     }
@@ -146,7 +146,7 @@ public class PropertyTemplateBindingTests
     // ── F9: inputs must not expand unless the port opts in ──────────────────────
 
     [Fact]
-    public void InputCarryingBracesFromUpstreamData_IsPassedThroughUntouched()
+    public async Task InputCarryingBracesFromUpstreamData_IsPassedThroughUntouched()
     {
         // 🛡️ The regression guard for F9. An input's value is upstream data or a run input, never
         // text an author typed. Expanding it let untrusted content — an HTTP response body, a
@@ -156,7 +156,7 @@ public class PropertyTemplateBindingTests
         var raw = new Dictionary<string, object?> { ["body"] = upstreamData };
         var schema = Arr.create(PortDefinition.Create<string>("body"));
 
-        var result = Binder.BindProperties(raw, schema, Context(("secret", "hunter2")));
+        var result = await Binder.BindPropertiesAsync(raw, schema, Context(("secret", "hunter2")));
 
         result.Success.Should().BeTrue(because: "unresolvable data must not fail the node either");
         result.BoundValues["body"].Should().Be(upstreamData);
@@ -164,23 +164,23 @@ public class PropertyTemplateBindingTests
     }
 
     [Fact]
-    public void InputThatOptsIn_StillResolves()
+    public async Task InputThatOptsIn_StillResolves()
     {
         var raw = new Dictionary<string, object?> { ["greeting"] = "{{Variable.name}}" };
         var schema = Arr.create(PortDefinition.Create<string>("greeting", supportsTemplates: true));
 
-        var result = Binder.BindProperties(raw, schema, Context(("name", "Ami")));
+        var result = await Binder.BindPropertiesAsync(raw, schema, Context(("name", "Ami")));
 
         result.BoundValues["greeting"].Should().Be("Ami");
     }
 
     [Fact]
-    public void InputThatOptsIn_AlsoHonoursTheEscape()
+    public async Task InputThatOptsIn_AlsoHonoursTheEscape()
     {
         var raw = new Dictionary<string, object?> { ["greeting"] = @"\{\{not a token}}" };
         var schema = Arr.create(PortDefinition.Create<string>("greeting", supportsTemplates: true));
 
-        var result = Binder.BindProperties(raw, schema, Context());
+        var result = await Binder.BindPropertiesAsync(raw, schema, Context());
 
         result.BoundValues["greeting"].Should().Be("{{not a token}}");
     }

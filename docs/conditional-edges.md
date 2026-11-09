@@ -134,7 +134,7 @@ what would change.
 - *Against:* if/else needs mutually exclusive conditions written out by hand (`>= 750`,
   `>= 600 && < 750`, `< 600`), or a Switch node.
 - *Change:*
-  - In `EdgeRouting.Fired`, treat every edge like priority 0 (drop the chain loop).
+  - In `EdgeRouting.FiredAsync`, treat every edge like priority 0 (drop the chain loop).
   - Remove the designer's Priority field and the `n:` label prefix (`EdgeConditions.Label`), and the
     chain lint.
   - Rewrite `ConditionalEdgeTests.PriorityEdges_…` / `OnceAPriorityEdgeWins_…`.
@@ -147,27 +147,27 @@ the API DTOs and the designer.
 - *For:* one chain per node.
 - *Against:* surprising when a module activates several ports (a Switch), because one port's edges
   would suppress another's.
-- *Change:* group by node instead of by `SourcePortName` in `EdgeRouting.Fired` and in
+- *Change:* group by node instead of by `SourcePortName` in `EdgeRouting.FiredAsync` and in
   `EdgeConditions.Validate`.
 
 **P4. Priority = evaluation order only (all true edges still fire).** Conditions run in priority
 order, but nothing is exclusive.
 - *For:* deterministic side effects if conditions ever have them.
 - *Against:* they don't (the sandbox is pure), so it buys nothing visible.
-- *Change:* in `EdgeRouting.Fired`, remove the `break`.
+- *Change:* in `EdgeRouting.FiredAsync`, remove the `break`.
 
 **P5. No implicit "else".** An unconditional edge in a chain is a designer error rather than "else".
 - *Change:* make the chain lint an error, or reject it at save. The engine needs no change.
 
 **P6. Highest number wins** instead of lowest.
-- *Change:* flip the `OrderBy` to `OrderByDescending` in `EdgeRouting.Fired`, and in the docs and
+- *Change:* flip the `OrderBy` to `OrderByDescending` in `EdgeRouting.FiredAsync`, and in the docs and
   lint wording.
 
 ### Other choices
 
 **C1. Full `{{…}}` syntax only, no `value`.** Conditions would use exact template syntax
 (`{{check.output.total}} > 1000`).
-- *Change:* stop seeding `value` in `PropertyBinder.EvaluateCondition`, and update the docs,
+- *Change:* stop seeding `value` in `PropertyBinder.EvaluateConditionAsync`, and update the docs,
   placeholder and help.
 
 **C2. A false edge blocks its join.** A false edge counts as "not satisfied", so a join never runs
@@ -176,7 +176,7 @@ if any incoming edge is false.
   it; `TryFireSuccessor` must check the inactive edges.
 
 **C3. A bad condition counts as false (plus a warning)** instead of failing the source node.
-- *Change:* in `EdgeRouting.Fired`'s `Passes`, return false and log instead of throwing; drop the
+- *Change:* in `EdgeRouting.FiredAsync`'s `PassesAsync`, return false and log instead of throwing; drop the
   `EdgeConditionException` handling in the executors.
 
 **C4. Conditions on construct edges.** Evaluate them on a construct's `done` (or other non-body)
@@ -188,8 +188,10 @@ ports too.
 
 *Where it lives:*
 - **Engine:** `Workflow.Engine/Actors/EdgeRouting.cs` (which edges fire),
-  `DispatchCore.ExecuteReadySuccessorsVia`, the `FiredEdges` / `RouteVia` and `_inactiveEdges` hooks
-  in `WorkflowExecutor` / `SubGraphExecutor`, and `PropertyBinder.EvaluateCondition`.
+  `DispatchCore.ExecuteReadySuccessorsVia`, the `DecideEdges` / `HandleEdgesDecided` / `RouteVia`
+  and `_inactiveEdges` hooks in `WorkflowExecutor` / `SubGraphExecutor`, and
+  `PropertyBinder.EvaluateConditionAsync`. Conditions are evaluated in a task
+  (`EdgeRouting.DecideInBackground`); the source node stays running until `EdgesDecided` comes back.
 - **Designer:** `Designer/State/EdgeConditions.cs`, the connection section of
   `PropertiesPanel.razor`, `EditConnectionPriorityCommand`, and the label in `EdgeLayer.razor`.
 - **Tests:** `Workflow.Tests/Engine/ConditionalEdgeTests.cs` and

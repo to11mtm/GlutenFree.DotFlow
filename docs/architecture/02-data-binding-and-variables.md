@@ -28,7 +28,7 @@ A module's `ModuleSchema` declares two kinds of value:
 | --- | --- | --- |
 | Carries | Runtime data from upstream nodes or run inputs | Configuration the author typed in the designer |
 | Stored in | Nothing: gathered fresh per run | `NodeDefinition.Properties` (`HashMap<string, JsonElement>`) |
-| Bound by | `PropertyBinder.BindProperties` | `PropertyBinder.BindModuleProperties` |
+| Bound by | `PropertyBinder.BindPropertiesAsync` | `PropertyBinder.BindModulePropertiesAsync` |
 | Template expansion | Only if `SupportsTemplates = true` (default **false**) | Only if `SupportsTemplates = true` (default **false**) |
 | Type conversion | Yes, to `PortDefinition.DataType` | No, passed as converted JSON |
 | Missing value | Default, or an error if `IsRequired` (default **true**) | Passed through as absent |
@@ -88,7 +88,7 @@ the *only* variables. The overlay has two consequences:
 
 ## 4. PropertyBinder
 
-### Ports: `BindProperties(rawValues, schema.Inputs, context)`
+### Ports: `BindPropertiesAsync(rawValues, schema.Inputs, context)`
 
 For each declared port, the binder runs these steps and accumulates every error (it never stops at
 the first):
@@ -105,7 +105,7 @@ the first):
 After that loop, input keys that aren't in the schema **pass through untouched**. That is how
 `srcId.key`, `__incomingBranches__` and the rest reach modules that know to look for them.
 
-### Properties: `BindModuleProperties(rawValues, schema.Properties, context)`
+### Properties: `BindModulePropertiesAsync(rawValues, schema.Properties, context)`
 
 Only string values whose property name is template-enabled get resolved. The name comparison is
 case-insensitive. Everything else passes through verbatim.
@@ -170,8 +170,9 @@ A template that isn't a pure reference is evaluated as an expression:
 
 `ConnectionDefinition.Condition` and `Priority` decide which edges fire (Stage 7.2, see
 [conditional edges](../conditional-edges.md)): `EdgeRouting` evaluates conditions through
-`PropertyBinder.EvaluateCondition`, with `value` set to the edge's value. Priority ≥ 1 makes the
-edges leaving one port an if / else-if / else chain. Branching can also be done with
+`PropertyBinder.EvaluateConditionAsync`, with `value` set to the edge's value. Priority ≥ 1 makes the
+edges leaving one port an if / else-if / else chain. The executors evaluate conditions in a task and
+route when the result comes back, so a slow condition doesn't block them. Branching can also be done with
 `builtin.condition` or `builtin.switch` plus `ActivePorts`, which are checked first.
 
 ---
@@ -282,10 +283,14 @@ These came from reading the code. Each needs a failing test before a fix.
    - a result arriving after a timeout or cancel is dropped, so there is no second report.
    Binding failures keep their messages ("Input binding failed: …" / "Property binding failed: …").
 
-   Still synchronous: the binder waits on the evaluator (`GetAwaiter().GetResult()`), now on a
-   thread-pool thread. Jint's 250 ms limit bounds it. Edge conditions (Stage 7.2) are evaluated
-   on the *executor's* thread when the source completes, with the same bound. Making
-   `IPropertyBinder` async would remove both; it's tracked as a follow-up in the worklog.
+   **Async binding (follow-up, 2026-11-09):** `IPropertyBinder` is async (`BindPropertiesAsync`,
+   `BindModulePropertiesAsync`, `EvaluateConditionAsync`); the binder awaits the evaluator and no
+   longer waits on it. Edge conditions (Stage 7.2) are no longer evaluated on the *executor's*
+   thread: `EdgeRouting.DecideInBackground` runs them in a task and pipes `EdgesDecided` back, and
+   the node completes (or fails) when that arrives. `StreamRegionExecutor` binds its stages'
+   properties in its run task too. These callers start binding with `Task.Run` rather than relying
+   on `await`: an evaluator or binder may finish synchronously (DynamicExpresso does; Jint offloads
+   to the pool itself).
 6. **Secrets reach history in plain text.** Run inputs are copied into every node's input
    dictionary, and that dictionary is persisted as `NodeExecutionRecord.Inputs`. Variable updates
    are also logged with their values at debug level.

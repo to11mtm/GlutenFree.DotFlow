@@ -89,7 +89,7 @@ sequenceDiagram
     loop every ready node
         X->>N: spawn "node-{id}", Execute(inputs, variables)
         X-->>B: NodeStateChanged(Running) → "NodeStarted"
-        N->>N: resolve module, PropertyBinder.BindProperties
+        N->>N: resolve module, PropertyBinder.BindPropertiesAsync
         N->>M: ExecuteAsync(ctx, token) on Task.Run
         M-->>N: ModuleResult (outputs, activePorts, variableUpdates, *Request)
         N->>X: NodeExecutionCompleted
@@ -163,7 +163,7 @@ Inside `NodeExecutor.HandleExecute`:
 | Cancellation | Creates a CTS linked to the parent token. |
 | Timeout | `Context.SetReceiveTimeout(node.Timeout ?? 30000 ms)`. On timeout it cancels the CTS and fails with `TimeoutException`. |
 | Module lookup | Uses `IModuleRegistry.GetModule(moduleId[, pinnedVersion])`. A missing *pinned* version fails clearly. A missing *module* falls back to a **stub that succeeds** (see §12). |
-| Binding | `PropertyBinder.BindProperties(inputs, schema.Inputs, bindingContext)` resolves references, expands opted-in templates, converts types and applies defaults. A binding error fails the node. See [02](02-data-binding-and-variables.md). |
+| Binding | `PropertyBinder.BindPropertiesAsync(inputs, schema.Inputs, bindingContext)` resolves references, expands opted-in templates, converts types and applies defaults. A binding error fails the node. See [02](02-data-binding-and-variables.md). |
 | Execution | Calls `module.ExecuteAsync(ctx, token)` inside `Task.Run`, and pipes the result back as `ExecutionResult`. |
 | Result | Success → `SendSuccess(outputs, metrics, variableUpdates, activePorts, loop/parallel/tryCatch/transaction)`. `ModuleResult.Success == false` or an exception → `NodeExecutionFailed`. |
 

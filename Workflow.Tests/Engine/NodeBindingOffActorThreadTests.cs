@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using Akka.Actor;
 using Akka.TestKit.Xunit2;
 using FluentAssertions;
@@ -108,7 +109,10 @@ public sealed class NodeBindingOffActorThreadTests : TestKit
             .Outputs["input"].Should().Be("hello");
     }
 
-    /// <summary>A real binder that takes its time on the inputs (like a slow expression).</summary>
+    /// <summary>
+    /// A real binder that takes its time on the inputs (like a slow expression). It blocks rather
+    /// than awaits, the way a synchronous evaluator (DynamicExpresso) or a custom binder can.
+    /// </summary>
     private sealed class SlowBinder : IPropertyBinder
     {
         private readonly TimeSpan delay;
@@ -116,17 +120,14 @@ public sealed class NodeBindingOffActorThreadTests : TestKit
 
         public SlowBinder(TimeSpan delay) => this.delay = delay;
 
-        public PropertyBindingResult BindProperties(IReadOnlyDictionary<string, object?> rawValues, Arr<PortDefinition> schema, PropertyBindingContext context)
+        public ValueTask<PropertyBindingResult> BindPropertiesAsync(IReadOnlyDictionary<string, object?> rawValues, Arr<PortDefinition> schema, PropertyBindingContext context, CancellationToken cancellationToken = default)
         {
             Thread.Sleep(this.delay);
-            return this.inner.BindProperties(rawValues, schema, context);
+            return this.inner.BindPropertiesAsync(rawValues, schema, context, cancellationToken);
         }
 
-        public PropertyBindingResult BindModuleProperties(IReadOnlyDictionary<string, object?> rawValues, Arr<ModulePropertyDefinition> schema, PropertyBindingContext context)
-            => this.inner.BindModuleProperties(rawValues, schema, context);
-
-        public ConditionResult EvaluateCondition(string expression, PropertyBindingContext context, object? value)
-            => this.inner.EvaluateCondition(expression, context, value);
+        public ValueTask<PropertyBindingResult> BindModulePropertiesAsync(IReadOnlyDictionary<string, object?> rawValues, Arr<ModulePropertyDefinition> schema, PropertyBindingContext context, CancellationToken cancellationToken = default)
+            => this.inner.BindModulePropertiesAsync(rawValues, schema, context, cancellationToken);
     }
 
     private sealed class FailingBinder : IPropertyBinder
@@ -136,13 +137,10 @@ public sealed class NodeBindingOffActorThreadTests : TestKit
 
         public FailingBinder(bool inputs) => this.inputs = inputs;
 
-        public PropertyBindingResult BindProperties(IReadOnlyDictionary<string, object?> rawValues, Arr<PortDefinition> schema, PropertyBindingContext context)
-            => this.inputs ? PropertyBindingResult.Fail("nope") : this.inner.BindProperties(rawValues, schema, context);
+        public ValueTask<PropertyBindingResult> BindPropertiesAsync(IReadOnlyDictionary<string, object?> rawValues, Arr<PortDefinition> schema, PropertyBindingContext context, CancellationToken cancellationToken = default)
+            => this.inputs ? ValueTask.FromResult(PropertyBindingResult.Fail("nope")) : this.inner.BindPropertiesAsync(rawValues, schema, context, cancellationToken);
 
-        public PropertyBindingResult BindModuleProperties(IReadOnlyDictionary<string, object?> rawValues, Arr<ModulePropertyDefinition> schema, PropertyBindingContext context)
-            => this.inputs ? this.inner.BindModuleProperties(rawValues, schema, context) : PropertyBindingResult.Fail("nope");
-
-        public ConditionResult EvaluateCondition(string expression, PropertyBindingContext context, object? value)
-            => this.inner.EvaluateCondition(expression, context, value);
+        public ValueTask<PropertyBindingResult> BindModulePropertiesAsync(IReadOnlyDictionary<string, object?> rawValues, Arr<ModulePropertyDefinition> schema, PropertyBindingContext context, CancellationToken cancellationToken = default)
+            => this.inputs ? this.inner.BindModulePropertiesAsync(rawValues, schema, context, cancellationToken) : ValueTask.FromResult(PropertyBindingResult.Fail("nope"));
     }
 }

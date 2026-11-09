@@ -7,8 +7,12 @@ namespace Workflow.Engine.Actors;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Akka.Actor;
 using LanguageExt;
 using Workflow.Core.Models;
+using Workflow.Engine.Messages;
 using Workflow.Modules.Binding;
 
 /// <summary>
@@ -34,27 +38,25 @@ public static class EdgeRouting
     /// <summary>Whether any outgoing connection of the node has a condition or a priority.</summary>
     /// <param name="definition">The workflow.</param>
     /// <param name="nodeId">The node.</param>
-    /// <returns>True when routing must go through <see cref="Fired"/>.</returns>
+    /// <returns>True when routing must go through <see cref="FiredAsync"/>.</returns>
     public static bool IsConditional(WorkflowDefinition definition, string nodeId)
         => definition.Connections.Exists(c => c.SourceNodeId == nodeId && (!string.IsNullOrWhiteSpace(c.Condition) || c.Priority > 0));
 
     /// <summary>
-    /// Works out which outgoing connections fire, building the condition context the way the
-    /// executors need it: the run's variables, plus the outputs of the node and its ancestors.
+    /// Builds what <see cref="FiredAsync"/> needs to evaluate conditions: the binder, plus a context
+    /// with the run's variables and the outputs of the node and its ancestors. Call it on the
+    /// executor's thread: it copies what it reads, so the evaluation can run elsewhere.
     /// </summary>
     /// <param name="definition">The workflow.</param>
     /// <param name="nodeId">The node that completed.</param>
-    /// <param name="activePorts">The ports the module activated (empty = all).</param>
     /// <param name="outputs">The node's (shaped) outputs.</param>
     /// <param name="services">For the binder / expression evaluator.</param>
-    /// <param name="variables">The run's variables, including the node's own writes.</param>
+    /// <param name="variables">The run's variables, including the node's own writes (not copied: pass a fresh dictionary).</param>
     /// <param name="completedOutputs">Completed nodes' outputs (outer scopes first).</param>
-    /// <returns>The connections that fire.</returns>
-    /// <exception cref="EdgeConditionException">A condition couldn't be evaluated.</exception>
-    public static IReadOnlyList<ConnectionDefinition> Fired(
+    /// <returns>The binder and the condition context.</returns>
+    public static (IPropertyBinder Binder, PropertyBindingContext Context) ConditionContext(
         WorkflowDefinition definition,
         string nodeId,
-        Arr<string> activePorts,
         IReadOnlyDictionary<string, object?> outputs,
         IServiceProvider services,
         IReadOnlyDictionary<string, object?> variables,
@@ -64,31 +66,76 @@ public static class EdgeRouting
 
         var binder = services.GetService(typeof(IPropertyBinder)) as IPropertyBinder
                      ?? new PropertyBinder(services.GetService(typeof(Workflow.Core.Abstractions.IExpressionEvaluator)) as Workflow.Core.Abstractions.IExpressionEvaluator);
-        var view = NodeAncestry.ViewFor(definition, nodeId, completedOutputs);
+        var view = NodeAncestry.ViewFor(definition, nodeId, completedOutputs); // a copy of the outer map~
         var nodeOutputs = new Dictionary<string, IReadOnlyDictionary<string, object?>>(view.Outputs, StringComparer.Ordinal)
         {
             [nodeId] = outputs,
         };
 
-        return Fired(definition, nodeId, activePorts, outputs, binder, new PropertyBindingContext(variables, nodeOutputs, services));
+        return (binder, new PropertyBindingContext(variables, nodeOutputs, services));
     }
 
-    /// <summary>Works out which outgoing connections fire.</summary>
+    /// <summary>
+    /// Decides a completed node's edges in a task and pipes an <see cref="EdgesDecided"/> back to
+    /// <paramref name="self"/>. The executor routes (or fails the node) when that arrives; until
+    /// then the node is still running, and the executor keeps handling other messages.
+    /// </summary>
+    /// <param name="completed">The node's completion (handed back unchanged).</param>
+    /// <param name="definition">The workflow.</param>
+    /// <param name="outputs">The node's (shaped) outputs.</param>
+    /// <param name="condition">From <see cref="ConditionContext"/>, built on the executor's thread.</param>
+    /// <param name="self">The executor.</param>
+    /// <param name="cancellationToken">The run's token.</param>
+    public static void DecideInBackground(
+        NodeExecutionCompleted completed,
+        WorkflowDefinition definition,
+        IReadOnlyDictionary<string, object?> outputs,
+        (IPropertyBinder Binder, PropertyBindingContext Context) condition,
+        IActorRef self,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(completed);
+
+        Task.Run(() => FiredAsync(definition, completed.NodeId, completed.ActivePorts, outputs, condition.Binder, condition.Context, cancellationToken), cancellationToken)
+            .ContinueWith(
+                task => task.IsCompletedSuccessfully
+                    ? new EdgesDecided(completed, task.Result, null)
+                    : new EdgesDecided(
+                        completed,
+                        null,
+                        task.IsCanceled ? new OperationCanceledException("Edge conditions were cancelled") : task.Exception!.GetBaseException()),
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default)
+            .PipeTo(self);
+    }
+
+    /// <summary>
+    /// Works out which outgoing connections fire. Conditions are awaited one at a time, in the order
+    /// the rules need (a Priority chain stops at its first true edge).
+    /// </summary>
+    /// <remarks>
+    /// The executors run this in a task (<c>Task.Run</c>) and pipe the result back, so a slow
+    /// condition never holds their thread: a binder or evaluator may finish synchronously
+    /// (DynamicExpresso does), so awaiting alone wouldn't leave the calling thread.
+    /// </remarks>
     /// <param name="definition">The workflow.</param>
     /// <param name="nodeId">The node that completed.</param>
     /// <param name="activePorts">The ports the module activated (empty = all).</param>
     /// <param name="outputs">The node's (shaped) outputs — each edge's <c>value</c> is its port's output.</param>
     /// <param name="binder">Evaluates conditions.</param>
     /// <param name="context">Variables and upstream outputs for conditions.</param>
+    /// <param name="cancellationToken">Cancels the evaluation.</param>
     /// <returns>The connections that fire.</returns>
     /// <exception cref="EdgeConditionException">A condition couldn't be evaluated.</exception>
-    public static IReadOnlyList<ConnectionDefinition> Fired(
+    public static async Task<IReadOnlyList<ConnectionDefinition>> FiredAsync(
         WorkflowDefinition definition,
         string nodeId,
         Arr<string> activePorts,
         IReadOnlyDictionary<string, object?> outputs,
         IPropertyBinder binder,
-        PropertyBindingContext context)
+        PropertyBindingContext context,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(binder);
@@ -104,7 +151,7 @@ public static class EdgeRouting
         {
             foreach (var (connection, _) in port.Where(x => x.Connection.Priority <= 0))
             {
-                if (Passes(connection))
+                if (await PassesAsync(connection).ConfigureAwait(false))
                 {
                     fired.Add(connection);
                 }
@@ -112,7 +159,7 @@ public static class EdgeRouting
 
             foreach (var (connection, _) in port.Where(x => x.Connection.Priority > 0).OrderBy(x => x.Connection.Priority).ThenBy(x => x.Index))
             {
-                if (Passes(connection))
+                if (await PassesAsync(connection).ConfigureAwait(false))
                 {
                     fired.Add(connection);
                     break; // first true wins~
@@ -122,7 +169,7 @@ public static class EdgeRouting
 
         return fired;
 
-        bool Passes(ConnectionDefinition connection)
+        async Task<bool> PassesAsync(ConnectionDefinition connection)
         {
             if (string.IsNullOrWhiteSpace(connection.Condition))
             {
@@ -130,13 +177,23 @@ public static class EdgeRouting
             }
 
             outputs.TryGetValue(connection.SourcePortName, out var value);
-            var result = binder.EvaluateCondition(connection.Condition, context, value);
+            var result = await binder.EvaluateConditionAsync(connection.Condition, context, value, cancellationToken).ConfigureAwait(false);
             return result.Failure is null
                 ? result.Value
                 : throw new EdgeConditionException(connection, result.Failure);
         }
     }
 }
+
+/// <summary>
+/// 🔀 A completed node's edges were decided off the executor's thread (see
+/// <see cref="EdgeRouting.DecideInBackground"/>).
+/// </summary>
+/// <param name="Completed">The node's completion, as the executor received it.</param>
+/// <param name="Fired">The connections that fire, or null when <paramref name="Error"/> is set.</param>
+/// <param name="Error">Why the edges couldn't be decided (usually <see cref="EdgeConditionException"/>);
+/// the executor fails the source node with it.</param>
+public sealed record EdgesDecided(NodeExecutionCompleted Completed, IReadOnlyList<ConnectionDefinition>? Fired, Exception? Error);
 
 /// <summary>🔀 Stage 7.2 — an edge condition couldn't be evaluated (counts as the source node failing).</summary>
 public sealed class EdgeConditionException : InvalidOperationException

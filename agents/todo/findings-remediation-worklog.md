@@ -169,7 +169,8 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 
 ### Follow-ups (future work, not findings)
 
-- [ ] **Async binding (`IPropertyBinder` → async).** After Stage 7.9, binding no longer runs on the
+- [x] ✅ **done 2026-11-09** (see the "Async binding" progress-log entry) —
+  **Async binding (`IPropertyBinder` → async).** After Stage 7.9, binding no longer runs on the
   node's actor thread. It still waits synchronously on the expression evaluator, though, now on a
   pool thread.
   - Edge conditions (`EdgeRouting.Fired` → `EvaluateCondition`, Stage 7.2) are evaluated on the
@@ -180,6 +181,11 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   - It touches the binder interface, modules that call the binder, and both executors' completion
     paths.
 
+- [ ] **Flaky test `StreamRegionExecutionTests.Region_PublishesLiveCounts_WhileItRuns_ThenTheFinalSummary`
+  (Stage 7.6).** It failed once in a full `Workflow.Tests` run during the Async binding work, then
+  passed in the next full run and 5/5 alone. The failure message wasn't captured. It's timing-based
+  (a 25 ms interval against 8 items × 150 ms), so it probably flakes under load. Capture the message
+  if it recurs.
 - [ ] **Flaky UI test `MonitorTests.Monitor_RowOpen_NavigatesToDetail`.** Failed once in a full
   UI run during Stage 7.2 ("nav.Uri … is too short") and passed on the re-run and alone. The
   navigation assertion probably races the click handler. Unrelated to 7.2.
@@ -277,6 +283,41 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Async binding follow-up (IPropertyBinder → async, conditions off the executor thread)
+- No decision needed. The 7.2 semantics are unchanged: a bad condition fails the source node, and
+  in a Priority chain the first true edge per port wins.
+- `IPropertyBinder` is async-only: `BindPropertiesAsync`, `BindModulePropertiesAsync` and
+  `EvaluateConditionAsync` (each takes a ValueTask and a CancellationToken). The sync methods are
+  gone, and every caller has been migrated.
+- `PropertyBinder` awaits the evaluator. No `GetAwaiter().GetResult()` is left in binding.
+  - Mixed-text interpolation is now a manual loop (the `Regex.Replace` callback can't await).
+  - On a cancel it throws `OperationCanceledException`, not "failed to evaluate".
+- `NodeExecutor`: `BindAndBuildContextAsync` (it passes the node's token).
+- `StreamRegionExecutor`: binds stage properties in `BindAndRunAsync`, inside the region's
+  `Task.Run`. It used to bind on the actor thread.
+- Edge conditions:
+  - `EdgeRouting.ConditionContext` takes a snapshot on the actor thread.
+  - `EdgeRouting.DecideInBackground` runs `FiredAsync` in `Task.Run` and pipes `EdgesDecided`
+    back.
+  - `HandleEdgesDecided` (both executors) then fails the node or calls `CompleteNode`. It drops
+    the result if the run is terminal (`DropIfTerminal`) or the body is `_finished`.
+  - The node stays Running until then.
+- Tests: `Engine/EdgeConditionsOffActorThreadTests` (3), each using a binder that blocks:
+  - the status reply arrives while a condition runs;
+  - a cancel is handled at once, and the late result is ignored;
+  - in a loop body, another branch moves on.
+- The binder unit tests and the test binders were migrated to async.
+- Proof: stashing doesn't compile (the tests use the new interface). I used a mutant instead:
+  without the `Task.Run` in `DecideInBackground`, 3/3 go red (replies ~1.5 s late).
+- Docs: 01, 02 (§6 and §10 item 5), 03 and `docs/conditional-edges.md`.
+- Suites:
+  - unfiltered `dotnet test Workflow.Tests`: 1963/1963 on the re-run. The first full run had
+    1 failure, `StreamRegionExecutionTests.Region_PublishesLiveCounts_WhileItRuns_ThenTheFinalSummary`,
+    which then passed 5/5 alone. I logged it as flaky in the follow-ups.
+  - `Workflow.Tests.UI`: 779/779.
+- Memorizer: added 2444cd75 (async binding rule and Task.Run gotcha). Updated 8addec6c (7.9) and
+  6ec4ef40 (conditional-edges map).
+
 ### 2026-11-09 — Stage 7.9 binding off the NodeExecutor actor thread (02 §10 item 5)
 - No decision needed.
 - `NodeExecutor.HandleExecute` now only gathers (on the actor thread) the binding context, the raw

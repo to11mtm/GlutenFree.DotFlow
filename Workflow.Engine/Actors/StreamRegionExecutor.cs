@@ -177,7 +177,8 @@ public sealed class StreamRegionExecutor : ReceiveActor
                 this.progressTimer = Context.System.Scheduler.ScheduleTellRepeatedlyCancelable(interval, interval, self, ProgressTick.Instance, self);
             }
 
-            runner.RunAsync(new StreamRegionPlan(stages), this.parentToken, this.liveCounts)
+            // Binding (which can evaluate expressions) runs in the task, off this actor's thread~
+            Task.Run(() => this.BindAndRunAsync(runner, stages))
                 .ContinueWith(
                     task => task.IsFaulted
                         ? new RegionRunFinished(null, task.Exception?.GetBaseException())
@@ -376,6 +377,34 @@ public sealed class StreamRegionExecutor : ReceiveActor
             ? e.GetString()
             : null;
 
+    /// <summary>
+    /// Resolves each stage's template-enabled properties, then runs the region. Runs in a task, so it
+    /// reads only fields that never change (<see cref="variables"/>, <see cref="inputs"/>, the
+    /// services) and touches no actor state.
+    /// </summary>
+    private async Task<StreamRegionResult> BindAndRunAsync(StreamRegionRunner runner, IReadOnlyList<StreamStage> unbound)
+    {
+        var binder = this.serviceProvider.GetService<IPropertyBinder>() ?? new PropertyBinder();
+        var stages = new List<StreamStage>(unbound.Count);
+        foreach (var stage in unbound)
+        {
+            var context = stage.Context;
+            var bindingContext = new PropertyBindingContext(
+                context.Variables,
+                new Dictionary<string, IReadOnlyDictionary<string, object?>>(),
+                this.serviceProvider,
+                this.inputs);
+
+            // A property that doesn't resolve keeps its raw value here (unlike the batch path)~
+            var bound = await binder.BindModulePropertiesAsync(context.Properties, stage.Module.Schema.Properties, bindingContext, this.parentToken).ConfigureAwait(false);
+            stages.Add(bound.Success
+                ? stage with { Context = context with { Properties = new Dictionary<string, object?>(bound.BoundValues) } }
+                : stage);
+        }
+
+        return await runner.RunAsync(new StreamRegionPlan(stages), this.parentToken, this.liveCounts).ConfigureAwait(false);
+    }
+
     private ModuleExecutionContext BuildContext(
         string nodeId,
         NodeDefinition nodeDefinition,
@@ -394,19 +423,7 @@ public sealed class StreamRegionExecutor : ReceiveActor
             variableDictionary[key] = value;
         }
 
-        var binder = this.serviceProvider.GetService<IPropertyBinder>() ?? new PropertyBinder();
-        var bindingContext = new PropertyBindingContext(
-            variableDictionary,
-            new Dictionary<string, IReadOnlyDictionary<string, object?>>(),
-            this.serviceProvider,
-            this.inputs);
-
-        var bound = binder.BindModuleProperties(properties, module.Schema.Properties, bindingContext);
-        if (bound.Success)
-        {
-            properties = new Dictionary<string, object?>(bound.BoundValues);
-        }
-
+        // Properties stay raw here; BindAndRunAsync resolves them off the actor thread~
         var loggerFactory = this.serviceProvider.GetService<ILoggerFactory>();
         var logger = loggerFactory?.CreateLogger($"Module.{module.ModuleId}.{nodeId}")
             ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;

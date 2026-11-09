@@ -35,12 +35,12 @@ public class PropertyBinderExpressionTests
 
     /// <summary>➕ A pure arithmetic expression evaluates and converts to the port type.</summary>
     [Fact]
-    public void Arithmetic_Evaluates()
+    public async Task Arithmetic_Evaluates()
     {
         var raw = new Dictionary<string, object?> { ["value"] = "{{1 + 2 * 3}}" };
         var schema = Arr.create(PortDefinition.Create<int>("value", supportsTemplates: true));
 
-        var result = _binder.BindProperties(raw, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(raw, schema, PropertyBindingContext.Empty);
 
         result.Success.Should().BeTrue();
         result.BoundValues["value"].Should().Be(7);
@@ -48,13 +48,13 @@ public class PropertyBinderExpressionTests
 
     /// <summary>🔎 A comparison expression using a variable evaluates to bool.</summary>
     [Fact]
-    public void Comparison_Evaluates()
+    public async Task Comparison_Evaluates()
     {
         var raw = new Dictionary<string, object?> { ["ok"] = "{{Variable.Count > 5}}" };
         var schema = Arr.create(PortDefinition.Create<bool>("ok", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Count"] = 10 });
 
-        var result = _binder.BindProperties(raw, schema, ctx);
+        var result = await _binder.BindPropertiesAsync(raw, schema, ctx);
 
         result.Success.Should().BeTrue();
         result.BoundValues["ok"].Should().Be(true);
@@ -62,13 +62,13 @@ public class PropertyBinderExpressionTests
 
     /// <summary>🔗 Logical operators combine variable references.</summary>
     [Fact]
-    public void Logical_Evaluates()
+    public async Task Logical_Evaluates()
     {
         var raw = new Dictionary<string, object?> { ["ok"] = "{{Variable.A && !Variable.B}}" };
         var schema = Arr.create(PortDefinition.Create<bool>("ok", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["A"] = true, ["B"] = false });
 
-        var result = _binder.BindProperties(raw, schema, ctx);
+        var result = await _binder.BindPropertiesAsync(raw, schema, ctx);
 
         result.Success.Should().BeTrue();
         result.BoundValues["ok"].Should().Be(true);
@@ -76,13 +76,13 @@ public class PropertyBinderExpressionTests
 
     /// <summary>🧵 String concatenation with a variable produces a string.</summary>
     [Fact]
-    public void StringConcat_Evaluates()
+    public async Task StringConcat_Evaluates()
     {
         var raw = new Dictionary<string, object?> { ["greeting"] = "{{Variable.Name + '!'}}" };
         var schema = Arr.create(PortDefinition.Create<string>("greeting", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Name"] = "Ami" });
 
-        var result = _binder.BindProperties(raw, schema, ctx);
+        var result = await _binder.BindPropertiesAsync(raw, schema, ctx);
 
         result.Success.Should().BeTrue();
         result.BoundValues["greeting"].Should().Be("Ami!");
@@ -90,13 +90,13 @@ public class PropertyBinderExpressionTests
 
     /// <summary>💾 A variable reference embedded in a larger expression resolves.</summary>
     [Fact]
-    public void VariableReference_InExpression_Resolves()
+    public async Task VariableReference_InExpression_Resolves()
     {
         var raw = new Dictionary<string, object?> { ["total"] = "{{Variable.Price * Variable.Qty}}" };
         var schema = Arr.create(PortDefinition.Create<int>("total", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Price"] = 3, ["Qty"] = 4 });
 
-        var result = _binder.BindProperties(raw, schema, ctx);
+        var result = await _binder.BindPropertiesAsync(raw, schema, ctx);
 
         result.Success.Should().BeTrue();
         result.BoundValues["total"].Should().Be(12);
@@ -104,7 +104,7 @@ public class PropertyBinderExpressionTests
 
     /// <summary>📤 A node-output reference embedded in an expression resolves.</summary>
     [Fact]
-    public void NodeOutput_InExpression_Resolves()
+    public async Task NodeOutput_InExpression_Resolves()
     {
         var raw = new Dictionary<string, object?> { ["doubled"] = "{{orderNode.total * 2}}" };
         var schema = Arr.create(PortDefinition.Create<int>("doubled", supportsTemplates: true));
@@ -114,7 +114,7 @@ public class PropertyBinderExpressionTests
         };
         var ctx = ContextWith(nodeOutputs: nodeOutputs);
 
-        var result = _binder.BindProperties(raw, schema, ctx);
+        var result = await _binder.BindPropertiesAsync(raw, schema, ctx);
 
         result.Success.Should().BeTrue();
         result.BoundValues["doubled"].Should().Be(42);
@@ -122,13 +122,13 @@ public class PropertyBinderExpressionTests
 
     /// <summary>🎯 A whole-template expression preserves the raw evaluated type (bool, not string).</summary>
     [Fact]
-    public void WholeTemplate_PreservesType()
+    public async Task WholeTemplate_PreservesType()
     {
         var raw = new Dictionary<string, object?> { ["flag"] = "{{Variable.Count >= 5}}" };
         var schema = Arr.create(PortDefinition.Create<object>("flag", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Count"] = 7 });
 
-        var result = _binder.BindProperties(raw, schema, ctx);
+        var result = await _binder.BindPropertiesAsync(raw, schema, ctx);
 
         result.Success.Should().BeTrue();
         result.BoundValues["flag"].Should().BeOfType<bool>();
@@ -137,13 +137,13 @@ public class PropertyBinderExpressionTests
 
     /// <summary>📝 A template with text around an expression interpolates to a string.</summary>
     [Fact]
-    public void MixedTemplate_Interpolates()
+    public async Task MixedTemplate_Interpolates()
     {
         var raw = new Dictionary<string, object?> { ["msg"] = "Total is {{Variable.Count + 1}}!" };
         var schema = Arr.create(PortDefinition.Create<string>("msg", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["Count"] = 41 });
 
-        var result = _binder.BindProperties(raw, schema, ctx);
+        var result = await _binder.BindPropertiesAsync(raw, schema, ctx);
 
         result.Success.Should().BeTrue();
         result.BoundValues["msg"].Should().Be("Total is 42!");
@@ -151,12 +151,12 @@ public class PropertyBinderExpressionTests
 
     /// <summary>💥 A syntactically invalid expression produces a binding error (never silent null).</summary>
     [Fact]
-    public void InvalidExpression_BindingError()
+    public async Task InvalidExpression_BindingError()
     {
         var raw = new Dictionary<string, object?> { ["value"] = "{{1 +* 2}}" };
         var schema = Arr.create(PortDefinition.Create<int>("value", supportsTemplates: true));
 
-        var result = _binder.BindProperties(raw, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(raw, schema, PropertyBindingContext.Empty);
 
         result.Success.Should().BeFalse();
         result.Errors.ToList().Should().Contain(e => e.Contains("1 +* 2"));
@@ -164,7 +164,7 @@ public class PropertyBinderExpressionTests
 
     /// <summary>⏰ An expression that never terminates is aborted by the evaluator timeout.</summary>
     [Fact]
-    public void ExpensiveExpression_TimesOut()
+    public async Task ExpensiveExpression_TimesOut()
     {
         var raw = new Dictionary<string, object?>
         {
@@ -172,7 +172,7 @@ public class PropertyBinderExpressionTests
         };
         var schema = Arr.create(PortDefinition.Create<int>("value", supportsTemplates: true));
 
-        var result = _binder.BindProperties(raw, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(raw, schema, PropertyBindingContext.Empty);
 
         result.Success.Should().BeFalse();
         result.Errors.ToList().Should().NotBeEmpty();
@@ -180,13 +180,13 @@ public class PropertyBinderExpressionTests
 
     /// <summary>♻️ Built-in globals like Math are NOT clobbered by reference rewriting.</summary>
     [Fact]
-    public void BuiltinGlobals_NotRewrittenAsReferences()
+    public async Task BuiltinGlobals_NotRewrittenAsReferences()
     {
         var raw = new Dictionary<string, object?> { ["max"] = "{{Math.max(Variable.A, Variable.B)}}" };
         var schema = Arr.create(PortDefinition.Create<int>("max", supportsTemplates: true));
         var ctx = ContextWith(new Dictionary<string, object?> { ["A"] = 3, ["B"] = 9 });
 
-        var result = _binder.BindProperties(raw, schema, ctx);
+        var result = await _binder.BindPropertiesAsync(raw, schema, ctx);
 
         result.Success.Should().BeTrue();
         result.BoundValues["max"].Should().Be(9);
@@ -194,7 +194,7 @@ public class PropertyBinderExpressionTests
 
     /// <summary>🛡️ With expressions disabled, a non-reference template stays a binding error (pre-3.1 behavior).</summary>
     [Fact]
-    public void ExpressionsDisabled_NonReferenceTemplate_Errors()
+    public async Task ExpressionsDisabled_NonReferenceTemplate_Errors()
     {
         var binder = new PropertyBinder(
             new JintExpressionEvaluator(NullLogger<JintExpressionEvaluator>.Instance),
@@ -202,7 +202,7 @@ public class PropertyBinderExpressionTests
         var raw = new Dictionary<string, object?> { ["value"] = "{{1 + 2}}" };
         var schema = Arr.create(PortDefinition.Create<int>("value", supportsTemplates: true));
 
-        var result = binder.BindProperties(raw, schema, PropertyBindingContext.Empty);
+        var result = await binder.BindPropertiesAsync(raw, schema, PropertyBindingContext.Empty);
 
         result.Success.Should().BeFalse();
     }

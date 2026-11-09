@@ -284,6 +284,7 @@ public class SubGraphExecutor : ReceiveActor
 
         // Message handlers
         Receive<NodeExecutionCompleted>(HandleNodeCompleted);
+        Receive<EdgesDecided>(HandleEdgesDecided);
         Receive<NodeExecutionFailed>(HandleNodeFailed);
         Receive<RetryNode>(HandleRetryNode);
         Receive<Terminated>(HandleTerminated);
@@ -658,33 +659,54 @@ public class SubGraphExecutor : ReceiveActor
     /// </summary>
     private void HandleNodeCompleted(NodeExecutionCompleted message)
     {
-        var nodeId = message.NodeId;
-
         // 🔀 Stage 7.2 — conditional edges, decided before anything changes (a bad condition is a
-        // failure of this node)~
-        IReadOnlyList<ConnectionDefinition>? firedEdges = null;
-        if (EdgeRouting.IsConditional(_definition, nodeId))
+        // failure of this node). They're evaluated off this thread and HandleEdgesDecided carries
+        // on; the node stays running meanwhile~
+        if (EdgeRouting.IsConditional(_definition, message.NodeId))
         {
-            try
+            var variables = new Dictionary<string, object?>(_variables.Current);
+            foreach (var (name, value) in message.VariableUpdates ?? HashMap<string, object?>.Empty)
             {
-                var variables = new Dictionary<string, object?>(_variables.Current);
-                foreach (var (name, value) in message.VariableUpdates ?? HashMap<string, object?>.Empty)
-                {
-                    variables[name] = value;
-                }
+                variables[name] = value;
+            }
 
-                var outputs = message.Outputs
-                    .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
-                    .ToDictionary(kv => kv.Key, kv => kv.Value);
-                firedEdges = EdgeRouting.Fired(_definition, nodeId, message.ActivePorts, outputs, _serviceProvider, variables, _outerOutputs, _nodeOutputs);
-            }
-            catch (EdgeConditionException ex)
-            {
-                _log.Error("🔀 {Error}", ex.Message);
-                HandleNodeFailed(new NodeExecutionFailed(nodeId, ex, _parentExecutionId, message.Duration));
-                return;
-            }
+            var outputs = message.Outputs
+                .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+            var condition = EdgeRouting.ConditionContext(_definition, message.NodeId, outputs, _serviceProvider, variables, _outerOutputs, _nodeOutputs);
+            EdgeRouting.DecideInBackground(message, _definition, outputs, condition, Self, _linkedCts.Token);
+            return;
         }
+
+        CompleteNode(message, firedEdges: null);
+    }
+
+    /// <summary>🔀 A conditional node's edges are decided: fail the node, or complete it and route.</summary>
+    private void HandleEdgesDecided(EdgesDecided message)
+    {
+        if (_finished)
+        {
+            return; // the body ended (failed, cancelled) while the conditions ran~
+        }
+
+        var completed = message.Completed;
+        if (message.Error is not null)
+        {
+            _log.Error("🔀 {Error}", message.Error.Message);
+            HandleNodeFailed(new NodeExecutionFailed(completed.NodeId, message.Error, _parentExecutionId, completed.Duration));
+            return;
+        }
+
+        CompleteNode(completed, message.Fired);
+    }
+
+    /// <summary>
+    /// Marks the node complete, stores its outputs and variable writes, and starts its successors
+    /// (only through <paramref name="firedEdges"/> when its edges are conditional)~ ✅.
+    /// </summary>
+    private void CompleteNode(NodeExecutionCompleted message, IReadOnlyList<ConnectionDefinition>? firedEdges)
+    {
+        var nodeId = message.NodeId;
 
         ErrorHandlerCounters.Reset(_parentExecutionId, nodeId); // §12.7: a success ends a failure streak
         _runningNodes.Remove(nodeId);

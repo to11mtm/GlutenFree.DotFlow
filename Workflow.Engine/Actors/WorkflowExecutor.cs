@@ -325,6 +325,7 @@ public class WorkflowExecutor : ReceiveActor
         // Set up message handlers
         Receive<StartExecution>(HandleStartExecution);
         Receive<NodeExecutionCompleted>(HandleNodeExecutionCompleted);
+        Receive<EdgesDecided>(HandleEdgesDecided);
         Receive<NodeExecutionFailed>(HandleNodeExecutionFailed);
         Receive<GetWorkflowStatus>(HandleGetWorkflowStatus);
         Receive<GetProgress>(HandleGetProgress);
@@ -990,24 +991,44 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
-        var nodeId = message.NodeId;
-
         // 🔀 Stage 7.2 — conditional edges are decided before anything changes: a condition that
-        // can't be evaluated is a failure of this node, so its On error setting applies~
-        IReadOnlyList<ConnectionDefinition>? firedEdges = null;
-        if (EdgeRouting.IsConditional(_definition, nodeId))
+        // can't be evaluated is a failure of this node, so its On error setting applies. They're
+        // evaluated off this thread (HandleEdgesDecided carries on); the node stays running meanwhile~
+        if (EdgeRouting.IsConditional(_definition, message.NodeId))
         {
-            try
-            {
-                firedEdges = FiredEdges(message);
-            }
-            catch (EdgeConditionException ex)
-            {
-                _log.Error("🔀 {Error}", ex.Message);
-                HandleNodeExecutionFailed(new NodeExecutionFailed(nodeId, ex, _executionId, message.Duration));
-                return;
-            }
+            DecideEdges(message);
+            return;
         }
+
+        CompleteNode(message, firedEdges: null);
+    }
+
+    /// <summary>🔀 A conditional node's edges are decided: fail the node, or complete it and route.</summary>
+    private void HandleEdgesDecided(EdgesDecided message)
+    {
+        if (DropIfTerminal(nameof(HandleEdgesDecided)))
+        {
+            return;
+        }
+
+        var completed = message.Completed;
+        if (message.Error is not null)
+        {
+            _log.Error("🔀 {Error}", message.Error.Message);
+            HandleNodeExecutionFailed(new NodeExecutionFailed(completed.NodeId, message.Error, _executionId, completed.Duration));
+            return;
+        }
+
+        CompleteNode(completed, message.Fired);
+    }
+
+    /// <summary>
+    /// Marks the node complete, stores its outputs and variable writes, and starts its successors
+    /// (only through <paramref name="firedEdges"/> when its edges are conditional)~ ✅.
+    /// </summary>
+    private void CompleteNode(NodeExecutionCompleted message, IReadOnlyList<ConnectionDefinition>? firedEdges)
+    {
+        var nodeId = message.NodeId;
 
         ErrorHandlerCounters.Reset(_executionId, nodeId); // §12.7: a success ends a failure streak
 
@@ -1106,8 +1127,11 @@ public class WorkflowExecutor : ReceiveActor
         }
     }
 
-    /// <summary>🔀 Stage 7.2 — which of the completed node's outgoing connections fire.</summary>
-    private IReadOnlyList<ConnectionDefinition> FiredEdges(NodeExecutionCompleted message)
+    /// <summary>
+    /// 🔀 Stage 7.2 — works out which of the completed node's outgoing connections fire: the context
+    /// is snapshotted here, the conditions run in a task, and <see cref="EdgesDecided"/> comes back.
+    /// </summary>
+    private void DecideEdges(NodeExecutionCompleted message)
     {
         var rawOutputs = message.Outputs
             .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
@@ -1120,7 +1144,8 @@ public class WorkflowExecutor : ReceiveActor
             variables[name] = value; // the node's own writes count~
         }
 
-        return EdgeRouting.Fired(_definition, message.NodeId, message.ActivePorts, outputs, _serviceProvider, variables, _nodeOutputs);
+        var condition = EdgeRouting.ConditionContext(_definition, message.NodeId, outputs, _serviceProvider, variables, _nodeOutputs);
+        EdgeRouting.DecideInBackground(message, _definition, outputs, condition, Self, _executionCts.Token);
     }
 
     /// <summary>🔀 Stage 7.2 — routes by the connections that fired; the rest give their targets nothing.</summary>

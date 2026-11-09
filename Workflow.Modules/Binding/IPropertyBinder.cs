@@ -7,6 +7,8 @@ namespace Workflow.Modules.Binding;
 
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using LanguageExt;
 using Workflow.Core.Models;
 
@@ -47,13 +49,15 @@ public interface IPropertyBinder
     /// The binding context providing workflow variables and predecessor node outputs
     /// for reference resolution.
     /// </param>
+    /// <param name="cancellationToken">Cancels expression evaluation (the binding then throws).</param>
     /// <returns>
     /// A <see cref="PropertyBindingResult"/> containing bound values or accumulated errors.
     /// </returns>
-    public PropertyBindingResult BindProperties(
+    public ValueTask<PropertyBindingResult> BindPropertiesAsync(
         IReadOnlyDictionary<string, object?> rawValues,
         Arr<PortDefinition> schema,
-        PropertyBindingContext context);
+        PropertyBindingContext context,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 🔗 Phase 3.5 (V4) — resolves <c>{{…}}</c> references in a node's **properties**.
@@ -69,7 +73,7 @@ public interface IPropertyBinder
     /// Only properties whose schema sets <see cref="ModulePropertyDefinition.SupportsTemplates"/>
     /// are resolved; everything else — SQL text, script bodies, connection strings, and any value
     /// that isn't a string — passes through byte-for-byte. Unlike
-    /// <see cref="BindProperties(IReadOnlyDictionary{string, object}, Arr{PortDefinition}, PropertyBindingContext)"/>
+    /// <see cref="BindPropertiesAsync"/>
     /// this deliberately performs **no** type conversion, default application or required-ness
     /// checking: modules parse their own properties, and changing that is a far wider concern.
     /// </para>
@@ -77,11 +81,13 @@ public interface IPropertyBinder
     /// <param name="rawValues">The node's raw property values.</param>
     /// <param name="schema">The module's property definitions.</param>
     /// <param name="context">Variables and upstream node outputs for resolution.</param>
+    /// <param name="cancellationToken">Cancels expression evaluation (the binding then throws).</param>
     /// <returns>The resolved values, or accumulated errors when a reference can't be resolved.</returns>
-    public PropertyBindingResult BindModuleProperties(
+    public ValueTask<PropertyBindingResult> BindModulePropertiesAsync(
         IReadOnlyDictionary<string, object?> rawValues,
         Arr<ModulePropertyDefinition> schema,
-        PropertyBindingContext context);
+        PropertyBindingContext context,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 🔀 Stage 7.2 — evaluates a connection's condition: an expression in the <c>{{…}}</c> language
@@ -91,12 +97,17 @@ public interface IPropertyBinder
     /// <param name="expression">The condition.</param>
     /// <param name="context">Variables and upstream outputs.</param>
     /// <param name="value">The edge's value (the source port's output).</param>
+    /// <param name="cancellationToken">Cancels the evaluation (it then throws).</param>
     /// <returns>True/false, or why it couldn't be evaluated.</returns>
-    public ConditionResult EvaluateCondition(string expression, PropertyBindingContext context, object? value)
-        => ConditionResult.Error("this binder can't evaluate edge conditions (no expression evaluator)");
+    public ValueTask<ConditionResult> EvaluateConditionAsync(
+        string expression,
+        PropertyBindingContext context,
+        object? value,
+        CancellationToken cancellationToken = default)
+        => ValueTask.FromResult(ConditionResult.Error("this binder can't evaluate edge conditions (no expression evaluator)"));
 }
 
-/// <summary>🔀 Stage 7.2 — the outcome of <see cref="IPropertyBinder.EvaluateCondition"/>.</summary>
+/// <summary>🔀 Stage 7.2 — the outcome of <see cref="IPropertyBinder.EvaluateConditionAsync"/>.</summary>
 /// <param name="Value">The result (meaningful when <paramref name="Failure"/> is null).</param>
 /// <param name="Failure">Why the condition couldn't be evaluated, or null.</param>
 public sealed record ConditionResult(bool Value, string? Failure)

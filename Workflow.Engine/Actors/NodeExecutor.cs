@@ -223,7 +223,7 @@ public class NodeExecutor : ReceiveActor
                 try
                 {
                     // ⏱️ Stage 7.9 — bind off the actor thread (see HandleExecute)~
-                    var context = BindAndBuildContext(module, plan);
+                    var context = await BindAndBuildContextAsync(module, plan, cancellationToken).ConfigureAwait(false);
                     cancellationToken.ThrowIfCancellationRequested();
 
                     var result = await module.ExecuteAsync(
@@ -603,10 +603,12 @@ public class NodeExecutor : ReceiveActor
     /// <summary>
     /// Binds the node's inputs and properties and builds the module context. ✨ Runs in the execution
     /// task (Stage 7.9), so it touches no actor state; a binding failure throws and fails the node.
+    /// Expressions are awaited, not waited on, and a cancel stops them (it throws
+    /// <see cref="OperationCanceledException"/>, so the node reports cancelled).
     /// </summary>
-    private ModuleExecutionContext BindAndBuildContext(IWorkflowModule module, ExecutionPlan plan)
+    private async Task<ModuleExecutionContext> BindAndBuildContextAsync(IWorkflowModule module, ExecutionPlan plan, CancellationToken cancellationToken)
     {
-        var bindingResult = plan.Binder.BindProperties(plan.RawInputs, module.Schema.Inputs, plan.BindingContext);
+        var bindingResult = await plan.Binder.BindPropertiesAsync(plan.RawInputs, module.Schema.Inputs, plan.BindingContext, cancellationToken).ConfigureAwait(false);
         if (!bindingResult.Success)
         {
             throw new InvalidOperationException($"Input binding failed: {string.Join(", ", bindingResult.Errors)}");
@@ -615,7 +617,7 @@ public class NodeExecutor : ReceiveActor
         // 🔗 V4 — resolve {{…}} in template-enabled properties. Properties are the designer's
         // whole editing surface, so without this every token inserted by the {{x}} picker or the
         // ƒx builder reached the module as literal text.
-        var propertyBinding = plan.Binder.BindModuleProperties(plan.RawProperties, module.Schema.Properties, plan.BindingContext);
+        var propertyBinding = await plan.Binder.BindModulePropertiesAsync(plan.RawProperties, module.Schema.Properties, plan.BindingContext, cancellationToken).ConfigureAwait(false);
         if (!propertyBinding.Success)
         {
             throw new InvalidOperationException("Property binding failed: " + string.Join(", ", propertyBinding.Errors));

@@ -36,18 +36,18 @@ public class PropertyBinderSelfInputTests
             new Dictionary<string, object?> { ["input"] = inputValue });
 
     [Fact]
-    public void BareInput_ResolvesWholePortValue()
+    public async Task BareInput_ResolvesWholePortValue()
     {
         var raw = new Dictionary<string, object?> { ["url"] = "{{input}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), ContextWithInput("order-42"));
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), ContextWithInput("order-42"));
 
         result.Success.Should().BeTrue();
         result.BoundValues["url"].Should().Be("order-42");
     }
 
     [Fact]
-    public void DottedInput_TraversesDictionaries()
+    public async Task DottedInput_TraversesDictionaries()
     {
         var input = new Dictionary<string, object?>
         {
@@ -55,31 +55,31 @@ public class PropertyBinderSelfInputTests
         };
         var raw = new Dictionary<string, object?> { ["url"] = "https://api/things/{{input.Thing.Id}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), ContextWithInput(input));
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), ContextWithInput(input));
 
         result.Success.Should().BeTrue();
         result.BoundValues["url"].Should().Be("https://api/things/42");
     }
 
     [Fact]
-    public void DottedInput_TraversesJsonElements()
+    public async Task DottedInput_TraversesJsonElements()
     {
         var input = JsonDocument.Parse("""{ "Thing": { "Id": "abc" } }""").RootElement.Clone();
         var raw = new Dictionary<string, object?> { ["url"] = "{{input.Thing.Id}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), ContextWithInput(input));
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), ContextWithInput(input));
 
         result.Success.Should().BeTrue();
         result.BoundValues["url"].Should().Be("abc");
     }
 
     [Fact]
-    public void InputRoot_IsCaseInsensitive()
+    public async Task InputRoot_IsCaseInsensitive()
     {
         var input = new Dictionary<string, object?> { ["id"] = 7 };
         var raw = new Dictionary<string, object?> { ["url"] = "{{Input.id}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), ContextWithInput(input));
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), ContextWithInput(input));
 
         result.Success.Should().BeTrue();
 
@@ -88,7 +88,7 @@ public class PropertyBinderSelfInputTests
     }
 
     [Fact]
-    public void MissingInputValue_FailsWithConnectHint()
+    public async Task MissingInputValue_FailsWithConnectHint()
     {
         var context = new PropertyBindingContext(
             new Dictionary<string, object?>(),
@@ -97,27 +97,27 @@ public class PropertyBinderSelfInputTests
             new Dictionary<string, object?>()); // SelfInputs present, but no 'input' key
         var raw = new Dictionary<string, object?> { ["url"] = "{{input}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), context);
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), context);
 
         result.Success.Should().BeFalse();
         result.Errors.AsEnumerable().Should().ContainSingle(e => e.Contains("connect a previous step", System.StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
-    public void WithoutSelfInputs_InputRootStaysInert()
+    public async Task WithoutSelfInputs_InputRootStaysInert()
     {
         // No SelfInputs on the context (standalone binding) — 'input.x' falls through to the
         // NodeId.Output path and reports the node as missing, exactly as before this feature.
         var raw = new Dictionary<string, object?> { ["url"] = "{{input.x}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), PropertyBindingContext.Empty);
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), PropertyBindingContext.Empty);
 
         result.Success.Should().BeFalse();
         result.Errors.AsEnumerable().Should().ContainSingle(e => e.Contains("'input' not found"));
     }
 
     [Fact]
-    public void ReservedRoot_WinsOverNodeNamedInput()
+    public async Task ReservedRoot_WinsOverNodeNamedInput()
     {
         // D5 — a (legal-but-exotic) node with id 'input' is shadowed by the reserved root.
         var context = new PropertyBindingContext(
@@ -133,14 +133,14 @@ public class PropertyBinderSelfInputTests
             });
         var raw = new Dictionary<string, object?> { ["url"] = "{{input.id}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), context);
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), context);
 
         result.Success.Should().BeTrue();
         result.BoundValues["url"].Should().Be("from-self-input");
     }
 
     [Fact]
-    public void NodeReferences_StillResolve_WhenSelfInputsPresent()
+    public async Task NodeReferences_StillResolve_WhenSelfInputsPresent()
     {
         var context = new PropertyBindingContext(
             new Dictionary<string, object?>(),
@@ -152,19 +152,19 @@ public class PropertyBinderSelfInputTests
             new Dictionary<string, object?> { ["input"] = "x" });
         var raw = new Dictionary<string, object?> { ["url"] = "{{http-1.body}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), context);
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), context);
 
         result.Success.Should().BeTrue();
         result.BoundValues["url"].Should().Be("payload");
     }
 
     [Fact]
-    public void TraversingMissingPath_Fails()
+    public async Task TraversingMissingPath_Fails()
     {
         var input = new Dictionary<string, object?> { ["Thing"] = null };
         var raw = new Dictionary<string, object?> { ["url"] = "{{input.Thing.Id}}" };
 
-        var result = _binder.BindModuleProperties(raw, TextProperty(), ContextWithInput(input));
+        var result = await _binder.BindModulePropertiesAsync(raw, TextProperty(), ContextWithInput(input));
 
         result.Success.Should().BeFalse();
         result.Errors.AsEnumerable().Should().ContainSingle(e => e.Contains("cannot traverse into null"));

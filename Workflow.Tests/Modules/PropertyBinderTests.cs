@@ -27,14 +27,14 @@ public class PropertyBinderTests
     /// 📝 A string value passed to a string port should come through unchanged. UwU~
     /// </summary>
     [Fact]
-    public void BindProperties_StringPassThrough_ShouldReturnStringAsIs()
+    public async Task BindProperties_StringPassThrough_ShouldReturnStringAsIs()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["name"] = "Ami-chan" };
         var schema = Arr.create(PortDefinition.Create<string>("name", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -45,14 +45,14 @@ public class PropertyBinderTests
     /// 🔢 A string "42" should be converted to int when the port expects int. Sugoi~
     /// </summary>
     [Fact]
-    public void BindProperties_IntConversionFromString_ShouldConvert()
+    public async Task BindProperties_IntConversionFromString_ShouldConvert()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["count"] = "42" };
         var schema = Arr.create(PortDefinition.Create<int>("count", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -63,14 +63,14 @@ public class PropertyBinderTests
     /// ✅ A string "true" should be converted to bool when the port expects bool.
     /// </summary>
     [Fact]
-    public void BindProperties_BoolConversionFromString_ShouldConvert()
+    public async Task BindProperties_BoolConversionFromString_ShouldConvert()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["enabled"] = "true" };
         var schema = Arr.create(PortDefinition.Create<bool>("enabled", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -81,14 +81,14 @@ public class PropertyBinderTests
     /// 📅 A string date should be converted to DateTime when the port expects it.
     /// </summary>
     [Fact]
-    public void BindProperties_DateTimeConversionFromString_ShouldConvert()
+    public async Task BindProperties_DateTimeConversionFromString_ShouldConvert()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["when"] = "2026-04-09T12:00:00Z" };
         var schema = Arr.create(PortDefinition.Create<DateTime>("when", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -99,7 +99,7 @@ public class PropertyBinderTests
     /// 🎲 A string GUID should be converted to Guid when the port expects it.
     /// </summary>
     [Fact]
-    public void BindProperties_GuidConversionFromString_ShouldConvert()
+    public async Task BindProperties_GuidConversionFromString_ShouldConvert()
     {
         // Arrange 🎀
         var guid = Guid.NewGuid();
@@ -107,7 +107,7 @@ public class PropertyBinderTests
         var schema = Arr.create(PortDefinition.Create<Guid>("id", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -118,14 +118,14 @@ public class PropertyBinderTests
     /// ⏱️ A string TimeSpan should be converted when the port expects it.
     /// </summary>
     [Fact]
-    public void BindProperties_TimeSpanConversionFromString_ShouldConvert()
+    public async Task BindProperties_TimeSpanConversionFromString_ShouldConvert()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["delay"] = "00:05:30" };
         var schema = Arr.create(PortDefinition.Create<TimeSpan>("delay", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -136,14 +136,14 @@ public class PropertyBinderTests
     /// 💰 A string decimal should be converted when the port expects it.
     /// </summary>
     [Fact]
-    public void BindProperties_DecimalConversionFromString_ShouldConvert()
+    public async Task BindProperties_DecimalConversionFromString_ShouldConvert()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["price"] = "99.99" };
         var schema = Arr.create(PortDefinition.Create<decimal>("price", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -154,7 +154,7 @@ public class PropertyBinderTests
     /// 📋 A JSON string should be deserialized into a complex object when the port expects it.
     /// </summary>
     [Fact]
-    public void BindProperties_JsonStringToComplexObject_ShouldDeserialize()
+    public async Task BindProperties_JsonStringToComplexObject_ShouldDeserialize()
     {
         // Arrange 🎀
         var json = """{"Name":"Ami","Level":99}""";
@@ -162,7 +162,7 @@ public class PropertyBinderTests
         var schema = Arr.create(PortDefinition.Create<TestConfig>("config", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -175,7 +175,7 @@ public class PropertyBinderTests
     /// 💾 A <c>{{Variable.Name}}</c> reference should resolve from workflow variables.
     /// </summary>
     [Fact]
-    public void BindProperties_VariableReference_ShouldResolve()
+    public async Task BindProperties_VariableReference_ShouldResolve()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["greeting"] = "{{Variable.UserName}}" };
@@ -185,7 +185,7 @@ public class PropertyBinderTests
             NodeOutputs: new Dictionary<string, IReadOnlyDictionary<string, object?>>());
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, context);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, context);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -196,7 +196,7 @@ public class PropertyBinderTests
     /// 🔗 A <c>{{Variable.User.Name}}</c> nested reference should traverse with dot-notation.
     /// </summary>
     [Fact]
-    public void BindProperties_NestedVariableReference_ShouldResolve()
+    public async Task BindProperties_NestedVariableReference_ShouldResolve()
     {
         // Arrange 🎀
         var userDict = new Dictionary<string, object?> { ["Name"] = "Ami-chan", ["Level"] = 99 };
@@ -207,7 +207,7 @@ public class PropertyBinderTests
             NodeOutputs: new Dictionary<string, IReadOnlyDictionary<string, object?>>());
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, context);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, context);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -218,7 +218,7 @@ public class PropertyBinderTests
     /// 📤 A <c>{{NodeId.OutputName}}</c> reference should resolve from predecessor node outputs.
     /// </summary>
     [Fact]
-    public void BindProperties_NodeOutputReference_ShouldResolve()
+    public async Task BindProperties_NodeOutputReference_ShouldResolve()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["input"] = "{{node1.result}}" };
@@ -232,7 +232,7 @@ public class PropertyBinderTests
             NodeOutputs: nodeOutputs);
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, context);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, context);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -243,14 +243,14 @@ public class PropertyBinderTests
     /// ❌ A <c>{{Variable.Missing}}</c> reference to a non-existent variable should produce an error.
     /// </summary>
     [Fact]
-    public void BindProperties_MissingVariableReference_ShouldError()
+    public async Task BindProperties_MissingVariableReference_ShouldError()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["value"] = "{{Variable.Missing}}" };
         var schema = Arr.create(PortDefinition.Create<string>("value", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ❌
         result.Success.Should().BeFalse();
@@ -262,14 +262,14 @@ public class PropertyBinderTests
     /// ❌ A <c>{{unknownNode.output}}</c> reference to a non-existent node should produce an error.
     /// </summary>
     [Fact]
-    public void BindProperties_MissingNodeOutputReference_ShouldError()
+    public async Task BindProperties_MissingNodeOutputReference_ShouldError()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["value"] = "{{unknownNode.output}}" };
         var schema = Arr.create(PortDefinition.Create<string>("value", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ❌
         result.Success.Should().BeFalse();
@@ -281,7 +281,7 @@ public class PropertyBinderTests
     /// 💫 When an optional input is missing and has a default, the default should be applied.
     /// </summary>
     [Fact]
-    public void BindProperties_DefaultValueApplied_ForOptionalMissingInput()
+    public async Task BindProperties_DefaultValueApplied_ForOptionalMissingInput()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?>(); // Empty — no inputs provided!
@@ -293,7 +293,7 @@ public class PropertyBinderTests
             DefaultValue: 30));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -304,14 +304,14 @@ public class PropertyBinderTests
     /// ❌ When a required input is missing, the binder should produce an error.
     /// </summary>
     [Fact]
-    public void BindProperties_RequiredMissingInput_ShouldError()
+    public async Task BindProperties_RequiredMissingInput_ShouldError()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?>(); // Empty — nothing provided!
         var schema = Arr.create(PortDefinition.Create<string>("required_field", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ❌
         result.Success.Should().BeFalse();
@@ -323,14 +323,14 @@ public class PropertyBinderTests
     /// ❌ When a value can't be converted to the expected type, the binder should produce an error.
     /// </summary>
     [Fact]
-    public void BindProperties_TypeMismatchAfterConversion_ShouldError()
+    public async Task BindProperties_TypeMismatchAfterConversion_ShouldError()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["count"] = "not-a-number" };
         var schema = Arr.create(PortDefinition.Create<int>("count", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ❌
         result.Success.Should().BeFalse();
@@ -342,7 +342,7 @@ public class PropertyBinderTests
     /// ❌ Multiple binding errors should all be accumulated rather than short-circuiting.
     /// </summary>
     [Fact]
-    public void BindProperties_MultipleErrors_ShouldAccumulateAll()
+    public async Task BindProperties_MultipleErrors_ShouldAccumulateAll()
     {
         // Arrange 🎀 — Two required ports, both missing!
         var rawValues = new Dictionary<string, object?>();
@@ -351,7 +351,7 @@ public class PropertyBinderTests
             PortDefinition.Create<int>("field2", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ❌
         result.Success.Should().BeFalse();
@@ -362,14 +362,14 @@ public class PropertyBinderTests
     /// 🔢 An int value passed to a long port should be widened via numeric conversion.
     /// </summary>
     [Fact]
-    public void BindProperties_NumericWidening_IntToLong_ShouldConvert()
+    public async Task BindProperties_NumericWidening_IntToLong_ShouldConvert()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["value"] = 42 };
         var schema = Arr.create(PortDefinition.Create<long>("value", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -381,7 +381,7 @@ public class PropertyBinderTests
     /// is a single reference, the original type should be preserved (int stays int). UwU~
     /// </summary>
     [Fact]
-    public void BindProperties_SingleVariableReference_PreservesResolvedType()
+    public async Task BindProperties_SingleVariableReference_PreservesResolvedType()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["count"] = "{{Variable.ItemCount}}" };
@@ -391,7 +391,7 @@ public class PropertyBinderTests
             NodeOutputs: new Dictionary<string, IReadOnlyDictionary<string, object?>>());
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, context);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, context);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -403,7 +403,7 @@ public class PropertyBinderTests
     /// E.g., "Hello {{Variable.Name}}!" → "Hello Ami-chan!". ✨
     /// </summary>
     [Fact]
-    public void BindProperties_MixedTextWithReferences_ShouldInterpolateAsString()
+    public async Task BindProperties_MixedTextWithReferences_ShouldInterpolateAsString()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?>
@@ -420,7 +420,7 @@ public class PropertyBinderTests
             NodeOutputs: new Dictionary<string, IReadOnlyDictionary<string, object?>>());
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, context);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, context);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -431,7 +431,7 @@ public class PropertyBinderTests
     /// 🌙 Optional port with no value and no default should bind to null.
     /// </summary>
     [Fact]
-    public void BindProperties_OptionalMissingNoDefault_ShouldBindToNull()
+    public async Task BindProperties_OptionalMissingNoDefault_ShouldBindToNull()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?>();
@@ -442,7 +442,7 @@ public class PropertyBinderTests
             IsRequired: false));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -453,7 +453,7 @@ public class PropertyBinderTests
     /// 🎁 Extra values not in the schema should be passed through for flexibility.
     /// </summary>
     [Fact]
-    public void BindProperties_ExtraValues_ShouldPassThrough()
+    public async Task BindProperties_ExtraValues_ShouldPassThrough()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?>
@@ -464,7 +464,7 @@ public class PropertyBinderTests
         var schema = Arr.create(PortDefinition.Create<string>("defined", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();
@@ -476,14 +476,14 @@ public class PropertyBinderTests
     /// 🔍 Case-insensitive port name matching — "NAME" should match port "name".
     /// </summary>
     [Fact]
-    public void BindProperties_CaseInsensitivePortMatch_ShouldResolve()
+    public async Task BindProperties_CaseInsensitivePortMatch_ShouldResolve()
     {
         // Arrange 🎀
         var rawValues = new Dictionary<string, object?> { ["NAME"] = "Ami-chan" };
         var schema = Arr.create(PortDefinition.Create<string>("name", supportsTemplates: true));
 
         // Act ⚡
-        var result = _binder.BindProperties(rawValues, schema, PropertyBindingContext.Empty);
+        var result = await _binder.BindPropertiesAsync(rawValues, schema, PropertyBindingContext.Empty);
 
         // Assert ✅
         result.Success.Should().BeTrue();

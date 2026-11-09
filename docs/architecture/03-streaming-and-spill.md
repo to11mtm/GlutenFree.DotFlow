@@ -148,7 +148,7 @@ why the resequencing buffer from the original design was deleted (decision D25).
 
 ### Contexts
 
-Properties are bound **once per region**, with `BindModuleProperties` and the same template rules
+Properties are bound **once per region**, with `BindModulePropertiesAsync` (in the region's run task, off the actor thread) and the same template rules
 as batch nodes. **Only the source** sees the gathered graph inputs. Later stages read the stream.
 `Variables` is the snapshot taken when the region starts.
 
