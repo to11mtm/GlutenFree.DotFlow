@@ -159,7 +159,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.1 | ✅ ~~**§9.7 (streaming) `Blob` spill can resolve to the in-memory blob store**~~ — **fixed 2026-11-08**, `Streaming/BlobSpillDurabilityTests` | Medium | plan 04 "Documented-only" | Small: fail fast at startup vs. require a durable persistence provider (plan leans fail-fast) | ~0.5 d |
 | 7.2 | ✅ **fixed 2026-11-08** (conditional edges, `docs/conditional-edges.md`) — ~~**`ConnectionDefinition.Condition` / `Priority` are never read**~~, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
 | 7.3 | ✅ **fixed 2026-11-09** (outbound HTTP policy, plan 06, `docs/outbound-http.md`) — ~~**§9.6 (modules) script HTTP has no host allowlist (SSRF)**~~ | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
-| 7.4 | 🔄 **in progress** (signed packages, plan 07; part 1/3 done) — **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
+| 7.4 | 🔄 **in progress** (signed packages, plan 07; parts 1–2 of 3 done) — **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
 | 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
 | 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
 | 7.7 | ✅ **fixed 2026-11-09** (`SubGraphExecutor` runs regions wholly inside a body) — ~~**§9.5 (streaming) no regions inside construct bodies**~~ | Low | plan 04 | No (parity work), but low priority | 1–2 d |
@@ -283,6 +283,38 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.4 part 2/3: trust in the API and UI, Trusted publishers page
+- API:
+  - `ModuleTrustDto` (status `verified` / `keyPinOnly` / `unsigned` / `untrusted` / `changedOnDisk`,
+    publisher, thumbprint, trust source, messages, checked-at).
+  - `ModuleSummaryDto.Trust` (installed packages only; built-ins have none) and
+    `ModuleInstallResultDto.Trust`.
+  - `ModulePackageInstaller.Packages()` lists installed packages for the list endpoint.
+- Trusted publishers:
+  - `Workflow.Api/Modules/TrustedPublisherService.cs` is the `ITrustedPublisherProvider`. It
+    merges the server's `Modules:Security:TrustedPublishers` (locked) with the saved ones (blob
+    `settings/trusted-publishers.json`, or in-memory without a blob store), validates and audits
+    saves, and reloads every minute (`TrustedPublisherHostedService`).
+  - The hosted service warns at startup when `RequireSigned` is on with no publishers.
+  - Validation: a thumbprint must be 40 or 64 hex digits; PEM must parse; a thumbprint and PEM
+    given together must agree; a CA root needs PEM; a server-set `CheckRevocation` can't be
+    changed.
+  - Saving normalizes the thumbprint to SHA-256 when a PEM is given, and the name defaults to the
+    certificate's common name.
+  - Endpoints `/api/v1/settings/module-publishers`: GET (read), PUT (Admin), `/audit` (Admin).
+- UI:
+  - `ModuleCard` trust badge (`trust-{id}`, tooltip = meaning or reasons).
+  - `UploadDialog` shows who signed the package, plus help with a link when it isn't verified.
+  - `/settings/module-publishers` page (`TrustedPublishersSettings.razor`, `TrustedPublishersClient`):
+    locked server entries, add by thumbprint or PEM, remove, revocation toggle (locked when the
+    server sets it), save errors, change list. Linked from Settings.
+- Tests:
+  - `Api/V1/TrustedPublisherApiTests` (4).
+  - UI `Modules/Components/ModuleTrustUiTests` (9).
+  - The signing helpers moved to `Modules/Security/SigningTestKit` (no test changed).
+- Proof: 9/9 mutants killed (5 API, 4 UI).
+- Suites: unfiltered `dotnet test Workflow.Tests` 1986/1986; `Workflow.Tests.UI` 788/788.
+
 ### 2026-11-09 — Stage 7.4 part 1/3: signed module packages (verification, install record, re-check on load)
 - Decided (asked in two rounds; `docs/architecture/plans/07-module-package-signing.md`):
   - Signed packages: a detached CMS signature (`signature.p7s`) over `module.json`, which must hash

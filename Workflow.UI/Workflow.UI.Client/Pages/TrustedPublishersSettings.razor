@@ -1,0 +1,280 @@
+﻿@page "/settings/module-publishers"
+@namespace Workflow.UI.Client.Pages
+@rendermode RenderModes.InteractiveWasm
+@inject Workflow.UI.Client.Api.TrustedPublishersClient Client
+@using Workflow.UI.Client.Api
+
+@* 🔏 Stage 7.4 — the Trusted publishers page (plan 07, docs/module-signing.md). Publishers and CA roots
+   from the server's configuration (Modules:Security:TrustedPublishers) are locked; the rest are
+   editable by an Admin and audited. *@
+
+<PageTitle>Trusted publishers · DotFlow</PageTitle>
+
+<TopBar />
+<ToastHost />
+
+<div class="df-page" style="max-width: 860px;">
+    <h1>Trusted publishers</h1>
+    <p class="df-field-help">
+        A module package can be <strong>signed</strong> by its publisher (a <code>signature.p7s</code> over its
+        <code>module.json</code>, which lists the hash of every file). A package signed by a publisher listed here,
+        or by a certificate issued by a CA root listed here, shows as <strong>Verified</strong>.
+    </p>
+
+    @if (loadError is not null)
+    {
+        <div class="df-field-error" data-testid="tp-load-error">⚠ @loadError</div>
+    }
+    else if (view is null)
+    {
+        <div class="df-empty">Loading…</div>
+    }
+    else
+    {
+        <div class="df-card df-field" data-testid="tp-policy">
+            @if (view.RequireSigned)
+            {
+                <div><strong>Signing is required</strong> (<code>Modules:Security:RequireSigned</code>): only verified packages,
+                    or ones accepted by a trusted strong-name token, can install or load.</div>
+            }
+            else
+            {
+                <div>Signing isn't required: unsigned or untrusted packages install with a warning. Set
+                    <code>Modules:Security:RequireSigned</code> to refuse them.</div>
+            }
+        </div>
+
+        @foreach (var (key, title, help, items) in Sections())
+        {
+            <div class="df-card df-field" data-testid="tp-section-@key">
+                <h2 style="margin-top:0">@title</h2>
+                <div class="df-field-help">@help</div>
+                @if (items.Count == 0)
+                {
+                    <div class="df-empty" data-testid="tp-empty-@key">None yet.</div>
+                }
+
+                @foreach (var item in items)
+                {
+                    <div class="df-row" data-testid="tp-@key-@item.Index" style="align-items:flex-start; gap: 8px;">
+                        <div style="flex:1">
+                            <strong>@(item.Name ?? "(unnamed)")</strong>
+                            @if (item.Locked)
+                            {
+                                <span class="df-token-badge" data-testid="tp-locked-@key-@item.Index">🔒 set by the server's configuration</span>
+                            }
+                            <div class="df-field-help"><code>@(item.Thumbprint ?? "(no thumbprint)")</code></div>
+                            @if (item.Subject is not null)
+                            {
+                                <div class="df-field-help">@item.Subject · expires @item.NotAfter?.ToString("yyyy-MM-dd")</div>
+                            }
+                        </div>
+                        @if (!item.Locked)
+                        {
+                            <button class="df-btn df-btn--small" data-testid="tp-remove-@key-@item.Index" @onclick="() => Remove(key, item)">Remove</button>
+                        }
+                    </div>
+                }
+
+                <details data-testid="tp-add-@key">
+                    <summary>Add @(key == "roots" ? "a CA root" : "a publisher")</summary>
+                    <label class="df-label">Name (optional)</label>
+                    <input class="df-input" data-testid="tp-new-name-@key" @bind="NewFor(key).Name" />
+                    @if (key != "roots")
+                    {
+                        <label class="df-label">Thumbprint (SHA-256 or SHA-1) — or paste the certificate below</label>
+                        <input class="df-input" data-testid="tp-new-thumbprint-@key" @bind="NewFor(key).Thumbprint" />
+                    }
+                    <label class="df-label">Certificate (PEM)</label>
+                    <textarea class="df-textarea" rows="4" placeholder="-----BEGIN CERTIFICATE-----" data-testid="tp-new-pem-@key" @bind="NewFor(key).Pem"></textarea>
+                    <button class="df-btn df-btn--small" data-testid="tp-new-add-@key" @onclick="() => Add(key)">Add</button>
+                </details>
+            </div>
+        }
+
+        <div class="df-card df-field" data-testid="tp-revocation">
+            <label class="df-label">
+                <input type="checkbox" data-testid="tp-check-revocation" checked="@checkRevocation" disabled="@view.CheckRevocationLocked"
+                       @onchange="e => checkRevocation = e.Value is true" />
+                Check CA-issued certificates for revocation (online)
+            </label>
+            @if (view.CheckRevocationLocked)
+            {
+                <div class="df-field-help" data-testid="tp-revocation-locked">🔒 set by the server's configuration</div>
+            }
+        </div>
+
+        @if (saveErrors.Count > 0)
+        {
+            <div class="df-field-error" data-testid="tp-save-errors">
+                <ul>
+                    @foreach (var e in saveErrors)
+                    {
+                        <li>@e</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="df-row">
+            <button class="df-btn df-btn--primary" data-testid="tp-save" @onclick="Save">Save</button>
+            @if (dirty)
+            {
+                <span class="df-field-help" data-testid="tp-unsaved">Unsaved changes</span>
+            }
+        </div>
+
+        @if (audit is { Count: > 0 })
+        {
+            <div class="df-card df-field" data-testid="tp-audit">
+                <h2 style="margin-top:0">Changes</h2>
+                <ul>
+                    @foreach (var entry in audit)
+                    {
+                        <li>@entry.At.ToLocalTime().ToString("yyyy-MM-dd HH:mm") · @entry.By · @string.Join("; ", entry.Changes)</li>
+                    }
+                </ul>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private TrustedPublishersViewDto? view;
+    private string? loadError;
+    private List<Item> publishers = new();
+    private List<Item> roots = new();
+    private bool checkRevocation;
+    private bool dirty;
+    private List<string> saveErrors = new();
+    private List<TrustedPublishersAuditDto>? audit;
+    private readonly TrustedCertificateInputDto newPublisher = new();
+    private readonly TrustedCertificateInputDto newRoot = new();
+
+    /// <inheritdoc/>
+    protected override async Task OnInitializedAsync() => await this.Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            this.Apply(await this.Client.GetAsync());
+            this.loadError = null;
+        }
+        catch (ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+            return;
+        }
+
+        try
+        {
+            this.audit = await this.Client.AuditAsync();
+        }
+        catch (ApiException)
+        {
+            this.audit = null; // not an Admin — the change list is Admin-only
+        }
+    }
+
+    private void Apply(TrustedPublishersViewDto loaded)
+    {
+        this.view = loaded;
+        this.publishers = loaded.Certificates.Select(Item.From).ToList();
+        this.roots = loaded.RootCertificates.Select(Item.From).ToList();
+        this.checkRevocation = loaded.CheckRevocation;
+        this.dirty = false;
+    }
+
+    private IEnumerable<(string Key, string Title, string Help, List<Item> Items)> Sections()
+    {
+        Renumber(this.publishers);
+        Renumber(this.roots);
+        yield return ("publishers", "Pinned publishers", "Packages signed with exactly one of these certificates are trusted.", this.publishers);
+        yield return ("roots", "CA roots", "Packages signed with a certificate issued by one of these roots are trusted (the chain and validity are checked).", this.roots);
+    }
+
+    private static void Renumber(List<Item> items)
+    {
+        for (var i = 0; i < items.Count; i++)
+        {
+            items[i].Index = i;
+        }
+    }
+
+    private TrustedCertificateInputDto NewFor(string key) => key == "roots" ? this.newRoot : this.newPublisher;
+
+    private void Add(string key)
+    {
+        var input = this.NewFor(key);
+        if (string.IsNullOrWhiteSpace(input.Pem) && string.IsNullOrWhiteSpace(input.Thumbprint))
+        {
+            return;
+        }
+
+        (key == "roots" ? this.roots : this.publishers).Add(new Item
+        {
+            Name = string.IsNullOrWhiteSpace(input.Name) ? null : input.Name.Trim(),
+            Thumbprint = string.IsNullOrWhiteSpace(input.Thumbprint) ? null : input.Thumbprint.Trim(),
+            Pem = string.IsNullOrWhiteSpace(input.Pem) ? null : input.Pem.Trim(),
+        });
+        input.Name = input.Thumbprint = input.Pem = null;
+        this.dirty = true;
+    }
+
+    private void Remove(string key, Item item)
+    {
+        (key == "roots" ? this.roots : this.publishers).Remove(item);
+        this.dirty = true;
+    }
+
+    private async Task Save()
+    {
+        this.saveErrors.Clear();
+        var request = new TrustedPublishersSaveDto
+        {
+            Certificates = this.publishers.Where(p => !p.Locked).Select(p => p.ToInput()).ToList(),
+            RootCertificates = this.roots.Where(r => !r.Locked).Select(r => r.ToInput()).ToList(),
+            CheckRevocation = this.view?.CheckRevocationLocked == true ? null : this.checkRevocation,
+        };
+
+        try
+        {
+            this.Apply(await this.Client.SaveAsync(request));
+            this.audit = await this.Client.AuditAsync();
+        }
+        catch (ApiException ex)
+        {
+            this.saveErrors = ex.Error.Errors?.Values.SelectMany(v => v).ToList() ?? [ex.Error.Summarize()];
+        }
+    }
+
+    private sealed class Item
+    {
+        public int Index { get; set; }
+
+        public string? Name { get; set; }
+
+        public string? Thumbprint { get; set; }
+
+        public string? Subject { get; set; }
+
+        public DateTimeOffset? NotAfter { get; set; }
+
+        public string? Pem { get; set; }
+
+        public bool Locked { get; set; }
+
+        public static Item From(TrustedCertificateDto dto) => new()
+        {
+            Name = dto.Name,
+            Thumbprint = dto.Thumbprint,
+            Subject = dto.Subject,
+            NotAfter = dto.NotAfter,
+            Pem = dto.Pem,
+            Locked = dto.Locked,
+        };
+
+        public TrustedCertificateInputDto ToInput() => new() { Name = this.Name, Thumbprint = this.Thumbprint, Pem = this.Pem };
+    }
+}

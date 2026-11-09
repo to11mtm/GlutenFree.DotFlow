@@ -46,6 +46,8 @@ builder.Services.AddScoped(sp =>
     new ScriptApprovalsClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
 builder.Services.AddScoped(sp =>
     new OutboundHttpClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
+builder.Services.AddScoped(sp =>
+    new TrustedPublishersClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("api")));
 
 // 🔔 App services: toasts + localStorage~
 builder.Services.AddScoped<Workflow.UI.Client.Services.ToastService>();

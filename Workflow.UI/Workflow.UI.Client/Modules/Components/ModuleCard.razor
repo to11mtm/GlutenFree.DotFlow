@@ -15,6 +15,11 @@
             @(Module.Enabled ? "🟢 enabled" : "⚪ disabled")
         </span>
     </div>
+    @if (Module.Trust is { } trust)
+    {
+        @* 🔏 Stage 7.4 — who signed it, and whether the files still match *@
+        <div class="df-trust @trust.Css" data-testid="trust-@Module.Id" title="@trust.Tooltip">@trust.Label</div>
+    }
 </button>
 
 @code {

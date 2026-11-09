@@ -155,6 +155,12 @@ public sealed record ModuleSummaryDto(
     bool Enabled = true,
     bool StreamCapable = false)
 {
+    /// <summary>
+    /// 🔏 Stage 7.4 — gets the installed package's trust (who signed it, whether they're trusted,
+    /// whether its files changed on disk); null for built-in modules.
+    /// </summary>
+    public ModuleTrustDto? Trust { get; init; }
+
     /// <summary>Projects an <see cref="IWorkflowModule"/> into a summary DTO~ 📦.</summary>
     /// <param name="module">The module.</param>
     /// <param name="enabled">Whether the resolved version is enabled.</param>
@@ -235,7 +241,43 @@ public sealed record ModuleDetailsDto(
 /// <param name="Module">The installed module's details.</param>
 /// <param name="Warnings">Non-fatal advisories (missing hashes, schema-compat, signature).</param>
 /// <param name="Modules">§9.7: every module id the package installed (one for a single-module package).</param>
-public sealed record ModuleInstallResultDto(ModuleDetailsDto Module, IReadOnlyList<string> Warnings, IReadOnlyList<string>? Modules = null);
+public sealed record ModuleInstallResultDto(ModuleDetailsDto Module, IReadOnlyList<string> Warnings, IReadOnlyList<string>? Modules = null)
+{
+    /// <summary>🔏 Stage 7.4 — gets who signed the package and whether they're trusted.</summary>
+    public ModuleTrustDto? Trust { get; init; }
+}
+
+/// <summary>🔏 Stage 7.4 — an installed package's trust, as last checked.</summary>
+/// <param name="Status"><c>verified</c>, <c>keyPinOnly</c>, <c>unsigned</c>, <c>untrusted</c> or <c>changedOnDisk</c>.</param>
+/// <param name="Publisher">The signing publisher, when signed.</param>
+/// <param name="Thumbprint">The signer certificate's SHA-256 thumbprint, when signed.</param>
+/// <param name="TrustSource"><c>pinnedCertificate</c> or <c>certificateAuthority</c> when verified; otherwise null.</param>
+/// <param name="Messages">Why it's less than verified, if it is.</param>
+/// <param name="CheckedAt">When it was checked (install, startup or hot reload).</param>
+public sealed record ModuleTrustDto(
+    string Status,
+    string? Publisher,
+    string? Thumbprint,
+    string? TrustSource,
+    IReadOnlyList<string> Messages,
+    DateTimeOffset CheckedAt)
+{
+    /// <summary>Projects the installer's trust info.</summary>
+    /// <param name="trust">The trust info.</param>
+    /// <returns>The DTO, or null.</returns>
+    public static ModuleTrustDto? From(Workflow.Modules.Security.ModuleTrustInfo? trust)
+        => trust is null
+            ? null
+            : new(
+                System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(trust.Trust.ToString()),
+                trust.Publisher,
+                trust.Thumbprint,
+                trust.TrustSource == Workflow.Modules.Security.PackageTrustSource.None
+                    ? null
+                    : System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(trust.TrustSource.ToString()),
+                trust.Messages,
+                trust.CheckedAt);
+}
 
 /// <summary>
 /// 🔘 Phase 2.8.5 — The result of an enable/disable toggle~ ✨.

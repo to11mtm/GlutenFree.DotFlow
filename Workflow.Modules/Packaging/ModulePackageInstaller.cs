@@ -713,6 +713,10 @@ public sealed class ModulePackageInstaller : IModuleLoadGate
     public InstalledPackage? FindPackageDeclaring(string moduleId)
         => this.InstalledPackages().FirstOrDefault(p => p.ModuleIds.Contains(moduleId, StringComparer.OrdinalIgnoreCase));
 
+    /// <summary>🔏 Stage 7.4 — every installed package and the module ids it provides.</summary>
+    /// <returns>The packages.</returns>
+    public IReadOnlyList<InstalledPackage> Packages() => this.InstalledPackages().ToList();
+
     private IEnumerable<InstalledPackage> InstalledPackages()
     {
         var root = Path.GetFullPath(this.options.PackagesPath);

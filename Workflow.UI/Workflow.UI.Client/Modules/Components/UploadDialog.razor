@@ -29,6 +29,20 @@
         @if (result is not null)
         {
             <div class="df-upload__ok" data-testid="upload-success">✅ Installed @result.Module.Id v@(result.Module.Version)</div>
+            @if (result.Trust is { } trust)
+            {
+                @* 🔏 Stage 7.4 — who signed it and whether they're trusted *@
+                <div class="df-trust @trust.Css" data-testid="upload-trust" title="@trust.Tooltip">@trust.Label</div>
+                @if (trust.Status != "verified")
+                {
+                    <div class="df-field-help" data-testid="upload-trust-help">
+                        @(trust.Status == "keyPinOnly"
+                            ? "Accepted by its strong-name public key token only. That's not proof of who built it."
+                            : "Not signed by a trusted publisher.")
+                        Trusted publishers are set under <a href="/settings/module-publishers">Settings → Trusted publishers</a>.
+                    </div>
+                }
+            }
             @if (result.Warnings.Count > 0)
             {
                 <div class="df-upload__warn" data-testid="upload-warnings">

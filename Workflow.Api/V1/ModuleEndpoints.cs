@@ -60,10 +60,19 @@ public static class ModuleEndpoints
             modules = registry.GetAllModules();
         }
 
+        // 🔏 Stage 7.4 — installed packages carry their trust (built-ins have none)~
+        var installer = http.RequestServices.GetService<Workflow.Modules.Packaging.ModulePackageInstaller>();
+        var packages = installer?.Packages() ?? [];
+        Workflow.Modules.Security.ModuleTrustInfo? TrustOf(IWorkflowModule m)
+        {
+            var package = packages.FirstOrDefault(p => p.ModuleIds.Contains(m.ModuleId, StringComparer.OrdinalIgnoreCase));
+            return package is null ? null : installer!.TrustFor(package.PackageId, m.Version);
+        }
+
         var summaries = modules
             .OrderBy(m => m.Category)
             .ThenBy(m => m.ModuleId)
-            .Select(m => ModuleSummaryDto.From(m, registry.IsModuleEnabled(m.ModuleId, m.Version)))
+            .Select(m => ModuleSummaryDto.From(m, registry.IsModuleEnabled(m.ModuleId, m.Version)) with { Trust = ModuleTrustDto.From(TrustOf(m)) })
             .ToList();
 
         if (groupByCategory == true)

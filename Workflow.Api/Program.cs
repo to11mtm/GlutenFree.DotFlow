@@ -133,13 +133,24 @@ builder.Services.AddSingleton<Workflow.Modules.Loading.IModuleLoader>(sp =>
     new Workflow.Modules.Loading.AssemblyModuleLoader(
         sp.GetRequiredService<IModuleRegistry>(),
         logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<Workflow.Modules.Loading.AssemblyModuleLoader>>()));
-// 🔏 Stage 7.4 — trusted publishers for signed module packages (server configuration)~
-builder.Services.TryAddSingleton<Workflow.Modules.Security.ITrustedPublisherProvider>(_ =>
+// 🔏 Stage 7.4 — trusted publishers for signed module packages: the server's configuration (locked)
+// plus the ones saved from Settings → Trusted publishers (blob-persisted, audited)~
+builder.Services.AddSingleton(sp =>
 {
     var publishers = new Workflow.Modules.Security.TrustedPublisherOptions();
     builder.Configuration.GetSection(Workflow.Modules.Security.TrustedPublisherOptions.SectionName).Bind(publishers);
-    return new Workflow.Modules.Security.StaticTrustedPublisherProvider(Workflow.Modules.Security.TrustedPublisherSet.From(publishers));
+    var blobs = sp.GetService<IBlobStore>();
+    return new Workflow.Api.Modules.TrustedPublisherService(
+        publishers,
+        builder.Configuration.GetValue<bool?>(Workflow.Modules.Security.TrustedPublisherOptions.SectionName + ":CheckRevocation"),
+        sp.GetRequiredService<Workflow.Modules.Packaging.ModulePackagingOptions>().RequireSigned,
+        blobs is not null
+            ? new Workflow.Api.Modules.BlobTrustedPublisherPersistence(blobs)
+            : new Workflow.Api.Modules.InMemoryTrustedPublisherPersistence());
 });
+builder.Services.TryAddSingleton<Workflow.Modules.Security.ITrustedPublisherProvider>(
+    sp => sp.GetRequiredService<Workflow.Api.Modules.TrustedPublisherService>());
+builder.Services.AddHostedService<Workflow.Api.Modules.TrustedPublisherHostedService>();
 builder.Services.AddSingleton(sp => new Workflow.Modules.Security.PackageSignatureVerifier(
     sp.GetRequiredService<Workflow.Modules.Security.ITrustedPublisherProvider>()));
 builder.Services.AddSingleton<Workflow.Modules.Packaging.ModulePackageInstaller>(sp =>
@@ -418,6 +429,7 @@ app.MapScriptApprovalEndpoints();
 
 // 🌐 Stage 7.3 — outbound HTTP setup screen API~
 app.MapOutboundHttpEndpoints();
+app.MapTrustedPublisherEndpoints();
 
 // 📊 Phase 2.7.5 — Monitoring endpoints (/api/v1/health, /status, /metrics)~
 app.MapMonitoringEndpoints();

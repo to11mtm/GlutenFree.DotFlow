@@ -97,7 +97,7 @@ public static class ModuleManagementEndpoints
             ? null
             : ModuleDetailsDto.From(module, enabled: true, versions);
 
-        var dto = new ModuleInstallResultDto(details!, result.Warnings, result.ModuleIds);
+        var dto = new ModuleInstallResultDto(details!, result.Warnings, result.ModuleIds) { Trust = ModuleTrustDto.From(result.Trust) };
         return Results.Created($"/api/v1/modules/{primaryId}", dto);
     }
 
