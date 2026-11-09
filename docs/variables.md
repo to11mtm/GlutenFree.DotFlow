@@ -231,9 +231,30 @@ declaration steps aside for the stored value, exactly as intended.
 
 ## Secrets — current limits
 
-A variable can be marked 🔒 **secret**. Today that flag governs the designer: secrets are masked,
-they cannot carry an initial value (a workflow definition is exported and version-controlled, so it
-must never contain a credential), and the run dialog renders them as password fields.
+A variable can be marked 🔒 **secret**. In the designer, secrets are masked and cannot carry an
+initial value (a workflow definition is exported and version-controlled, so it must never contain a
+credential). The run dialog renders them as password fields.
+
+**At run time, a secret's value is hidden (shown as `••••••`) before it reaches anything people can
+read:**
+- execution and node history (inputs, outputs, error text);
+- the run's own variable-write records;
+- debug logs;
+- the failure messages sent to live clients.
+
+It's hidden **by name and by value**:
+- any key named like a secret variable is masked;
+- the secret's actual value is replaced wherever it appears inside other text, e.g. a URL or header
+  a module echoes back;
+- a new value written to a secret variable mid-run is hidden from then on;
+- values shorter than 4 characters are only hidden by name.
+
+**Not covered yet:**
+- values saved with **Save for future runs** (the workflow/global variable store);
+- the engine's internal resume snapshots;
+- anything a module logs by itself.
+
+These are stored as-is; see below.
 
 > 🔒 **Globals are not for credentials yet.** Global values are stored and returned in **plaintext**,
 > and anyone who can read workflows can read them. Encryption at rest, redaction from execution

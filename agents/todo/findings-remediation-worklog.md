@@ -141,14 +141,22 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 ### Stage 6 — needs a decision before coding
 
-- [ ] **§10.6 — secrets persisted verbatim** · plan 03 · guard `SecretPersistenceFindingTests.SecretValue_…`
-  - [ ] settle the "what is secret" policy (plan 03 Finding D) · then redact at every sink (history in/out, variable store, logs, broadcast — incl. the exception text SignalR now sends in `ExecutionFailed`/`NodeFailed` since §12.1)
+- [x] **§10.6 — secrets persisted verbatim** · plan 03 · guard `SecretPersistenceFindingTests.SecretValue_…` — fixed, retired → `Engine/SecretRedactionTests` + `Engine/SecretRedactorTests`
+  - [x] settle the "what is secret" policy — declared `IsSecret`, redacted by **name and value**; at-rest storage out of scope (pivot options in plan 03)
 - [x] **§9.6 — spill kept forever with no history** · plan 04 · guard `SpillCleanupFindingTests.Sweep_WithNoHistory_…` — fixed (B2), retired → `Streaming/SpillAgeRetentionTests`
   - [x] pick B1 / B2 / B3 — **B2** (artefact age) + startup warning; B1/B3 kept on file in plan 04
 - [ ] **§12.7 — UseErrorHandler not implemented** · plan 02 · guard `EngineFindingTests.UseErrorHandler_…`
   - [ ] this is a **feature spec**, not a bug: agree the semantics (`ErrorNodeId` routing, `MaxConsecutiveErrors`) before implementing
 
 ### Follow-ups (future work, not findings)
+
+- [ ] **Completed body nodes have no inputs in history.** `SubGraphExecutor.HandleNodeCompleted`
+  removes `_nodeInputs[nodeId]` before `QueuePersistNode`, so completed records from loop / branch /
+  try bodies are written with `Inputs = null` (failed ones keep theirs). Top-level records keep
+  inputs. Pre-existing; found during §10.6.
+- [ ] **Secrets at rest.** "Save for future runs" (workflow/global variable store) and the state
+  snapshots still hold secret values in plain text. This is pivot option "names + values, plus at
+  rest" in plan 03 Finding D, and it overlaps the secrets-storage plan.
 
 - [ ] **Dedicated cancel event for real-time clients.** Since §12.1 a user cancel reaches SignalR as
   `ExecutionFailed` with "Workflow execution was cancelled" — clients can only tell it apart by text.
@@ -228,6 +236,22 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — §10.6 secrets hidden by name and value
+- `SecretRedactor` (name + value; values under 4 chars by name only; longest first; old values stay
+  hidden) and the `ExecutionSecrets` per-run registry.
+- Hooked in at: execution record inputs, node records (top level + bodies), both status-error
+  paths, run-scope variable writes, the variable-update debug log, and published
+  `NodeExecutionFailed` / `WorkflowFailed`.
+- The workflow-scope store and state snapshots stay verbatim (at rest, by decision).
+- Found + fixed: the snapshot path's history status update threw on every successful run
+  (LanguageExt `Match` with a null branch) and was swallowed. Moving it out of the task's try block
+  turned it into a hang, which is how it was found.
+- Tests: `Engine/SecretRedactionTests` (3), RED with both executor changes stashed;
+  `Engine/SecretRedactorTests` (7); value and name mutants killed. Retired
+  `Findings/Binding/SecretPersistenceFindingTests`.
+- New follow-ups: completed body records lack inputs; secrets at rest.
+- `--filter Category!=Finding`: 1883 passed, 0 failed (UI unchanged this commit); open finding tests 1 (§12.7).
+
 ### 2026-11-08 — Stage 6 decisions + §9.6 spill reclaimed by age without history
 - Stage 6 decisions (asked), recorded in the plans with the alternatives kept on file:
   - §10.6: redact secrets by name **and value**.

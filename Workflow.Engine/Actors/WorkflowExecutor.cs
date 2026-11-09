@@ -235,6 +235,9 @@ public class WorkflowExecutor : ReceiveActor
         // registered, V3 re-resolves this at start with the stored layers underneath.
         _seededVariables = InitialVariables.Resolve(definition, inputs);
 
+        // 🔒 §10.6 — what to hide before anything leaves the engine (history, logs, live events)~
+        ExecutionSecrets.Set(executionId, SecretRedactor.For(definition, ToPairs(_seededVariables.Variables)));
+
         // Initialize the immutable execution context~ 🌱
         _context = WorkflowExecutionContext.Create(
             executionId: executionId,
@@ -685,6 +688,7 @@ public class WorkflowExecutor : ReceiveActor
                 message.Global,
                 message.WorkflowScoped);
             _context = _context with { Variables = _seededVariables.Variables };
+            ExecutionSecrets.Set(_executionId, SecretRedactor.For(_definition, ToPairs(_seededVariables.Variables)));
         }
         else
         {
@@ -989,8 +993,8 @@ public class WorkflowExecutor : ReceiveActor
             State: NodeExecutionState.Completed,
             StartedAt: nodeStart,
             CompletedAt: now,
-            Inputs: nodeInputs,
-            Outputs: nodeOutputs,
+            Inputs: Secrets.Map(nodeInputs),
+            Outputs: Secrets.Map(nodeOutputs),
             Duration: message.Duration,
             // Phase 2.2.0b: Stamp loop scope metadata if a loop is active~ 🔁
             LoopId: _loopContextStack.Count > 0 ? _loopContextStack.Peek().LoopId : null,
@@ -1133,8 +1137,8 @@ public class WorkflowExecutor : ReceiveActor
             State: NodeExecutionState.Failed,
             StartedAt: nodeStart,
             CompletedAt: now,
-            Inputs: nodeInputs,
-            Error: error.Message,
+            Inputs: Secrets.Map(nodeInputs),
+            Error: Secrets.Text(error.Message),
             Duration: nodeDuration,
             // Phase 2.2.0b: Stamp loop scope metadata if a loop is active~ 🔁
             LoopId: _loopContextStack.Count > 0 ? _loopContextStack.Peek().LoopId : null,
@@ -1150,7 +1154,7 @@ public class WorkflowExecutor : ReceiveActor
 
         _nodeInputs.Remove(nodeId);
 
-        PublishTerminal(new NodeExecutionFailed(nodeId, error, _executionId, nodeDuration));
+        PublishTerminal(new NodeExecutionFailed(nodeId, ExecutionSecrets.Error(Secrets, error), _executionId, nodeDuration));
 
         // §12.4: the boundary → retry / continue / fail decision is shared with SubGraphExecutor~ 🛡️
         _failureCore.Handle(nodeId, error);
@@ -1911,7 +1915,7 @@ public class WorkflowExecutor : ReceiveActor
             partialOutputs.Count > 0
                 ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
                 : Option<HashMap<string, object?>>.None));
-        PublishTerminal(new WorkflowFailed(_executionId, cancelled, _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
+        PublishTerminal(new WorkflowFailed(_executionId, ExecutionSecrets.Error(Secrets, cancelled), _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
         StopWhenPersisted();
     }
 
@@ -1989,6 +1993,11 @@ public class WorkflowExecutor : ReceiveActor
 
         var snapshot = _context;
 
+        // 🔒 §10.6 — the history copy of the error hides secrets; the state-store snapshot stays
+        // verbatim (resume needs it; storage at rest is out of scope, plan 03 Finding D)~
+        // (IfNoneUnsafe: LanguageExt's Match throws when a branch returns null.)
+        var historyError = Secrets.Text(snapshot.Error.IfNoneUnsafe((string?)null));
+
         _pendingPersistence++;
         Task.Run(
             async () =>
@@ -2005,7 +2014,7 @@ public class WorkflowExecutor : ReceiveActor
                             _executionId,
                             snapshot.State,
                             snapshot.EndTime.Match(Some: x => (DateTimeOffset?)x, None: () => null),
-                            snapshot.Error.Match(Some: x => x, None: () => null)).ConfigureAwait(false);
+                            historyError).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -2217,7 +2226,7 @@ public class WorkflowExecutor : ReceiveActor
             partialOutputs.Count > 0
                 ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
                 : Option<HashMap<string, object?>>.None));
-        PublishTerminal(new WorkflowFailed(_executionId, error, _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
+        PublishTerminal(new WorkflowFailed(_executionId, ExecutionSecrets.Error(Secrets, error), _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
         StopWhenPersisted();
     }
 
@@ -2228,6 +2237,12 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void PublishTerminal(IWorkflowMessage message) => Context.System.EventStream.Publish(message);
 
+    /// <summary>🔒 §10.6 — this run's current redactor (secret names + the values seen so far).</summary>
+    private SecretRedactor Secrets => ExecutionSecrets.For(_executionId);
+
+    private static IEnumerable<KeyValuePair<string, object?>> ToPairs(HashMap<string, object?> map)
+        => map.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value));
+
     /// <summary>
     /// Applies variable writes to the workflow context and persists them — for a top-level node's
     /// <c>VariableUpdates</c> and (§10.3) for the writes a construct body reports when it ends~ 💾.
@@ -2236,11 +2251,12 @@ public class WorkflowExecutor : ReceiveActor
     {
         foreach (var (name, value) in updates)
         {
+            var secrets = ExecutionSecrets.Learn(_executionId, name, value);
             _log.Debug(
                 "💾 Variable update from node {NodeId}: {VarName} = {VarValue}",
                 sourceNodeId,
                 name,
-                value);
+                secrets.IsSecretName(name) ? SecretRedactor.Mask : secrets.Value(value));
             _context = _context.WithVariable(name, value);
         }
 
@@ -2597,6 +2613,7 @@ public class WorkflowExecutor : ReceiveActor
     protected override void PostStop()
     {
         _executionTimer.Stop();
+        ExecutionSecrets.Remove(_executionId);
 
         // 🧹 Cancel all pending scheduled retry messages to prevent memory leaks (AK1004 fix)
         if (_pendingRetryCancellations.Count > 0)
@@ -2689,7 +2706,7 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
-        var inputsCopy = new Dictionary<string, object?>(_workflowInputs);
+        var inputsCopy = Secrets.Map(new Dictionary<string, object?>(_workflowInputs));
 
         Task.Run(
             async () =>
@@ -2747,6 +2764,14 @@ public class WorkflowExecutor : ReceiveActor
             .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
+        // 🔒 §10.6 — the run's own write records are for reading back, so hide secrets there. The
+        // workflow scope ("Save for future runs") is storage at rest and keeps the real value
+        // (plan 03 Finding D, pivot option "names + values, plus at rest")~
+        var secrets = Secrets;
+        var executionCopy = updatesCopy.ToDictionary(
+            kv => kv.Key,
+            kv => secrets.IsSecretName(kv.Key) ? SecretRedactor.Mask : secrets.Value(kv.Value));
+
         _pendingPersistence++;
         Task.Run(
             async () =>
@@ -2757,7 +2782,7 @@ public class WorkflowExecutor : ReceiveActor
                     {
                         if (_variableWriteMode is VariableWriteMode.Execution or VariableWriteMode.Dual)
                         {
-                            await _variableStore.SetVariableAsync(VariableScope.ForExecution(_executionId), name, value)
+                            await _variableStore.SetVariableAsync(VariableScope.ForExecution(_executionId), name, executionCopy[name])
                                 .ConfigureAwait(false);
                         }
 
@@ -2784,6 +2809,8 @@ public class WorkflowExecutor : ReceiveActor
             return;
         }
 
+        var redactedError = Secrets.Text(error);
+
         _pendingPersistence++;
         Task.Run(
             async () =>
@@ -2794,7 +2821,7 @@ public class WorkflowExecutor : ReceiveActor
                         _executionId,
                         state,
                         endTime,
-                        error).ConfigureAwait(false);
+                        redactedError).ConfigureAwait(false);
 
                     return new PersistenceExecutionStatusUpdated(state, true);
                 }

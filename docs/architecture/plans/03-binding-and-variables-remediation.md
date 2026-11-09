@@ -261,6 +261,18 @@ missing a sink — enumerate them (history inputs, history outputs, variable sto
   - Values shorter than 4 characters are only redacted by name, to avoid false matches.
   - Sinks: node history inputs/outputs, variable-write records, debug logs, and the error text sent
     to live clients.
+- **Fixed 2026-11-08:**
+  - `Workflow.Engine/Actors/SecretRedactor` (immutable) and `ExecutionSecrets`, a per-execution
+    registry so `SubGraphExecutor` redacts with the same knowledge.
+  - Hooked in at: the execution record inputs, node records (top level and bodies), both
+    status-error paths, run-scope variable writes, the variable-update debug log, and the published
+    `NodeExecutionFailed` / `WorkflowFailed` (a cancellation stays an `OperationCanceledException`).
+  - Writes to a secret variable are learned, in bodies too.
+  - Tests: `Engine/SecretRedactionTests` (3) and `Engine/SecretRedactorTests` (7). The guard is
+    retired.
+  - Found while doing this: the snapshot path's history status update called LanguageExt `Match`
+    with a branch returning null, which throws. On every successful run it had been failing
+    silently inside its try/catch. Fixed with `IfNoneUnsafe`.
 - **Pivot options kept on file** (user asked to keep them documented):
   - **Names only** (option A as originally written): simpler and predictable. It misses a secret
     once it's inside another value.

@@ -542,7 +542,7 @@ public class SubGraphExecutor : ReceiveActor
         // §10.3: later body nodes see this write; it is reported up when the sub-graph ends~ 💾
         if (message.VariableUpdates is { Count: > 0 } varUpdates)
         {
-            _variables.Apply(varUpdates.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
+            ApplyBodyWrites(varUpdates.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)));
         }
 
         // Phase 2.2.2: detect loop break/continue sentinel keys from BreakModule/ContinueModule~ ⏹️⏭️
@@ -636,7 +636,7 @@ public class SubGraphExecutor : ReceiveActor
 
         _breakRequested |= breakRequested;
         _continueRequested |= continueRequested;
-        _variables.Apply(variableUpdates);
+        ApplyBodyWrites(variableUpdates);
         Context.Unwatch(Sender);
         complete();
     }
@@ -652,7 +652,7 @@ public class SubGraphExecutor : ReceiveActor
             return;
         }
 
-        _variables.Apply(variableUpdates);
+        ApplyBodyWrites(variableUpdates);
         Context.Unwatch(Sender);
         _constructs.OnFailed(constructNodeId);
 
@@ -858,6 +858,26 @@ public class SubGraphExecutor : ReceiveActor
     /// §12.10 follow-up: also stamps <c>Metadata["scopePath"]</c> (every construct the body runs
     /// inside, outermost first) and <c>LoopId</c> / <c>LoopIteration</c> from the innermost loop step.
     /// </summary>
+    /// <summary>
+    /// Applies variable writes to this body, teaching the run's redactor any new secret value first
+    /// (§10.6), so later records from this or any other body hide it~ 🔒.
+    /// </summary>
+    private void ApplyBodyWrites(IEnumerable<KeyValuePair<string, object?>>? updates)
+    {
+        if (updates is null)
+        {
+            return;
+        }
+
+        var list = updates.ToList();
+        foreach (var (name, value) in list)
+        {
+            ExecutionSecrets.Learn(_parentExecutionId, name, value);
+        }
+
+        _variables.Apply(list);
+    }
+
     private void QueuePersistNode(string nodeId, TimeSpan duration, NodeExecutionState state, string? error = null)
     {
         if (_historyRepository == null)
@@ -900,6 +920,12 @@ public class SubGraphExecutor : ReceiveActor
         IReadOnlyDictionary<string, object?>? metadata = metadataDict.Count > 0 ? metadataDict : null;
 
         var innermostLoop = _scopePath.LastOrDefault(step => step.Kind == ScopeStep.Loop);
+
+        // 🔒 §10.6 — hide secrets before the record leaves the engine~
+        var secrets = ExecutionSecrets.For(_parentExecutionId);
+        inputs = secrets.Map(inputs);
+        outputs = secrets.Map(outputs);
+        error = secrets.Text(error);
 
         var now = DateTimeOffset.UtcNow;
         var record = new NodeExecutionRecord(
