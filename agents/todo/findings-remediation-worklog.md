@@ -117,7 +117,7 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 - [x] **§12.4 — body nodes ignore retry/continue** · plan 02 · guard `EngineFindingTests.RetryInsideLoopBody_ShouldBeHonoured`
 - [x] **§10.3 — body variable writes not visible after loop** · plan 03 · guard `BindingFindingTests.VariableWriteInsideLoopBody_…` (needs §12.9 done first)
   - [x] decide scoping (visible after construct? iteration-local? per plan 03 open question) — decided, recorded in plan 03
-- [ ] (optional) **§9.5 — no streaming regions inside bodies** · plan 04 (documented-only; add a test if tackled)
+- [x] ~~(optional) **§9.5 — no streaming regions inside bodies**~~ · moved to Stage 7 (7.7)
   - [x] plan read (02 §12.4 + 03 §10.3) · [x] extraction done · [x] both guards green · [x] `SubGraphExecutorTests`/`LoopScopeTests`/`ErrorBoundaryTests` green · [x] suite green · [x] findings retired (→ `Engine/SubGraphParityTests`) · [x] README updated · §9.5 not tackled (optional)
 
 ### Stage 4 — security (script sandbox)
@@ -147,6 +147,25 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   - [x] pick B1 / B2 / B3 — **B2** (artefact age) + startup warning; B1/B3 kept on file in plan 04
 - [x] **§12.7 — UseErrorHandler not implemented** · plan 02 · guard `EngineFindingTests.UseErrorHandler_…` — fixed, retired → `Engine/ErrorHandlerTests`
   - [x] agree the semantics — catch-style handler, retry first, handler-only nodes, handler path continues, designer support (plan 02, `docs/error-handling.md`)
+
+### Stage 7 — documented-only findings (no guard test yet)
+
+The rest of the [findings table](../../docs/architecture/README.md#findings-at-a-glance). These came
+from reading the code and were never reproduced by a finding test, so each one needs a failing
+test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
+
+| # | Finding | Sev. | Plan | Decision needed? | Size |
+| --- | --- | :-: | --- | --- | --- |
+| 7.1 | **§9.7 (streaming) `Blob` spill can resolve to the in-memory blob store**: no memory relief | Medium | plan 04 "Documented-only" | Small: fail fast at startup vs. require a durable persistence provider (plan leans fail-fast) | ~0.5 d |
+| 7.2 | **`ConnectionDefinition.Condition` / `Priority` are never read**, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
+| 7.3 | **§9.6 (modules) script HTTP has no host allowlist (SSRF)** | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
+| 7.4 | **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
+| 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
+| 7.6 | **§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR** | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
+| 7.7 | **§9.5 (streaming) no regions inside construct bodies** | Low | plan 04 | No (parity work), but low priority | 1–2 d |
+| 7.8 | **§9.3 (streaming) mid-pipeline retry**: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
+| 7.9 | **Expression evaluation blocks the `NodeExecutor` thread** (`.GetAwaiter().GetResult()`) | Low | 02 data-binding §10, item 5 | No | ~0.5 d |
+| 7.10 | **Scheduled and Event triggers have no runtime** | Info | 01 §12.8 | Feature, not a fix: out of scope for this effort | — |
 
 ### Follow-ups (future work, not findings)
 
@@ -228,11 +247,14 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 
 ## 5. Done criteria for the whole effort
 
-- [ ] Every Stage 1–5 finding fixed, its guard green or retired, and its README row removed.
-- [ ] Stage 6 items either resolved or converted to tracked tickets with their decision recorded.
-- [ ] `dotnet test Workflow.Tests` fully green.
+- [x] Every Stage 1–5 finding fixed, its guard green or retired, and its README row ~~removed~~
+  struck through with a "Fixed (§…)" note (kept as history). Optional §9.5 (streaming) moved to Stage 7.
+- [x] Stage 6 items either resolved or converted to tracked tickets with their decision recorded
+  (all three resolved, 2026-11-08).
+- [x] `dotnet test Workflow.Tests` fully green. *2026-11-08: 1893/1893 unfiltered (finding tests included); UI 760/760.*
 - [ ] `docs/architecture/README.md#findings-at-a-glance` reflects reality (ideally empty or only
-  parked design-decisions remain).
+  parked design-decisions remain). *2026-11-08: every row is now fixed, refuted or tracked in
+  Stage 7, and the §9.3 mid-pipeline row is corrected. Open until Stage 7 is fixed or parked.*
 
 ---
 
@@ -241,6 +263,19 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — done-criteria check; Stage 7 created
+- Pushed Stage 6 (`02fac32`, `9cf07bb`, `8ad6ae3`).
+- §5 done criteria: 1–3 ticked. Unfiltered `dotnet test Workflow.Tests` 1893/1893 green; UI
+  760/760.
+- Criterion 4 is open: the findings table's remaining rows (never reproduced by a test) are now
+  tracked as **Stage 7** (7.1–7.10), with plan pointers, whether a decision is needed, and a size.
+- Corrected the §9.3 (streaming) table row: plan 04 already found there's no stall (the source is
+  blamed and the region re-runs), so Medium → Low.
+- The optional §9.5 (streaming) item moved to Stage 7.7.
+- Spotted while checking: the designer lets you set an edge **condition**, but the engine never
+  reads `ConnectionDefinition.Condition` (7.2). User-visible.
+- Next: pick from Stage 7. 7.1 is small. 7.2–7.5 need decisions.
+
 ### 2026-11-08 — §12.7 UseErrorHandler: catch-style handler (Stage 6 done)
 - Decided (asked):
   - Handler nodes run only on error.
