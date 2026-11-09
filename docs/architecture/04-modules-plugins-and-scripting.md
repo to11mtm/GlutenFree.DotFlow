@@ -115,8 +115,11 @@ A `.wfmod` is a zip file containing a manifest and the module's assemblies:
 3. **Duplicate check.** Refuse a version that is already installed.
 4. **Dependency pre-check.** Each dependency id must be present, and its version range satisfied.
 5. **Extract.** `PackagePath` rejects entries that would escape the package root (zip-slip).
-6. **Signature policy.** `IAssemblyVerifier` (`StrongNameVerifier`) runs. By default it only warns.
-   With `RequireSigned`, it blocks unsigned or untrusted assemblies.
+6. **Trust policy (Stage 7.4).** A `signature.p7s` (a CMS signature over `module.json`) is checked
+   against the trusted publishers; a strong-name token match is still accepted as "key pin only".
+   By default the policy only warns; with `RequireSigned`, it blocks unsigned or untrusted packages.
+   The verified file hashes are recorded, and every later load (startup, hot reload) re-checks
+   them. See [module signing](../module-signing.md).
 7. **Capture the previous schema.** The current latest version's schema is saved, for the
    compatibility diff.
 8. **Load** through `AssemblyModuleLoader`.
@@ -300,7 +303,10 @@ flowchart LR
      reports activity forever, so **every hot reload times out** after 30 s.
 4. **`IWorkflowModule.ValidateConfiguration` is never called.** Many built-ins implement it, but
    neither the validators nor the engine invoke it, so the checks those modules wrote never run.
-5. **Strong-name tokens aren't signatures.**
+5. ~~**Strong-name tokens aren't signatures.**~~ **Fixed (Stage 7.4):** signed packages (a CMS
+   signature over `module.json`, which hashes every file) by a trusted publisher (pinned certificate
+   or CA root). Every load re-checks the files against the install record. The token check is kept,
+   labelled "key pin only". See [module signing](../module-signing.md). Original note:
    - What the code does: `StrongNameVerifier` compares `GetPublicKeyToken()` against a trusted
      list.
    - Why it matters: .NET doesn't verify strong-name signatures, and anyone can build an assembly

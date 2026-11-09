@@ -1,6 +1,6 @@
 # Plan 07 — Signed module packages (Stage 7.4, finding 04 §9.5)
 
-**Status:** decided 2026-11-09 (asked in two rounds). Part 1 (verification, install record, re-check on every load) implemented; part 2 (API + UI) and part 3 (CLI + docs) to follow.
+**Status:** implemented 2026-11-09 (Stage 7.4, three commits); user docs in `docs/module-signing.md`. Decided 2026-11-09 (asked in two rounds).
 
 ## Problem
 

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- 🔏 Stage 7.4 — `dotflow-module`: pack a module folder into a .wfmod (hashing every file) and
+         sign it for trusted-publisher verification. See docs/module-signing.md. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AssemblyName>dotflow-module</AssemblyName>
+        <RootNamespace>Workflow.Tools.ModulePack</RootNamespace>
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>dotflow-module</ToolCommandName>
+        <PackageId>GlutenFree.DotFlow.ModulePack</PackageId>
+        <Description>Packs and signs DotFlow module packages (.wfmod).</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Workflow.Modules\Workflow.Modules.csproj" />
+    </ItemGroup>
+
+</Project>

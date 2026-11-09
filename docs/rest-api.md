@@ -139,17 +139,20 @@ hot-reload, and signing.
 
 ### Module signing / trusted publishers
 
-Assembly signature verification is optional. By default unsigned/untrusted module assemblies **load
-with a warning**; to enforce signing, configure:
+Package signing is optional. By default unsigned or untrusted packages **install with a warning**.
+To enforce it, configure:
 
 ```jsonc
 "Modules": { "Security": {
   "RequireSigned": true,
-  "TrustedPublicKeyTokens": [ "b77a5c561934e089" ]   // hex strong-name tokens you trust
+  "TrustedPublishers": { "Certificates": [ { "Name": "Acme", "Thumbprint": "…SHA-256…" } ] },
+  "TrustedPublicKeyTokens": [ ]   // older strong-name check: accepted, but only "key pin only"
 } }
 ```
 
-With `RequireSigned=true`, an unsigned or untrusted package upload is refused with `422`.
+With `RequireSigned=true`, an unsigned or untrusted package upload is refused with `422`. Upload
+responses and `GET /api/v1/modules` include a `trust` object. Trusted publishers can also be managed
+under `/api/v1/settings/module-publishers`. See [module signing](module-signing.md).
 
 ## Variables 🔧 (`/api/v1/variables`)
 

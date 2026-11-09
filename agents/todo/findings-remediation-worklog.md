@@ -159,7 +159,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.1 | ✅ ~~**§9.7 (streaming) `Blob` spill can resolve to the in-memory blob store**~~ — **fixed 2026-11-08**, `Streaming/BlobSpillDurabilityTests` | Medium | plan 04 "Documented-only" | Small: fail fast at startup vs. require a durable persistence provider (plan leans fail-fast) | ~0.5 d |
 | 7.2 | ✅ **fixed 2026-11-08** (conditional edges, `docs/conditional-edges.md`) — ~~**`ConnectionDefinition.Condition` / `Priority` are never read**~~, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
 | 7.3 | ✅ **fixed 2026-11-09** (outbound HTTP policy, plan 06, `docs/outbound-http.md`) — ~~**§9.6 (modules) script HTTP has no host allowlist (SSRF)**~~ | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
-| 7.4 | 🔄 **in progress** (signed packages, plan 07; parts 1–2 of 3 done) — **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
+| 7.4 | ✅ **fixed 2026-11-09** (signed packages, plan 07, `docs/module-signing.md`) — ~~**§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key~~ | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
 | 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
 | 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
 | 7.7 | ✅ **fixed 2026-11-09** (`SubGraphExecutor` runs regions wholly inside a body) — ~~**§9.5 (streaming) no regions inside construct bodies**~~ | Low | plan 04 | No (parity work), but low priority | 1–2 d |
@@ -283,6 +283,35 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.4 part 3/3: dotflow-module CLI, docs
+- `Workflow.Modules/Packaging/ModulePackageBuilder.cs` builds a package from a folder:
+  - it writes `contentHashes` for every file (except `module.json`, `signature.p7s` and the install
+    record);
+  - it validates the result like the server would;
+  - it signs `module.json` (detached CMS, SHA-256, signer certificate included), then zips.
+- `Workflow.Tools.ModulePack` (`dotflow-module`, packable as a dotnet tool; added to `Workflow.sln`):
+  - `pack <folder> [--out] [--cert pfx | --cert pem --key pem] [--password-env VAR] [--chain]`. The
+    PFX password comes from an environment variable only (default `DOTFLOW_SIGN_PASSWORD`).
+  - `verify <wfmod> [--trust cert|thumbprint] [--trust-root root]`: exit 0 only when trusted (if
+    asked).
+  - On Windows, a PEM key is re-imported as PFX so it can sign.
+- End-to-end check with real OpenSSL 3.2 (Git Bash):
+  - an OpenSSL-made certificate and key → CLI pack + sign → `verify --trust` passes; checked
+    against another certificate → refused;
+  - the docs recipe (`openssl cms -sign -binary -md sha256 …` over `module.json`, then re-zip) →
+    OpenSSL verifies it, and DotFlow's verifier reports it trusted;
+  - a file tampered after signing → refused.
+- Tests: `Modules/Security/ModulePackToolTests` (7). `Workflow.Tests` now references the CLI
+  project.
+- Proof: 5/5 mutants killed (a file left unhashed, never signs, verify passes untrusted, password
+  env ignored, unknown options accepted).
+- Docs:
+  - New `docs/module-signing.md` (two mermaid diagrams, trust table, CLI and OpenSSL recipes,
+    config, API, alternatives) and a docs index entry.
+  - Updated: 04 §3 step 6 and §9.5, the findings table, the module author guide signing section,
+    and the rest-api signing section; plan 07 marked implemented.
+- Suites: unfiltered `dotnet test Workflow.Tests` 1993/1993; `Workflow.Tests.UI` 788/788.
+
 ### 2026-11-09 — Stage 7.4 part 2/3: trust in the API and UI, Trusted publishers page
 - API:
   - `ModuleTrustDto` (status `verified` / `keyPinOnly` / `unsigned` / `untrusted` / `changedOnDisk`,

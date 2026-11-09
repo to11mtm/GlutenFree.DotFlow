@@ -502,9 +502,11 @@ When `Modules:HotReload:Enabled=true`, DotFlow watches the installed-packages ro
 
 ### 🔏 Signing (optional)
 
-Assemblies may be strong-name signed. By default unsigned/untrusted assemblies **load with a
-warning**; set `Modules:Security:RequireSigned=true` (and `Modules:Security:TrustedPublicKeyTokens`)
-to **block** them.
+Sign your **package** so servers can verify who built it: `dotflow-module pack <folder> --cert …`
+hashes every file into `module.json` and signs it (`signature.p7s`). By default unsigned or
+untrusted packages **install with a warning**; servers with `Modules:Security:RequireSigned=true`
+**refuse** them. A strong-name token match (`TrustedPublicKeyTokens`) is still accepted, as "key pin
+only". See [module signing](module-signing.md).
 
 ### Installing over HTTP
 

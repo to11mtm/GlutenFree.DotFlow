@@ -64,6 +64,8 @@
              need the DLL to exist on disk before running. We resolve the path at test time
              via typeof(SampleLogModule).Assembly.Location so no hardcoded paths~  -->
         <ProjectReference Include="..\Workflow.Tests.SampleModules\Workflow.Tests.SampleModules.csproj" />
+        <!-- Stage 7.4: the dotflow-module pack/sign CLI -->
+        <ProjectReference Include="..\Workflow.Tools.ModulePack\Workflow.Tools.ModulePack.csproj" />
     </ItemGroup>
 
 </Project>

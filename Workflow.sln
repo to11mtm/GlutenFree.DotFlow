@@ -224,6 +224,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "craplogic", "craplogic", "{
 		new-feature-design\snaplogic-analysis\10-full-streaming-option-assessment-plan.md = new-feature-design\snaplogic-analysis\10-full-streaming-option-assessment-plan.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Workflow.Tools.ModulePack", "Workflow.Tools.ModulePack\Workflow.Tools.ModulePack.csproj", "{7D32830A-517E-414A-AEA3-1B5055006D4E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -510,6 +512,18 @@ Global
 		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|x64.Build.0 = Release|Any CPU
 		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|x86.ActiveCfg = Release|Any CPU
 		{0D1AA6E5-771D-4B84-A0F9-6293A09EA206}.Release|x86.Build.0 = Release|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Debug|x64.Build.0 = Debug|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Debug|x86.Build.0 = Debug|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Release|x64.ActiveCfg = Release|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Release|x64.Build.0 = Release|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Release|x86.ActiveCfg = Release|Any CPU
+		{7D32830A-517E-414A-AEA3-1B5055006D4E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
