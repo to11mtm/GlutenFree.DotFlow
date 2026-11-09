@@ -147,6 +147,15 @@ Planned lightly here; promote to a tested finding when scheduled.
   the `Blob` spill wiring should reject an in-memory `IBlobStore` (fail fast), or require a durable
   persistence provider. Checkable by resolving `ISpillStore` from a host with Blob spill + default
   persistence and asserting it isn't in-memory-backed.
+  **Fixed 2026-11-08 (Stage 7.1), fail fast.**
+  - The real gap was the default SQLite `:memory:` provider. Its `SqliteBlobStore` passed the old
+    `is InMemoryBlobStore` check.
+  - New `IBlobStore.IsInMemory` (a default interface member, false), overridden by
+    `InMemoryBlobStore` and by `SqliteBlobStore` from the connection string.
+  - `BlobStoreSpillStore` refuses either, and the spill cleanup service resolves it at startup, so
+    the host fails to start.
+  - "Require a durable provider" turned out to be the same change, so no decision was needed.
+  - Tests: `Streaming/BlobSpillDurabilityTests` (8).
 
 ---
 

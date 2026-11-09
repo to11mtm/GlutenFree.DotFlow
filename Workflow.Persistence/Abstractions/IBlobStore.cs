@@ -36,6 +36,16 @@ public interface IBlobStore
 
     /// <summary>Generates a time-limited presigned URL for direct access to the object~ 🔗.</summary>
     Task<string> GeneratePresignedUrlAsync(string key, TimeSpan expiry, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gets a value indicating whether objects live in this process's memory (the dev fallback, a
+    /// SQLite <c>:memory:</c> database…) rather than on durable storage~ 🧠.
+    /// </summary>
+    /// <remarks>
+    /// Stage 7.1: consumers that store data to <i>relieve</i> memory (streaming spill) refuse such a
+    /// store. Defaults to <c>false</c>; stores backed by memory override it.
+    /// </remarks>
+    bool IsInMemory => false;
 }
 
 /// <summary>

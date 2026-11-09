@@ -54,12 +54,15 @@ public sealed class BlobStoreSpillStore : ISpillStore
     {
         ArgumentNullException.ThrowIfNull(blobs);
 
-        if (blobs is InMemoryBlobStore)
+        // Stage 7.1: not just the dev fallback — the default persistence (SQLite :memory:) has a blob
+        // store too, and it lives in memory just the same~ 🧠
+        if (blobs is InMemoryBlobStore || blobs.IsInMemory)
         {
             throw new InvalidOperationException(
-                "Blob spill is configured but the active IBlobStore is the in-memory dev fallback. " +
-                "Spilling there would just move items around the heap — configure a real persistence " +
-                "provider with blob support (Postgres, NATS or S3), or set Streaming:Spill:Store=Sqlite~ 🚫");
+                $"Streaming:Spill:Store is 'Blob' but the active blob store ({blobs.GetType().Name}) is an in-memory store, " +
+                "so spilling there would just move items around the heap. Configure a persistence provider whose blobs " +
+                "are durable (Postgres, NATS, S3, or SQLite on a file), or set Streaming:Spill:Store to 'Sqlite' or " +
+                "'Directory'~ 🚫");
         }
 
         this.blobs = blobs;

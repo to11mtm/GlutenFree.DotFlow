@@ -156,7 +156,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 
 | # | Finding | Sev. | Plan | Decision needed? | Size |
 | --- | --- | :-: | --- | --- | --- |
-| 7.1 | **§9.7 (streaming) `Blob` spill can resolve to the in-memory blob store**: no memory relief | Medium | plan 04 "Documented-only" | Small: fail fast at startup vs. require a durable persistence provider (plan leans fail-fast) | ~0.5 d |
+| 7.1 | ✅ ~~**§9.7 (streaming) `Blob` spill can resolve to the in-memory blob store**~~ — **fixed 2026-11-08**, `Streaming/BlobSpillDurabilityTests` | Medium | plan 04 "Documented-only" | Small: fail fast at startup vs. require a durable persistence provider (plan leans fail-fast) | ~0.5 d |
 | 7.2 | **`ConnectionDefinition.Condition` / `Priority` are never read**, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
 | 7.3 | **§9.6 (modules) script HTTP has no host allowlist (SSRF)** | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
 | 7.4 | **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
@@ -263,6 +263,22 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — Stage 7.1 Blob spill refuses an in-memory blob store
+- Real gap: the default persistence (SQLite `:memory:`) gives a `SqliteBlobStore`, which passed
+  `BlobStoreSpillStore`'s `is InMemoryBlobStore` check. Blob spill on a default host gave no memory
+  relief.
+- Fix: `IBlobStore.IsInMemory` (default false). It is true for `InMemoryBlobStore`, and for
+  `SqliteBlobStore` when `WorkflowDataConnectionFactory.IsInMemory` (`:memory:`, `Mode=Memory`, or a
+  `file:…?mode=memory` URI). `BlobStoreSpillStore` refuses it, and the host fails at startup
+  because the cleanup service resolves the store. Fail-fast and "require durable" were the same
+  change, so no decision was needed.
+- Kept the existing test's "in-memory" wording in the new message rather than changing that test.
+- Tests: `Streaming/BlobSpillDurabilityTests` (8); 2 mutants killed.
+- Gotcha: `WebApplicationFactory` `ConfigureAppConfiguration` values are NOT visible to
+  `Program.cs` code that reads `builder.Configuration` eagerly (e.g. `AddStreamingSpill`). Use
+  `builder.UseSetting(...)`.
+- `--filter Category!=Finding`: unfiltered `dotnet test Workflow.Tests` 1901/1901 (UI unchanged).
+
 ### 2026-11-08 — done-criteria check; Stage 7 created
 - Pushed Stage 6 (`02fac32`, `9cf07bb`, `8ad6ae3`).
 - §5 done criteria: 1–3 ticked. Unfiltered `dotnet test Workflow.Tests` 1893/1893 green; UI

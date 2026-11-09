@@ -29,6 +29,33 @@ public sealed class WorkflowDataConnectionFactory
     }
 
     /// <summary>
+    /// Gets a value indicating whether the database lives in memory (<c>:memory:</c>,
+    /// <c>Mode=Memory</c>, or a <c>file:…?mode=memory</c> URI) — gone when the process ends~ 🧠.
+    /// </summary>
+    public bool IsInMemory
+    {
+        get
+        {
+            if (string.Equals(_connectionString.Trim(), ":memory:", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            try
+            {
+                var builder = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(_connectionString);
+                return builder.Mode == Microsoft.Data.Sqlite.SqliteOpenMode.Memory
+                       || string.Equals(builder.DataSource, ":memory:", StringComparison.Ordinal)
+                       || builder.DataSource.Contains("mode=memory", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
     /// Ensures the SQLite linq2db provider is registered with the runtime.
     /// Call this once at application startup~ ✅.
     /// </summary>

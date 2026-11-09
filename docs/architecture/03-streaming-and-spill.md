@@ -281,7 +281,10 @@ Its recommendation is streaming as a second mode, at about 5–9 engineer-months
 6. ~~**Spill is kept forever when there is no history.**~~ **Fixed (§9.6):** with no history,
    abandoned spill is reclaimed by its own age (last write older than `AbandonedThreshold`), and the
    host warns at startup. See §7.
-7. **`Blob` spill can quietly land in memory.**
+7. ~~**`Blob` spill can quietly land in memory.**~~ **Fixed (Stage 7.1):** `IBlobStore.IsInMemory`
+   (true for `InMemoryBlobStore` and for SQLite `:memory:` / `Mode=Memory`) is refused by
+   `BlobStoreSpillStore`. The spill cleanup service resolves the store at startup, so such a host
+   fails to start with a message naming the setting. Original note:
    - What the code does: the `Blob` store throws when no `IBlobStore` is registered. But
      `Program.cs` always registers an `InMemoryBlobStore` fallback (`TryAddSingleton`), so the
      guard can never trip. With the default SQLite `:memory:` provider, blob spill also goes into

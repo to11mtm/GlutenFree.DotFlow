@@ -35,6 +35,10 @@ public sealed class SqliteBlobStore : IBlobStore
     }
 
     /// <inheritdoc/>
+    /// <remarks>Stage 7.1: true for the default <c>:memory:</c> persistence~ 🧠.</remarks>
+    public bool IsInMemory => _factory.IsInMemory;
+
+    /// <inheritdoc/>
     public async Task<string> PutAsync(
         string key,
         Stream data,

@@ -24,6 +24,9 @@ using Workflow.Persistence.Abstractions;
 /// </remarks>
 public sealed class InMemoryBlobStore : IBlobStore
 {
+    /// <inheritdoc/>
+    public bool IsInMemory => true;
+
     private readonly ConcurrentDictionary<string, Entry> store = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
