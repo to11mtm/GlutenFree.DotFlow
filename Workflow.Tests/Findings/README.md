@@ -61,7 +61,7 @@ exercised without a hanging/heavy setup. These stay in the docs, not here:
 - 03 §9.2 — regions have no timeout (a test would need a hanging module).
 - 03 §9.3 — retrying a mid-pipeline stage: the current blame-the-source behaviour makes the exact
   repro ambiguous; revisit once stage-level blame exists.
-- 03 §9.5 / §9.7 — no regions inside construct bodies; `Blob` spill can land in an in-memory store.
+- ~~03 §9.5 / §9.7 — no regions inside construct bodies; `Blob` spill can land in an in-memory store~~ — fixed in Stage 7.7 (`StreamRegionExecutionTests.Region_InsideALoopBody_*`, `Regions_InParallelBranches_*`) and Stage 7.1 (`BlobSpillDurabilityTests`).
   Both are DI/wiring shapes better checked by inspection than a brittle test.
 
 ## When a finding is fixed

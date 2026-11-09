@@ -157,6 +157,14 @@ Planned lightly here; promote to a tested finding when scheduled.
   streaming edges inside a loop/branch body run as batch. Ties to the "sub-graph parity" theme
   ([plan 02 §12.4](02-engine-lifecycle-remediation.md), [plan 03 §10.3](03-binding-and-variables-remediation.md)).
   Low priority; most streaming is top-level.
+  **Fixed 2026-11-09 (Stage 7.7, no decision needed):**
+  - `SubGraphExecutor` detects regions over the whole definition (so the indices match the top
+    level's) and keeps those wholly inside its scope.
+  - It runs them through `StreamRegionExecutor`, exactly like `WorkflowExecutor`. A failure goes
+    through `HandleNodeFailed`, so retry, continue, an error handler and the enclosing try/catch
+    all apply.
+  - Tests: `StreamRegionExecutionTests.Region_InsideALoopBody_*` (3) and
+    `Regions_InParallelBranches_EachRunAsAPipeline`.
 - **§9.7 `Blob` spill can land in an in-memory store.** `Program.cs` always registers an
   `InMemoryBlobStore` fallback (`TryAddSingleton`), and the default provider is SQLite `:memory:`, so
   `Streaming:Spill:Store=Blob` can resolve to an in-memory backend that gives no memory relief. Fix:

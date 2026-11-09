@@ -260,6 +260,140 @@ public class StreamRegionExecutionTests : TestKit
         first.ItemCounts["src"].Should().Be(10);
     }
 
+    // ── Stage 7.7 (§9.5): regions inside construct bodies ─────────────────────────────────────────
+
+    private static NodeDefinition Foreach(string id, int count)
+        => new(
+            id,
+            "builtin.loop.foreach",
+            id,
+            HashMap<string, JsonElement>.Empty.Add("collection", JsonSerializer.SerializeToElement(Enumerable.Range(1, count).ToArray())));
+
+    /// <summary>
+    /// 🔁 Stage 7.7 — a streaming chain inside a loop body runs as one pipeline in every iteration
+    /// (like at the top level), and the body carries on from the terminal stage's outputs.
+    /// </summary>
+    [Fact]
+    public void Region_InsideALoopBody_RunsAsAPipeline_InEveryIteration()
+    {
+        var recorder = new FakeRecorder();
+        var definition = Definition(
+            [Foreach("loop", 3), Node("src", "test.stream.source"), Node("collect", "test.stream.collect"), Node("rec", "test.record")],
+            [
+                new ConnectionDefinition("loop", "loopBody", "src", "items"),
+                new ConnectionDefinition("src", "items", "collect", "items"),
+                new ConnectionDefinition("collect", "count", "rec", "input"),
+            ]);
+
+        var services = Services(new StreamingProgressOptions(0), new Workflow.Modules.Builtin.Flow.ForEachModule(), new FakeSource(5), new FakeCollector(), recorder);
+        var executionId = Guid.NewGuid();
+        Sys.EventStream.Subscribe(TestActor, typeof(StreamRegionProgress));
+
+        var executor = StartExecutor(definition, services, executionId);
+        executor.Tell(new StartExecution(executionId));
+
+        for (var i = 0; i < 3; i++)
+        {
+            var progress = FishForMessage<StreamRegionProgress>(p => p.ExecutionId == executionId && p.Completed, TimeSpan.FromSeconds(15));
+            progress.ItemCounts["collect"].Should().Be(5);
+        }
+
+        AwaitTerminalState(executor, executionId).Should().Be(ExecutionState.Completed);
+        recorder.Seen.Should().Equal(new object?[] { 5L, 5L, 5L }, because: "each iteration's region hands its terminal output to the next body node");
+    }
+
+    /// <summary>
+    /// 🌐 Stage 7.7 — each parallel branch can hold its own region; both run as pipelines at once.
+    /// </summary>
+    [Fact]
+    public void Regions_InParallelBranches_EachRunAsAPipeline()
+    {
+        var recorder = new FakeRecorder();
+        var definition = Definition(
+            [
+                new NodeDefinition("par", "builtin.parallel", "par", HashMap<string, JsonElement>.Empty.Add("branches", JsonSerializer.SerializeToElement(new[] { "b0", "b1" }))),
+                Node("srcA", "test.stream.source"), Node("collectA", "test.stream.collect"), Node("recA", "test.record"),
+                Node("srcB", "test.stream.source"), Node("collectB", "test.stream.collect"), Node("recB", "test.record"),
+            ],
+            [
+                new ConnectionDefinition("par", "b0", "srcA", "items"),
+                new ConnectionDefinition("srcA", "items", "collectA", "items"),
+                new ConnectionDefinition("collectA", "count", "recA", "input"),
+                new ConnectionDefinition("par", "b1", "srcB", "items"),
+                new ConnectionDefinition("srcB", "items", "collectB", "items"),
+                new ConnectionDefinition("collectB", "count", "recB", "input"),
+            ]);
+
+        var services = Services(new Workflow.Modules.Builtin.Flow.ParallelModule(), new FakeSource(6), new FakeCollector(), recorder);
+        var executionId = Guid.NewGuid();
+
+        var executor = StartExecutor(definition, services, executionId);
+        executor.Tell(new StartExecution(executionId));
+
+        AwaitTerminalState(executor, executionId).Should().Be(ExecutionState.Completed);
+        recorder.Seen.Should().Equal(new object?[] { 6L, 6L });
+    }
+
+    /// <summary>
+    /// 🔁 Stage 7.7 — a stage failing inside a body's region fails the body like a node failure,
+    /// with the stage's own error.
+    /// </summary>
+    [Fact]
+    public void Region_InsideALoopBody_FailsTheBody_WithTheStagesError()
+    {
+        var definition = Definition(
+            [Foreach("loop", 2), Node("src", "test.stream.source"), Node("boom", "test.stream.boom"), Node("collect", "test.stream.collect")],
+            [
+                new ConnectionDefinition("loop", "loopBody", "src", "items"),
+                new ConnectionDefinition("src", "items", "boom", "items"),
+                new ConnectionDefinition("boom", "items", "collect", "items"),
+            ]);
+
+        var services = Services(new Workflow.Modules.Builtin.Flow.ForEachModule(), new FakeSource(5), new FakeThrowingStage(), new FakeCollector());
+        var executionId = Guid.NewGuid();
+        var parent = CreateTestProbe();
+        var executor = parent.ChildActorOf(WorkflowExecutor.Props(executionId, definition, new Dictionary<string, object?>(), services));
+        executor.Tell(new StartExecution(executionId));
+
+        var terminal = parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, TimeSpan.FromSeconds(15));
+        terminal.Should().BeOfType<WorkflowFailed>()
+            .Which.Error.Message.Should().Contain("stage exploded");
+    }
+
+    /// <summary>
+    /// 🔁 Stage 7.7 — retry inside a body re-runs the whole region (a failure blames the source, as
+    /// at the top level), and the second run completes the body.
+    /// </summary>
+    [Fact]
+    public void Region_InsideALoopBody_RetriesTheWholeRegion()
+    {
+        var flaky = new FakeFlakyStage();
+        var recorder = new FakeRecorder();
+        var src = Node("src", "test.stream.source") with
+        {
+            ErrorHandling = new ErrorHandling(ErrorBehavior.Retry),
+            RetryPolicy = new RetryPolicy(MaxAttempts: 3, DelayMs: 10, BackoffMultiplier: 1.0, MaxDelayMs: 50),
+        };
+        var definition = Definition(
+            [Foreach("loop", 1), src, Node("flaky", "test.stream.flaky"), Node("collect", "test.stream.collect"), Node("rec", "test.record")],
+            [
+                new ConnectionDefinition("loop", "loopBody", "src", "items"),
+                new ConnectionDefinition("src", "items", "flaky", "items"),
+                new ConnectionDefinition("flaky", "items", "collect", "items"),
+                new ConnectionDefinition("collect", "count", "rec", "input"),
+            ]);
+
+        var services = Services(new Workflow.Modules.Builtin.Flow.ForEachModule(), new FakeSource(4), flaky, new FakeCollector(), recorder);
+        var executionId = Guid.NewGuid();
+
+        var executor = StartExecutor(definition, services, executionId);
+        executor.Tell(new StartExecution(executionId));
+
+        AwaitTerminalState(executor, executionId).Should().Be(ExecutionState.Completed);
+        flaky.Runs.Should().Be(2);
+        recorder.Seen.Should().Equal(new object?[] { 4L });
+    }
+
     /// <summary>
     /// 🧯 5.1.4 — an item skipped by `onItemError: skip` survives as a per-item error document on
     /// the stage's `errors` output, so a designer can wire it to a dead-letter path~ 🧾
@@ -448,6 +582,64 @@ public class StreamRegionExecutionTests : TestKit
             }
 
             return ModuleResult.Ok(new Dictionary<string, object?> { ["count"] = count });
+        }
+    }
+
+    /// <summary>A stage whose first run throws; later runs pass items through.</summary>
+    private sealed class FakeFlakyStage : FakeStreamModule
+    {
+        private int runs;
+
+        public int Runs => this.runs;
+
+        public override string ModuleId => "test.stream.flaky";
+
+        public override async IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+            ModuleExecutionContext context,
+            IAsyncEnumerable<StreamItem> input,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var run = Interlocked.Increment(ref this.runs);
+            await foreach (var item in input.WithCancellation(cancellationToken).ConfigureAwait(false))
+            {
+                if (run == 1)
+                {
+                    throw new InvalidOperationException("first run fails");
+                }
+
+                yield return item;
+            }
+        }
+    }
+
+    /// <summary>A batch node that records the <c>input</c> it was given.</summary>
+    private sealed class FakeRecorder : IWorkflowModule
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<object?> seen = new();
+
+        public IReadOnlyList<object?> Seen => this.seen.ToList();
+
+        public string ModuleId => "test.record";
+
+        public string DisplayName => "Record";
+
+        public string Category => "Test";
+
+        public string Description => "records its input";
+
+        public string Icon => "📝";
+
+        public Version Version => new(1, 0);
+
+        public ModuleSchema Schema => new(
+            Arr.create(PortDefinition.Create<object>("input", isRequired: false)),
+            Arr<PortDefinition>.Empty,
+            Arr<ModulePropertyDefinition>.Empty);
+
+        public Task<ModuleResult> ExecuteAsync(ModuleExecutionContext context, CancellationToken cancellationToken = default)
+        {
+            this.seen.Enqueue(context.Inputs.TryGetValue("input", out var v) ? v : null);
+            return Task.FromResult(ModuleResult.Ok(new Dictionary<string, object?>()));
         }
     }
 

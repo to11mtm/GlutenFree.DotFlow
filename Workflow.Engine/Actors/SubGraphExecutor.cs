@@ -138,6 +138,16 @@ public class SubGraphExecutor : ReceiveActor
     /// <summary>Set once <see cref="SubGraphCompleted"/> / <see cref="SubGraphFailed"/> was sent; later reports are ignored.</summary>
     private bool _finished;
 
+    /// <summary>
+    /// 🌊 Stage 7.7 (§9.5) — the streaming regions lying wholly inside this body (computed on first
+    /// use). A region that would cross the body's boundary isn't one here: the designer refuses
+    /// such a stream, and its nodes run as ordinary nodes~.
+    /// </summary>
+    private IReadOnlyList<Workflow.Engine.Streaming.StreamRegion>? _streamRegions;
+
+    /// <summary>🌊 Stage 7.7 — running region actors, with the region's source and start time.</summary>
+    private readonly Dictionary<IActorRef, (string SourceNodeId, DateTimeOffset StartedAt)> _regionActors = new();
+
     // ── Private persistence confirmation ────────────────────────────────────────────────────────
     private sealed record NodePersisted(string NodeId, bool Success);
 
@@ -280,6 +290,10 @@ public class SubGraphExecutor : ReceiveActor
         Receive<SubGraphCompleted>(HandleErrorHandlerCompleted);
         Receive<SubGraphFailed>(HandleErrorHandlerFailed);
         Receive<NodePersisted>(_ => { }); // fire-and-forget persistence acknowledgement
+
+        // 🌊 Stage 7.7 (§9.5): streaming regions inside the body run as one pipeline, like at the top level~
+        Receive<StreamRegionCompleted>(HandleStreamRegionCompleted);
+        Receive<StreamRegionFailed>(HandleStreamRegionFailed);
 
         // §12.10: nested constructs — same request → spawn → completion flow as WorkflowExecutor~ 🧩
         Receive<NodeLoopExecutionRequested>(_constructs.Request);
@@ -472,6 +486,18 @@ public class SubGraphExecutor : ReceiveActor
 
         _log.Debug("⚡ SubGraph {SubGraphId}: executing node {NodeId}", _subGraphId, nodeId);
 
+        // 🌊 Stage 7.7 (§9.5) — as in WorkflowExecutor: reaching a region's source runs the whole
+        // region as one pipeline; any other member runs as part of it~
+        if (FindStreamRegion(nodeId) is { } region)
+        {
+            if (string.Equals(region.SourceNodeIds.FirstOrDefault(), nodeId, StringComparison.Ordinal))
+            {
+                ExecuteStreamRegion(region, nodeId);
+            }
+
+            return;
+        }
+
         var nodeInputs = GatherNodeInputs(nodeId);
         _nodeInputs[nodeId] = new Dictionary<string, object?>(nodeInputs);
         _runningNodes.Add(nodeId);
@@ -490,6 +516,76 @@ public class SubGraphExecutor : ReceiveActor
             _parentExecutionId,
             _variables.CurrentAsHashMap(),
             NodeAncestry.ViewFor(_definition, nodeId, _outerOutputs, _nodeOutputs)));
+    }
+
+    /// <summary>🌊 Stage 7.7 — the streaming regions wholly inside this body.</summary>
+    private IReadOnlyList<Workflow.Engine.Streaming.StreamRegion> StreamRegions
+    {
+        get
+        {
+            if (_streamRegions is not null)
+            {
+                return _streamRegions;
+            }
+
+            var registry = _serviceProvider.GetService(typeof(Workflow.Modules.Abstractions.IModuleRegistry))
+                as Workflow.Modules.Abstractions.IModuleRegistry;
+            var schemas = new Dictionary<string, ModuleSchema?>(StringComparer.Ordinal);
+            ModuleSchema? SchemaOf(string nodeId)
+            {
+                if (!schemas.TryGetValue(nodeId, out var schema))
+                {
+                    var node = _definition.Nodes.Find(n => n.Id == nodeId).IfNoneUnsafe((NodeDefinition?)null);
+
+                    // §9.4: the version the node will actually run (pins included)~
+                    schema = node is null ? null : Workflow.Modules.ModuleResolution.Resolve(registry, node).Module?.Schema;
+                    schemas[nodeId] = schema;
+                }
+
+                return schema;
+            }
+
+            // Detected over the whole definition so region indices match the top level's~
+            _streamRegions = Workflow.Engine.Streaming.StreamRegionDetector.Regions(_definition, SchemaOf)
+                .Where(r => r.NodeIds.All(_nodeSuccessors.ContainsKey))
+                .ToList();
+            return _streamRegions;
+        }
+    }
+
+    private Workflow.Engine.Streaming.StreamRegion? FindStreamRegion(string nodeId)
+        => StreamRegions.FirstOrDefault(r => r.NodeIds.Contains(nodeId, StringComparer.Ordinal));
+
+    /// <summary>🌊 Stage 7.7 — spawns a <see cref="StreamRegionExecutor"/> for a region whose source was reached.</summary>
+    private void ExecuteStreamRegion(Workflow.Engine.Streaming.StreamRegion region, string sourceNodeId)
+    {
+        // Every member is running for the region's lifetime (a retry re-runs the whole region, so
+        // members skipped by the failed run are running again)~
+        foreach (var memberId in region.NodeIds)
+        {
+            _skippedNodes.Remove(memberId);
+            _failedNodes.Remove(memberId);
+            _completedNodes.Remove(memberId);
+            _runningNodes.Add(memberId);
+        }
+
+        var inputs = GatherNodeInputs(sourceNodeId);
+        _nodeInputs[sourceNodeId] = new Dictionary<string, object?>(inputs);
+
+        var actor = Context.ActorOf(
+            StreamRegionExecutor.Props(
+                region,
+                _definition,
+                inputs,
+                _variables.CurrentAsHashMap(),
+                _parentExecutionId,
+                _serviceProvider,
+                _linkedCts.Token),
+            $"sg-stream-region-{region.Index}-{Guid.NewGuid():N}");
+
+        Context.Watch(actor);
+        _regionActors[actor] = (sourceNodeId, DateTimeOffset.UtcNow);
+        actor.Tell(new ExecuteStreamRegion());
     }
 
     /// <summary>
@@ -655,6 +751,95 @@ public class SubGraphExecutor : ReceiveActor
         {
             ExecuteReadySuccessors(nodeId, message.ActivePorts);
         }
+    }
+
+    /// <summary>
+    /// 🌊 Stage 7.7 — a body's region finished: every member is complete, the terminal stage's outputs
+    /// are stored under its id, and the body carries on from it (as in WorkflowExecutor)~.
+    /// </summary>
+    private void HandleStreamRegionCompleted(StreamRegionCompleted message)
+    {
+        if (_finished || !_regionActors.Remove(Sender))
+        {
+            return;
+        }
+
+        Context.Unwatch(Sender);
+        Context.Stop(Sender);
+
+        foreach (var nodeId in message.NodeIds)
+        {
+            _runningNodes.Remove(nodeId);
+            _completedNodes.Add(nodeId);
+
+            if (message.ItemCounts.TryGetValue(nodeId, out var itemCount))
+            {
+                var outputs = new Dictionary<string, object?> { ["itemCount"] = itemCount };
+                if (message.ItemErrors?.TryGetValue(nodeId, out var errors) == true)
+                {
+                    outputs["errors"] = errors;
+                    outputs["errorCount"] = (long)errors.Count;
+                }
+
+                _nodeOutputs[nodeId] = outputs;
+            }
+        }
+
+        _nodeOutputs[message.TerminalNodeId] = new Dictionary<string, object?>(message.Outputs);
+
+        foreach (var nodeId in message.NodeIds)
+        {
+            QueuePersistNode(nodeId, message.Duration, NodeExecutionState.Completed);
+        }
+
+        _nodeInputs.Remove(message.NodeIds.FirstOrDefault() ?? string.Empty);
+
+        // 📡 the final per-stage counts, as a top-level region publishes them~
+        Context.System.EventStream.Publish(new StreamRegionProgress(
+            _parentExecutionId,
+            message.RegionIndex,
+            message.ItemCounts,
+            message.Duration,
+            DateTimeOffset.UtcNow));
+
+        if (IsComplete())
+        {
+            ReportSuccess();
+            return;
+        }
+
+        ExecuteReadySuccessors(message.TerminalNodeId);
+    }
+
+    /// <summary>
+    /// 🌊 Stage 7.7 — a body's region failed: the blamed node fails like any body node (so retry,
+    /// continue, an error handler or the enclosing try/catch apply); the other members are skipped~.
+    /// </summary>
+    private void HandleStreamRegionFailed(StreamRegionFailed message)
+    {
+        if (_finished || !_regionActors.Remove(Sender, out var run))
+        {
+            return;
+        }
+
+        Context.Unwatch(Sender);
+        Context.Stop(Sender);
+
+        foreach (var nodeId in message.NodeIds)
+        {
+            if (string.Equals(nodeId, message.FailedNodeId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            _runningNodes.Remove(nodeId);
+            if (!_completedNodes.Contains(nodeId) && _skippedNodes.Add(nodeId))
+            {
+                QueuePersistNode(nodeId, TimeSpan.Zero, NodeExecutionState.Skipped);
+            }
+        }
+
+        HandleNodeFailed(new NodeExecutionFailed(message.FailedNodeId, message.Error, _parentExecutionId, DateTimeOffset.UtcNow - run.StartedAt));
     }
 
     /// <summary>
@@ -835,6 +1020,13 @@ public class SubGraphExecutor : ReceiveActor
         if (_errorHandlers.TryFinish(terminated.ActorRef, out var handledNodeId))
         {
             ReportFailure(handledNodeId, new InvalidOperationException($"The error handler for node '{handledNodeId}' stopped unexpectedly."));
+            return;
+        }
+
+        // 🌊 Stage 7.7: a region actor stopped without reporting~
+        if (_regionActors.Remove(terminated.ActorRef, out var region))
+        {
+            ReportFailure(region.SourceNodeId, new Exception($"SubGraph streaming region starting at '{region.SourceNodeId}' terminated unexpectedly"));
             return;
         }
 

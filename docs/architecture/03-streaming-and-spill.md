@@ -279,8 +279,16 @@ Its recommendation is streaming as a second mode, at about 5–9 engineer-months
    - Effect: the node stays `Retrying` and the run never completes. Worth a test.
 4. **Pinned module versions are ignored inside regions.** `StreamRegionExecutor` calls
    `GetModule(moduleId)` without the version that `NodeExecutor` honours.
-5. **No regions inside construct bodies.** `SubGraphExecutor` doesn't run region detection, so
-   streaming edges inside a loop or branch body run as ordinary batch hops.
+5. ~~**No regions inside construct bodies.**~~ **Fixed (Stage 7.7):** `SubGraphExecutor` runs a
+   region that lies wholly inside the body (loop iteration, parallel branch, try/catch body,
+   transaction body) as one pipeline, the same way `WorkflowExecutor` does.
+   - Region indices match the top level's.
+   - A failure blames the region's source; retry re-runs the whole region, and the other members
+     are skipped meanwhile.
+   - Every member gets a history record.
+   - The final `StreamRegionProgress` is published.
+   - A stream that would cross the body's boundary isn't a region inside the body. The designer
+     refuses such an edge (rule 3), and in the body its nodes run as ordinary nodes.
 6. ~~**Spill is kept forever when there is no history.**~~ **Fixed (§9.6):** with no history,
    abandoned spill is reclaimed by its own age (last write older than `AbandonedThreshold`), and the
    host warns at startup. See §7.

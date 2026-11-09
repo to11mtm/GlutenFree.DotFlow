@@ -162,7 +162,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.4 | **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
 | 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
 | 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
-| 7.7 | **§9.5 (streaming) no regions inside construct bodies** | Low | plan 04 | No (parity work), but low priority | 1–2 d |
+| 7.7 | ✅ **fixed 2026-11-09** (`SubGraphExecutor` runs regions wholly inside a body) — ~~**§9.5 (streaming) no regions inside construct bodies**~~ | Low | plan 04 | No (parity work), but low priority | 1–2 d |
 | 7.8 | **§9.3 (streaming) mid-pipeline retry**: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
 | 7.9 | **Expression evaluation blocks the `NodeExecutor` thread** (`.GetAwaiter().GetResult()`) | Low | 02 data-binding §10, item 5 | No | ~0.5 d |
 | 7.10 | **Scheduled and Event triggers have no runtime** | Info | 01 §12.8 | Feature, not a fix: out of scope for this effort | — |
@@ -266,6 +266,36 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.7 streaming regions inside construct bodies (§9.5 streaming)
+- No decision needed (parity work).
+- The scope rule is "region wholly inside the body". This matches the designer's rule 3 (a stream
+  may not cross a construct boundary); a crossing stream's body nodes still run as ordinary nodes.
+- `SubGraphExecutor`:
+  - `StreamRegions`: lazy, detected over the whole definition (indices match the top level's),
+    filtered to scope, with cached schema lookups and pins honoured.
+  - `ExecuteNode`: a region's source starts `ExecuteStreamRegion`; other members return.
+  - `ExecuteStreamRegion` un-skips and un-fails the members first, because a retry re-runs the whole
+    region.
+  - `HandleStreamRegionCompleted`:
+    - members complete, with `itemCount` / `errors` outputs;
+    - terminal outputs, history records and the final `StreamRegionProgress` (EventStream only;
+      the construct parent doesn't want it);
+    - then dispatch from the terminal stage.
+  - `HandleStreamRegionFailed`: the other members are skipped (recorded), then the blamed node goes
+    through `HandleNodeFailed`, so retry, continue, the error handler and try/catch apply.
+  - A region actor that stops unexpectedly fails the body. Region actors are stopped once they
+    report (top-level region actors still aren't, which is harmless: they die with the executor).
+- Tests: `StreamRegionExecutionTests` — loop body each iteration, failure carries the stage's
+  error, retry re-runs the region, two parallel branches.
+- Proof:
+  - Stashing the production change → 4/12 red.
+  - Mutants killed: no body regions, retry leaves members skipped, terminal outputs dropped, no
+    dispatch after the region, failure bypasses retry.
+  - One survivor ("complete while a region runs") showed a redundant `_regionActors.Count` check in
+    `IsComplete` (the members are already running), so I removed the check.
+- Docs: 03 §9 item 5, the findings table, plan 04, Findings README.
+- Suites: unfiltered `dotnet test Workflow.Tests` 1956/1956; `Workflow.Tests.UI` 779/779.
+
 ### 2026-11-09 — Stage 7.6 streaming progress to live clients (§9.1 streaming)
 - Decided (asked; plan 04 "Low"):
   - Live + final.
