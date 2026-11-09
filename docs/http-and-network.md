@@ -61,6 +61,11 @@ app.MapWebhookEndpoints();  // registers /webhooks/{id} + /api/webhooks CRUD
 
 ## HttpRequest Module
 
+> 🌐 Which addresses this module may call is decided by the server's
+> [outbound HTTP policy](outbound-http.md). By default internal addresses (localhost, private
+> networks) and cloud metadata are blocked. An optional `allowedHosts` property narrows it for one
+> node.
+
 **Module ID:** `builtin.http.request`  
 **Category:** Network  
 **Icon:** 🌐

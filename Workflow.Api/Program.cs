@@ -167,6 +167,20 @@ builder.Services.AddSingleton<IExpressionEvaluatorFactory, KeyedExpressionEvalua
 builder.Services.AddSingleton<Workflow.Modules.Binding.IPropertyBinder>(sp =>
     new Workflow.Modules.Binding.PropertyBinder(sp.GetService<IExpressionEvaluator>()));
 
+// 🌐 Stage 7.3 — outbound HTTP policy (SSRF): host settings (Http:Outbound, locked) merged over the
+// policy saved from Settings → Outbound HTTP. Registered BEFORE the HTTP modules so their fail-closed
+// fallback (TryAdd) defers to this one. Unconfigured channels run as PublicOnly and warn at startup~
+var outboundHttpHost = builder.Configuration.GetSection(Workflow.Core.Http.OutboundHttpOptions.SectionName)
+    .Get<Workflow.Core.Http.OutboundHttpOptions>();
+builder.Services.AddSingleton(sp => new Workflow.Api.Http.OutboundHttpPolicyService(
+    outboundHttpHost,
+    sp.GetService<IBlobStore>() is { } outboundBlobs
+        ? new Workflow.Api.Http.BlobOutboundHttpPolicyPersistence(outboundBlobs)
+        : new Workflow.Api.Http.InMemoryOutboundHttpPolicyPersistence()));
+builder.Services.AddSingleton<Workflow.Core.Http.IOutboundHttpPolicyProvider>(
+    sp => sp.GetRequiredService<Workflow.Api.Http.OutboundHttpPolicyService>());
+builder.Services.AddHostedService<Workflow.Api.Http.OutboundHttpPolicyHostedService>();
+
 //  HTTP built-in modules (Phase 2.3.0)~ — IHttpClientFactory named client "dotflow.http"
 // (was: builder.Services.AddHttpModules(); — now aggregated under AddWorkflowModules)
 builder.Services.AddWorkflowModules();
@@ -387,6 +401,9 @@ app.MapScriptEndpoints();
 
 // 🛡️ §9.2 — review/approval of C# code that uses sensitive APIs~
 app.MapScriptApprovalEndpoints();
+
+// 🌐 Stage 7.3 — outbound HTTP setup screen API~
+app.MapOutboundHttpEndpoints();
 
 // 📊 Phase 2.7.5 — Monitoring endpoints (/api/v1/health, /status, /metrics)~
 app.MapMonitoringEndpoints();

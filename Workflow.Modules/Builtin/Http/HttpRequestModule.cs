@@ -376,7 +376,15 @@ public class HttpRequestModule : IWorkflowModule
                 Description: "Sliding window for failure counting (default 30s)~ ⏰",
                 IsRequired: false,
                 DefaultValue: 30.0,
-                EditorType: PropertyEditorType.Number)));
+                EditorType: PropertyEditorType.Number),
+            new ModulePropertyDefinition(
+                Name: "allowedHosts",
+                DisplayName: "Allowed Hosts",
+                DataType: typeof(object),
+                Description: "Optional: the only hosts this node may call (e.g. [\"api.partner.com\", \"*.partner.com\"]). Narrows the server's outbound HTTP policy for this node; can't widen it~ 🌐",
+                IsRequired: false,
+                DefaultValue: null,
+                EditorType: PropertyEditorType.Json)));
 
     /// <inheritdoc />
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -459,6 +467,7 @@ public class HttpRequestModule : IWorkflowModule
         // 3️⃣ Build the request — extracted into a local function so it can be rebuilt for 401-retry~ 🛠️
         var client = factory.CreateClient(HttpModuleServiceCollectionExtensions.HttpClientName);
         var headers = ExtractHeaderMap(context.Properties, "headers");
+        var allowedHosts = ExtractStringList(context.Properties, "allowedHosts");
         var requestedContentType = GetString(context.Properties, "contentType");
         var hasBody = context.Properties.TryGetValue("body", out var bodyObj)
             && bodyObj is not null
@@ -467,6 +476,11 @@ public class HttpRequestModule : IWorkflowModule
         HttpRequestMessage BuildRequest()
         {
             var req = new HttpRequestMessage(new HttpMethod(methodStr.ToUpperInvariant()), uri);
+            if (allowedHosts.Count > 0)
+            {
+                // 🌐 Stage 7.3 — per-node narrowing of the HttpModule outbound policy~
+                req.Options.Set(Workflow.Core.Http.OutboundHttpRequestOptions.AllowedHosts, allowedHosts);
+            }
             if (headers is not null)
             {
                 foreach (var kv in headers)
@@ -821,6 +835,26 @@ public class HttpRequestModule : IWorkflowModule
         }
 
         return result;
+    }
+
+    /// <summary>🌐 Stage 7.3 — a list property (JSON array, list, or comma-separated text)~.</summary>
+    private static IReadOnlyCollection<string> ExtractStringList(IReadOnlyDictionary<string, object?> props, string key)
+    {
+        if (!props.TryGetValue(key, out var raw) || raw is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        IEnumerable<string?> items = raw switch
+        {
+            string text when text.TrimStart().StartsWith('[') => System.Text.Json.JsonSerializer.Deserialize<string[]>(text) ?? Array.Empty<string>(),
+            string text => text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+            System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Array } json => json.EnumerateArray().Select(e => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() : e.ToString()),
+            System.Collections.IEnumerable list => list.Cast<object?>().Select(o => o?.ToString()),
+            _ => Array.Empty<string>(),
+        };
+
+        return items.Where(h => !string.IsNullOrWhiteSpace(h)).Select(h => h!.Trim()).ToArray();
     }
 
     private static string? GetString(IReadOnlyDictionary<string, object?> props, string key)

@@ -158,7 +158,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | --- | --- | :-: | --- | --- | --- |
 | 7.1 | ✅ ~~**§9.7 (streaming) `Blob` spill can resolve to the in-memory blob store**~~ — **fixed 2026-11-08**, `Streaming/BlobSpillDurabilityTests` | Medium | plan 04 "Documented-only" | Small: fail fast at startup vs. require a durable persistence provider (plan leans fail-fast) | ~0.5 d |
 | 7.2 | ✅ **fixed 2026-11-08** (conditional edges, `docs/conditional-edges.md`) — ~~**`ConnectionDefinition.Condition` / `Priority` are never read**~~, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
-| 7.3 | **§9.6 (modules) script HTTP has no host allowlist (SSRF)** | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
+| 7.3 | ✅ **fixed 2026-11-09** (outbound HTTP policy, plan 06, `docs/outbound-http.md`) — ~~**§9.6 (modules) script HTTP has no host allowlist (SSRF)**~~ | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
 | 7.4 | **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
 | 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
 | 7.6 | **§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR** | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
@@ -266,6 +266,42 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.3 outbound HTTP policy (SSRF)
+- Decided (asked twice; plan 06 §1 + §8):
+  - Separate Scripts / HttpModule channels, and four modes with allow/deny lists (deny wins).
+  - **Unconfigured fails closed as PublicOnly**, with warnings.
+  - `AllowCloudMetadata` is an explicit switch: blocked in every mode, incl. Unrestricted.
+  - Per-node narrowing.
+  - **Setup screen in v1**, with host settings locked.
+  - Enforcement: connect-time IP check + per-hop host check.
+- Core:
+  - `Workflow.Core/Http`: the policy model with layered resolve and locked fields, `OutboundHttpRules`,
+    `OutboundHttp.CreatePrimaryHandler` (ConnectCallback), `OutboundPolicyHandler` (manual
+    redirects, credentials stripped across hosts), and `OutboundHttpBlockedException`.
+  - Polly retries skip policy blocks.
+- Wiring:
+  - Named clients `dotflow.http` / `dotflow.script.http`; a fail-closed fallback provider in
+    `AddHttpModules`.
+  - Script HTTP never uses a bare `HttpClient` any more.
+  - `allowedHosts` on HTTP Request and script nodes.
+- API:
+  - `OutboundHttpPolicyService` (blob-persisted, audited, reloaded every minute), endpoints under
+    `/settings/outbound-http` (Admin save), the `/status` `outboundHttp` section, and a startup
+    warning per unconfigured channel.
+- UI: the `/settings/outbound-http` page (locked fields, check an address, change list), a link
+  from Settings, and the designer banner.
+- **Test setup changed (not assertions):** 8 HTTP test classes that call WireMock on localhost now
+  register `StaticOutboundHttpPolicyProvider.Unrestricted`. The fail-closed default blocks
+  localhost.
+- Tests:
+  - `Http/OutboundHttpRulesTests` + `OutboundHttpEnforcementTests` (24),
+    `Api/V1/OutboundHttpSettingsTests` (6), UI `OutboundHttpUiTests` (6).
+  - Mutants killed: connect check, host check, retry exclusion (after adding a policy-call counter),
+    metadata rule, script fallback, locked-field validation.
+- Docs: `docs/outbound-http.md` (modes, diagrams, upgrade note, alternatives); scripting / http
+  docs, the findings table and 04 §9.6 updated.
+- Unfiltered `dotnet test Workflow.Tests` 1945/1945; UI 775/775.
+
 ### 2026-11-09 — Stage 7.2 conditional edges (Condition + Priority)
 - Decided (asked):
   - Syntax: the expression language plus `value` (the edge's value).

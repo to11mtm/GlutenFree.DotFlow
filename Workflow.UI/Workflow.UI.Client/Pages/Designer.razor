@@ -40,6 +40,17 @@
 </TopBar>
 <ToastHost />
 
+@if (unconfiguredOutbound is { Count: > 0 } && !outboundBannerDismissed)
+{
+    @* 🌐 Stage 7.3 — say plainly that outbound HTTP is failing closed until someone sets it up. *@
+    <div class="df-import-banner" data-testid="outbound-banner">
+        🌐 Outbound HTTP isn't set up (@string.Join(", ", unconfiguredOutbound.Select(c => c.Channel == "httpModule" ? "HTTP Request" : "script HTTP"))),
+        so it runs as <strong>@unconfiguredOutbound[0].Mode</strong>: internal addresses such as localhost and private
+        networks are blocked. <a href="/settings/outbound-http" data-testid="outbound-banner-setup">Set it up</a>
+        <button class="df-btn df-btn--small" data-testid="outbound-banner-dismiss" @onclick="() => outboundBannerDismissed = true">Dismiss</button>
+    </div>
+}
+
 @if (importedUnsaved)
 {
     <div class="df-import-banner" data-testid="imported-banner">
@@ -183,6 +194,8 @@ else if (document is not null)
     // 🌍 V6 — global variable names for the token picker; null when the store is unreachable.
     private List<string>? globalVariableNames;
     private Workflow.UI.Client.Api.SpillStatus? hostSpill;
+    private IReadOnlyList<Workflow.UI.Client.Api.UnconfiguredOutboundChannel>? unconfiguredOutbound;
+    private bool outboundBannerDismissed;
     private readonly string statusInfo = "editing";
     private DotNetObjectReference<Designer>? keysRef;
 
@@ -805,6 +818,15 @@ else if (document is not null)
         catch (Exception)
         {
             this.hostSpill = null;
+        }
+
+        try
+        {
+            this.unconfiguredOutbound = await client.GetUnconfiguredOutboundHttpAsync(); // 🌐 Stage 7.3
+        }
+        catch (Exception)
+        {
+            this.unconfiguredOutbound = null;
         }
     }
 

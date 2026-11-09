@@ -57,7 +57,8 @@ public sealed class ScriptModule : IWorkflowModule
             new ModulePropertyDefinition("timeoutSeconds", "Timeout (s)", typeof(int), "Execution timeout~ ⏱️", false, 30, PropertyEditorType.Number),
             new ModulePropertyDefinition("allowNetwork", "Allow Network", typeof(bool), "Permit HTTP calls~ 🌐", false, false, PropertyEditorType.Boolean),
             new ModulePropertyDefinition("allowFileSystem", "Allow File System", typeof(bool), "Permit file access~ 📁", false, false, PropertyEditorType.Boolean),
-            new ModulePropertyDefinition("allowedPaths", "Allowed Paths", typeof(object), "Paths the script may touch~ 📂", false, null, PropertyEditorType.Json)));
+            new ModulePropertyDefinition("allowedPaths", "Allowed Paths", typeof(object), "Paths the script may touch~ 📂", false, null, PropertyEditorType.Json),
+            new ModulePropertyDefinition("allowedHosts", "Allowed Hosts", typeof(object), "Optional: the only hosts this script's HTTP may reach (e.g. [\"api.partner.com\", \"*.partner.com\"]). Narrows the server's outbound HTTP policy; can't widen it~ 🌐", false, null, PropertyEditorType.Json)));
 
     /// <inheritdoc/>
     public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
@@ -109,6 +110,7 @@ public sealed class ScriptModule : IWorkflowModule
             AllowNetwork = GetBool(context.Properties, "allowNetwork") ?? false,
             AllowFileSystem = GetBool(context.Properties, "allowFileSystem") ?? false,
             AllowedPaths = GetStringList(context.Properties, "allowedPaths"),
+            AllowedHosts = GetStringList(context.Properties, "allowedHosts"),
         };
         var config = requested.ClampTo(ceilings);
 
@@ -124,6 +126,7 @@ public sealed class ScriptModule : IWorkflowModule
             NodeId = context.NodeId,
             Logger = context.Logger,
             HttpClientFactory = context.Services.GetService<IHttpClientFactory>(),
+            OutboundPolicy = context.Services.GetService<Workflow.Core.Http.IOutboundHttpPolicyProvider>(),
             CancellationToken = cancellationToken,
         });
 

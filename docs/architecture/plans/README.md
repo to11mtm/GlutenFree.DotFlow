@@ -16,6 +16,7 @@ built yet.
 | [03 — Binding & variables](03-binding-and-variables-remediation.md) | non-adjacent refs (§10.1), variable shadowing (§10.2), loop-body writes (§10.3), secrets in history (§10.6) | Medium / Low |
 | [04 — Streaming & spill](04-streaming-and-spill-remediation.md) | pinned version in region (§9.4), spill cleanup w/o history (§9.6), + documented-only streaming items | Medium / Low |
 | [05 — Modules & plugins](05-modules-and-plugins-remediation.md) | active-exec count (§9.3), ValidateConfiguration (§9.4), package extra modules (§9.7) | Medium / Low |
+| [06 — Outbound HTTP policy](06-outbound-http-policy.md) | script/HTTP-module SSRF (04 §9.6, Stage 7.3): modes, channels, metadata switch, setup screen | Medium |
 
 ## Coverage
 

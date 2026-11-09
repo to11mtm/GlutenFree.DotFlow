@@ -59,7 +59,31 @@ public sealed class SystemClient
             spill.TryGetProperty("store", out var s) ? s.GetString() ?? "None" : "None",
             !spill.TryGetProperty("encrypted", out var e) || e.ValueKind != JsonValueKind.False);
     }
+
+    /// <summary>🌐 Stage 7.3 — the outbound HTTP channels nobody has configured (empty = all set up).</summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The unconfigured channels.</returns>
+    public async Task<IReadOnlyList<UnconfiguredOutboundChannel>> GetUnconfiguredOutboundHttpAsync(CancellationToken ct = default)
+    {
+        var doc = await ApiHttp.SendAsync<JsonElement>(
+            this.http, new HttpRequestMessage(HttpMethod.Get, "api/v1/status"), ct).ConfigureAwait(false);
+        if (!doc.TryGetProperty("outboundHttp", out var outbound) || outbound.ValueKind != JsonValueKind.Object)
+        {
+            return [];
+        }
+
+        return outbound.EnumerateObject()
+            .Where(c => c.Value.ValueKind == JsonValueKind.Object
+                        && c.Value.TryGetProperty("configured", out var configured) && configured.ValueKind == JsonValueKind.False)
+            .Select(c => new UnconfiguredOutboundChannel(c.Name, c.Value.TryGetProperty("mode", out var m) ? m.GetString() ?? "PublicOnly" : "PublicOnly"))
+            .ToList();
+    }
 }
+
+/// <summary>🌐 Stage 7.3 — an outbound HTTP channel nobody has configured (it runs fail-closed).</summary>
+/// <param name="Channel"><c>scripts</c> or <c>httpModule</c>.</param>
+/// <param name="Mode">What it runs as.</param>
+public readonly record struct UnconfiguredOutboundChannel(string Channel, string Mode);
 
 /// <summary>
 /// 💾 What the host reports about streaming spill~ ✨.

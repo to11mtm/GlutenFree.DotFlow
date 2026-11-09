@@ -1,0 +1,331 @@
+﻿@page "/settings/outbound-http"
+@namespace Workflow.UI.Client.Pages
+@rendermode RenderModes.InteractiveWasm
+@inject Workflow.UI.Client.Api.OutboundHttpClient Client
+@using Workflow.UI.Client.Api
+
+@* 🌐 Stage 7.3 — the outbound HTTP setup screen (plan 06, docs/outbound-http.md). Values the server's
+   configuration sets (Http:Outbound) are locked and shown read-only; everything else is editable by
+   an Admin and audited. *@
+
+<PageTitle>Outbound HTTP · DotFlow</PageTitle>
+
+<TopBar />
+<ToastHost />
+
+<div class="df-page" style="max-width: 860px;">
+    <h1>Outbound HTTP</h1>
+    <p class="df-field-help">
+        Controls which addresses the <strong>HTTP Request</strong> module and <strong>script HTTP</strong>
+        (<code>workflow.httpGet</code>…) may call. This protects internal services and cloud metadata from
+        requests whose URL comes from data (SSRF). A channel left unset runs as
+        <strong>@(view?.UnconfiguredMode ?? "PublicOnly")</strong>: the public internet is allowed and internal
+        addresses (localhost, private networks) are blocked.
+    </p>
+
+    @if (loadError is not null)
+    {
+        <div class="df-field-error" data-testid="ob-load-error">⚠ @loadError</div>
+    }
+    else if (view is null)
+    {
+        <div class="df-empty">Loading…</div>
+    }
+    else
+    {
+        @foreach (var layer in Layers)
+        {
+            <div class="df-card df-field" data-testid="ob-layer-@layer.Key">
+                <h2 style="margin-top:0">@layer.Title</h2>
+                <div class="df-field-help">@layer.Help</div>
+                @if (layer.Effective is { } eff)
+                {
+                    <div class="df-row" data-testid="ob-effective-@layer.Key">
+                        In force: <strong>@eff.Mode</strong>
+                        @if (!eff.Configured)
+                        {
+                            <span class="df-token-badge df-token-badge--bad" data-testid="ob-unconfigured-@layer.Key">not configured — failing closed</span>
+                        }
+                    </div>
+                }
+
+                <label class="df-label">Mode</label>
+                @if (layer.Locked(nameof(OutboundHttpSettingsDto.Mode)))
+                {
+                    <div class="df-props__conn" data-testid="ob-locked-@layer.Key-Mode">🔒 @layer.HostValue(nameof(OutboundHttpSettingsDto.Mode)) — set by the server's configuration</div>
+                }
+                else
+                {
+                    <select class="df-input" data-testid="ob-mode-@layer.Key" value="@(layer.Edit.Mode ?? string.Empty)"
+                            @onchange="e => layer.Edit.Mode = Blank(e.Value?.ToString())">
+                        <option value="">@(layer.Key == "Default" ? $"(not set — {view.UnconfiguredMode})" : "(use the default)")</option>
+                        @foreach (var (mode, label) in Modes)
+                        {
+                            <option value="@mode">@label</option>
+                        }
+                    </select>
+                }
+
+                @foreach (var (field, label, placeholder) in ListFields)
+                {
+                    <label class="df-label">@label</label>
+                    @if (layer.Locked(field))
+                    {
+                        <div class="df-props__conn" data-testid="ob-locked-@layer.Key-@field">🔒 @layer.HostValue(field) — set by the server's configuration</div>
+                    }
+                    else
+                    {
+                        <textarea class="df-textarea" rows="2" placeholder="@placeholder" data-testid="ob-@field-@layer.Key"
+                                  @bind="layer.Texts[field]"></textarea>
+                    }
+                }
+
+                <label class="df-label">Cloud metadata (169.254.169.254, metadata.google.internal…)</label>
+                @if (layer.Locked(nameof(OutboundHttpSettingsDto.AllowCloudMetadata)))
+                {
+                    <div class="df-props__conn">🔒 @layer.HostValue(nameof(OutboundHttpSettingsDto.AllowCloudMetadata)) — set by the server's configuration</div>
+                }
+                else
+                {
+                    <select class="df-input" data-testid="ob-metadata-@layer.Key" value="@MetadataValue(layer.Edit.AllowCloudMetadata)"
+                            @onchange="e => SetMetadata(layer, e.Value?.ToString())">
+                        <option value="">@(layer.Key == "Default" ? "(not set — blocked)" : "(use the default)")</option>
+                        <option value="block">Blocked</option>
+                        <option value="allow">Allowed — only if a workflow genuinely needs instance metadata</option>
+                    </select>
+                }
+            </div>
+        }
+
+        @if (saveErrors.Count > 0)
+        {
+            <div class="df-field-error" data-testid="ob-save-errors">
+                @foreach (var error in saveErrors)
+                {
+                    <div>⚠ @error</div>
+                }
+            </div>
+        }
+
+        <div class="df-row">
+            <button class="df-btn df-btn--primary" data-testid="ob-save" @onclick="Save">Save</button>
+            <span class="df-field-help">Saving needs the Admin role. Changes apply within a minute on every server.</span>
+        </div>
+
+        <div class="df-card df-field" data-testid="ob-check">
+            <h2 style="margin-top:0">Check an address</h2>
+            <div class="df-row">
+                <select class="df-input" style="max-width: 12rem" @bind="checkChannel" data-testid="ob-check-channel">
+                    <option value="HttpModule">HTTP Request</option>
+                    <option value="Scripts">Script HTTP</option>
+                </select>
+                <input class="df-input" placeholder="https://api.partner.com/orders" @bind="checkUrl" data-testid="ob-check-url" />
+                <button class="df-btn" data-testid="ob-check-run" @onclick="Check">Check</button>
+            </div>
+            @if (checkResult is not null)
+            {
+                <div data-testid="ob-check-result" class="@(checkResult.Allowed ? "df-field-help" : "df-field-error")">
+                    @(checkResult.Allowed ? "✅ Allowed" : "⛔ Blocked") — @checkResult.Reason
+                    @foreach (var a in checkResult.Addresses)
+                    {
+                        <div>@a.Address: @(a.Allowed ? "allowed" : "blocked") (@a.Reason)</div>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (audit is { Count: > 0 })
+        {
+            <div class="df-card df-field" data-testid="ob-audit">
+                <h2 style="margin-top:0">Changes</h2>
+                @foreach (var entry in audit.Take(20))
+                {
+                    <div class="df-field-help"><strong>@entry.At.ToLocalTime().ToString("g")</strong> · @entry.By — @string.Join("; ", entry.Changes)</div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private static readonly (string Mode, string Label)[] Modes =
+    [
+        ("PublicOnly", "Public only — the internet; internal addresses only if listed"),
+        ("InternalOnly", "Internal only — internal addresses; the internet only if listed"),
+        ("AllowlistOnly", "Allowlist only — only the hosts and ranges listed below"),
+        ("Unrestricted", "Unrestricted — anything (cloud metadata still needs its own switch)"),
+    ];
+
+    private static readonly (string Field, string Label, string Placeholder)[] ListFields =
+    [
+        (nameof(OutboundHttpSettingsDto.AllowedHosts), "Allowed hosts (one per line)", "api.partner.com\n*.partner.com"),
+        (nameof(OutboundHttpSettingsDto.AllowedCidrs), "Allowed address ranges", "10.20.0.0/16"),
+        (nameof(OutboundHttpSettingsDto.DeniedHosts), "Denied hosts — always wins", "*.internal.corp"),
+        (nameof(OutboundHttpSettingsDto.DeniedCidrs), "Denied address ranges — always wins", "10.0.5.0/24"),
+    ];
+
+    private OutboundHttpViewDto? view;
+    private string? loadError;
+    private List<Layer> Layers = new();
+    private List<string> saveErrors = new();
+    private List<OutboundHttpAuditDto>? audit;
+    private string checkChannel = "HttpModule";
+    private string checkUrl = string.Empty;
+    private OutboundHttpCheckDto? checkResult;
+
+    /// <inheritdoc/>
+    protected override async Task OnInitializedAsync() => await this.Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            this.view = await this.Client.GetAsync();
+            this.loadError = null;
+        }
+        catch (ApiException ex)
+        {
+            this.loadError = ex.Error.Summarize();
+            return;
+        }
+
+        var module = this.view.Channels.FirstOrDefault(c => c.Channel == "HttpModule");
+        var scripts = this.view.Channels.FirstOrDefault(c => c.Channel == "Scripts");
+        this.Layers =
+        [
+            new Layer("HttpModule", "HTTP Request module", "Requests made by HTTP Request nodes, including their OAuth2 token calls.", module?.Effective, module?.Saved, module?.Host),
+            new Layer("Scripts", "Script HTTP", "workflow.httpGet / httpPost / httpPut / httpDelete from JavaScript, Lua and C# scripts.", scripts?.Effective, scripts?.Saved, scripts?.Host),
+            new Layer("Default", "Default", "Applies to a channel that doesn't set a value itself.", null, this.view.SavedDefault, this.view.HostDefault),
+        ];
+
+        try
+        {
+            this.audit = await this.Client.AuditAsync();
+        }
+        catch (ApiException)
+        {
+            this.audit = null; // not an Admin — the change list is Admin-only
+        }
+    }
+
+    private async Task Save()
+    {
+        this.saveErrors.Clear();
+        var request = new OutboundHttpSaveDto
+        {
+            HttpModule = this.Layers.Single(l => l.Key == "HttpModule").ToDto(),
+            Scripts = this.Layers.Single(l => l.Key == "Scripts").ToDto(),
+            Default = this.Layers.Single(l => l.Key == "Default").ToDto(),
+        };
+
+        try
+        {
+            await this.Client.SaveAsync(request);
+            await this.Load();
+        }
+        catch (ApiException ex)
+        {
+            this.saveErrors = ex.Error.Errors?.Values.SelectMany(v => v).ToList() ?? [ex.Error.Summarize()];
+        }
+    }
+
+    private async Task Check()
+    {
+        try
+        {
+            this.checkResult = await this.Client.CheckAsync(this.checkChannel, this.checkUrl);
+        }
+        catch (ApiException ex)
+        {
+            this.checkResult = new OutboundHttpCheckDto(false, ex.Error.Summarize(), []);
+        }
+    }
+
+    private static void SetMetadata(Layer layer, string? value)
+        => layer.Edit.AllowCloudMetadata = value == "allow" ? true : value == "block" ? false : null;
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private static string MetadataValue(bool? value) => value switch { true => "allow", false => "block", _ => string.Empty };
+
+    private sealed class Layer
+    {
+        private readonly OutboundHttpSettingsDto? host;
+        private readonly IReadOnlyCollection<string> locked;
+
+        public Layer(string key, string title, string help, OutboundHttpEffectiveDto? effective, OutboundHttpSettingsDto? saved, OutboundHttpSettingsDto? host)
+        {
+            this.Key = key;
+            this.Title = title;
+            this.Help = help;
+            this.Effective = effective;
+            this.host = host;
+            this.locked = effective?.LockedFields ?? SetFields(host);
+            this.Edit = new OutboundHttpSettingsDto { Mode = saved?.Mode, AllowCloudMetadata = saved?.AllowCloudMetadata };
+            this.Texts = new Dictionary<string, string>
+            {
+                [nameof(OutboundHttpSettingsDto.AllowedHosts)] = string.Join("\n", saved?.AllowedHosts ?? []),
+                [nameof(OutboundHttpSettingsDto.AllowedCidrs)] = string.Join("\n", saved?.AllowedCidrs ?? []),
+                [nameof(OutboundHttpSettingsDto.DeniedHosts)] = string.Join("\n", saved?.DeniedHosts ?? []),
+                [nameof(OutboundHttpSettingsDto.DeniedCidrs)] = string.Join("\n", saved?.DeniedCidrs ?? []),
+            };
+        }
+
+        public string Key { get; }
+
+        public string Title { get; }
+
+        public string Help { get; }
+
+        public OutboundHttpEffectiveDto? Effective { get; }
+
+        public OutboundHttpSettingsDto Edit { get; }
+
+        public Dictionary<string, string> Texts { get; }
+
+        public bool Locked(string field) => this.locked.Contains(field);
+
+        public string HostValue(string field) => field switch
+        {
+            nameof(OutboundHttpSettingsDto.Mode) => this.Effective?.Mode ?? this.host?.Mode ?? "(server default)",
+            nameof(OutboundHttpSettingsDto.AllowCloudMetadata) => (this.Effective?.AllowCloudMetadata ?? this.host?.AllowCloudMetadata ?? false) ? "Allowed" : "Blocked",
+            nameof(OutboundHttpSettingsDto.AllowedHosts) => Join(this.Effective?.AllowedHosts ?? this.host?.AllowedHosts),
+            nameof(OutboundHttpSettingsDto.AllowedCidrs) => Join(this.Effective?.AllowedCidrs ?? this.host?.AllowedCidrs),
+            nameof(OutboundHttpSettingsDto.DeniedHosts) => Join(this.Effective?.DeniedHosts ?? this.host?.DeniedHosts),
+            nameof(OutboundHttpSettingsDto.DeniedCidrs) => Join(this.Effective?.DeniedCidrs ?? this.host?.DeniedCidrs),
+            _ => string.Empty,
+        };
+
+        public OutboundHttpSettingsDto? ToDto()
+        {
+            List<string>? Lines(string field) => this.Locked(field)
+                ? null
+                : this.Texts[field].Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is { Length: > 0 } lines ? [.. lines] : null;
+
+            var dto = new OutboundHttpSettingsDto
+            {
+                Mode = this.Locked(nameof(OutboundHttpSettingsDto.Mode)) ? null : this.Edit.Mode,
+                AllowCloudMetadata = this.Locked(nameof(OutboundHttpSettingsDto.AllowCloudMetadata)) ? null : this.Edit.AllowCloudMetadata,
+                AllowedHosts = Lines(nameof(OutboundHttpSettingsDto.AllowedHosts)),
+                AllowedCidrs = Lines(nameof(OutboundHttpSettingsDto.AllowedCidrs)),
+                DeniedHosts = Lines(nameof(OutboundHttpSettingsDto.DeniedHosts)),
+                DeniedCidrs = Lines(nameof(OutboundHttpSettingsDto.DeniedCidrs)),
+            };
+            return dto is { Mode: null, AllowCloudMetadata: null, AllowedHosts: null, AllowedCidrs: null, DeniedHosts: null, DeniedCidrs: null } ? null : dto;
+        }
+
+        private static string Join(List<string>? values) => values is { Count: > 0 } ? string.Join(", ", values) : "(none)";
+
+        private static IReadOnlyCollection<string> SetFields(OutboundHttpSettingsDto? s)
+        {
+            var fields = new List<string>();
+            if (s?.Mode is not null) { fields.Add(nameof(s.Mode)); }
+            if (s?.AllowedHosts is not null) { fields.Add(nameof(s.AllowedHosts)); }
+            if (s?.AllowedCidrs is not null) { fields.Add(nameof(s.AllowedCidrs)); }
+            if (s?.DeniedHosts is not null) { fields.Add(nameof(s.DeniedHosts)); }
+            if (s?.DeniedCidrs is not null) { fields.Add(nameof(s.DeniedCidrs)); }
+            if (s?.AllowCloudMetadata is not null) { fields.Add(nameof(s.AllowCloudMetadata)); }
+            return fields;
+        }
+    }
+}

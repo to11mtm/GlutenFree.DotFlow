@@ -116,7 +116,7 @@ public sealed class HttpResiliencePipelineFactory
                 MaxRetryAttempts = config.RetryCount,
                 ShouldHandle = args =>
                 {
-                    if (args.Outcome.Exception is HttpRequestException)
+                    if (args.Outcome.Exception is HttpRequestException and not Workflow.Core.Http.OutboundHttpBlockedException) // 🌐 7.3: a policy block isn't transient
                     {
                         return ValueTask.FromResult(true);
                     }
@@ -174,7 +174,7 @@ public sealed class HttpResiliencePipelineFactory
                 BreakDuration = TimeSpan.FromMilliseconds(500), // Short for V1; configurable later~
                 ShouldHandle = args =>
                 {
-                    if (args.Outcome.Exception is HttpRequestException)
+                    if (args.Outcome.Exception is HttpRequestException and not Workflow.Core.Http.OutboundHttpBlockedException) // 🌐 7.3: a policy block isn't transient
                     {
                         return ValueTask.FromResult(true);
                     }

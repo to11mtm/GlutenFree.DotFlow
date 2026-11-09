@@ -33,6 +33,12 @@ public sealed record ScriptExecutionConfig
     /// <summary>Gets the maximum number of HTTP requests a script may make (default 10).</summary>
     public int MaxHttpRequests { get; init; } = 10;
 
+    /// <summary>
+    /// 🌐 Stage 7.3 — per-node narrowing of the Scripts outbound HTTP policy: when set, script HTTP
+    /// may only reach these hosts (exact or <c>*.example.com</c>). It can't widen the policy.
+    /// </summary>
+    public IReadOnlyList<string> AllowedHosts { get; init; } = Array.Empty<string>();
+
     /// <summary>The default (fully locked-down) config~ 🔒.</summary>
     public static ScriptExecutionConfig Default { get; } = new();
 

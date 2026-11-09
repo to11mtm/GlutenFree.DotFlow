@@ -52,6 +52,7 @@ Configuration properties:
 | `code`           | code    | the script source |
 | `timeoutSeconds` | number  | clamped to the host ceiling |
 | `allowNetwork`   | boolean | default **false** |
+| `allowedHosts`   | string[] | optional — the only hosts this script's HTTP may call; narrows the server's [outbound HTTP policy](outbound-http.md), never widens it |
 | `allowFileSystem`| boolean | default **false** |
 | `allowedPaths`   | json    | file paths the script may touch when file access is on |
 

@@ -64,6 +64,8 @@ public sealed class HttpE2ETests : TestKit, IDisposable
         sc.AddSingleton<WorkflowValidator>();
         sc.AddSingleton<IExecutionStateStore, InMemoryExecutionStateStore>();
         sc.AddWorkflowModules();
+        // Stage 7.3: the outbound HTTP policy fails closed (PublicOnly) — these tests call WireMock on localhost.
+        sc.AddSingleton<Workflow.Core.Http.IOutboundHttpPolicyProvider>(Workflow.Core.Http.StaticOutboundHttpPolicyProvider.Unrestricted);
         sc.AddSingleton<IModuleRegistry>(registry);
         _services = sc.BuildServiceProvider();
     }

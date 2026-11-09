@@ -163,6 +163,7 @@ phases/                  the phased build roadmap (design breakdowns + status)
 - [Visual Designer](designer.md) — building workflows on the canvas
 - [Workflow Variables](variables.md) — scopes, precedence, bindings, and what expands templates
 - [Error Handling](error-handling.md) — Fail / Continue / Retry / error handler, with diagrams and the alternatives we could switch to
+- [Outbound HTTP](outbound-http.md) — which addresses HTTP Request and script HTTP may call (SSRF protection), the setup screen, and the alternatives
 - [Conditional Edges](conditional-edges.md) — conditions on connections, `value`, and Priority if / else-if / else chains (plus the alternatives)
 - [Import & Export](import-export.md) — saving workflows to files and loading them back
 - [Designer Architecture & React-Port Guide](designer-architecture.md) — the framework-free boundary

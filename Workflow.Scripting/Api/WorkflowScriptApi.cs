@@ -35,6 +35,7 @@ public sealed class WorkflowScriptApi : IWorkflowScriptApi
     private readonly string nodeId;
     private readonly ILogger logger;
     private readonly IHttpClientFactory? httpClientFactory;
+    private readonly Workflow.Core.Http.IOutboundHttpPolicyProvider? outboundPolicy;
     private readonly CancellationToken cancellationToken;
 
     private readonly Dictionary<string, object?> variableUpdates = new();
@@ -53,6 +54,7 @@ public sealed class WorkflowScriptApi : IWorkflowScriptApi
         this.nodeId = options.NodeId ?? string.Empty;
         this.logger = options.Logger ?? NullLogger.Instance;
         this.httpClientFactory = options.HttpClientFactory;
+        this.outboundPolicy = options.OutboundPolicy;
         this.cancellationToken = options.CancellationToken;
     }
 
@@ -406,8 +408,21 @@ public sealed class WorkflowScriptApi : IWorkflowScriptApi
 
         this.httpRequestCount++;
 
-        var client = this.httpClientFactory?.CreateClient("dotflow.http") ?? new HttpClient();
+        // 🌐 Stage 7.3 — the Scripts channel's client enforces the outbound HTTP policy. Without a
+        // factory (tools, tests), build the same pipeline directly — never a bare HttpClient~
+        using var fallback = this.httpClientFactory is null
+            ? new HttpClient(Workflow.Core.Http.OutboundHttp.CreatePipeline(
+                Workflow.Core.Http.OutboundHttpChannel.Scripts,
+                () => this.outboundPolicy?.Get(Workflow.Core.Http.OutboundHttpChannel.Scripts)
+                      ?? Workflow.Core.Http.EffectiveOutboundPolicy.Resolve(Workflow.Core.Http.OutboundHttpChannel.Scripts, null, null)))
+            : null;
+        var client = fallback ?? this.httpClientFactory!.CreateClient(Workflow.Core.Http.OutboundHttp.ScriptsClientName);
         using var request = new HttpRequestMessage(method, url);
+        if (this.config.AllowedHosts.Count > 0)
+        {
+            request.Options.Set(Workflow.Core.Http.OutboundHttpRequestOptions.AllowedHosts, this.config.AllowedHosts);
+        }
+
         if (body is not null)
         {
             var json = body is string s ? s : JsonSerializer.Serialize(body, JsonOptions);
@@ -492,6 +507,9 @@ public sealed class WorkflowScriptApiOptions
 
     /// <summary>Gets or sets the HTTP client factory (for the gated HTTP API).</summary>
     public IHttpClientFactory? HttpClientFactory { get; set; }
+
+    /// <summary>🌐 Stage 7.3 — the outbound HTTP policy (used when there's no <see cref="HttpClientFactory"/>).</summary>
+    public Workflow.Core.Http.IOutboundHttpPolicyProvider? OutboundPolicy { get; set; }
 
     /// <summary>Gets or sets the cancellation token (timeout-linked).</summary>
     public CancellationToken CancellationToken { get; set; }

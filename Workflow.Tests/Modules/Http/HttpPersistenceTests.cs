@@ -226,6 +226,8 @@ public sealed class HttpPersistenceTests : TestKit, IAsyncLifetime
 
         // 🌐 Register IHttpClientFactory so HttpRequestModule can resolve it~
         services.AddWorkflowModules();
+        // Stage 7.3: the outbound HTTP policy fails closed (PublicOnly) — these tests call WireMock on localhost.
+        services.AddSingleton<Workflow.Core.Http.IOutboundHttpPolicyProvider>(Workflow.Core.Http.StaticOutboundHttpPolicyProvider.Unrestricted);
 
         // 💾 Persistence via SQLite in-memory~
         services.AddSingleton<IPersistenceProvider>(_provider);

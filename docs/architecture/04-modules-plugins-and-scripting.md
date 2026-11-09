@@ -307,9 +307,11 @@ flowchart LR
      with a copied public key. `RequireSigned` identifies the publisher by assertion only. It
      doesn't prove who built the file. `ContentHashes` in a manifest from the same untrusted
      upload doesn't add trust either. Authenticode (2.8.P2) is the real fix.
-6. **Script HTTP has no host allowlist.** With `allowNetwork` on, `workflow.http*` can reach any
-   URL, including cloud metadata endpoints and internal services (SSRF). A host allowlist next to
-   `ScriptHostCeilings.AllowNetwork` would close this.
+6. ~~**Script HTTP has no host allowlist.**~~ **Fixed (Stage 7.3):** an outbound HTTP policy for
+   script HTTP *and* the HTTP Request module, with separate channels; modes Public only / Internal
+   only / Allowlist only / Unrestricted; deny lists; an explicit cloud-metadata switch;
+   connect-time IP checks; and a setup screen. Unconfigured channels fail closed (Public only). See
+   [outbound HTTP](../outbound-http.md).
 7. **Discovery registers any public `IWorkflowModule` in an uploaded assembly.** A package can
    register more module ids than its manifest names. The installer only checks that the manifest
    id is among them.

@@ -34,6 +34,8 @@ public sealed class OAuth2Tests : IDisposable
         _server = WireMockServer.Start();
         var sc = new ServiceCollection();
         sc.AddHttpModules();
+        // Stage 7.3: the outbound HTTP policy fails closed (PublicOnly) — these tests call WireMock on localhost.
+        sc.AddSingleton<Workflow.Core.Http.IOutboundHttpPolicyProvider>(Workflow.Core.Http.StaticOutboundHttpPolicyProvider.Unrestricted);
         _services = sc.BuildServiceProvider();
     }
 

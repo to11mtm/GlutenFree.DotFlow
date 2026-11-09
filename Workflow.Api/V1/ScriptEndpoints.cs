@@ -94,6 +94,7 @@ public static class ScriptEndpoints
             Config = config,
             NodeId = "test",
             HttpClientFactory = http.RequestServices.GetService<IHttpClientFactory>(),
+            OutboundPolicy = http.RequestServices.GetService<Workflow.Core.Http.IOutboundHttpPolicyProvider>(),
             CancellationToken = ct,
         });
 

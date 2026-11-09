@@ -130,9 +130,32 @@ public static class MonitoringEndpoints
                 store = spill?.Store.ToString() ?? "None",
                 encrypted = spill?.Encrypt ?? true,
             },
+
+            // 🌐 Stage 7.3 — so the designer can warn when outbound HTTP hasn't been set up~
+            outboundHttp = OutboundHttpStatus(http.RequestServices.GetService<Workflow.Core.Http.IOutboundHttpPolicyProvider>()),
         };
 
         return Results.Ok(payload);
+    }
+
+    private static object? OutboundHttpStatus(Workflow.Core.Http.IOutboundHttpPolicyProvider? provider)
+    {
+        if (provider is null)
+        {
+            return null;
+        }
+
+        object Channel(Workflow.Core.Http.OutboundHttpChannel channel)
+        {
+            var policy = provider.Get(channel);
+            return new { mode = policy.Mode.ToString(), configured = policy.Configured };
+        }
+
+        return new
+        {
+            scripts = Channel(Workflow.Core.Http.OutboundHttpChannel.Scripts),
+            httpModule = Channel(Workflow.Core.Http.OutboundHttpChannel.HttpModule),
+        };
     }
 
     private static IResult MetricsHandler(HttpContext http)

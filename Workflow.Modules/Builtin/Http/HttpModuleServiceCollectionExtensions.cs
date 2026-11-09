@@ -7,6 +7,8 @@ namespace Workflow.Modules.Builtin.Http;
 using System.Net;
 using System.Net.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Workflow.Core.Http;
 using Workflow.Modules.Builtin.Http.Auth;
 
 /// <summary>
@@ -40,6 +42,18 @@ public static class HttpModuleServiceCollectionExtensions
     /// <returns>The same <paramref name="services"/> for chaining~ 💖.</returns>
     public static IServiceCollection AddHttpModules(this IServiceCollection services)
     {
+        static void ConfigurePooling(SocketsHttpHandler handler)
+        {
+            // Rotate connections every 2 minutes to pick up DNS changes~ 🔄
+            handler.PooledConnectionLifetime = TimeSpan.FromMinutes(2);
+
+            // Allow parallel connections to the same host (needed for parallel branches)~ ⚡
+            handler.MaxConnectionsPerServer = 256;
+
+            // Respect the module's CancellationToken — don't add an extra layer here~ 🛑
+            handler.ConnectTimeout = TimeSpan.FromSeconds(30);
+        }
+
         // Register the named HttpClient with a SocketsHttpHandler that:
         //   • Pools connections for up to 2 minutes (PooledConnectionLifetime)
         //     — prevents stale DNS entries from persisting indefinitely~ 🧠
@@ -53,27 +67,31 @@ public static class HttpModuleServiceCollectionExtensions
                     "User-Agent",
                     "GlutenFree.DotFlow/1.0 (https://github.com/GlutenFree/DotFlow)");
             })
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-            {
-                // Rotate connections every 2 minutes to pick up DNS changes~ 🔄
-                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            // 🌐 Stage 7.3 — the HttpModule channel's outbound policy: the connect step checks every
+            // resolved address; the policy handler checks host rules on every hop and follows redirects
+            // (up to 10) itself, so a redirect can't sneak past the rules~
+            .ConfigurePrimaryHttpMessageHandler(sp => OutboundHttp.CreatePrimaryHandler(
+                OutboundHttpChannel.HttpModule,
+                () => sp.GetRequiredService<IOutboundHttpPolicyProvider>().Get(OutboundHttpChannel.HttpModule),
+                ConfigurePooling))
+            .AddHttpMessageHandler(sp => new OutboundPolicyHandler(
+                OutboundHttpChannel.HttpModule,
+                () => sp.GetRequiredService<IOutboundHttpPolicyProvider>().Get(OutboundHttpChannel.HttpModule)));
 
-                // Allow parallel connections to the same host (needed for parallel branches)~ ⚡
-                MaxConnectionsPerServer = 256,
+        // 🌐 Stage 7.3 — script HTTP (workflow.http*) gets its own client and its own policy channel~
+        services.AddHttpClient(OutboundHttp.ScriptsClientName, client =>
+                client.DefaultRequestHeaders.Add("User-Agent", "GlutenFree.DotFlow/1.0 (script)"))
+            .ConfigurePrimaryHttpMessageHandler(sp => OutboundHttp.CreatePrimaryHandler(
+                OutboundHttpChannel.Scripts,
+                () => sp.GetRequiredService<IOutboundHttpPolicyProvider>().Get(OutboundHttpChannel.Scripts),
+                ConfigurePooling))
+            .AddHttpMessageHandler(sp => new OutboundPolicyHandler(
+                OutboundHttpChannel.Scripts,
+                () => sp.GetRequiredService<IOutboundHttpPolicyProvider>().Get(OutboundHttpChannel.Scripts)));
 
-                // Respect the module's CancellationToken — don't add an extra layer here~ 🛑
-                ConnectTimeout = TimeSpan.FromSeconds(30),
-
-                // Follow redirects by default; modules can override via HttpRequestModule.followRedirects~ 🔗
-                AllowAutoRedirect = true,
-                MaxAutomaticRedirections = 10,
-
-                // Default certificate validation ON; modules can flip via HttpRequestModule.validateCertificate~ 🔒
-                SslOptions = new System.Net.Security.SslClientAuthenticationOptions
-                {
-                    // Inherits system cert store — no custom roots set here
-                },
-            });
+        // Hosts that don't register a policy provider get the fail-closed default (unconfigured =
+        // PublicOnly). The API host registers the real one (host settings + setup screen)~
+        services.TryAddSingleton<IOutboundHttpPolicyProvider>(new StaticOutboundHttpPolicyProvider(null));
 
         // 🔑 Phase 2.3.3 — Pipeline-scoped OAuth2 token cache (DI singleton)~
         // Keyed on (executionId, authority, clientId, scope); tokens are shared across HTTP nodes
