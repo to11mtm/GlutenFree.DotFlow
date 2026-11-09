@@ -441,7 +441,11 @@ gets a fix.
      unregistered modules, with the comment "runtime execution will catch this". It doesn't.
    - Likely effect: a workflow can complete while doing nothing. This fallback was meant for tests.
      Production should fail the node, or the validator should reject unknown module ids up front.
-6. **A join can be skipped when it has a live input.**
+6. ~~**A join can be skipped when it has a live input.**~~ **Fixed (Stage 7.2):** `DispatchCore`
+   remembers nodes a predecessor has activated and fires them instead of skipping them, for
+   conditional edges and module ports alike. Guarded by
+   `ConditionalEdgeTests.PortRouting_AJoinDeactivatedByTheLastPredecessor_StillRuns`. Original
+   note:
    - What the code does: the skip rule treats `Completed` predecessors as settled.
    - Likely effect: take a join with one input from an independent path that already completed,
      and another from a branch deactivated *later*. The join is skipped instead of fired. The

@@ -65,6 +65,9 @@ public class WorkflowExecutor : ReceiveActor
 
     // Node actor tracking (actor-local runtime refs, not persisted)
     private readonly Dictionary<string, IActorRef> _nodeActors = new();
+    // 🔀 Stage 7.2 — connections whose condition was false (or lost on priority)~
+    private readonly System.Collections.Generic.HashSet<ConnectionDefinition> _inactiveEdges = new();
+
     // 🚑 §12.7 — UseErrorHandler: handler paths, and handler nodes that only run on error~
     private readonly ErrorHandlerCore _errorHandlers;
     private readonly IReadOnlySet<string> _errorOnlyNodes;
@@ -901,6 +904,12 @@ public class WorkflowExecutor : ReceiveActor
 
         foreach (var conn in incomingConnections)
         {
+            // 🔀 Stage 7.2 — an edge whose condition was false (or lost on priority) carries nothing~
+            if (_inactiveEdges.Contains(conn))
+            {
+                continue;
+            }
+
             if (_nodeOutputs.TryGetValue(conn.SourceNodeId, out var sourceOutputs))
             {
                 // Map source output port to target input port
@@ -982,6 +991,24 @@ public class WorkflowExecutor : ReceiveActor
         }
 
         var nodeId = message.NodeId;
+
+        // 🔀 Stage 7.2 — conditional edges are decided before anything changes: a condition that
+        // can't be evaluated is a failure of this node, so its On error setting applies~
+        IReadOnlyList<ConnectionDefinition>? firedEdges = null;
+        if (EdgeRouting.IsConditional(_definition, nodeId))
+        {
+            try
+            {
+                firedEdges = FiredEdges(message);
+            }
+            catch (EdgeConditionException ex)
+            {
+                _log.Error("🔀 {Error}", ex.Message);
+                HandleNodeExecutionFailed(new NodeExecutionFailed(nodeId, ex, _executionId, message.Duration));
+                return;
+            }
+        }
+
         ErrorHandlerCounters.Reset(_executionId, nodeId); // §12.7: a success ends a failure streak
 
         _log.Info(
@@ -1069,7 +1096,42 @@ public class WorkflowExecutor : ReceiveActor
 
         // Find and execute successor nodes whose dependencies are now satisfied.
         // Pass activePorts for port-aware routing (Phase 2.2.0a)~ 🎯
-        ExecuteReadySuccessors(nodeId, message.ActivePorts);
+        if (firedEdges is not null)
+        {
+            RouteVia(nodeId, firedEdges);
+        }
+        else
+        {
+            ExecuteReadySuccessors(nodeId, message.ActivePorts);
+        }
+    }
+
+    /// <summary>🔀 Stage 7.2 — which of the completed node's outgoing connections fire.</summary>
+    private IReadOnlyList<ConnectionDefinition> FiredEdges(NodeExecutionCompleted message)
+    {
+        var rawOutputs = message.Outputs
+            .Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        var outputs = IsMergedOutputNode(message.NodeId) ? OutputShaping.Merge(rawOutputs) : rawOutputs;
+
+        var variables = ToPairs(_context.Variables).ToDictionary(kv => kv.Key, kv => kv.Value);
+        foreach (var (name, value) in message.VariableUpdates ?? HashMap<string, object?>.Empty)
+        {
+            variables[name] = value; // the node's own writes count~
+        }
+
+        return EdgeRouting.Fired(_definition, message.NodeId, message.ActivePorts, outputs, _serviceProvider, variables, _nodeOutputs);
+    }
+
+    /// <summary>🔀 Stage 7.2 — routes by the connections that fired; the rest give their targets nothing.</summary>
+    private void RouteVia(string nodeId, IReadOnlyList<ConnectionDefinition> fired)
+    {
+        foreach (var connection in _definition.Connections.Where(c => c.SourceNodeId == nodeId && !fired.Contains(c)))
+        {
+            _inactiveEdges.Add(connection);
+        }
+
+        _dispatchCore!.ExecuteReadySuccessorsVia(nodeId, fired);
     }
 
     /// <summary>

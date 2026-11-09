@@ -480,7 +480,20 @@
         </div>
         <div class="df-field">
             <label class="df-label">Condition (optional)</label>
-            <input class="df-input" data-testid="conn-condition" @bind="connCondition" placeholder="e.g. output.status == 200" />
+            <input class="df-input" data-testid="conn-condition" @bind="connCondition" placeholder="e.g. value.status == 200" />
+            <div class="df-field-help" data-testid="conn-condition-help">
+                Fires only when true. <code>value</code> is what travels on this edge; <code>Variable.x</code> and
+                <code>nodeId.port</code> work too. False = like an unused port (the target is skipped unless another
+                edge reaches it). An error fails the source node. See docs/conditional-edges.md.
+            </div>
+        </div>
+        <div class="df-field">
+            <label class="df-label">Priority (optional)</label>
+            <input class="df-input" type="number" min="0" data-testid="conn-priority" @bind="connPriority" placeholder="none — independent" />
+            <div class="df-field-help">
+                Edges from the same port with a priority (1, 2, 3…) form an if / else-if / else chain: only the first
+                true one fires. Leave empty (or 0) for an edge that fires on its own condition.
+            </div>
         </div>
         @if (IsSelectedConnectionStreaming)
         {
@@ -552,6 +565,7 @@
 
     private string? seededConnKey;
     private string connCondition = string.Empty;
+    private int? connPriority;
 
     // 🌊 5.1.2 — per-connection bounded-channel capacity (null = inherit the default).
     private int? connBuffer;
@@ -970,6 +984,7 @@
         {
             this.seededConnKey = conn.Key;
             this.connCondition = conn.Condition ?? string.Empty;
+            this.connPriority = conn.Priority > 0 ? conn.Priority : null;
             this.connBuffer = conn.BufferCapacity;
         }
         else if (conn is null)
@@ -1204,6 +1219,13 @@
         if (after != conn.Condition)
         {
             this.Commands.Execute(new EditConnectionCommand(conn.Key, conn.Condition, after));
+        }
+
+        // 🔀 Stage 7.2 — blank / 0 = independent~
+        var priority = this.connPriority is > 0 ? this.connPriority.Value : 0;
+        if (priority != conn.Priority)
+        {
+            this.Commands.Execute(new EditConnectionPriorityCommand(conn.Key, conn.Priority, priority));
         }
 
         // 🌊 Buffer capacity is only meaningful on a streaming edge; a blank field means "inherit".

@@ -82,6 +82,34 @@ public interface IPropertyBinder
         IReadOnlyDictionary<string, object?> rawValues,
         Arr<ModulePropertyDefinition> schema,
         PropertyBindingContext context);
+
+    /// <summary>
+    /// 🔀 Stage 7.2 — evaluates a connection's condition: an expression in the <c>{{…}}</c> language
+    /// (braces optional) where <c>value</c> is the value travelling on the edge, and
+    /// <c>Variable.x</c> / <c>nodeId.port</c> resolve as in templates. The result must be a boolean.
+    /// </summary>
+    /// <param name="expression">The condition.</param>
+    /// <param name="context">Variables and upstream outputs.</param>
+    /// <param name="value">The edge's value (the source port's output).</param>
+    /// <returns>True/false, or why it couldn't be evaluated.</returns>
+    public ConditionResult EvaluateCondition(string expression, PropertyBindingContext context, object? value)
+        => ConditionResult.Error("this binder can't evaluate edge conditions (no expression evaluator)");
+}
+
+/// <summary>🔀 Stage 7.2 — the outcome of <see cref="IPropertyBinder.EvaluateCondition"/>.</summary>
+/// <param name="Value">The result (meaningful when <paramref name="Failure"/> is null).</param>
+/// <param name="Failure">Why the condition couldn't be evaluated, or null.</param>
+public sealed record ConditionResult(bool Value, string? Failure)
+{
+    /// <summary>A true/false result.</summary>
+    /// <param name="value">The result.</param>
+    /// <returns>The outcome.</returns>
+    public static ConditionResult Of(bool value) => new(value, null);
+
+    /// <summary>A failure.</summary>
+    /// <param name="failure">Why.</param>
+    /// <returns>The outcome.</returns>
+    public static ConditionResult Error(string failure) => new(false, failure);
 }
 
 /// <summary>

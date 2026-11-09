@@ -484,6 +484,92 @@ public class PropertyBinder : IPropertyBinder
         }
     }
 
+    /// <inheritdoc/>
+    public ConditionResult EvaluateCondition(string expression, PropertyBindingContext context, object? value)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (_evaluator is null)
+        {
+            return ConditionResult.Error("no expression evaluator is registered");
+        }
+
+        var text = (expression ?? string.Empty).Trim();
+        if (text.StartsWith("{{", StringComparison.Ordinal) && text.EndsWith("}}", StringComparison.Ordinal))
+        {
+            text = text[2..^2].Trim(); // braces are optional~
+        }
+
+        if (text.Length == 0)
+        {
+            return ConditionResult.Error("the condition is empty");
+        }
+
+        // Same rewrite as template expressions, except `value…` stays for the evaluator: it's in scope.
+        var scope = new Dictionary<string, object?>(StringComparer.Ordinal) { ["value"] = ToScriptValue(value) };
+        var builder = new StringBuilder(text.Length + 16);
+        var cursor = 0;
+        foreach (var token in _tokenCache.GetOrAdd(text, PrepareTokenSpans))
+        {
+            builder.Append(text, cursor, token.Start - cursor);
+            var root = token.Text[..token.Text.IndexOf('.', StringComparison.Ordinal)];
+            ReferenceResolution? resolution = root == "value" ? null : ResolveSingleReference(token.Text, context, "condition");
+            if (resolution is { HasErrors: false } resolved)
+            {
+                var safeName = "__ref_" + token.Text.Replace('.', '_');
+                scope[safeName] = ToScriptValue(resolved.ResolvedValue);
+                builder.Append(safeName);
+            }
+            else
+            {
+                builder.Append(token.Text); // value…, Math.max, JSON.parse — or a typo the evaluator reports~
+            }
+
+            cursor = token.Start + token.Length;
+        }
+
+        builder.Append(text, cursor, text.Length - cursor);
+
+        object? result;
+        try
+        {
+            result = _evaluator.EvaluateAsync(builder.ToString(), scope).AsTask().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            return ConditionResult.Error($"'{text}' failed to evaluate: {ex.Message}");
+        }
+
+        return result is bool b
+            ? ConditionResult.Of(b)
+            : ConditionResult.Error($"'{text}' must be true or false, but it gave {(result is null ? "null" : $"'{result}'")}");
+    }
+
+    /// <summary>
+    /// JSON and other shapes become plain dictionaries / lists / primitives, so <c>value.status</c>
+    /// works in the evaluator whatever the upstream module returned~ 🔀.
+    /// </summary>
+    private static object? ToScriptValue(object? value) => value switch
+    {
+        null => null,
+        JsonElement json => FromJson(json),
+        string or bool or int or long or double or decimal or float => value,
+        IReadOnlyDictionary<string, object?> map => map.ToDictionary(kv => kv.Key, kv => ToScriptValue(kv.Value)),
+        IDictionary<string, object?> map => map.ToDictionary(kv => kv.Key, kv => ToScriptValue(kv.Value)),
+        System.Collections.IEnumerable list and not byte[] => list.Cast<object?>().Select(ToScriptValue).ToList(),
+        _ => value,
+    };
+
+    private static object? FromJson(JsonElement json) => json.ValueKind switch
+    {
+        JsonValueKind.Object => json.EnumerateObject().ToDictionary(p => p.Name, p => FromJson(p.Value)),
+        JsonValueKind.Array => json.EnumerateArray().Select(FromJson).ToList(),
+        JsonValueKind.String => json.GetString(),
+        JsonValueKind.Number => json.TryGetInt64(out var l) ? l : json.GetDouble(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        _ => null,
+    };
+
     /// <summary>
     /// 🧮 Phase 3.1.7 — Scans an expression for dotted reference tokens (context-independent),
     /// so the regex work can be memoized in <see cref="_tokenCache"/>~ 💾.

@@ -1,4 +1,4 @@
-// <copyright file="DispatchCore.cs" company="GlutenFree">
+﻿// <copyright file="DispatchCore.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
@@ -123,6 +123,11 @@ public sealed class DispatchCore
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
+    // Nodes some finished predecessor fired an edge into. Such a node runs once all its predecessors
+    // are done, even if the LAST one to finish deactivated its own edge (Stage 7.2; also the
+    // documented join-skip race in 01-execution-lifecycle §12, item 6)~
+    private readonly System.Collections.Generic.HashSet<string> _activated = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Checks which successor nodes are ready to execute after <paramref name="completedNodeId"/>
     /// finished, and either fires or skips them based on <paramref name="activePorts"/>~ 🎯✨.
@@ -151,6 +156,7 @@ public sealed class DispatchCore
             // Legacy / fire-all: unchanged behaviour — every successor whose predecessors are satisfied runs~ ✅
             foreach (var successorId in successors)
             {
+                _activated.Add(successorId);
                 TryFireSuccessor(successorId);
             }
 
@@ -174,6 +180,7 @@ public sealed class DispatchCore
         // Fire activated branches
         foreach (var targetId in activatedTargets)
         {
+            _activated.Add(targetId);
             TryFireSuccessor(targetId);
         }
 
@@ -184,6 +191,36 @@ public sealed class DispatchCore
         }
 
         // After propagating skips, give the actor a chance to check for completion~ 🎉
+        _checkCompletionAfterSkipPropagation();
+    }
+
+    /// <summary>
+    /// 🔀 Stage 7.2 — routes by connection rather than by port: the targets of
+    /// <paramref name="fired"/> are fired; every other outgoing target of the node (not also reached
+    /// by a fired connection) is treated like an inactive port's target and may be skipped~.
+    /// </summary>
+    /// <param name="completedNodeId">The node that just completed.</param>
+    /// <param name="fired">Its outgoing connections that fire (conditions true / chosen by priority).</param>
+    public void ExecuteReadySuccessorsVia(string completedNodeId, IReadOnlyCollection<ConnectionDefinition> fired)
+    {
+        var activatedTargets = fired.Select(c => c.TargetNodeId).ToHashSet();
+        var deactivatedTargets = _definition.Connections
+            .Where(c => c.SourceNodeId == completedNodeId)
+            .Select(c => c.TargetNodeId)
+            .Where(t => !activatedTargets.Contains(t))
+            .ToHashSet();
+
+        foreach (var targetId in activatedTargets)
+        {
+            _activated.Add(targetId);
+            TryFireSuccessor(targetId);
+        }
+
+        foreach (var targetId in deactivatedTargets)
+        {
+            TrySkipNodeDownstream(targetId);
+        }
+
         _checkCompletionAfterSkipPropagation();
     }
 
@@ -250,6 +287,13 @@ public sealed class DispatchCore
 
         if (!allSatisfied)
         {
+            return;
+        }
+
+        // An earlier predecessor already fired an edge into it: it runs rather than being skipped~
+        if (_activated.Contains(nodeId))
+        {
+            TryFireSuccessor(nodeId);
             return;
         }
 

@@ -157,7 +157,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | # | Finding | Sev. | Plan | Decision needed? | Size |
 | --- | --- | :-: | --- | --- | --- |
 | 7.1 | ✅ ~~**§9.7 (streaming) `Blob` spill can resolve to the in-memory blob store**~~ — **fixed 2026-11-08**, `Streaming/BlobSpillDurabilityTests` | Medium | plan 04 "Documented-only" | Small: fail fast at startup vs. require a durable persistence provider (plan leans fail-fast) | ~0.5 d |
-| 7.2 | **`ConnectionDefinition.Condition` / `Priority` are never read**, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
+| 7.2 | ✅ **fixed 2026-11-08** (conditional edges, `docs/conditional-edges.md`) — ~~**`ConnectionDefinition.Condition` / `Priority` are never read**~~, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
 | 7.3 | **§9.6 (modules) script HTTP has no host allowlist (SSRF)** | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
 | 7.4 | **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
 | 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
@@ -169,6 +169,9 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 
 ### Follow-ups (future work, not findings)
 
+- [ ] **Flaky UI test `MonitorTests.Monitor_RowOpen_NavigatesToDetail`.** Failed once in a full
+  UI run during Stage 7.2 ("nav.Uri … is too short") and passed on the re-run and alone. The
+  navigation assertion probably races the click handler. Unrelated to 7.2.
 - [ ] **Rare test-host crash in `StreamRegionRunnerTests`.** Once during the §12.7 run:
   `ArgumentOutOfRangeException: An unexpected state object was encountered` from
   `CountingSource.ExecuteStreamAsync` (an async-iterator stub), which aborted the test run. It
@@ -263,6 +266,38 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.2 conditional edges (Condition + Priority)
+- Decided (asked):
+  - Syntax: the expression language plus `value` (the edge's value).
+  - False = like an inactive port.
+  - A bad condition = a failure of the source node (On error applies).
+  - Priority ≥ 1 = an if / else-if / else chain per port (first true wins, no condition = else);
+    0 = independent.
+- Engine:
+  - `EdgeRouting.IsConditional` / `Fired`, `EdgeConditionException`, and
+    `DispatchCore.ExecuteReadySuccessorsVia`.
+  - Both executors decide edges before any state change. A bad condition becomes
+    `NodeExecutionFailed`.
+  - `_inactiveEdges` keeps a false edge's value out of a join's inputs.
+  - `PropertyBinder.EvaluateCondition` (`value` in scope, JSON → plain objects, braces optional).
+  - Nodes without conditional edges keep the old code path exactly.
+- **Also fixed:** the documented join-skip race (01-execution-lifecycle §12, item 6). A join
+  activated by one predecessor was skipped when the last predecessor deactivated its edge. Found
+  because the join test was order-dependent. `DispatchCore._activated` now fires such nodes. This
+  also applies to module ports. Each race test is RED without it.
+- Designer: the Priority field, condition help text, `EditConnectionPriorityCommand`, the
+  `n: cond` / `n: else` edge labels, and `EdgeConditions` lint (construct and streaming edges
+  ignored, missing node, unreachable chain edges).
+- Docs: new `docs/conditional-edges.md` with the Priority decision, diagrams and alternatives
+  P1–P6 / C1–C4 (the user asked for this). Docs index, data-binding doc, lifecycle doc and findings
+  table updated.
+- Also fixed: `SubGraphExecutor.cs` had a literal NUL byte in the §12.7 `NoPortFires` constant
+  (from an edit script). It compiled, but made the file "binary" to grep and diffs. Now the
+  `\u0000` escape.
+- Tests: `Engine/ConditionalEdgeTests` (15), UI `EdgeConditionsTests` (9); routing, priority,
+  gather, bad-condition, activated-join and lint mutants all killed.
+- Unfiltered `dotnet test Workflow.Tests` 1915/1915; UI 769/769.
+
 ### 2026-11-08 — Stage 7.1 Blob spill refuses an in-memory blob store
 - Real gap: the default persistence (SQLite `:memory:`) gives a `SqliteBlobStore`, which passed
   `BlobStoreSpillStore`'s `is InMemoryBlobStore` check. Blob spill on a default host gave no memory

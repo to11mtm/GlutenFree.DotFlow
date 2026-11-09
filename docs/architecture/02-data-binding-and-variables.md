@@ -168,9 +168,11 @@ A template that isn't a pure reference is evaluated as an expression:
 | `DynamicExpressoEvaluator` | keyed `"csharp"` | DynamicExpresso | C# expression subset, no statements | transform modules with `language: "csharp"` (`ItemExpressionEvaluator`) |
 | `KeyedExpressionEvaluatorFactory` | `IExpressionEvaluatorFactory` | — | picks by key | transform modules |
 
-`ConnectionDefinition.Condition` and `Priority` exist in the model, but no code in
-`Workflow.Engine` reads them (see §10). Branching today is done with `builtin.condition` or
-`builtin.switch` plus `ActivePorts`.
+`ConnectionDefinition.Condition` and `Priority` decide which edges fire (Stage 7.2, see
+[conditional edges](../conditional-edges.md)): `EdgeRouting` evaluates conditions through
+`PropertyBinder.EvaluateCondition`, with `value` set to the edge's value. Priority ≥ 1 makes the
+edges leaving one port an if / else-if / else chain. Branching can also be done with
+`builtin.condition` or `builtin.switch` plus `ActivePorts`, which are checked first.
 
 ---
 
@@ -269,8 +271,8 @@ These came from reading the code. Each needs a failing test before a fix.
    - Likely effect: a `SetVariable` in a foreach body never updates the workflow. A body node reads
      the values from when the loop started. Accumulating a counter in a loop doesn't work through
      variables.
-4. **`ConnectionDefinition.Condition` and `Priority` are dead fields.** They are part of the
-   model, and the designer may let authors set them. The engine ignores them.
+4. ~~**`ConnectionDefinition.Condition` and `Priority` are dead fields.**~~ **Fixed (Stage 7.2):**
+   conditional edges and priority chains. See [conditional edges](../conditional-edges.md).
 5. **Expression evaluation blocks the actor.** `EvaluateExpression` calls
    `.AsTask().GetAwaiter().GetResult()` on the `NodeExecutor`'s actor thread. Jint's own timeout
    bounds this, so it isn't a deadlock risk. But a slow expression holds a dispatcher thread, and

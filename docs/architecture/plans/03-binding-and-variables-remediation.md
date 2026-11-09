@@ -283,6 +283,43 @@ missing a sink — enumerate them (history inputs, history outputs, variable sto
 
 ---
 
+## Finding E — `ConnectionDefinition.Condition` / `Priority` are never read (Stage 7.2)
+
+The designer lets authors set an edge **condition** (it's drawn as an edge label), but no engine
+code reads `Condition` or `Priority`, so the edge always fires.
+
+### Decided 2026-11-08 (asked) — make conditional edges work
+- **Syntax:** the same sandboxed expression language as `{{…}}` templates, written without braces.
+  `value` is what travels on the edge (the source port's output); `Variable.x` and `nodeId.port`
+  work too. E.g. `value.status == 200`, `Variable.retries < 3`, `fetch.count > 0`.
+- **False:** like an inactive port. The edge doesn't fire. A target whose every incoming edge is
+  inactive is skipped, and the skip flows downstream. A join with another active edge still runs,
+  and the false edge contributes no input.
+- **Bad condition** (syntax error, unknown reference, not true/false): a failure of the **source
+  node**, so its On error setting applies. The message names the edge and the expression.
+- **Priority:** among edges leaving the **same output port** with a Priority set (1 and up), check
+  them in Priority order and fire only the first whose condition is true. That's an if / else-if /
+  else chain, where an edge with no condition is the "else". Edges without a Priority (0) are
+  independent. The designer gets a Priority field.
+- **Fixed 2026-11-08:**
+  - Engine: `EdgeRouting`, `DispatchCore.ExecuteReadySuccessorsVia`, the `_inactiveEdges` hooks in
+    both executors, and `PropertyBinder.EvaluateCondition`.
+  - Designer: `EdgeConditions` (label + lint), the Priority field, and `EditConnectionPriorityCommand`.
+  - **Docs:** `docs/conditional-edges.md` has the Priority semantics with diagrams, and the
+    alternatives P1–P6 for Priority and C1–C4 for the rest. That's the place to go to pivot.
+  - **Also fixed, because "a join with another active edge still runs" required it:** the
+    documented join-skip race (01-execution-lifecycle §12, item 6). `DispatchCore` now remembers
+    nodes a predecessor has activated, and fires them instead of skipping them when the last
+    predecessor deactivates its own edge. That covers module ports too.
+  - Tests: `Engine/ConditionalEdgeTests` (15; 4 routing mutants plus the activated-join mutant
+    killed) and UI `EdgeConditionsTests` (9; 2 mutants killed).
+- **Alternatives considered:**
+  - full `{{…}}` syntax only;
+  - a false edge blocks its join;
+  - a bad condition counts as false plus a warning;
+  - Priority unused, or removed.
+
+
 ## Cross-cutting theme
 
 Findings **C (§10.3)** and **[§12.4](02-engine-lifecycle-remediation.md)** are both "`SubGraphExecutor`

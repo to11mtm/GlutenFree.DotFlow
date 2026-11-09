@@ -265,6 +265,42 @@ public sealed class EditConnectionCommand : IDesignerCommand
     }
 }
 
+/// <summary>🔀 Stage 7.2 — edits a connection's Priority (0 = independent; 1+ = if/else-if chain order)~ ✨.</summary>
+public sealed class EditConnectionPriorityCommand : IDesignerCommand
+{
+    private readonly string key;
+    private readonly int before;
+    private readonly int after;
+
+    /// <summary>Initializes a new instance of the <see cref="EditConnectionPriorityCommand"/> class.</summary>
+    /// <param name="key">The connection key.</param>
+    /// <param name="before">The old priority.</param>
+    /// <param name="after">The new priority.</param>
+    public EditConnectionPriorityCommand(string key, int before, int after)
+    {
+        this.key = key;
+        this.before = before;
+        this.after = after;
+    }
+
+    /// <inheritdoc/>
+    public string Description => "Edit connection priority";
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document) => this.Set(document, this.after);
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document) => this.Set(document, this.before);
+
+    private void Set(DesignerDocument document, int priority)
+    {
+        if (document.Connections.FirstOrDefault(c => c.Key == this.key) is { } conn)
+        {
+            conn.Priority = priority;
+        }
+    }
+}
+
 /// <summary>
 /// 🌊 Phase 5.1.2 — Edits a streaming connection's bounded-channel capacity~ ✨.
 /// </summary>

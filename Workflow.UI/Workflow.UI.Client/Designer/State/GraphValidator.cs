@@ -97,6 +97,7 @@ public static class GraphValidator
         issues.AddRange(ValidatePorts(doc));
         issues.AddRange(ValidateStreaming(doc));
         issues.AddRange(NodeErrorHandling.Validate(doc)); // 🚑 §12.7
+        issues.AddRange(EdgeConditions.Validate(doc)); // 🔀 Stage 7.2
 
         return issues;
     }
