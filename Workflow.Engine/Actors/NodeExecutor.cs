@@ -193,27 +193,15 @@ public class NodeExecutor : ReceiveActor
             _log.Debug(" Found module: {ModuleName} ({ModuleId})", module.DisplayName, module.ModuleId);
 
             // Bind inputs via PropertyBinder (resolves references, converts types, applies defaults).
+            // ⏱️ Stage 7.9 — binding can evaluate expressions, so it runs in the node's execution
+            // task, not here on the actor thread: the node's timeout covers it, and a cancel is
+            // handled while it runs. Only the cheap, actor-state parts are gathered here~
             var binder = _serviceProvider.GetService<IPropertyBinder>() ?? new PropertyBinder();
             var bindingContext = BuildBindingContext();
-            var bindingResult = binder.BindProperties(_inputs, module.Schema.Inputs, bindingContext);
-
-            if (!bindingResult.Success)
-            {
-                var errorMessage = $"Input binding failed: {string.Join(", ", bindingResult.Errors)}";
-                _log.Error("❌ {Error}", errorMessage);
-                SendFailure(new InvalidOperationException(errorMessage));
-                return;
-            }
-
-            // Build execution context using bound inputs. ✨
-            var context = BuildExecutionContext(module, bindingResult.BoundValues, binder, bindingContext);
-            if (context is null)
-            {
-                return;
-            }
+            var plan = PrepareExecution(module, binder, bindingContext);
 
             // Execute the module asynchronously
-            ExecuteModuleAsync(module, context, _cancellationTokenSource.Token);
+            ExecuteModuleAsync(module, plan, _cancellationTokenSource.Token);
         }
         catch (Exception ex)
         {
@@ -225,16 +213,19 @@ public class NodeExecutor : ReceiveActor
     /// <summary>
     /// Executes the module asynchronously and pipes result back to self.
     /// </summary>
-    private void ExecuteModuleAsync(IWorkflowModule module, ModuleExecutionContext context, CancellationToken cancellationToken)
+    private void ExecuteModuleAsync(IWorkflowModule module, ExecutionPlan plan, CancellationToken cancellationToken)
     {
         var self = Self;
-        var parent = Context.Parent;
 
         Task.Run(
             async () =>
             {
                 try
                 {
+                    // ⏱️ Stage 7.9 — bind off the actor thread (see HandleExecute)~
+                    var context = BindAndBuildContext(module, plan);
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     var result = await module.ExecuteAsync(
                         context,
                         cancellationToken);
@@ -266,6 +257,14 @@ public class NodeExecutor : ReceiveActor
     /// </summary>
     private void HandleExecutionResult(ExecutionResult result)
     {
+        // ⏱️ Stage 7.9 — the node already timed out or was cancelled and reported that; a result
+        // arriving afterwards (e.g. binding that finished late) must not report a second time~
+        if (!_isExecuting)
+        {
+            _log.Debug("Node {NodeId}: ignoring a result that arrived after the node had already finished", _nodeId);
+            return;
+        }
+
         Context.SetReceiveTimeout(null); // Clear timeout
         _timer.Stop();
 
@@ -566,15 +565,19 @@ public class NodeExecutor : ReceiveActor
     }
 
     /// <summary>
-    /// Builds the module execution context using bound input values. ✨.
+    /// ⏱️ Stage 7.9 — everything binding needs, gathered from actor state on the actor thread (cheap),
+    /// so the binding itself can run in the execution task.
     /// </summary>
-    /// <param name="module">The module being executed.</param>
-    /// <param name="boundInputs">The inputs after PropertyBinder processing.</param>
-    private ModuleExecutionContext? BuildExecutionContext(
-        IWorkflowModule module,
-        IReadOnlyDictionary<string, object?> boundInputs,
-        IPropertyBinder binder,
-        PropertyBindingContext bindingContext)
+    private sealed record ExecutionPlan(
+        IPropertyBinder Binder,
+        PropertyBindingContext BindingContext,
+        IReadOnlyDictionary<string, object?> RawInputs,
+        Dictionary<string, object?> RawProperties,
+        Dictionary<string, object?> Variables,
+        Microsoft.Extensions.Logging.ILogger Logger);
+
+    /// <summary>Gathers the binding inputs from actor state (runs on the actor thread).</summary>
+    private ExecutionPlan PrepareExecution(IWorkflowModule module, IPropertyBinder binder, PropertyBindingContext bindingContext)
     {
         // Extract and convert properties from node definition. ⚙️
         var properties = new Dictionary<string, object?>();
@@ -583,31 +586,47 @@ public class NodeExecutor : ReceiveActor
             properties[prop.Key] = ConvertJsonElement(prop.Value);
         }
 
-        // 🔗 V4 — resolve {{…}} in template-enabled properties. Properties are the designer's
-        // whole editing surface, so without this every token inserted by the {{x}} picker or the
-        // ƒx builder reached the module as literal text.
-        var propertyBinding = binder.BindModuleProperties(properties, module.Schema.Properties, bindingContext);
-        if (!propertyBinding.Success)
-        {
-            var errorMessage = "Property binding failed: " + string.Join(", ", propertyBinding.Errors);
-            _log.Error("❌ {Error}", errorMessage);
-            SendFailure(new InvalidOperationException(errorMessage));
-            return null;
-        }
-
-        properties = new Dictionary<string, object?>(propertyBinding.BoundValues);
-
         // Get logger from service provider or create null logger
         var loggerFactory = _serviceProvider.GetService<ILoggerFactory>();
         var logger = loggerFactory?.CreateLogger($"Module.{module.ModuleId}.{_nodeId}")
             ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 
+        return new ExecutionPlan(
+            binder,
+            bindingContext,
+            new Dictionary<string, object?>(_inputs),
+            properties,
+            ConvertHashMapToDictionary(_workflowVariables),
+            logger);
+    }
+
+    /// <summary>
+    /// Binds the node's inputs and properties and builds the module context. ✨ Runs in the execution
+    /// task (Stage 7.9), so it touches no actor state; a binding failure throws and fails the node.
+    /// </summary>
+    private ModuleExecutionContext BindAndBuildContext(IWorkflowModule module, ExecutionPlan plan)
+    {
+        var bindingResult = plan.Binder.BindProperties(plan.RawInputs, module.Schema.Inputs, plan.BindingContext);
+        if (!bindingResult.Success)
+        {
+            throw new InvalidOperationException($"Input binding failed: {string.Join(", ", bindingResult.Errors)}");
+        }
+
+        // 🔗 V4 — resolve {{…}} in template-enabled properties. Properties are the designer's
+        // whole editing surface, so without this every token inserted by the {{x}} picker or the
+        // ƒx builder reached the module as literal text.
+        var propertyBinding = plan.Binder.BindModuleProperties(plan.RawProperties, module.Schema.Properties, plan.BindingContext);
+        if (!propertyBinding.Success)
+        {
+            throw new InvalidOperationException("Property binding failed: " + string.Join(", ", propertyBinding.Errors));
+        }
+
         return new ModuleExecutionContext
         {
-            Inputs = boundInputs,
-            Properties = properties,
-            Variables = ConvertHashMapToDictionary(_workflowVariables),
-            Logger = logger,
+            Inputs = bindingResult.BoundValues,
+            Properties = new Dictionary<string, object?>(propertyBinding.BoundValues),
+            Variables = plan.Variables,
+            Logger = plan.Logger,
             Services = _serviceProvider,
             ExecutionId = _executionId,
             NodeId = _nodeId,

@@ -164,10 +164,21 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
 | 7.7 | ✅ **fixed 2026-11-09** (`SubGraphExecutor` runs regions wholly inside a body) — ~~**§9.5 (streaming) no regions inside construct bodies**~~ | Low | plan 04 | No (parity work), but low priority | 1–2 d |
 | 7.8 | **§9.3 (streaming) mid-pipeline retry**: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
-| 7.9 | **Expression evaluation blocks the `NodeExecutor` thread** (`.GetAwaiter().GetResult()`) | Low | 02 data-binding §10, item 5 | No | ~0.5 d |
+| 7.9 | ✅ **fixed 2026-11-09** (binding runs in the node's execution task) — ~~**Expression evaluation blocks the `NodeExecutor` thread** (`.GetAwaiter().GetResult()`)~~ | Low | 02 data-binding §10, item 5 | No | ~0.5 d |
 | 7.10 | **Scheduled and Event triggers have no runtime** | Info | 01 §12.8 | Feature, not a fix: out of scope for this effort | — |
 
 ### Follow-ups (future work, not findings)
+
+- [ ] **Async binding (`IPropertyBinder` → async).** After Stage 7.9, binding no longer runs on the
+  node's actor thread. It still waits synchronously on the expression evaluator, though, now on a
+  pool thread.
+  - Edge conditions (`EdgeRouting.Fired` → `EvaluateCondition`, Stage 7.2) are evaluated on the
+    **WorkflowExecutor / SubGraphExecutor** thread when the source node completes.
+  - Both are bounded by Jint's 250 ms timeout.
+  - An async binder (`BindPropertiesAsync` / `EvaluateConditionAsync`), plus routing that pipes the
+    condition result back to the executor, would remove both waits.
+  - It touches the binder interface, modules that call the binder, and both executors' completion
+    paths.
 
 - [ ] **Flaky UI test `MonitorTests.Monitor_RowOpen_NavigatesToDetail`.** Failed once in a full
   UI run during Stage 7.2 ("nav.Uri … is too short") and passed on the re-run and alone. The
@@ -266,6 +277,27 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.9 binding off the NodeExecutor actor thread (02 §10 item 5)
+- No decision needed.
+- `NodeExecutor.HandleExecute` now only gathers (on the actor thread) the binding context, the raw
+  properties, the variables and the logger (`PrepareExecution` → `ExecutionPlan`).
+- `BindAndBuildContext` binds the inputs and properties inside the `Task.Run` that runs the module,
+  then calls `ThrowIfCancellationRequested` before the module starts.
+- Binding failures throw the same `InvalidOperationException` messages.
+- `HandleExecutionResult` ignores a result once the node has already reported (timeout or cancel).
+  This also fixes a late module result after a timeout being reported a second time.
+- Tests: `Engine/NodeBindingOffActorThreadTests` (4):
+  - the timeout covers slow binding (with no late second report);
+  - a cancel during binding stops the node before the module runs;
+  - binding failure messages are unchanged;
+  - binding still feeds the module.
+- Proof: stashing the production change → 2/4 red. Mutants killed: no late-result guard (after
+  widening the test's quiet window to 2 s), no cancel check before the module.
+- Remaining sync waits: the binder on the evaluator (pool thread), and edge conditions on the
+  executor thread. Logged as the "Async binding" follow-up.
+- Docs: 02 §10 item 5, the findings table.
+- Suites: unfiltered `dotnet test Workflow.Tests` 1960/1960; `Workflow.Tests.UI` 779/779.
+
 ### 2026-11-09 — Stage 7.7 streaming regions inside construct bodies (§9.5 streaming)
 - No decision needed (parity work).
 - The scope rule is "region wholly inside the body". This matches the designer's rule 3 (a stream

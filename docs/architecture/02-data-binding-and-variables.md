@@ -273,10 +273,19 @@ These came from reading the code. Each needs a failing test before a fix.
      variables.
 4. ~~**`ConnectionDefinition.Condition` and `Priority` are dead fields.**~~ **Fixed (Stage 7.2):**
    conditional edges and priority chains. See [conditional edges](../conditional-edges.md).
-5. **Expression evaluation blocks the actor.** `EvaluateExpression` calls
-   `.AsTask().GetAwaiter().GetResult()` on the `NodeExecutor`'s actor thread. Jint's own timeout
-   bounds this, so it isn't a deadlock risk. But a slow expression holds a dispatcher thread, and
-   the node's receive timeout doesn't start until binding has finished.
+5. ~~**Expression evaluation blocks the actor.**~~ **Fixed (Stage 7.9):** `NodeExecutor` gathers
+   the binding inputs on the actor thread (cheap). It then binds inputs and properties inside the
+   node's execution task, just before the module runs. The effects:
+   - no dispatcher thread is held;
+   - the node's timeout covers binding;
+   - a cancel sent during binding is handled at once, so the module never starts;
+   - a result arriving after a timeout or cancel is dropped, so there is no second report.
+   Binding failures keep their messages ("Input binding failed: …" / "Property binding failed: …").
+
+   Still synchronous: the binder waits on the evaluator (`GetAwaiter().GetResult()`), now on a
+   thread-pool thread. Jint's 250 ms limit bounds it. Edge conditions (Stage 7.2) are evaluated
+   on the *executor's* thread when the source completes, with the same bound. Making
+   `IPropertyBinder` async would remove both; it's tracked as a follow-up in the worklog.
 6. **Secrets reach history in plain text.** Run inputs are copied into every node's input
    dictionary, and that dictionary is persisted as `NodeExecutionRecord.Inputs`. Variable updates
    are also logged with their values at debug level.
