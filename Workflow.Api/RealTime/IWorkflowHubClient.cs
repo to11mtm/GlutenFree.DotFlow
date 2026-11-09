@@ -50,6 +50,14 @@ public interface IWorkflowHubClient
     /// <returns>A task.</returns>
     Task ExecutionProgress(ExecutionProgressEvent e);
 
+    /// <summary>
+    /// 📡 Stage 7.6 — pushed while a streaming region runs (every <c>Streaming:ProgressIntervalMs</c>,
+    /// only when the counts changed) and once more when it finishes (<c>Completed</c> = true).
+    /// </summary>
+    /// <param name="e">The event payload.</param>
+    /// <returns>A task.</returns>
+    Task StreamProgress(StreamProgressEvent e);
+
     /// <summary>Pushed to the caller right after subscribing to an execution (initial snapshot)~ 📸.</summary>
     /// <param name="e">The snapshot payload.</param>
     /// <returns>A task.</returns>

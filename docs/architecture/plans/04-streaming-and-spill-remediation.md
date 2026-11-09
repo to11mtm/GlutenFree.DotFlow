@@ -130,6 +130,22 @@ Planned lightly here; promote to a tested finding when scheduled.
 - **§9.1 `StreamRegionProgress` not forwarded to SignalR.** No client event contract exists for
   per-stage progress. Fix belongs with Phase 5.1.5 (observability): define the client event, add the
   type to `ExecutionEventBridge.SubscribedTypes`, map it. Until 5.1.5, document as "not wired."
+  **Decided 2026-11-09 (asked, Stage 7.6):**
+  - **Live + final:** while a region runs, per-stage item counts are sent every interval (only when
+    they changed), plus a final event when it finishes, carrying the duration and a `completed`
+    flag.
+  - **UI:** run mode and the execution detail page show per-stage counters. The monitor list is
+    unchanged.
+  - **Rate:** 1 s by default, configurable via `Streaming:ProgressIntervalMs` (0 = final summary
+    only).
+  - Alternatives: final summary only; detail page only; API only; a fixed 1 s; 250 ms.
+  - **Implemented 2026-11-09 (Stage 7.6):**
+    - `StreamRegionCounters` lets the runner's counts be read while it runs.
+    - `StreamRegionExecutor` sends a `ProgressTick` on a timer.
+    - `StreamingProgressOptions` is registered from `Streaming:ProgressIntervalMs`.
+    - `StreamRegionProgress.Completed` was added.
+    - The bridge maps it to `StreamProgress`; `RunState.StreamProgress` and `ItemBadgeFor` show it
+      in the UI.
 - **§9.2 regions have no timeout.** Batch nodes get `NodeExecutor`'s receive timeout; a region has
   none. Fix: a per-region timeout knob (default off or generous for long ETL) enforced around
   `StreamRegionRunner.RunAsync` via the linked CTS. Needs a design decision on the default.

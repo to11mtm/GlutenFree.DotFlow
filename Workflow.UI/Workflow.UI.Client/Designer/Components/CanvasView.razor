@@ -57,6 +57,7 @@
             var issue = nodeIssues.TryGetValue(node.Id, out var found) ? found : null;
             <NodeView @key="node.Id" Node="node"
                       StateClass="@StateClassFor(node.Id)"
+                      RunBadge="@NodeRunBadge?.Invoke(node.Id)"
                       Selected="@IsSelected(node.Id)"
                       Role="@(topology.Roles.TryGetValue(node.Id, out var role) ? role : null)"
                       IconOverride="@ModuleIcon?.Invoke(node.ModuleId)"
@@ -233,6 +234,10 @@
     /// <summary>Resolves an extra CSS state class for a node (run overlay).</summary>
     [Parameter]
     public Func<string, string>? NodeStateClass { get; set; }
+
+    /// <summary>📡 Stage 7.6 — resolves a run-mode badge for a node (streaming item counts).</summary>
+    [Parameter]
+    public Func<string, string?>? NodeRunBadge { get; set; }
 
     /// <summary>Raised on node pointer-down (after internal selection handling).</summary>
     [Parameter]

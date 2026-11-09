@@ -260,10 +260,13 @@ Its recommendation is streaming as a second mode, at about 5–9 engineer-months
 
 ## 9. Findings to verify
 
-1. **`StreamRegionProgress` never reaches SignalR.**
-   - What the code does: `WorkflowExecutor` publishes it with a comment saying the 3.2 bridge
-     already forwards it. `ExecutionEventBridge.SubscribedTypes` doesn't include it.
-   - Effect: no per-stage throughput reaches the monitor. This overlaps with 5.1.5.
+1. ~~**`StreamRegionProgress` never reaches SignalR.**~~ **Fixed (Stage 7.6):**
+   - The bridge forwards it as the `StreamProgress` client event.
+   - While a region runs, `StreamRegionExecutor` sends live per-stage counts every
+     `Streaming:ProgressIntervalMs` (default 1 s, only when they changed). The final event has
+     `Completed = true`.
+   - The designer's run mode and the execution detail page show the counts. See
+     [realtime](../realtime.md#streaming-progress).
 2. **Regions have no timeout.**
    - What the code does: batch nodes get `NodeExecutor`'s receive timeout (default 30 s). Neither
      `StreamRegionExecutor` nor the runner sets one.

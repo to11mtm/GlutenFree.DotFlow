@@ -121,4 +121,37 @@ public sealed class RunStateTests
 
         fired.Should().BeGreaterThan(0);
     }
+
+    /// <summary>📡 Stage 7.6 — live counts, then the final ones; a late live tick doesn't undo the final.</summary>
+    [Fact]
+    public void StreamProgress_TracksLiveThenFinalCounts()
+    {
+        var id = System.Guid.NewGuid();
+        var run = new RunState { ExecutionId = id };
+
+        run.StreamProgress(id, 0, new Dictionary<string, long> { ["src"] = 1234, ["sink"] = 1200 }, 1500, completed: false);
+        run.StreamCounts["src"].Should().Be(new StreamStageCount(0, 1234, 1500, false));
+        run.ItemBadgeFor("src").Should().Be(1234.ToString("N0") + " items");
+        run.ItemBadgeFor("other").Should().BeNull();
+
+        run.StreamProgress(id, 0, new Dictionary<string, long> { ["src"] = 2000, ["sink"] = 2000 }, 2600, completed: true);
+        run.StreamProgress(id, 0, new Dictionary<string, long> { ["src"] = 1999, ["sink"] = 1990 }, 2500, completed: false);
+
+        run.StreamCounts["src"].Should().Be(new StreamStageCount(0, 2000, 2600, true));
+        run.StreamCounts["sink"].Items.Should().Be(2000);
+        run.Log.Should().Contain(l => l.Text.Contains("streaming region 0 finished"));
+    }
+
+    /// <summary>📡 Stage 7.6 — counts for another execution are ignored; one item is singular.</summary>
+    [Fact]
+    public void StreamProgress_IgnoresOtherExecutions()
+    {
+        var run = new RunState { ExecutionId = System.Guid.NewGuid() };
+
+        run.StreamProgress(System.Guid.NewGuid(), 0, new Dictionary<string, long> { ["src"] = 5 }, 10, completed: false);
+        run.StreamCounts.Should().BeEmpty();
+
+        run.StreamProgress(run.ExecutionId, 0, new Dictionary<string, long> { ["src"] = 1 }, 10, completed: false);
+        run.ItemBadgeFor("src").Should().Be("1 item");
+    }
 }

@@ -49,6 +49,12 @@ public sealed class StreamRegionExecutor : ReceiveActor
     private readonly CancellationToken parentToken;
     private readonly ILoggingAdapter log = Context.GetLogger();
 
+    // 📡 Stage 7.6 — live progress while the region runs~
+    private readonly StreamRegionCounters liveCounts = new();
+    private readonly System.Diagnostics.Stopwatch elapsed = new();
+    private ICancelable? progressTimer;
+    private IReadOnlyDictionary<string, long>? lastSent;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="StreamRegionExecutor"/> class. 🌊.
     /// </summary>
@@ -78,6 +84,7 @@ public sealed class StreamRegionExecutor : ReceiveActor
 
         this.Receive<ExecuteStreamRegion>(_ => this.HandleExecute());
         this.Receive<RegionRunFinished>(this.HandleFinished);
+        this.Receive<ProgressTick>(_ => this.PublishLiveProgress());
     }
 
     /// <summary>
@@ -160,7 +167,17 @@ public sealed class StreamRegionExecutor : ReceiveActor
             var runner = new StreamRegionRunner(Context.System.Materializer());
             var self = Self;
 
-            runner.RunAsync(new StreamRegionPlan(stages), this.parentToken)
+            // 📡 Stage 7.6 — publish per-stage counts every interval while it runs (only when they
+            // changed); the final summary comes from WorkflowExecutor when the region finishes~
+            this.elapsed.Start();
+            var intervalMs = (this.serviceProvider.GetService<StreamingProgressOptions>() ?? new StreamingProgressOptions()).IntervalMs;
+            if (intervalMs > 0)
+            {
+                var interval = TimeSpan.FromMilliseconds(intervalMs);
+                this.progressTimer = Context.System.Scheduler.ScheduleTellRepeatedlyCancelable(interval, interval, self, ProgressTick.Instance, self);
+            }
+
+            runner.RunAsync(new StreamRegionPlan(stages), this.parentToken, this.liveCounts)
                 .ContinueWith(
                     task => task.IsFaulted
                         ? new RegionRunFinished(null, task.Exception?.GetBaseException())
@@ -176,8 +193,37 @@ public sealed class StreamRegionExecutor : ReceiveActor
         }
     }
 
+    private void PublishLiveProgress()
+    {
+        var counts = this.liveCounts.Snapshot();
+        if (counts.Count == 0 || (this.lastSent is not null && SameCounts(this.lastSent, counts)))
+        {
+            return; // nothing new to say~
+        }
+
+        this.lastSent = counts;
+        Context.System.EventStream.Publish(new StreamRegionProgress(
+            this.executionId,
+            this.region.Index,
+            counts,
+            this.elapsed.Elapsed,
+            DateTimeOffset.UtcNow,
+            Completed: false));
+    }
+
+    private static bool SameCounts(IReadOnlyDictionary<string, long> a, IReadOnlyDictionary<string, long> b)
+        => a.Count == b.Count && a.All(kv => b.TryGetValue(kv.Key, out var v) && v == kv.Value);
+
+    /// <inheritdoc/>
+    protected override void PostStop()
+    {
+        this.progressTimer?.Cancel();
+        base.PostStop();
+    }
+
     private void HandleFinished(RegionRunFinished message)
     {
+        this.progressTimer?.Cancel(); // the final summary is published by WorkflowExecutor~
         var parent = Context.Parent;
 
         if (message.Error is not null)
@@ -394,4 +440,10 @@ public sealed class StreamRegionExecutor : ReceiveActor
                 .ToDictionary(p => p.Name, p => ConvertJsonElement(p.Value)),
             _ => element.ToString(),
         };
+
+    /// <summary>📡 Stage 7.6 — time to publish live progress.</summary>
+    private sealed class ProgressTick
+    {
+        public static readonly ProgressTick Instance = new();
+    }
 }

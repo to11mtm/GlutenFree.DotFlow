@@ -55,11 +55,16 @@ public sealed class StreamRegionRunner
     /// </summary>
     /// <param name="plan">The stages to run, in pipeline order, with their bound contexts.</param>
     /// <param name="cancellationToken">Cancellation, linked to the execution as usual.</param>
+    /// <param name="liveCounts">
+    /// 📡 Stage 7.6 — optional: the per-stage counters are kept here so a caller can read them while
+    /// the region runs (live progress). Null = private counters.
+    /// </param>
     /// <returns>The region's result: the terminal node's outputs plus per-stage item counts.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the plan has no stages.</exception>
     public async Task<StreamRegionResult> RunAsync(
         StreamRegionPlan plan,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        StreamRegionCounters? liveCounts = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
@@ -69,7 +74,7 @@ public sealed class StreamRegionRunner
         }
 
         var stopwatch = Stopwatch.StartNew();
-        var counters = plan.Stages.ToDictionary(s => s.NodeId, _ => new StageCounter(), StringComparer.Ordinal);
+        var counters = (liveCounts ?? new StreamRegionCounters()).Track(plan.Stages.Select(s => s.NodeId));
         var errors = new List<StreamItemError>();
 
         var head = plan.Stages[0];
@@ -192,14 +197,39 @@ public sealed class StreamRegionRunner
         yield break;
     }
 
-    private sealed class StageCounter
+}
+
+/// <summary>
+/// 📡 Stage 7.6 — per-stage item counters a <see cref="StreamRegionRunner"/> updates as items flow,
+/// readable at any time from another thread (live progress). Thread-safe.
+/// </summary>
+public sealed class StreamRegionCounters
+{
+    private volatile IReadOnlyDictionary<string, StageCounter> counters = new Dictionary<string, StageCounter>();
+
+    /// <summary>The counts so far, per stage node id.</summary>
+    /// <returns>A snapshot.</returns>
+    public IReadOnlyDictionary<string, long> Snapshot()
+        => this.counters.ToDictionary(kv => kv.Key, kv => kv.Value.Count, StringComparer.Ordinal);
+
+    internal IReadOnlyDictionary<string, StageCounter> Track(IEnumerable<string> nodeIds)
     {
-        private long count;
-
-        public long Count => Interlocked.Read(ref this.count);
-
-        public void Increment() => Interlocked.Increment(ref this.count);
+        var tracked = nodeIds.ToDictionary(id => id, _ => new StageCounter(), StringComparer.Ordinal);
+        this.counters = tracked;
+        return tracked;
     }
+}
+
+/// <summary>A thread-safe item counter for one stage.</summary>
+internal sealed class StageCounter
+{
+    private long count;
+
+    /// <summary>Gets the count.</summary>
+    public long Count => Interlocked.Read(ref this.count);
+
+    /// <summary>Adds one.</summary>
+    public void Increment() => Interlocked.Increment(ref this.count);
 }
 
 /// <summary>

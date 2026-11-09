@@ -41,6 +41,10 @@
             <span class="df-node__badge df-node__badge--unordered" data-testid="node-unordered"
                   title="This stage runs items concurrently with ordering turned off, so downstream items arrive in completion order. Keeping order costs nothing — turn it back on unless you need the throughput.">⚠ unordered</span>
         }
+        @if (RunBadge is not null)
+        {
+            <span class="df-node__badge df-node__badge--items" data-testid="node-items" title="Items this streaming stage has emitted">@RunBadge</span>
+        }
     </div>
 
     <div class="df-node__ports">
@@ -85,6 +89,10 @@
     /// <summary>Extra CSS state class (run overlay: running/completed/failed…).</summary>
     [Parameter]
     public string StateClass { get; set; } = string.Empty;
+
+    /// <summary>📡 Stage 7.6 — run-mode badge (streaming item count), or null.</summary>
+    [Parameter]
+    public string? RunBadge { get; set; }
 
     /// <summary>Whether the node is selected.</summary>
     [Parameter]

@@ -5,6 +5,7 @@
 namespace Workflow.Tests.Api.RealTime;
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Akka.Actor;
 using FluentAssertions;
@@ -110,6 +111,31 @@ public sealed class ExecutionEventBridgeTests
         e.CurrentNode.Should().Be("node-2");
         e.CompletedNodes.Should().Be(3);
         e.TotalNodes.Should().Be(5);
+    }
+
+    /// <summary>📡 Stage 7.6 — streaming-region item counts reach clients, live and final.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StreamRegionProgress_Broadcast(bool completed)
+    {
+        await using var ctx = await RealTimeFixture.ConnectAndSubscribeAsync();
+        var tcs = ctx.On<StreamProgressEvent>("StreamProgress");
+
+        ctx.Publish(new StreamRegionProgress(
+            ctx.ExecutionId,
+            2,
+            new Dictionary<string, long> { ["src"] = 1234, ["sink"] = 1200 },
+            TimeSpan.FromMilliseconds(1500),
+            DateTimeOffset.UtcNow,
+            completed));
+
+        var e = await tcs.WaitAsync(RealTimeFixture.Timeout);
+        e.ExecutionId.Should().Be(ctx.ExecutionId);
+        e.RegionIndex.Should().Be(2);
+        e.ItemCounts.Should().Contain("src", 1234).And.Contain("sink", 1200);
+        e.ElapsedMs.Should().Be(1500);
+        e.Completed.Should().Be(completed);
     }
 
     [Fact]

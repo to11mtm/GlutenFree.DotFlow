@@ -249,6 +249,10 @@ a.df-link:hover { text-decoration: underline; }
 /* ⚠ A stage that traded source order for throughput — say so on the node, not just in the panel */
 .df-node__badge { margin-left: auto; padding: 0 var(--df-space-1); font-size: 0.65rem; border-radius: var(--df-radius); white-space: nowrap; }
 .df-node__badge--unordered { color: var(--df-warning, #fbbf24); border: 1px solid var(--df-warning, #fbbf24); }
+.df-node__badge--items { color: var(--df-accent, #60a5fa); border: 1px solid var(--df-accent, #60a5fa); font-variant-numeric: tabular-nums; }
+.df-streamprogress { margin: var(--df-space-2, 8px) 0; }
+.df-streamprogress table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.df-streamprogress td, .df-streamprogress th { padding: 2px var(--df-space-2, 8px); text-align: left; }
 .df-region--parallel { border-color: var(--df-state-running); background: rgba(79,156,249,0.05); }
 .df-region--parallel .df-region__label { color: var(--df-state-running); }
 

@@ -32,6 +32,9 @@ public class StreamRegionExecutionTests : TestKit
         => new(id, moduleId, id, HashMap<string, JsonElement>.Empty);
 
     private static IServiceProvider Services(params IWorkflowModule[] modules)
+        => Services(null, modules);
+
+    private static IServiceProvider Services(StreamingProgressOptions? progress, params IWorkflowModule[] modules)
     {
         var registry = new InMemoryModuleRegistry(skipValidation: true);
         foreach (var module in modules)
@@ -39,9 +42,13 @@ public class StreamRegionExecutionTests : TestKit
             registry.RegisterModule(module);
         }
 
-        return new ServiceCollection()
-            .AddSingleton<IModuleRegistry>(registry)
-            .BuildServiceProvider();
+        var services = new ServiceCollection().AddSingleton<IModuleRegistry>(registry);
+        if (progress is not null)
+        {
+            services.AddSingleton(progress);
+        }
+
+        return services.BuildServiceProvider();
     }
 
     private static WorkflowDefinition Definition(
@@ -182,11 +189,75 @@ public class StreamRegionExecutionTests : TestKit
         var executor = StartExecutor(definition, services, executionId);
         executor.Tell(new StartExecution(executionId));
 
-        var progress = ExpectMsg<StreamRegionProgress>(TimeSpan.FromSeconds(15));
+        var progress = FishForMessage<StreamRegionProgress>(p => p.Completed, TimeSpan.FromSeconds(15));
         progress.ExecutionId.Should().Be(executionId);
         progress.ItemCounts["src"].Should().Be(6);
         progress.ItemCounts["collect"].Should().Be(6);
         progress.Duration.Should().BeGreaterThan(TimeSpan.Zero);
+    }
+
+    /// <summary>
+    /// 📡 Stage 7.6 — while a region runs it publishes live counts (Completed = false) every
+    /// interval, only when they changed; then the final summary (Completed = true) with the totals.
+    /// </summary>
+    [Fact]
+    public void Region_PublishesLiveCounts_WhileItRuns_ThenTheFinalSummary()
+    {
+        var definition = Definition(
+            [Node("src", "test.stream.source"), Node("collect", "test.stream.collect")],
+            [new ConnectionDefinition("src", "items", "collect", "items")]);
+
+        var services = Services(new StreamingProgressOptions(25), new FakeSource(8, TimeSpan.FromMilliseconds(150)), new FakeCollector());
+        var executionId = Guid.NewGuid();
+        Sys.EventStream.Subscribe(TestActor, typeof(StreamRegionProgress));
+
+        var executor = StartExecutor(definition, services, executionId);
+        executor.Tell(new StartExecution(executionId));
+
+        var live = new List<StreamRegionProgress>();
+        StreamRegionProgress final;
+        while (true)
+        {
+            var p = ExpectMsg<StreamRegionProgress>(TimeSpan.FromSeconds(15));
+            p.ExecutionId.Should().Be(executionId);
+            if (p.Completed)
+            {
+                final = p;
+                break;
+            }
+
+            live.Add(p);
+        }
+
+        live.Should().NotBeEmpty(because: "a region running ~1.2 s with a 25 ms interval reports while it runs");
+        live.Select(p => p.ItemCounts["src"]).Should().BeInAscendingOrder().And.OnlyContain(n => n < 8);
+        Enumerable.Zip(live, live.Skip(1)).Should().OnlyContain(
+            pair => pair.Item1.ItemCounts["src"] != pair.Item2.ItemCounts["src"] || pair.Item1.ItemCounts["collect"] != pair.Item2.ItemCounts["collect"],
+            because: "unchanged counts aren't re-sent");
+        live.Select(p => p.Duration).Should().BeInAscendingOrder();
+        final.ItemCounts["src"].Should().Be(8);
+        final.ItemCounts["collect"].Should().Be(8);
+        ExpectNoMsg(TimeSpan.FromMilliseconds(200)); // the timer stops with the region~
+    }
+
+    /// <summary>📡 Stage 7.6 — <c>Streaming:ProgressIntervalMs</c> = 0 means the final summary only.</summary>
+    [Fact]
+    public void Region_WithIntervalZero_PublishesOnlyTheFinalSummary()
+    {
+        var definition = Definition(
+            [Node("src", "test.stream.source"), Node("collect", "test.stream.collect")],
+            [new ConnectionDefinition("src", "items", "collect", "items")]);
+
+        var services = Services(new StreamingProgressOptions(0), new FakeSource(10, TimeSpan.FromMilliseconds(40)), new FakeCollector());
+        var executionId = Guid.NewGuid();
+        Sys.EventStream.Subscribe(TestActor, typeof(StreamRegionProgress));
+
+        var executor = StartExecutor(definition, services, executionId);
+        executor.Tell(new StartExecution(executionId));
+
+        var first = ExpectMsg<StreamRegionProgress>(TimeSpan.FromSeconds(15));
+        first.Completed.Should().BeTrue();
+        first.ItemCounts["src"].Should().Be(10);
     }
 
     /// <summary>
@@ -257,8 +328,13 @@ public class StreamRegionExecutionTests : TestKit
     private sealed class FakeSource : FakeStreamModule
     {
         private readonly int count;
+        private readonly TimeSpan delay;
 
-        public FakeSource(int count) => this.count = count;
+        public FakeSource(int count, TimeSpan delay = default)
+        {
+            this.count = count;
+            this.delay = delay;
+        }
 
         public override string ModuleId => "test.stream.source";
 
@@ -274,6 +350,11 @@ public class StreamRegionExecutionTests : TestKit
         {
             for (var i = 0; i < this.count; i++)
             {
+                if (this.delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(this.delay, cancellationToken);
+                }
+
                 await Task.Yield();
                 yield return StreamItem.FromJson(JsonDocument.Parse($$"""{"n":{{i}}}""").RootElement.Clone(), i);
             }

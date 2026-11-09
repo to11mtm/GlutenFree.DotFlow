@@ -6,6 +6,7 @@ namespace Workflow.UI.Client.Execution.State;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>🏃 Phase 3.3.c / 3.5.1 — Per-node run state for the execution overlay (shared by the
 /// designer and the monitor)~ ✨.</summary>
@@ -48,6 +49,7 @@ public sealed class RunState
 {
     private readonly Dictionary<string, NodeRunStatus> nodes = new(StringComparer.Ordinal);
     private readonly List<RunLogEntry> log = new();
+    private readonly Dictionary<string, StreamStageCount> streamCounts = new(StringComparer.Ordinal);
 
     /// <summary>Raised on any change~ 🔔.</summary>
     public event Action? Changed;
@@ -89,6 +91,50 @@ public sealed class RunState
 
     /// <summary>Gets the run log (in order).</summary>
     public IReadOnlyList<RunLogEntry> Log => this.log;
+
+    /// <summary>📡 Stage 7.6 — items each streaming stage (node id) has emitted, live or final.</summary>
+    public IReadOnlyDictionary<string, StreamStageCount> StreamCounts => this.streamCounts;
+
+    /// <summary>
+    /// 📡 Stage 7.6 — applies streaming-region item counts. Events for another execution are
+    /// ignored; a late live snapshot never overwrites a final count.
+    /// </summary>
+    /// <param name="executionId">The execution the counts belong to.</param>
+    /// <param name="regionIndex">The streaming region.</param>
+    /// <param name="itemCounts">Items per stage node id.</param>
+    /// <param name="elapsedMs">Time since the region started.</param>
+    /// <param name="completed">Whether these are the final counts.</param>
+    public void StreamProgress(Guid executionId, int regionIndex, IReadOnlyDictionary<string, long> itemCounts, double elapsedMs, bool completed)
+    {
+        if (executionId != this.ExecutionId)
+        {
+            return;
+        }
+
+        foreach (var (nodeId, count) in itemCounts)
+        {
+            if (this.streamCounts.TryGetValue(nodeId, out var existing) && existing.Completed && !completed)
+            {
+                continue; // a live tick that arrives after the final summary~
+            }
+
+            this.streamCounts[nodeId] = new StreamStageCount(regionIndex, count, elapsedMs, completed);
+        }
+
+        if (completed)
+        {
+            this.AddLog($"streaming region {regionIndex} finished: " + string.Join(", ", itemCounts.Select(kv => $"{kv.Key} {kv.Value:N0}")));
+            return; // AddLog raised already
+        }
+
+        this.Raise();
+    }
+
+    /// <summary>📡 Stage 7.6 — the item-count badge for a node on the canvas (null when not streaming).</summary>
+    /// <param name="nodeId">The node id.</param>
+    /// <returns>e.g. "1,234 items", or null.</returns>
+    public string? ItemBadgeFor(string nodeId)
+        => this.streamCounts.TryGetValue(nodeId, out var c) ? $"{c.Items:N0} item{(c.Items == 1 ? string.Empty : "s")}" : null;
 
     /// <summary>The CSS state class for a node (empty when unknown)~ 🎨.</summary>
     /// <param name="nodeId">The node id.</param>
@@ -217,3 +263,10 @@ public sealed class RunState
 
     private void Raise() => this.Changed?.Invoke();
 }
+
+/// <summary>📡 Stage 7.6 — one streaming stage's item count.</summary>
+/// <param name="RegionIndex">The streaming region.</param>
+/// <param name="Items">Items emitted so far (or in total, once completed).</param>
+/// <param name="ElapsedMs">Time since the region started.</param>
+/// <param name="Completed">Whether the region has finished.</param>
+public sealed record StreamStageCount(int RegionIndex, long Items, double ElapsedMs, bool Completed);

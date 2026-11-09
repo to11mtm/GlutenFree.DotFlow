@@ -57,7 +57,7 @@ A few findings need a design decision before "correct behaviour" can be asserted
 exercised without a hanging/heavy setup. These stay in the docs, not here:
 
 - 01 §12.8 — Scheduled / Event triggers have no runtime (nothing to assert against).
-- 03 §9.1 — `StreamRegionProgress` isn't forwarded to SignalR (no client event contract exists yet).
+- ~~03 §9.1 — `StreamRegionProgress` isn't forwarded to SignalR~~ — fixed in Stage 7.6 (`StreamRegionExecutionTests`, `ExecutionEventBridgeTests.StreamRegionProgress_Broadcast`).
 - 03 §9.2 — regions have no timeout (a test would need a hanging module).
 - 03 §9.3 — retrying a mid-pipeline stage: the current blame-the-source behaviour makes the exact
   repro ambiguous; revisit once stage-level blame exists.

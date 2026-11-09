@@ -146,4 +146,40 @@ public sealed class ExecutionDetailTests : TestContext
 
         this.Services.GetRequiredService<NavigationManager>().Uri.Should().EndWith($"/designer/{wf}");
     }
+
+    /// <summary>📡 Stage 7.6 — the detail page shows per-stage streaming item counts as they arrive.</summary>
+    [Fact]
+    public void Detail_ShowsStreamingItemCounts_LiveThenFinal()
+    {
+        var id = Guid.NewGuid();
+        this.UseHandler(id, Guid.NewGuid(), "Running");
+        var cut = this.RenderComponent<ExecutionDetail>(p => p.Add(x => x.ExecutionId, id.ToString()));
+        cut.WaitForAssertion(() => cut.Find("[data-testid=detail-state]"));
+        cut.FindAll("[data-testid=stream-progress]").Should().BeEmpty();
+        var realTime = this.Services.GetRequiredService<RealTimeClient>();
+
+        RaiseStreamProgress(realTime, new StreamProgressEvent(Guid.NewGuid(), 0, new Dictionary<string, long> { ["src"] = 9 }, 100, false, DateTimeOffset.UtcNow));
+        cut.FindAll("[data-testid=stream-progress]").Should().BeEmpty(because: "another execution's counts");
+
+        RaiseStreamProgress(realTime, new StreamProgressEvent(id, 0, new Dictionary<string, long> { ["src"] = 1234, ["sink"] = 1200 }, 1500, false, DateTimeOffset.UtcNow));
+        cut.WaitForAssertion(() =>
+        {
+            var row = cut.Find("[data-testid=stream-stage-src]").TextContent;
+            row.Should().Contain(1234.ToString("N0")).And.Contain("running");
+        });
+
+        RaiseStreamProgress(realTime, new StreamProgressEvent(id, 0, new Dictionary<string, long> { ["src"] = 2000, ["sink"] = 2000 }, 2600, true, DateTimeOffset.UtcNow));
+        cut.WaitForAssertion(() =>
+        {
+            var row = cut.Find("[data-testid=stream-stage-sink]").TextContent;
+            row.Should().Contain(2000.ToString("N0")).And.Contain("done");
+        });
+    }
+
+    /// <summary>Raises <see cref="RealTimeClient.StreamProgress"/> as the hub connection would.</summary>
+    private static void RaiseStreamProgress(RealTimeClient client, StreamProgressEvent e)
+    {
+        var field = typeof(RealTimeClient).GetField(nameof(RealTimeClient.StreamProgress), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        ((Action<StreamProgressEvent>?)field.GetValue(client))?.Invoke(e);
+    }
 }

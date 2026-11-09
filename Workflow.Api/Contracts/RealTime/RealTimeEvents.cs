@@ -67,6 +67,15 @@ public sealed record NodeFailedEvent(Guid ExecutionId, string NodeId, string Err
 /// <param name="Timestamp">When the update occurred.</param>
 public sealed record ExecutionProgressEvent(Guid ExecutionId, int Percentage, string? CurrentNode, int CompletedNodes, int TotalNodes, DateTimeOffset Timestamp);
 
+/// <summary>📡 Stage 7.6 — item counts for a streaming region, live or final.</summary>
+/// <param name="ExecutionId">The execution id.</param>
+/// <param name="RegionIndex">Which streaming region of the workflow.</param>
+/// <param name="ItemCounts">Items each stage (node id) has emitted so far.</param>
+/// <param name="ElapsedMs">Time since the region started, in milliseconds.</param>
+/// <param name="Completed">False while it runs; true for the final counts.</param>
+/// <param name="Timestamp">When the counts were taken.</param>
+public sealed record StreamProgressEvent(Guid ExecutionId, int RegionIndex, IReadOnlyDictionary<string, long> ItemCounts, double ElapsedMs, bool Completed, DateTimeOffset Timestamp);
+
 /// <summary>
 /// 📸 A point-in-time status snapshot pushed to a client immediately after it subscribes to an
 /// execution, so late subscribers aren't blank until the next live event~ ✨.

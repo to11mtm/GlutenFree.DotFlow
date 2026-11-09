@@ -131,6 +131,7 @@ public sealed class ExecutionEventBridge : IHostedService
         typeof(WorkflowFailed),
         typeof(NodeExecutionCompleted),
         typeof(NodeExecutionFailed),
+        typeof(StreamRegionProgress),
     };
 
     private async Task ConsumeAsync(CancellationToken ct)
@@ -217,6 +218,17 @@ public sealed class ExecutionEventBridge : IHostedService
                 var wf = await this.ResolveWorkflowIdAsync(e.ExecutionId, ct).ConfigureAwait(false);
                 await this.BroadcastAsync(e.ExecutionId, wf, c => c.ExecutionProgress(
                     new ExecutionProgressEvent(e.ExecutionId, e.Percentage, current, e.CompletedNodes, e.TotalNodes, now))).ConfigureAwait(false);
+                break;
+            }
+
+            case StreamRegionProgress e:
+            {
+                // 📡 Stage 7.6 — live per-stage item counts while a streaming region runs, then a
+                // final one with Completed = true~
+                var wf = await this.ResolveWorkflowIdAsync(e.ExecutionId, ct).ConfigureAwait(false);
+                var counts = new Dictionary<string, long>(e.ItemCounts, StringComparer.Ordinal);
+                await this.BroadcastAsync(e.ExecutionId, wf, c => c.StreamProgress(
+                    new StreamProgressEvent(e.ExecutionId, e.RegionIndex, counts, e.Duration.TotalMilliseconds, e.Completed, now))).ConfigureAwait(false);
                 break;
             }
 

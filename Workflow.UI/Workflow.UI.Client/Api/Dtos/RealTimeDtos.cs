@@ -35,6 +35,9 @@ public sealed record NodeFailedEvent(Guid ExecutionId, string NodeId, string Err
 /// <summary>💫 Execution progress.</summary>
 public sealed record ExecutionProgressEvent(Guid ExecutionId, int Percentage, string? CurrentNode, int CompletedNodes, int TotalNodes, DateTimeOffset Timestamp);
 
+/// <summary>📡 Stage 7.6 — item counts for a streaming region: live (Completed = false) or final.</summary>
+public sealed record StreamProgressEvent(Guid ExecutionId, int RegionIndex, IReadOnlyDictionary<string, long> ItemCounts, double ElapsedMs, bool Completed, DateTimeOffset Timestamp);
+
 /// <summary>📸 Snapshot pushed after subscribing to an execution.</summary>
 public sealed record ExecutionSnapshotEvent(
     Guid ExecutionId,

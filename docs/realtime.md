@@ -98,6 +98,37 @@ omitted; fetch them via `GET /api/v1/executions/{id}` when needed.
 | `NodeFailed` | `executionId`, `nodeId`, `error`, `durationMs`, `timestamp` |
 | `ExecutionProgress` | `executionId`, `percentage`, `currentNode?`, `completedNodes`, `totalNodes`, `timestamp` |
 | `ExecutionSnapshot` | `executionId`, `state`, `progress`, `nodeStates`, `endTime?`, `error?` |
+| `StreamProgress` | `executionId`, `regionIndex`, `itemCounts` (node id → items emitted), `elapsedMs`, `completed`, `timestamp` |
+
+### Streaming progress
+
+While a [streaming region](architecture/03-streaming-and-spill.md) runs, it sends
+`StreamProgress` with each stage's item count so far (`completed: false`):
+- one is sent every `Streaming:ProgressIntervalMs` (default **1000**);
+- one is sent only if the counts changed since the last one.
+
+When the region finishes, one more event carries the totals and the region's duration
+(`completed: true`).
+
+Set `Streaming:ProgressIntervalMs` to `0` to send only the final event.
+
+```mermaid
+sequenceDiagram
+    participant R as StreamRegionExecutor
+    participant E as WorkflowExecutor
+    participant B as ExecutionEventBridge
+    participant C as Client (designer run mode, execution detail)
+    loop every ProgressIntervalMs, while counts change
+        R->>B: StreamRegionProgress (Completed = false)
+        B->>C: StreamProgress { completed: false }
+    end
+    R->>E: region finished
+    E->>B: StreamRegionProgress (Completed = true)
+    B->>C: StreamProgress { completed: true }
+```
+
+The designer's run mode shows the count as a badge on each streaming node. The execution detail
+page lists each stage's items and elapsed time.
 
 ---
 

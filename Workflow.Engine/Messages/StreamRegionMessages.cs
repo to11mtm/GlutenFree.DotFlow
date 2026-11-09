@@ -67,7 +67,11 @@ public record StreamRegionFailed(
 /// <param name="RegionIndex">The region's stable index. 🔢.</param>
 /// <param name="ItemCounts">Items emitted per stage node id. 📊.</param>
 /// <param name="Duration">Wall-clock duration of the region. ⏱️.</param>
-/// <param name="Timestamp">When the region finished. ⏰.</param>
+/// <param name="Timestamp">When the region finished (or, live, when the snapshot was taken). ⏰.</param>
+/// <param name="Completed">
+/// 📡 Stage 7.6 — false for a live snapshot sent while the region runs (counts so far, elapsed
+/// time); true for the final event when it finishes.
+/// </param>
 /// <remarks>
 /// CopilotNote: The 3.2 <c>ExecutionEventBridge</c> already forwards EventStream messages to
 /// SignalR, so publishing here is all the monitor needs to learn about stage throughput — no hub
@@ -78,4 +82,16 @@ public record StreamRegionProgress(
     int RegionIndex,
     IReadOnlyDictionary<string, long> ItemCounts,
     TimeSpan Duration,
-    DateTimeOffset Timestamp);
+    DateTimeOffset Timestamp,
+    bool Completed = true);
+
+/// <summary>
+/// 📡 Stage 7.6 — how often a running streaming region publishes live progress. Registered by the
+/// host from <c>Streaming:ProgressIntervalMs</c>; when absent, the default applies.
+/// </summary>
+/// <param name="IntervalMs">Milliseconds between live snapshots (0 or less = final summary only).</param>
+public sealed record StreamingProgressOptions(int IntervalMs = StreamingProgressOptions.DefaultIntervalMs)
+{
+    /// <summary>The default interval.</summary>
+    public const int DefaultIntervalMs = 1000;
+}

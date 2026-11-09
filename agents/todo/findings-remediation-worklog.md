@@ -161,7 +161,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.3 | ✅ **fixed 2026-11-09** (outbound HTTP policy, plan 06, `docs/outbound-http.md`) — ~~**§9.6 (modules) script HTTP has no host allowlist (SSRF)**~~ | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
 | 7.4 | **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
 | 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
-| 7.6 | **§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR** | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
+| 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
 | 7.7 | **§9.5 (streaming) no regions inside construct bodies** | Low | plan 04 | No (parity work), but low priority | 1–2 d |
 | 7.8 | **§9.3 (streaming) mid-pipeline retry**: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
 | 7.9 | **Expression evaluation blocks the `NodeExecutor` thread** (`.GetAwaiter().GetResult()`) | Low | 02 data-binding §10, item 5 | No | ~0.5 d |
@@ -266,6 +266,40 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.6 streaming progress to live clients (§9.1 streaming)
+- Decided (asked; plan 04 "Low"):
+  - Live + final.
+  - Shown in designer run mode and on the execution detail page.
+  - Every 1 s, configurable via `Streaming:ProgressIntervalMs` (0 = final only).
+- Engine:
+  - `StreamRegionCounters` (shared, readable mid-run) passed to `StreamRegionRunner.RunAsync`.
+  - `StreamRegionExecutor` schedules a repeating `ProgressTick`, publishes
+    `StreamRegionProgress(..., Completed: false)` only when the counts changed, and cancels it when
+    the region finishes or the actor stops.
+  - The final event from `WorkflowExecutor` defaults to `Completed = true`.
+  - `StreamingProgressOptions` (default 1000 when not registered).
+- API:
+  - The bridge subscribes to `StreamRegionProgress` and maps it to `IWorkflowHubClient.StreamProgress(StreamProgressEvent)`.
+  - Program.cs registers the interval.
+- UI:
+  - `RealTimeClient.StreamProgress`.
+  - `RunState.StreamProgress` / `StreamCounts` / `ItemBadgeFor`: ignores other executions; a late
+    live tick never overwrites the final count.
+  - `NodeView` `RunBadge` (`node-items`) via `CanvasView.NodeRunBadge`.
+  - An ExecutionDetail "streaming items" table.
+- **Test change (not weakened):** `Region_PublishesPerStageItemCounts` now waits for the final
+  event (`FishForMessage(p => p.Completed)`), because live events may come first. Its assertions are
+  unchanged.
+- Tests:
+  - Engine: live-then-final, interval 0.
+  - Bridge: live and final.
+  - `StreamingProgressConfigTests`.
+  - UI: RunState ×2, canvas badge, detail table.
+  - Mutants killed (7/7): no timer, no "changed" check, live marked final, config ignored, bridge
+    not subscribed, late live overwrites final, other executions accepted.
+- Docs: `docs/realtime.md` (event and diagram), 03 §9 item 1, findings table, plan 04.
+- Suites: unfiltered `dotnet test Workflow.Tests` 1952/1952; `Workflow.Tests.UI` 779/779. Live test repeated 5× green.
+
 ### 2026-11-09 — Stage 7.3 outbound HTTP policy (SSRF)
 - Decided (asked twice; plan 06 §1 + §8):
   - Separate Scripts / HttpModule channels, and four modes with allow/deny lists (deny wins).

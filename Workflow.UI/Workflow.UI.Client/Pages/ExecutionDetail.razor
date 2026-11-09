@@ -39,6 +39,26 @@
     @if (detail is not null)
     {
         <NodeInspector Nodes="NodeRecords" OnSelect="SelectNode" />
+        @if (runState.StreamCounts.Count > 0)
+        {
+            <div class="df-streamprogress" data-testid="stream-progress">
+                <div class="df-nodeinspect__label">streaming items</div>
+                <table>
+                    <thead><tr><th>stage</th><th>items</th><th>elapsed</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var (nodeId, c) in runState.StreamCounts.OrderBy(kv => kv.Value.RegionIndex).ThenBy(kv => kv.Key, StringComparer.Ordinal))
+                        {
+                            <tr data-testid="stream-stage-@nodeId">
+                                <td>@nodeId</td>
+                                <td>@c.Items.ToString("N0")</td>
+                                <td>@((c.ElapsedMs / 1000).ToString("F1")) s</td>
+                                <td>@(c.Completed ? "done" : "running…")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
         <div class="df-execdetail__logs">
             <div class="df-nodeinspect__label">run log</div>
             <LogViewer Entries="runState.Log" />
@@ -120,6 +140,7 @@
         this.runState.ExecutionId = id;
         this.RealTime.ExecutionSnapshot += this.OnSnapshot;
         this.RealTime.NodeStarted += this.OnNodeStarted;
+        this.RealTime.StreamProgress += this.OnStreamProgress;
         this.RealTime.NodeCompleted += this.OnNodeCompleted;
         this.RealTime.NodeFailed += this.OnNodeFailed;
         this.RealTime.ExecutionCompleted += this.OnExecutionDone;
@@ -169,6 +190,13 @@
             this.runState.NodeFailed(e.NodeId, e.Error, e.DurationMs);
             this.InvokeAsync(this.StateHasChanged);
         }
+    }
+
+    private void OnStreamProgress(Workflow.UI.Client.Api.Dtos.StreamProgressEvent e)
+    {
+        // 📡 Stage 7.6 — RunState ignores other executions' counts~
+        this.runState.StreamProgress(e.ExecutionId, e.RegionIndex, e.ItemCounts, e.ElapsedMs, e.Completed);
+        this.InvokeAsync(this.StateHasChanged);
     }
 
     private async void OnExecutionDone(Workflow.UI.Client.Api.Dtos.ExecutionCompletedEvent e)
@@ -269,6 +297,7 @@
         this.disposed = true;
         this.RealTime.ExecutionSnapshot -= this.OnSnapshot;
         this.RealTime.NodeStarted -= this.OnNodeStarted;
+        this.RealTime.StreamProgress -= this.OnStreamProgress;
         this.RealTime.NodeCompleted -= this.OnNodeCompleted;
         this.RealTime.NodeFailed -= this.OnNodeFailed;
         this.RealTime.ExecutionCompleted -= this.OnExecutionDone;

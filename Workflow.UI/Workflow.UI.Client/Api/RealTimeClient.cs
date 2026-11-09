@@ -53,6 +53,9 @@ public sealed class RealTimeClient : IAsyncDisposable
     /// <summary>Raised on progress updates~ 💫.</summary>
     public event Action<ExecutionProgressEvent>? ExecutionProgress;
 
+    /// <summary>📡 Stage 7.6 — raised with streaming-region item counts (live and final).</summary>
+    public event Action<StreamProgressEvent>? StreamProgress;
+
     /// <summary>Raised with the initial snapshot after subscribing~ 📸.</summary>
     public event Action<ExecutionSnapshotEvent>? ExecutionSnapshot;
 
@@ -184,6 +187,7 @@ public sealed class RealTimeClient : IAsyncDisposable
         conn.On<NodeCompletedEvent>("NodeCompleted", e => this.NodeCompleted?.Invoke(e));
         conn.On<NodeFailedEvent>("NodeFailed", e => this.NodeFailed?.Invoke(e));
         conn.On<ExecutionProgressEvent>("ExecutionProgress", e => this.ExecutionProgress?.Invoke(e));
+        conn.On<StreamProgressEvent>("StreamProgress", e => this.StreamProgress?.Invoke(e));
         conn.On<ExecutionSnapshotEvent>("ExecutionSnapshot", e => this.ExecutionSnapshot?.Invoke(e));
     }
 }

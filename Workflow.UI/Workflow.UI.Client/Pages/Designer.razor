@@ -112,7 +112,7 @@ else if (document is not null)
             else
             {
                 <div class="df-designer__canvas">
-                    <CanvasView @ref="canvas" Document="document" ModuleIcon="IconFor" NodeStateClass="runState.CssClassFor" />
+                    <CanvasView @ref="canvas" Document="document" ModuleIcon="IconFor" NodeStateClass="runState.CssClassFor" NodeRunBadge="runState.ItemBadgeFor" />
                 </div>
                 <div class="df-designer__props">
                     <RunOverlay Document="document" Run="runState" Reconnecting="reconnecting" OnCancel="CancelRun" OnClose="CloseRun" OnRerun="Rerun" OnJumpTo="JumpTo" />
@@ -915,6 +915,7 @@ else if (document is not null)
         RealTime.NodeCompleted += e => this.runState?.NodeCompleted(e.NodeId, e.DurationMs);
         RealTime.NodeFailed += e => this.runState?.NodeFailed(e.NodeId, e.Error, e.DurationMs);
         RealTime.ExecutionProgress += e => this.runState?.Progress(e.Percentage, e.CurrentNode, e.CompletedNodes, e.TotalNodes);
+        RealTime.StreamProgress += e => this.runState?.StreamProgress(e.ExecutionId, e.RegionIndex, e.ItemCounts, e.ElapsedMs, e.Completed);
         RealTime.ExecutionCompleted += e => this.runState?.MarkCompleted(e.DurationMs);
         RealTime.ExecutionFailed += e => this.runState?.MarkFailed(e.Error, e.DurationMs);
         RealTime.Reconnecting += () => { this.reconnecting = true; this.InvokeAsync(this.StateHasChanged); };

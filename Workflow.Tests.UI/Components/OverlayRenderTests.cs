@@ -101,4 +101,20 @@ public sealed class OverlayRenderTests : TestContext
         cut.Find("[data-node-id=a]").ClassList.Should().Contain("df-node--running");
         cut.Find("[data-node-id=b]").ClassList.Should().Contain("df-node--failed");
     }
+
+    /// <summary>📡 Stage 7.6 — in run mode, a streaming stage shows its item count on the canvas.</summary>
+    [Fact]
+    public void Canvas_ShowsStreamingItemCounts_FromRunState()
+    {
+        var doc = TwoNodeDoc();
+        var run = new RunState { ExecutionId = System.Guid.NewGuid() };
+        run.StreamProgress(run.ExecutionId, 0, new System.Collections.Generic.Dictionary<string, long> { ["a"] = 42 }, 900, completed: false);
+
+        var cut = this.RenderComponent<CanvasView>(p => p
+            .Add(x => x.Document, doc)
+            .Add(x => x.NodeRunBadge, run.ItemBadgeFor));
+
+        cut.Find("[data-node-id=a] [data-testid=node-items]").TextContent.Should().Be("42 items");
+        cut.FindAll("[data-node-id=b] [data-testid=node-items]").Should().BeEmpty();
+    }
 }
