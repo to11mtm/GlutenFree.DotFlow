@@ -159,7 +159,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.1 | ✅ ~~**§9.7 (streaming) `Blob` spill can resolve to the in-memory blob store**~~ — **fixed 2026-11-08**, `Streaming/BlobSpillDurabilityTests` | Medium | plan 04 "Documented-only" | Small: fail fast at startup vs. require a durable persistence provider (plan leans fail-fast) | ~0.5 d |
 | 7.2 | ✅ **fixed 2026-11-08** (conditional edges, `docs/conditional-edges.md`) — ~~**`ConnectionDefinition.Condition` / `Priority` are never read**~~, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
 | 7.3 | ✅ **fixed 2026-11-09** (outbound HTTP policy, plan 06, `docs/outbound-http.md`) — ~~**§9.6 (modules) script HTTP has no host allowlist (SSRF)**~~ | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
-| 7.4 | **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
+| 7.4 | 🔄 **in progress** (signed packages, plan 07; part 1/3 done) — **§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
 | 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
 | 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
 | 7.7 | ✅ **fixed 2026-11-09** (`SubGraphExecutor` runs regions wholly inside a body) — ~~**§9.5 (streaming) no regions inside construct bodies**~~ | Low | plan 04 | No (parity work), but low priority | 1–2 d |
@@ -283,6 +283,60 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.4 part 1/3: signed module packages (verification, install record, re-check on load)
+- Decided (asked in two rounds; `docs/architecture/plans/07-module-package-signing.md`):
+  - Signed packages: a detached CMS signature (`signature.p7s`) over `module.json`, which must hash
+    every file. Must work on Windows and Linux.
+  - Trust: pinned certificates plus optional CA roots; revocation opt-in.
+  - Every load is re-checked: warn, or refuse under `RequireSigned`.
+  - The strong-name token is kept as an accepted option, labelled "key pin only".
+  - Tooling: a CLI plus openssl docs.
+  - UI: all three pieces (badge, upload result, Trusted publishers page).
+- Core (`Workflow.Modules`):
+  - `Security/TrustedPublishers.cs`: options, set and provider.
+  - `Security/PackageSignatureVerifier.cs`: `SignedCms`; a pinned SHA-256/SHA-1 thumbprint or PEM;
+    a CA chain with `CustomRootTrust`; expiry checked at install only.
+  - `Security/ModuleTrust.cs`: `ModuleTrust` (Verified / KeyPinOnly / Unsigned / Untrusted /
+    ChangedOnDisk), `ModuleTrustInfo`, `ModuleInstallRecord`, `IModuleLoadGate`.
+  - New package reference: `System.Security.Cryptography.Pkcs` 8.0.1.
+- Reader: keeps the exact `module.json` bytes and `signature.p7s`. A signed package whose
+  `contentHashes` miss any file is refused.
+- Installer:
+  - An invalid signature (tampered `module.json`) is always refused.
+  - `Decide()`: a Verified signature, else a trusted strong-name token (KeyPinOnly, with a "not
+    proof of authorship" warning), else Unsigned / Untrusted.
+  - `RequireSigned` accepts Verified or KeyPinOnly.
+  - Writes `.dotflow-install.json` (the trust and every file's hash).
+  - `RehydrateAsync` runs `CheckInstalled` first. It compares the files with the record; with the
+    same files it re-verifies the signature and the publisher's trust without the time check.
+  - `TrustFor(packageId, version)` returns the last result.
+  - Implements `IModuleLoadGate` (installed package files, or loose DLLs via the token check).
+  - **Behaviour change:** with `RequireSigned` on and no assembly verifier wired, an unsigned
+    package is now refused. Before, the check was skipped when no verifier was wired; the API
+    always wires one.
+- Hot reload: `ModuleReloadService` takes an optional gate, wired from the installer by
+  `ModuleHotReloadHostedService`. A refused reload returns the new `ModuleReloadOutcome.Refused`,
+  and the current version stays loaded.
+- API: `Program.cs` binds `Modules:Security:TrustedPublishers` → `StaticTrustedPublisherProvider`
+  (`TryAdd`, so part 2 can replace it) → `PackageSignatureVerifier` → installer.
+- Tests: `Modules/Security/PackageSigningTests` (19), using real throwaway certificates (RSA
+  `CertificateRequest`, a CA root and an issued leaf) and real CMS signing.
+- Proof: 10/10 mutants killed:
+  - signature not checked;
+  - pinned expiry ignored;
+  - included certificates treated as roots;
+  - unhashed files allowed;
+  - invalid signature not refused;
+  - key-pin option dropped;
+  - changes on disk ignored;
+  - startup re-load ignores refusal;
+  - publisher trust not re-checked;
+  - hot reload ignores refusal.
+- Next: part 2 (API signature status, Trusted publishers store and page, module-list badge,
+  upload result), then part 3 (`dotflow-module` CLI, `docs/module-signing.md`, 04 §9.5, findings
+  table).
+- Suites: unfiltered `dotnet test Workflow.Tests` 1982/1982; `Workflow.Tests.UI` 779/779.
+
 ### 2026-11-09 — Async binding follow-up (IPropertyBinder → async, conditions off the executor thread)
 - No decision needed. The 7.2 semantics are unchanged: a bad condition fails the source node, and
   in a Priority chain the first true edge per port wins.

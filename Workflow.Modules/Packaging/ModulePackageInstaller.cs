@@ -5,6 +5,7 @@
 namespace Workflow.Modules.Packaging;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -22,7 +23,7 @@ using Workflow.Modules.Security;
 /// <see cref="ModulePackageReader"/>, gates on engine version, extracts to a content-addressed
 /// directory, loads through <see cref="IModuleLoader"/>, and rolls back on failure~ ✨.
 /// </summary>
-public sealed class ModulePackageInstaller
+public sealed class ModulePackageInstaller : IModuleLoadGate
 {
     private readonly IModuleLoader loader;
     private readonly IModuleRegistry registry;
@@ -30,7 +31,18 @@ public sealed class ModulePackageInstaller
     private readonly ModulePackagingOptions options;
     private readonly IModulePackageArchive? archive;
     private readonly IAssemblyVerifier? verifier;
+    private readonly PackageSignatureVerifier? signatureVerifier;
     private readonly ILogger logger;
+
+    // 🔏 Stage 7.4 — the trust of each installed version (by its directory), as last checked~
+    private readonly ConcurrentDictionary<string, ModuleTrustInfo> trustByDirectory = new(StringComparer.OrdinalIgnoreCase);
+
+    private static readonly System.Text.Json.JsonSerializerOptions RecordJson = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
 
     /// <summary>Initializes a new instance of the <see cref="ModulePackageInstaller"/> class~ 🏗️.</summary>
     /// <param name="loader">The assembly module loader.</param>
@@ -40,6 +52,10 @@ public sealed class ModulePackageInstaller
     /// <param name="archive">Optional package-archival seam (Q1).</param>
     /// <param name="verifier">Optional assembly signature verifier (Phase 2.8.4).</param>
     /// <param name="logger">Optional logger.</param>
+    /// <param name="signatureVerifier">
+    /// 🔏 Stage 7.4 — optional package signature verifier (trusted publishers). Without it, a signed
+    /// package is treated as signed by an untrusted publisher.
+    /// </param>
     public ModulePackageInstaller(
         IModuleLoader loader,
         IModuleRegistry registry,
@@ -47,8 +63,10 @@ public sealed class ModulePackageInstaller
         ModulePackageReader? reader = null,
         IModulePackageArchive? archive = null,
         IAssemblyVerifier? verifier = null,
-        ILogger<ModulePackageInstaller>? logger = null)
+        ILogger<ModulePackageInstaller>? logger = null,
+        PackageSignatureVerifier? signatureVerifier = null)
     {
+        this.signatureVerifier = signatureVerifier;
         this.loader = loader ?? throw new ArgumentNullException(nameof(loader));
         this.registry = registry ?? throw new ArgumentNullException(nameof(registry));
         this.options = options ?? throw new ArgumentNullException(nameof(options));
@@ -82,6 +100,13 @@ public sealed class ModulePackageInstaller
         var manifest = read.Manifest;
         var version = manifest.ParseVersion()!;
         var warnings = new List<string>(read.Warnings);
+
+        // 🔏 Stage 7.4 — a signature that doesn't match is tampering: refused whatever the policy~
+        var signature = this.VerifySignature(read.ManifestBytes, read.SignatureBytes, checkTime: true);
+        if (signature.Status == PackageSignatureStatus.Invalid)
+        {
+            return ModuleInstallResult.Fail(ModuleInstallFailureReason.InvalidPackage, signature.Messages.ToArray());
+        }
 
         // 🏷️ Engine version gate (SemVer) — Q6~
         if (this.EngineTooOld(manifest, out var engineError))
@@ -147,21 +172,28 @@ public sealed class ModulePackageInstaller
             return ModuleInstallResult.Fail(ModuleInstallFailureReason.LoadFailed, $"Entry assembly '{manifest.EntryAssembly}' missing after extraction.");
         }
 
-        // 🔏 Phase 2.8.4 — Signature policy (warn by default, block when RequireSigned)~
-        if (this.verifier is not null)
+        // 🔏 Phase 2.8.4 / Stage 7.4 — trust policy: a trusted publisher's signature, or (the kept,
+        // weaker option) a trusted strong-name token. Warn by default, block when RequireSigned~
+        var trust = this.Decide(signature, this.verifier?.Verify(entryDll));
+        if (this.options.RequireSigned && !trust.SatisfiesRequireSigned)
         {
-            var verification = this.verifier.Verify(entryDll);
-            if (this.options.RequireSigned && (!verification.Signed || !verification.Trusted))
-            {
-                SafeDelete(targetDir);
-                return ModuleInstallResult.Fail(
-                    ModuleInstallFailureReason.Untrusted,
-                    verification.Messages.Count > 0
-                        ? verification.Messages.ToArray()
-                        : new[] { "Assembly is unsigned or untrusted and Modules:Security:RequireSigned is enabled." });
-            }
+            SafeDelete(targetDir);
+            return ModuleInstallResult.Fail(
+                ModuleInstallFailureReason.Untrusted,
+                trust.Messages.Count > 0
+                    ? trust.Messages.ToArray()
+                    : new[] { "The package isn't signed by a trusted publisher and Modules:Security:RequireSigned is enabled." });
+        }
 
-            warnings.AddRange(verification.Messages);
+        warnings.AddRange(trust.Messages);
+        try
+        {
+            WriteInstallRecord(targetDir, trust);
+        }
+        catch (Exception ex)
+        {
+            SafeDelete(targetDir);
+            return ModuleInstallResult.Fail(ModuleInstallFailureReason.LoadFailed, $"Failed to record the installed files: {ex.Message}");
         }
 
         // §9.7 — the module ids this package provides (manifest 'modules', or just its 'id')~
@@ -245,12 +277,15 @@ public sealed class ModulePackageInstaller
             }
         }
 
+        this.trustByDirectory[targetDir] = trust;
         this.logger.LogInformation(
-            "📦 Installed package {PackageId} {Version} ({Modules})~",
+            "📦 Installed package {PackageId} {Version} ({Modules}), trust {Trust}{Publisher}~",
             manifest.Id,
             version,
-            string.Join(", ", declaredIds));
-        return ModuleInstallResult.Ok(manifest.Id, version, warnings) with { ModuleIds = declaredIds };
+            string.Join(", ", declaredIds),
+            trust.Trust,
+            trust.Publisher is null ? string.Empty : $" ({trust.Publisher})");
+        return ModuleInstallResult.Ok(manifest.Id, version, warnings) with { ModuleIds = declaredIds, Trust = trust };
     }
 
     /// <summary>Uninstalls an installed package version (unload + delete)~ 🗑️.</summary>
@@ -286,6 +321,7 @@ public sealed class ModulePackageInstaller
         }
 
         SafeDelete(dir);
+        this.trustByDirectory.TryRemove(dir, out _);
         this.logger.LogInformation("🗑️ Uninstalled module {ModuleId} {Version}~", moduleId, resolvedVersion);
         return Task.FromResult(true);
     }
@@ -331,6 +367,23 @@ public sealed class ModulePackageInstaller
                     continue;
                 }
 
+                // 🔏 Stage 7.4 — re-check against what was verified at install~
+                var check = this.CheckInstalled(versionDir, manifest, entryDll);
+                if (!check.Allowed)
+                {
+                    this.logger.LogError(
+                        "🔏 Not loading '{ModuleId}' {Version}: Modules:Security:RequireSigned is on and {Reasons}",
+                        manifest.Id,
+                        manifest.Version,
+                        string.Join(" ", check.Messages));
+                    continue;
+                }
+
+                foreach (var message in check.Messages)
+                {
+                    this.logger.LogWarning("🔏 '{ModuleId}' {Version}: {Message}", manifest.Id, manifest.Version, message);
+                }
+
                 var result = this.loader.LoadFromAssembly(entryDll, manifest.DeclaredModuleIds());
                 if (result.Success)
                 {
@@ -345,6 +398,223 @@ public sealed class ModulePackageInstaller
 
         this.logger.LogInformation("🔁 Rehydrated {Count} installed module version(s) from '{Root}'~", loaded, root);
         return Task.FromResult(loaded);
+    }
+
+    /// <summary>
+    /// 🔏 Stage 7.4 — the trust of an installed package version, as last checked (install, startup
+    /// re-load or hot reload); null when it hasn't been checked in this process.
+    /// </summary>
+    /// <param name="packageId">The package id (manifest <c>id</c>).</param>
+    /// <param name="version">The version.</param>
+    /// <returns>The trust, or null.</returns>
+    public ModuleTrustInfo? TrustFor(string packageId, Version version)
+        => this.trustByDirectory.TryGetValue(this.VersionDirectory(packageId, version), out var trust) ? trust : null;
+
+    /// <inheritdoc/>
+    public ModuleLoadCheck CheckBeforeLoad(string assemblyPath)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(assemblyPath);
+        var fullPath = Path.GetFullPath(assemblyPath);
+        var root = Path.GetFullPath(this.options.PackagesPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+        // An installed package's file: check the whole version against its install record~
+        if (fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            var segments = fullPath.Substring(root.Length).Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length >= 3)
+            {
+                var versionDir = Path.Combine(root, segments[0], segments[1]);
+                if (TryReadInstalledManifest(versionDir) is { } manifest)
+                {
+                    var entryDll = Path.GetFullPath(Path.Combine(versionDir, manifest.EntryAssembly.Replace('\\', '/')));
+                    return this.CheckInstalled(versionDir, manifest, entryDll);
+                }
+            }
+        }
+
+        // A loose DLL (hot-reload dev folder): only the assembly itself can be checked~
+        var trust = this.Decide(PackageSignatureResult.Unsigned, this.verifier?.Verify(fullPath));
+        return this.Gate(trust);
+    }
+
+    /// <summary>🔏 Stage 7.4 — re-checks an installed version against its install record.</summary>
+    private ModuleLoadCheck CheckInstalled(string versionDir, ModuleManifest manifest, string entryDll)
+    {
+        ModuleTrustInfo trust;
+        var record = TryReadInstallRecord(versionDir);
+        if (record is null)
+        {
+            // Installed before Stage 7.4: nothing to compare with, so judge the assembly as before~
+            var legacy = this.Decide(PackageSignatureResult.Unsigned, this.verifier?.Verify(entryDll));
+            trust = legacy with
+            {
+                Messages = legacy.Messages
+                    .Append("It was installed before package signing, so changes on disk can't be detected; reinstall it (signed) to verify it.")
+                    .ToList(),
+            };
+        }
+        else
+        {
+            var current = HashFiles(versionDir);
+            var changed = record.Files.Where(f => current.TryGetValue(f.Key, out var h) && !string.Equals(h, f.Value, StringComparison.Ordinal)).Select(f => f.Key).ToList();
+            var missing = record.Files.Keys.Where(k => !current.ContainsKey(k)).ToList();
+            var added = current.Keys.Where(k => !record.Files.ContainsKey(k)).ToList();
+            if (changed.Count + missing.Count + added.Count > 0)
+            {
+                var parts = new List<string>();
+                if (changed.Count > 0)
+                {
+                    parts.Add("changed " + string.Join(", ", changed));
+                }
+
+                if (missing.Count > 0)
+                {
+                    parts.Add("missing " + string.Join(", ", missing));
+                }
+
+                if (added.Count > 0)
+                {
+                    parts.Add("added " + string.Join(", ", added));
+                }
+
+                trust = new ModuleTrustInfo(
+                    ModuleTrust.ChangedOnDisk,
+                    record.Publisher,
+                    record.Thumbprint,
+                    PackageTrustSource.None,
+                    new[] { $"Its files changed on disk since it was installed ({string.Join("; ", parts)})." },
+                    DateTimeOffset.UtcNow);
+            }
+            else
+            {
+                // Same files: re-check the signature and the publisher's trust (it may have been
+                // removed since), but not certificate expiry~
+                var manifestPath = Path.Combine(versionDir, ModulePackageReader.ManifestFileName);
+                var signaturePath = Path.Combine(versionDir, ModulePackageReader.SignatureFileName);
+                var signature = this.VerifySignature(
+                    File.ReadAllBytes(manifestPath),
+                    File.Exists(signaturePath) ? File.ReadAllBytes(signaturePath) : null,
+                    checkTime: false);
+                trust = this.Decide(signature, this.verifier?.Verify(entryDll));
+                if (record.Trust == ModuleTrust.Verified && trust.Trust != ModuleTrust.Verified)
+                {
+                    trust = trust with
+                    {
+                        Messages = trust.Messages.Prepend($"It was verified at install as signed by '{record.Publisher}', but that publisher is no longer trusted.").ToList(),
+                    };
+                }
+            }
+        }
+
+        this.trustByDirectory[Path.GetFullPath(versionDir)] = trust;
+        return this.Gate(trust);
+    }
+
+    private ModuleLoadCheck Gate(ModuleTrustInfo trust)
+        => new(!this.options.RequireSigned || trust.SatisfiesRequireSigned, trust, trust.Messages);
+
+    private PackageSignatureResult VerifySignature(byte[] manifestBytes, byte[]? signatureBytes, bool checkTime)
+    {
+        if (signatureBytes is null || signatureBytes.Length == 0)
+        {
+            return PackageSignatureResult.Unsigned;
+        }
+
+        return this.signatureVerifier?.Verify(manifestBytes, signatureBytes, checkTime)
+            ?? new PackageSignatureResult(
+                PackageSignatureStatus.Untrusted,
+                null,
+                null,
+                PackageTrustSource.None,
+                new[] { "The package is signed, but package signature verification isn't configured on this server." });
+    }
+
+    /// <summary>
+    /// 🔏 Stage 7.4 — the trust policy: a trusted publisher's signature verifies; otherwise a trusted
+    /// strong-name token is accepted as key pinning (weaker, kept for existing setups).
+    /// </summary>
+    private ModuleTrustInfo Decide(PackageSignatureResult signature, AssemblyVerificationResult? assembly)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (signature.Status == PackageSignatureStatus.Verified)
+        {
+            return new ModuleTrustInfo(ModuleTrust.Verified, signature.Publisher, signature.Thumbprint, signature.TrustSource, Array.Empty<string>(), now);
+        }
+
+        var messages = new List<string>();
+        if (signature.Status != PackageSignatureStatus.Unsigned)
+        {
+            messages.AddRange(signature.Messages);
+        }
+
+        if (assembly is { Signed: true, Trusted: true })
+        {
+            messages.Add(
+                $"Accepted by its strong-name public key token ({assembly.PublicKeyToken}) only. That's key pinning, not proof of "
+                + "authorship: anyone can build an assembly with a copied public key. Sign the package to verify its publisher.");
+            return new ModuleTrustInfo(ModuleTrust.KeyPinOnly, signature.Publisher, signature.Thumbprint, PackageTrustSource.None, messages, now);
+        }
+
+        if (assembly is not null)
+        {
+            messages.AddRange(assembly.Messages);
+        }
+
+        var level = signature.Status == PackageSignatureStatus.Untrusted ? ModuleTrust.Untrusted : ModuleTrust.Unsigned;
+        return new ModuleTrustInfo(level, signature.Publisher, signature.Thumbprint, PackageTrustSource.None, messages, now);
+    }
+
+    private static void WriteInstallRecord(string versionDir, ModuleTrustInfo trust)
+    {
+        var record = new ModuleInstallRecord(
+            1,
+            trust.Trust,
+            trust.Publisher,
+            trust.Thumbprint,
+            trust.TrustSource,
+            DateTimeOffset.UtcNow,
+            HashFiles(versionDir));
+        File.WriteAllText(
+            Path.Combine(versionDir, ModuleInstallRecord.FileName),
+            System.Text.Json.JsonSerializer.Serialize(record, RecordJson));
+    }
+
+    private static ModuleInstallRecord? TryReadInstallRecord(string versionDir)
+    {
+        var path = Path.Combine(versionDir, ModuleInstallRecord.FileName);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<ModuleInstallRecord>(File.ReadAllText(path), RecordJson);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Every file under the version directory (except the install record) → base64 SHA-256.</summary>
+    private static Dictionary<string, string> HashFiles(string versionDir)
+    {
+        var root = Path.GetFullPath(versionDir);
+        var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            if (string.Equals(relative, ModuleInstallRecord.FileName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            hashes[relative] = Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(stream));
+        }
+
+        return hashes;
     }
 
     private static void ExtractTo(byte[] packageBytes, string destinationRoot)
@@ -527,6 +797,9 @@ public sealed record ModuleInstallResult(
     /// <see cref="ModuleId"/>, which is then both the package id and the module id.
     /// </summary>
     public IReadOnlyList<string> ModuleIds { get; init; } = Array.Empty<string>();
+
+    /// <summary>🔏 Stage 7.4 — gets the installed package's trust (who signed it, and whether they're trusted).</summary>
+    public ModuleTrustInfo? Trust { get; init; }
 
     /// <summary>Creates a successful install result~ ✅.</summary>
     /// <param name="moduleId">The installed module id.</param>

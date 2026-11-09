@@ -47,6 +47,7 @@
     <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
     <!--  Serialization -->
     <PackageVersion Include="System.Text.Json" Version="10.0.1" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="8.0.1" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />
     <!-- ️ Persistence — Linq2Db + FluentMigrator + providers -->
     <PackageVersion Include="linq2db" Version="6.3.0" />

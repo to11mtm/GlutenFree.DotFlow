@@ -133,6 +133,15 @@ builder.Services.AddSingleton<Workflow.Modules.Loading.IModuleLoader>(sp =>
     new Workflow.Modules.Loading.AssemblyModuleLoader(
         sp.GetRequiredService<IModuleRegistry>(),
         logger: sp.GetService<Microsoft.Extensions.Logging.ILogger<Workflow.Modules.Loading.AssemblyModuleLoader>>()));
+// 🔏 Stage 7.4 — trusted publishers for signed module packages (server configuration)~
+builder.Services.TryAddSingleton<Workflow.Modules.Security.ITrustedPublisherProvider>(_ =>
+{
+    var publishers = new Workflow.Modules.Security.TrustedPublisherOptions();
+    builder.Configuration.GetSection(Workflow.Modules.Security.TrustedPublisherOptions.SectionName).Bind(publishers);
+    return new Workflow.Modules.Security.StaticTrustedPublisherProvider(Workflow.Modules.Security.TrustedPublisherSet.From(publishers));
+});
+builder.Services.AddSingleton(sp => new Workflow.Modules.Security.PackageSignatureVerifier(
+    sp.GetRequiredService<Workflow.Modules.Security.ITrustedPublisherProvider>()));
 builder.Services.AddSingleton<Workflow.Modules.Packaging.ModulePackageInstaller>(sp =>
     new Workflow.Modules.Packaging.ModulePackageInstaller(
         sp.GetRequiredService<Workflow.Modules.Loading.IModuleLoader>(),
@@ -141,7 +150,8 @@ builder.Services.AddSingleton<Workflow.Modules.Packaging.ModulePackageInstaller>
         sp.GetRequiredService<Workflow.Modules.Packaging.ModulePackageReader>(),
         sp.GetService<Workflow.Modules.Packaging.IModulePackageArchive>(),
         sp.GetService<Workflow.Modules.Security.IAssemblyVerifier>(),
-        sp.GetService<Microsoft.Extensions.Logging.ILogger<Workflow.Modules.Packaging.ModulePackageInstaller>>()));
+        sp.GetService<Microsoft.Extensions.Logging.ILogger<Workflow.Modules.Packaging.ModulePackageInstaller>>(),
+        sp.GetRequiredService<Workflow.Modules.Security.PackageSignatureVerifier>()));
 builder.Services.AddSingleton<Workflow.Modules.Loading.IActiveExecutionTracker, Workflow.Api.Modules.MetricsActiveExecutionTracker>();
 
 // 🗂️ Phase 2.8.2 — Module state store (file default; repository when Modules:StateStore=repository + provider, Q2)~

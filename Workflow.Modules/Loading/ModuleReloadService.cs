@@ -30,6 +30,9 @@ public sealed class ModuleReloadService
     private readonly TimeSpan pollInterval;
     private readonly TimeSpan maxWait;
 
+    // 🔏 Stage 7.4 — checked before each reload (null = no check)~
+    private readonly Workflow.Modules.Security.IModuleLoadGate? loadGate;
+
     /// <summary>Initializes a new instance of the <see cref="ModuleReloadService"/> class~ 🔄.</summary>
     /// <param name="loader">The assembly loader.</param>
     /// <param name="registry">The module registry.</param>
@@ -43,8 +46,10 @@ public sealed class ModuleReloadService
         IActiveExecutionTracker tracker,
         ILogger<ModuleReloadService>? logger = null,
         int pollIntervalMs = 100,
-        int maxWaitMs = 30000)
+        int maxWaitMs = 30000,
+        Workflow.Modules.Security.IModuleLoadGate? gate = null)
     {
+        this.loadGate = gate;
         this.loader = loader ?? throw new ArgumentNullException(nameof(loader));
         this.registry = registry ?? throw new ArgumentNullException(nameof(registry));
         this.tracker = tracker ?? throw new ArgumentNullException(nameof(tracker));
@@ -88,6 +93,26 @@ public sealed class ModuleReloadService
             }
 
             await Task.Delay(this.pollInterval, ct).ConfigureAwait(false);
+        }
+
+        // 🔏 Stage 7.4 — check the changed files before anything is unloaded: a refused reload
+        // leaves the current version running~
+        if (this.loadGate is not null)
+        {
+            var check = this.loadGate.CheckBeforeLoad(assemblyPath);
+            if (!check.Allowed)
+            {
+                this.logger.LogError(
+                    "🔏 Reload of '{Path}' refused: Modules:Security:RequireSigned is on and {Reasons} The current version stays loaded.",
+                    assemblyPath,
+                    string.Join(" ", check.Messages));
+                return ModuleReloadOutcome.Refused;
+            }
+
+            foreach (var message in check.Messages)
+            {
+                this.logger.LogWarning("🔏 Reloading '{Path}': {Message}", assemblyPath, message);
+            }
         }
 
         // 🔌 Unload (if tracked) then reload~
@@ -194,4 +219,7 @@ public enum ModuleReloadOutcome
 
     /// <summary>The assembly failed to reload.</summary>
     Failed,
+
+    /// <summary>🔏 Stage 7.4 — the reload was refused by the trust policy (RequireSigned); the current version stays loaded.</summary>
+    Refused,
 }

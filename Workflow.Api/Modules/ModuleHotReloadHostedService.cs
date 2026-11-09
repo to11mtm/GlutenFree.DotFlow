@@ -35,6 +35,7 @@ public sealed class ModuleHotReloadHostedService : IHostedService, IModuleChange
     private readonly ActorSystem actorSystem;
     private readonly ILogger<ModuleHotReloadHostedService> logger;
     private readonly ILoggerFactory loggerFactory;
+    private readonly Workflow.Modules.Security.IModuleLoadGate? loadGate;
 
     private FileSystemModuleWatcher? watcher;
     private ModuleReloadService? reloadService;
@@ -49,6 +50,7 @@ public sealed class ModuleHotReloadHostedService : IHostedService, IModuleChange
     /// <param name="tracker">The active-execution tracker (unload-safety gate).</param>
     /// <param name="actorSystem">The actor system (for EventStream publication).</param>
     /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="installer">🔏 Stage 7.4 — the package installer, which checks files before a reload.</param>
     public ModuleHotReloadHostedService(
         IConfiguration configuration,
         ModulePackagingOptions packaging,
@@ -56,8 +58,10 @@ public sealed class ModuleHotReloadHostedService : IHostedService, IModuleChange
         IModuleRegistry registry,
         IActiveExecutionTracker tracker,
         ActorSystem actorSystem,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        Workflow.Modules.Packaging.ModulePackageInstaller? installer = null)
     {
+        this.loadGate = installer;
         this.options = new HotReloadOptions();
         configuration.GetSection(HotReloadOptions.SectionName).Bind(this.options);
         this.packaging = packaging;
@@ -82,7 +86,8 @@ public sealed class ModuleHotReloadHostedService : IHostedService, IModuleChange
             this.loader,
             this.registry,
             this.tracker,
-            this.loggerFactory.CreateLogger<ModuleReloadService>());
+            this.loggerFactory.CreateLogger<ModuleReloadService>(),
+            gate: this.loadGate);
         this.reloadSubscription = this.reloadService.Subscribe(this);
 
         this.watcher = new FileSystemModuleWatcher(

@@ -15,6 +15,8 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
         <PackageReference Include="Microsoft.Extensions.Http" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <!-- Stage 7.4: CMS (PKCS#7) signatures on module packages -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" />
         <!-- ?? Phase 2.3.4 — Polly v8 resilience pipelines~ -->
         <PackageReference Include="Polly.Core" />
         <!-- ?? Phase 2.3.5 — JSONPath extraction via JsonPath.Net (json-everything, MIT)~ -->
