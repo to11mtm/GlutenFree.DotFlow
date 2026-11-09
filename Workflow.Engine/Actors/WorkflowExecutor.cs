@@ -65,6 +65,10 @@ public class WorkflowExecutor : ReceiveActor
 
     // Node actor tracking (actor-local runtime refs, not persisted)
     private readonly Dictionary<string, IActorRef> _nodeActors = new();
+    // 🚑 §12.7 — UseErrorHandler: handler paths, and handler nodes that only run on error~
+    private readonly ErrorHandlerCore _errorHandlers;
+    private readonly IReadOnlySet<string> _errorOnlyNodes;
+
     private readonly Dictionary<string, Dictionary<string, object?>> _nodeOutputs = new();
     private readonly Dictionary<string, Dictionary<string, object?>> _nodeInputs = new();
     private LanguageExt.HashSet<string> _completedNodes;
@@ -246,6 +250,9 @@ public class WorkflowExecutor : ReceiveActor
             initialNodeIds: definition.Nodes.Select(n => n.Id),
             initialVariables: _seededVariables.Variables);
 
+        // 🚑 §12.7 — before the graph is built: GetStartNodes (logged there) excludes these~
+        _errorOnlyNodes = ErrorHandlerCore.ErrorOnlyNodes(_definition);
+
         // Build the execution graph from connections
         BuildExecutionGraph();
 
@@ -257,6 +264,25 @@ public class WorkflowExecutor : ReceiveActor
             scheduleRetry: ScheduleNodeRetry,
             continueAfterFailure: ContinueAfterNodeFailure,
             fail: (_, error) => FailWorkflow(error),
+            log: _log,
+            runErrorHandler: RunErrorHandler,
+            executionId: _executionId);
+
+        // 🚑 §12.7 — handler paths for UseErrorHandler run as sub-graphs of this executor~
+        _errorHandlers = new ErrorHandlerCore(
+            definition: _definition,
+            executionId: _executionId,
+            serviceProvider: _serviceProvider,
+            spawnChild: (props, name) =>
+            {
+                var child = Context.ActorOf(props, name);
+                Context.Watch(child);
+                return child;
+            },
+            cancellationToken: () => _executionCts.Token,
+            currentVariables: CurrentVariables,
+            scopePath: () => ScopeStep.EmptyPath,
+            outerOutputs: () => _nodeOutputs,
             log: _log);
 
         _constructs = new ConstructSpawnCore(
@@ -306,6 +332,8 @@ public class WorkflowExecutor : ReceiveActor
         Receive<GetExecutionSnapshot>(HandleGetSnapshot);
         Receive<RetryNode>(HandleRetryNode);
         Receive<Terminated>(HandleTerminated);
+        Receive<SubGraphCompleted>(HandleErrorHandlerCompleted);
+        Receive<SubGraphFailed>(HandleErrorHandlerFailed);
         Receive<PersistenceExecutionCreated>(HandleExecutionRecordCreated);
         Receive<PersistenceNodeRecorded>(HandlePersistenceNodeRecorded);
         Receive<PersistenceExecutionStatusUpdated>(HandlePersistenceExecutionStatusUpdated);
@@ -570,7 +598,8 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private IEnumerable<string> GetStartNodes()
     {
-        return _inDegree.Where(kv => kv.Value == 0).Select(kv => kv.Key);
+        // §12.7: an error handler with no incoming connections runs only when a failure routes to it~
+        return _inDegree.Where(kv => kv.Value == 0 && !_errorOnlyNodes.Contains(kv.Key)).Select(kv => kv.Key);
     }
 
     /// <summary>
@@ -733,6 +762,12 @@ public class WorkflowExecutor : ReceiveActor
         if (_context.State != ExecutionState.Running)
         {
             return;
+        }
+
+        // 🚑 §12.7 — handler-only paths count as skipped unless a failure routes to them~
+        foreach (var nodeId in _errorOnlyNodes)
+        {
+            _skippedNodes = _skippedNodes.Add(nodeId);
         }
 
         // Find and execute start nodes (nodes with no dependencies)
@@ -947,6 +982,7 @@ public class WorkflowExecutor : ReceiveActor
         }
 
         var nodeId = message.NodeId;
+        ErrorHandlerCounters.Reset(_executionId, nodeId); // §12.7: a success ends a failure streak
 
         _log.Info(
             "✅ Node {NodeId} completed in {Duration}ms",
@@ -1164,6 +1200,53 @@ public class WorkflowExecutor : ReceiveActor
     /// <see cref="NodeFailureCore"/> callback for <see cref="ErrorBehavior.Continue"/>: treat the failed
     /// node as completed for routing so the workflow proceeds~ ⚡.
     /// </summary>
+    /// <summary>
+    /// 🚑 §12.7 <see cref="NodeFailureCore"/> callback: the failure is handled — skip the failed
+    /// node's downstream and run its handler path; the run carries on~.
+    /// </summary>
+    private void RunErrorHandler(string nodeId, string handlerId, Exception error)
+    {
+        // Settled for completion (history keeps it Failed), but not a reason to fail the run~
+        _failedNodes = _failedNodes.Remove(nodeId);
+        _completedNodes = _completedNodes.Add(nodeId);
+        // Start the handler BEFORE skipping downstream: skip propagation runs the completion check,
+        // which must already see the handler path as running~
+        _errorHandlers.Start(nodeId, handlerId, error);
+        ExecuteReadySuccessors(nodeId, Arr.create(NoPortFires));
+    }
+
+    private void HandleErrorHandlerCompleted(SubGraphCompleted message)
+    {
+        if (!_errorHandlers.TryFinish(Sender, out var failedNodeId))
+        {
+            _log.Warning("⚠️ Unexpected SubGraphCompleted {SubGraphId} from {Sender}", message.SubGraphId, Sender);
+            return;
+        }
+
+        Context.Unwatch(Sender);
+        _log.Info("🚑 Error handler for node {NodeId} finished~", failedNodeId);
+        ApplyConstructVariableUpdates(failedNodeId, message.VariableUpdates);
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+        }
+    }
+
+    private void HandleErrorHandlerFailed(SubGraphFailed message)
+    {
+        if (!_errorHandlers.TryFinish(Sender, out var failedNodeId))
+        {
+            _log.Warning("⚠️ Unexpected SubGraphFailed {SubGraphId} from {Sender}", message.SubGraphId, Sender);
+            return;
+        }
+
+        Context.Unwatch(Sender);
+        ApplyConstructVariableUpdates(failedNodeId, message.VariableUpdates);
+        FailWorkflow(new InvalidOperationException(
+            $"The error handler for node '{failedNodeId}' failed: {message.Error.Message}",
+            message.Error));
+    }
+
     private void ContinueAfterNodeFailure(string nodeId)
     {
         // Remove from failed set to avoid double-counting in IsWorkflowComplete~ 🔄
@@ -2050,6 +2133,13 @@ public class WorkflowExecutor : ReceiveActor
     /// </summary>
     private void HandleTerminated(Terminated message)
     {
+        // §12.7: a handler path stopped without reporting~
+        if (_errorHandlers.TryFinish(message.ActorRef, out var handledNodeId))
+        {
+            FailWorkflow(new InvalidOperationException($"The error handler for node '{handledNodeId}' stopped unexpectedly."));
+            return;
+        }
+
         var terminatedNodeId = _nodeActors
             .FirstOrDefault(kv => kv.Value.Equals(message.ActorRef))
             .Key;
@@ -2089,6 +2179,7 @@ public class WorkflowExecutor : ReceiveActor
         return _runningNodes.Count == 0 &&
                _pendingRetryCancellations.Count == 0 &&
                _constructs.RunningCount == 0 &&
+               _errorHandlers.RunningCount == 0 &&
                _completedNodes.Count + _failedNodes.Count + _skippedNodes.Count >= _definition.Nodes.Count;
     }
 
@@ -2239,6 +2330,9 @@ public class WorkflowExecutor : ReceiveActor
 
     /// <summary>🔒 §10.6 — this run's current redactor (secret names + the values seen so far).</summary>
     private SecretRedactor Secrets => ExecutionSecrets.For(_executionId);
+
+    /// <summary>§12.7: an active-port name no connection uses — routes "skip every successor".</summary>
+    private const string NoPortFires = "\u0000none";
 
     private static IEnumerable<KeyValuePair<string, object?>> ToPairs(HashMap<string, object?> map)
         => map.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value));
@@ -2614,6 +2708,7 @@ public class WorkflowExecutor : ReceiveActor
     {
         _executionTimer.Stop();
         ExecutionSecrets.Remove(_executionId);
+        ErrorHandlerCounters.Remove(_executionId);
 
         // 🧹 Cancel all pending scheduled retry messages to prevent memory leaks (AK1004 fix)
         if (_pendingRetryCancellations.Count > 0)

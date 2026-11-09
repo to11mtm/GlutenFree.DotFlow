@@ -162,6 +162,7 @@ phases/                  the phased build roadmap (design breakdowns + status)
 **The web UI**
 - [Visual Designer](designer.md) — building workflows on the canvas
 - [Workflow Variables](variables.md) — scopes, precedence, bindings, and what expands templates
+- [Error Handling](error-handling.md) — Fail / Continue / Retry / error handler, with diagrams and the alternatives we could switch to
 - [Import & Export](import-export.md) — saving workflows to files and loading them back
 - [Designer Architecture & React-Port Guide](designer-architecture.md) — the framework-free boundary
 - [Script Studio](script-studio.md) — writing/testing/managing scripts

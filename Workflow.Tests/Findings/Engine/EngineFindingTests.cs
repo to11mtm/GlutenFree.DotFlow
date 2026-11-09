@@ -83,32 +83,4 @@ public sealed class EngineFindingTests : TestKit
         onTrue.Calls.Should().Be(1, because: "the active 'true' branch inside the body should run");
         onFalse.Calls.Should().Be(0, because: "the deactivated 'false' branch inside the body should be skipped (01 §12.4)");
     }
-
-    // ── Finding 01 §12.7 — UseErrorHandler is not implemented ─────────────────────────────────────
-
-    /// <summary>
-    /// A node with <c>ErrorBehavior.UseErrorHandler</c> should route to its configured error node
-    /// rather than failing the whole workflow. Today the behaviour logs a warning and fails.
-    /// </summary>
-    [Fact]
-    public void UseErrorHandler_ShouldRouteToHandler_NotFailWorkflow()
-    {
-        var failing = new FlakyModule("f.always", failTimes: int.MaxValue);
-        var handler = new PassModule("f.handler");
-        var services = FindingDefs.Services(new Workflow.Modules.Abstractions.IWorkflowModule[] { failing, handler });
-
-        var definition = FindingDefs.Definition(
-            nodes: new[]
-            {
-                FindingDefs.Node("boom", "f.always", errorHandling: new ErrorHandling(ErrorBehavior.UseErrorHandler, ErrorNodeId: "handler")),
-                FindingDefs.Node("handler", "f.handler"),
-            });
-
-        var (_, parent, _) = this.StartRun(definition, services);
-        var terminal = parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, FindingDefs.RunTimeout);
-
-        terminal.Should().BeOfType<WorkflowCompleted>(
-            because: "UseErrorHandler should divert to the error node instead of failing the run (01 §12.7)");
-        handler.Calls.Should().Be(1, because: "the configured error handler node should run");
-    }
 }

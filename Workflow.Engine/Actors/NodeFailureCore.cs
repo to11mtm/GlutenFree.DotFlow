@@ -34,6 +34,8 @@ public sealed class NodeFailureCore
     private readonly Action<string> _continueAfterFailure;
     private readonly Action<string, Exception> _fail;
     private readonly ILoggingAdapter _log;
+    private readonly Action<string, string, Exception>? _runErrorHandler;
+    private readonly Guid _executionId;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NodeFailureCore"/> class.
@@ -50,6 +52,11 @@ public sealed class NodeFailureCore
     /// <param name="continueAfterFailure">Treats the failed node as done and routes its successors.</param>
     /// <param name="fail">Fails the owner (workflow or sub-graph) because of this node.</param>
     /// <param name="log">The owning actor's logger.</param>
+    /// <param name="runErrorHandler">
+    /// §12.7: runs a failed node's error handler (failed node id, handler id, error). Null = an
+    /// owner that can't, so <see cref="ErrorBehavior.UseErrorHandler"/> fails as before.
+    /// </param>
+    /// <param name="executionId">§12.7: the run, for <see cref="ErrorHandlerCounters"/>.</param>
     public NodeFailureCore(
         Func<string, NodeDefinition?> getNode,
         ErrorHandling? workflowErrorHandling,
@@ -58,7 +65,9 @@ public sealed class NodeFailureCore
         Action<RetryDecision> scheduleRetry,
         Action<string> continueAfterFailure,
         Action<string, Exception> fail,
-        ILoggingAdapter log)
+        ILoggingAdapter log,
+        Action<string, string, Exception>? runErrorHandler = null,
+        Guid executionId = default)
     {
         _getNode = getNode;
         _workflowErrorHandling = workflowErrorHandling;
@@ -68,6 +77,8 @@ public sealed class NodeFailureCore
         _continueAfterFailure = continueAfterFailure;
         _fail = fail;
         _log = log;
+        _runErrorHandler = runErrorHandler;
+        _executionId = executionId;
     }
 
     /// <summary>
@@ -89,7 +100,7 @@ public sealed class NodeFailureCore
         switch (behavior)
         {
             case ErrorBehavior.Retry:
-                HandleRetry(nodeId, error, nodeDef);
+                HandleRetry(nodeId, error, nodeDef, onExhausted: () => _fail(nodeId, error));
                 break;
 
             case ErrorBehavior.Continue:
@@ -98,10 +109,17 @@ public sealed class NodeFailureCore
                 break;
 
             case ErrorBehavior.UseErrorHandler:
-                _log.Warning(
-                    "⚠️ UseErrorHandler behavior is not yet implemented — falling back to Fail for node {NodeId}. UwU",
-                    nodeId);
-                _fail(nodeId, error);
+                // §12.7: retry first when the node has a policy; the handler runs once retries are
+                // exhausted (or straight away without a policy)~ 🚑
+                if (nodeDef?.RetryPolicy is not null)
+                {
+                    HandleRetry(nodeId, error, nodeDef, onExhausted: () => RunErrorHandler(nodeId, error, errorHandling!));
+                }
+                else
+                {
+                    RunErrorHandler(nodeId, error, errorHandling!);
+                }
+
                 break;
 
             case ErrorBehavior.Fail:
@@ -112,7 +130,41 @@ public sealed class NodeFailureCore
         }
     }
 
-    private void HandleRetry(string nodeId, Exception error, NodeDefinition? nodeDef)
+    /// <summary>
+    /// §12.7: run the node's error handler — unless it has failed more than
+    /// <see cref="ErrorHandling.MaxConsecutiveErrors"/> times in a row, which fails the owner.
+    /// </summary>
+    private void RunErrorHandler(string nodeId, Exception error, ErrorHandling errorHandling)
+    {
+        var handlerId = errorHandling.ErrorNodeId;
+        if (string.IsNullOrWhiteSpace(handlerId) || _runErrorHandler is null || _getNode(handlerId) is null)
+        {
+            _log.Error(
+                "🛑 Node {NodeId} uses an error handler, but '{HandlerId}' isn't a node in this workflow — failing~",
+                nodeId,
+                handlerId ?? "(none)");
+            _fail(nodeId, error);
+            return;
+        }
+
+        var handled = ErrorHandlerCounters.Increment(_executionId, nodeId);
+        if (errorHandling.MaxConsecutiveErrors is { } max && handled > max)
+        {
+            _log.Error(
+                "🛑 Node {NodeId} failed {Count} times in a row (MaxConsecutiveErrors = {Max}) — failing~",
+                nodeId,
+                handled,
+                max);
+            _fail(nodeId, new InvalidOperationException(
+                $"Node '{nodeId}' failed {handled} times in a row, more than its MaxConsecutiveErrors ({max}). Last error: {error.Message}",
+                error));
+            return;
+        }
+
+        _runErrorHandler(nodeId, handlerId, error);
+    }
+
+    private void HandleRetry(string nodeId, Exception error, NodeDefinition? nodeDef, Action onExhausted)
     {
         var retryPolicy = nodeDef?.RetryPolicy ?? RetryPolicy.Default;
         var attempt = _retryAttempts(nodeId) + 1;
@@ -123,7 +175,7 @@ public sealed class NodeFailureCore
                 "🛑 Node {NodeId} exhausted all {MaxAttempts} retry attempts~ 💔",
                 nodeId,
                 retryPolicy.MaxAttempts);
-            _fail(nodeId, error);
+            onExhausted();
             return;
         }
 

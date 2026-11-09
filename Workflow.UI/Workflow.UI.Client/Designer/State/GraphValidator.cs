@@ -96,6 +96,7 @@ public static class GraphValidator
         issues.AddRange(ValidateFanOut(doc));
         issues.AddRange(ValidatePorts(doc));
         issues.AddRange(ValidateStreaming(doc));
+        issues.AddRange(NodeErrorHandling.Validate(doc)); // 🚑 §12.7
 
         return issues;
     }

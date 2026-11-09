@@ -265,8 +265,35 @@ treated as a spec question, not a bug to rush. **Effort:** ~2–3 days once sema
 - `MaxConsecutiveErrors` fails the run after N handled failures of that node in a row (e.g. across
   loop iterations).
 
-Detail questions are to be asked before coding: handler-as-entry-node, handler successors,
-workflow-level `ErrorNodeId`.
+Detail questions (asked 2026-11-08, all answered with the recommended option):
+- **Handler start:** a node referenced as an `ErrorNodeId` (node- or workflow-level) never starts
+  with the run on its own. It runs only when a failure routes to it, or through its own incoming
+  connections if it has any.
+- **Retries:** if the failing node has a `RetryPolicy`, retry as usual first. The handler runs once
+  retries are exhausted. Without a policy, it runs on the first failure.
+- **After the handler:** the handler's own outgoing path continues, like a catch body. The failing
+  node's downstream is skipped. The run completes unless something on the handler's path fails.
+- **Designer support:** added in the same change:
+  - an "On error" choice (Fail / Continue / Retry / Use error handler);
+  - a handler picker;
+  - a max-consecutive-errors field;
+  - a dashed "on error" link on the canvas;
+  - lint for a missing/invalid handler.
+- **Defaults stated, not asked:**
+  - A workflow-level `ErrorHandling` is already the fallback for nodes without their own, so a
+    workflow-level handler is the default handler.
+  - `MaxConsecutiveErrors` counts handled failures per node across the whole run (loop iterations
+    included), and is reset when that node succeeds.
+  - Implementation: the handler and its downstream run as a sub-graph with `error` as a body
+    variable, like a catch body.
+
+**Fixed 2026-11-08.**
+- Engine: `ErrorHandlerCore`, `ErrorHandlerCounters`, the `NodeFailureCore` `UseErrorHandler`
+  branch, and `RunErrorHandler` in both executors.
+- Designer: `NodeErrorHandling`, the *On error* panel section, and the `EdgeLayer` link.
+- Docs: `docs/error-handling.md`, with diagrams and alternatives A–G.
+- Tests: `Engine/ErrorHandlerTests` (8, 6 mutants killed), UI `NodeErrorHandlingTests` (9) and
+  `OnErrorPanelTests` (2). The guard is retired.
 
 **Alternatives considered (kept on file):**
 - retire the setting in favour of Try/Catch;

@@ -38,6 +38,40 @@
             </div>
         }
 
+        @* 🚑 §12.7 — what happens when this node fails. Applied immediately (one undoable edit). *@
+        <div class="df-field" data-testid="on-error">
+            <label class="df-label">On error</label>
+            <select class="df-input" data-testid="on-error-behavior" @onchange="OnErrorBehaviorChanged">
+                @foreach (var (value, label) in NodeErrorHandling.Behaviors)
+                {
+                    <option value="@value" selected="@(ErrorSettings.Behavior == value)">@label</option>
+                }
+            </select>
+            @if (ErrorSettings.Behavior == NodeErrorHandling.Retry)
+            {
+                <div class="df-field-help">uses this node's retry policy (or the default: 3 attempts), then fails the run</div>
+            }
+            @if (ErrorSettings.Behavior == NodeErrorHandling.UseErrorHandler)
+            {
+                <label class="df-label">Error handler</label>
+                <select class="df-input" data-testid="on-error-handler" @onchange="OnErrorHandlerChanged">
+                    <option value="" selected="@(ErrorSettings.HandlerId is null)">— choose a node —</option>
+                    @foreach (var candidate in NodeErrorHandling.HandlerCandidates(Document, SelectedNode))
+                    {
+                        <option value="@candidate.Id" selected="@(ErrorSettings.HandlerId == candidate.Id)">@candidate.Name</option>
+                    }
+                </select>
+                <label class="df-label">Max consecutive errors</label>
+                <input class="df-input" type="number" min="1" placeholder="no limit" data-testid="on-error-max"
+                       value="@ErrorSettings.MaxConsecutiveErrors" @onchange="OnErrorMaxChanged" />
+                <div class="df-field-help" data-testid="on-error-help">
+                    Retries first if this node has a retry policy. Then the handler runs with the error as
+                    {{Variable.error}} (message, errorType, nodeId); this node's downstream is skipped and the
+                    handler's own path continues. The handler doesn't run on its own. See docs/error-handling.md.
+                </div>
+            }
+        </div>
+
         @* 📤 G6 — live outputs strip: the node's current output ports (reflects merged/meta). *@
         <div class="df-field">
             <label class="df-label">Outputs</label>
@@ -717,6 +751,32 @@
 
         this.Commands.Execute(new EditNodePropertiesCommand(node.Id, before, after));
     }
+
+    /// <summary>🚑 §12.7 — the selected node's on-error settings.</summary>
+    private NodeErrorHandling.Settings ErrorSettings
+        => this.SelectedNode is { } node ? NodeErrorHandling.Read(node.ErrorHandling) : NodeErrorHandling.Settings.Default;
+
+    private void SetErrorSettings(NodeErrorHandling.Settings settings)
+    {
+        if (this.SelectedNode is not { } node)
+        {
+            return;
+        }
+
+        this.Commands.Execute(new EditNodeErrorHandlingCommand(node.Id, node.ErrorHandling, NodeErrorHandling.Write(settings)));
+    }
+
+    private void OnErrorBehaviorChanged(ChangeEventArgs e)
+        => this.SetErrorSettings(this.ErrorSettings with { Behavior = e.Value?.ToString() ?? NodeErrorHandling.Fail });
+
+    private void OnErrorHandlerChanged(ChangeEventArgs e)
+        => this.SetErrorSettings(this.ErrorSettings with { HandlerId = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : e.Value!.ToString() });
+
+    private void OnErrorMaxChanged(ChangeEventArgs e)
+        => this.SetErrorSettings(this.ErrorSettings with
+        {
+            MaxConsecutiveErrors = int.TryParse(e.Value?.ToString(), out var max) && max > 0 ? max : null,
+        });
 
     /// <summary>🔎 T4 — the selected node's wired inputs (empty when nothing selected/wired)~.</summary>
     private IReadOnlyList<InputShape.Incoming> IncomingRows

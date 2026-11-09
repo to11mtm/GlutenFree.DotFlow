@@ -10,7 +10,19 @@
         <marker id="df-arrow-sel" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
             <path d="M0,0 L8,4 L0,8 Z" fill="var(--df-accent)"></path>
         </marker>
+        <marker id="df-arrow-error" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="var(--df-state-failed)"></path>
+        </marker>
     </defs>
+    @* 🚑 §12.7 — dashed "on error" links: from a node that runs an error handler to its handler. *@
+    @foreach (var link in ErrorLinks)
+    {
+        <g class="df-edge-group df-edge-group--onerror" data-testid="error-link" data-error-link="@(link.From)→@(link.To)">
+            <path class="df-edge df-edge--onerror" d="@link.Path" fill="none" stroke="var(--df-state-failed)"
+                  stroke-width="1.5" stroke-dasharray="3 4" marker-end="url(#df-arrow-error)" />
+            <text class="df-edge__label" x="@link.LabelX.ToString(Inv)" y="@link.LabelY.ToString(Inv)" fill="var(--df-state-failed)">on error</text>
+        </g>
+    }
     @foreach (var e in Edges)
     {
         var selected = Selection is not null && Selection.IsConnectionSelected(e.Key);
@@ -106,6 +118,32 @@
             }
         }
     }
+
+    private IEnumerable<ErrorLinkRender> ErrorLinks
+    {
+        get
+        {
+            foreach (var link in NodeErrorHandling.Links(Document))
+            {
+                var source = Document.FindNode(link.NodeId)!;
+                var handler = Document.FindNode(link.HandlerId)!;
+                var from = CanvasGeometry.NodeBounds(source.X, source.Y, NodePorts.Inputs(source).Count, NodePorts.Outputs(source).Count);
+                var to = CanvasGeometry.NodeBounds(handler.X, handler.Y, NodePorts.Inputs(handler).Count, NodePorts.Outputs(handler).Count);
+
+                // From the bottom-centre of the failing node to the top-centre of its handler~
+                var s = new Point(from.X + (from.Width / 2), from.Bottom);
+                var t = new Point(to.X + (to.Width / 2), to.Y);
+                yield return new ErrorLinkRender(
+                    link.NodeId,
+                    link.HandlerId,
+                    System.FormattableString.Invariant($"M {s.X} {s.Y} C {s.X} {s.Y + 60}, {t.X} {t.Y - 60}, {t.X} {t.Y}"),
+                    ((s.X + t.X) / 2) + 6,
+                    (s.Y + t.Y) / 2);
+            }
+        }
+    }
+
+    private readonly record struct ErrorLinkRender(string From, string To, string Path, double LabelX, double LabelY);
 
     private readonly record struct EdgeRender(
         string Key,

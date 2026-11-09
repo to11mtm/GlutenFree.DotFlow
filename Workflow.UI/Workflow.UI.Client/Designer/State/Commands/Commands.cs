@@ -583,3 +583,39 @@ public sealed class EditNodeMetadataCommand : IDesignerCommand
         }
     }
 }
+
+/// <summary>🚑 §12.7 — sets a node's error-handling settings (null = the default, fail)~ ✨.</summary>
+public sealed class EditNodeErrorHandlingCommand : IDesignerCommand
+{
+    private readonly string nodeId;
+    private readonly JsonElement? before;
+    private readonly JsonElement? after;
+
+    /// <summary>Initializes a new instance of the <see cref="EditNodeErrorHandlingCommand"/> class.</summary>
+    /// <param name="nodeId">The node.</param>
+    /// <param name="before">The previous settings JSON.</param>
+    /// <param name="after">The new settings JSON.</param>
+    public EditNodeErrorHandlingCommand(string nodeId, JsonElement? before, JsonElement? after)
+    {
+        this.nodeId = nodeId;
+        this.before = before;
+        this.after = after;
+    }
+
+    /// <inheritdoc/>
+    public string Description => "Edit on-error settings";
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document) => Apply(document, this.after);
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document) => Apply(document, this.before);
+
+    private void Apply(DesignerDocument document, JsonElement? value)
+    {
+        if (document.FindNode(this.nodeId) is { } node)
+        {
+            node.ErrorHandling = value;
+        }
+    }
+}

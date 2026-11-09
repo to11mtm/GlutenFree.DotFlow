@@ -145,11 +145,16 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
   - [x] settle the "what is secret" policy — declared `IsSecret`, redacted by **name and value**; at-rest storage out of scope (pivot options in plan 03)
 - [x] **§9.6 — spill kept forever with no history** · plan 04 · guard `SpillCleanupFindingTests.Sweep_WithNoHistory_…` — fixed (B2), retired → `Streaming/SpillAgeRetentionTests`
   - [x] pick B1 / B2 / B3 — **B2** (artefact age) + startup warning; B1/B3 kept on file in plan 04
-- [ ] **§12.7 — UseErrorHandler not implemented** · plan 02 · guard `EngineFindingTests.UseErrorHandler_…`
-  - [ ] this is a **feature spec**, not a bug: agree the semantics (`ErrorNodeId` routing, `MaxConsecutiveErrors`) before implementing
+- [x] **§12.7 — UseErrorHandler not implemented** · plan 02 · guard `EngineFindingTests.UseErrorHandler_…` — fixed, retired → `Engine/ErrorHandlerTests`
+  - [x] agree the semantics — catch-style handler, retry first, handler-only nodes, handler path continues, designer support (plan 02, `docs/error-handling.md`)
 
 ### Follow-ups (future work, not findings)
 
+- [ ] **Rare test-host crash in `StreamRegionRunnerTests`.** Once during the §12.7 run:
+  `ArgumentOutOfRangeException: An unexpected state object was encountered` from
+  `CountingSource.ExecuteStreamAsync` (an async-iterator stub), which aborted the test run. It
+  didn't reproduce on a re-run. Likely the stub's enumerator is used concurrently. Pre-existing and
+  unrelated to §12.7.
 - [ ] **Completed body nodes have no inputs in history.** `SubGraphExecutor.HandleNodeCompleted`
   removes `_nodeInputs[nodeId]` before `QueuePersistNode`, so completed records from loop / branch /
   try bodies are written with `Inputs = null` (failed ones keep theirs). Top-level records keep
@@ -236,6 +241,38 @@ Dependencies: **§12.9 first** (blocks §10.3). **§12.1 before §9.3** (§9.3 r
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-08 — §12.7 UseErrorHandler: catch-style handler (Stage 6 done)
+- Decided (asked):
+  - Handler nodes run only on error.
+  - Retries come first.
+  - The handler's own path continues and the failed node's downstream is skipped.
+  - Designer support is included.
+  - Defaults: workflow-level handler = default; MaxConsecutiveErrors per node per run, reset on
+    success.
+- Engine:
+  - `ErrorHandlerCore`: handler ids, the handler path (the handler + nodes reachable only through
+    it), error-only nodes skipped at start, and the handler sub-graph with `error` as a body
+    variable.
+  - `ErrorHandlerCounters`, the `NodeFailureCore` `UseErrorHandler` branch, and `RunErrorHandler` +
+    `SubGraphCompleted`/`SubGraphFailed`/`Terminated` handling in both executors.
+  - `ScopeStep.ErrorHandler`.
+- Gotchas hit:
+  - `GetStartNodes` is called while the graph is being built, so error-only nodes must be computed
+    first (a ctor NRE hung every test).
+  - Start the handler **before** skipping downstream: skip propagation runs the completion check.
+- Designer: `NodeErrorHandling` (read/write, candidates, lint, links), the *On error* section,
+  `EditNodeErrorHandlingCommand`, and the dashed "on error" link in `EdgeLayer`.
+- Docs: new `docs/error-handling.md` (decision flow, handler path, retry sequence and loop/max
+  diagrams, comparison with Try/Catch, designer, alternatives A–G); lifecycle doc and README
+  updated.
+- Tests:
+  - `Engine/ErrorHandlerTests` (8): 6 mutants killed (route, retry-first, max, reset, start-skip,
+    downstream).
+  - UI `NodeErrorHandlingTests` (9) + `OnErrorPanelTests` (2): lint/links mutants killed.
+  - Retired the §12.7 guard method (`EngineFindingTests` keeps its other test). No failing finding
+    tests remain.
+- `--filter Category!=Finding`: 1891 passed, 0 failed; Workflow.Tests.UI 760/760; `Category=Finding` 2/2 passing (no open finding tests). **Stage 6 complete.**
+
 ### 2026-11-08 — §10.6 secrets hidden by name and value
 - `SecretRedactor` (name + value; values under 4 chars by name only; longest first; old values stay
   hidden) and the `ExecutionSecrets` per-run registry.

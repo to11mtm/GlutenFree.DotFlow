@@ -284,7 +284,7 @@ flowchart TB
     R -- yes --> Sch["Retrying · schedule RetryNode<br/>after min(DelayMs × Multiplier^(n-1), MaxDelayMs)"]
     R -- no --> Fail[FailWorkflow]
     Beh -- Continue --> Cont["Treat as completed<br/>route successors"]
-    Beh -- UseErrorHandler --> NI["Not implemented:<br/>logs a warning, then FailWorkflow"]
+    Beh -- UseErrorHandler --> EH["Retry first if a RetryPolicy is set, then<br/>skip downstream · run ErrorNodeId's path<br/>(sub-graph, {{Variable.error}}) — see docs/error-handling.md"]
     Beh -- "Fail (default)" --> Fail
 ```
 
@@ -447,7 +447,9 @@ gets a fix.
      and another from a branch deactivated *later*. The join is skipped instead of fired. The
      common "branch then merge" shape is unaffected, because both inputs come after the same
      condition.
-7. **`UseErrorHandler` isn't implemented.** It logs a warning and fails the workflow.
-   `ErrorHandling.ErrorNodeId` and `MaxConsecutiveErrors` aren't read.
+7. ~~**`UseErrorHandler` isn't implemented.**~~ **Fixed (§12.7):** a catch-style handler, with
+   retries first, the failed node's downstream skipped and the handler's path continuing. Handler
+   nodes don't start on their own, and `MaxConsecutiveErrors` is honoured. See
+   [error handling](../error-handling.md).
 8. **Scheduled and Event triggers have no runtime.** No cron scheduler or event subscription exists
    in the host.

@@ -42,6 +42,9 @@ public sealed record ScopeStep(
     /// <summary>Kind of a transaction body step.</summary>
     public const string Transaction = "transaction";
 
+    /// <summary>§12.7: kind of an error-handler path; <see cref="NodeId"/> is the node that failed.</summary>
+    public const string ErrorHandler = "errorHandler";
+
     /// <summary>The path of a top-level construct's bodies' parent: empty.</summary>
     public static readonly IReadOnlyList<ScopeStep> EmptyPath = System.Array.Empty<ScopeStep>();
 
@@ -55,6 +58,7 @@ public sealed record ScopeStep(
         Loop => $"{NodeId}#{Iteration}",
         Parallel => $"{NodeId}[{BranchIndex}]",
         TryCatch => $"{NodeId}:{Branch}",
+        ErrorHandler => $"{NodeId}!onError",
         _ => NodeId,
     };
 }
