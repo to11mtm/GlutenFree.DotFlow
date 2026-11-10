@@ -29,11 +29,30 @@ public sealed class StreamingProgressConfigTests
         factory.Services.GetRequiredService<StreamingProgressOptions>().IntervalMs.Should().Be(expected);
     }
 
+    /// <summary>⏱️ Stage 7.5 — region time limits: off unless the server sets them.</summary>
+    [Theory]
+    [InlineData(null, null, 0, 0)]
+    [InlineData("300000", "3600000", 300000, 3600000)]
+    public void TheHost_RegistersTheRegionTimeLimits(string? stall, string? total, int expectedStall, int expectedTotal)
+    {
+        using var factory = new Host(null, ("Streaming:RegionStallTimeoutMs", stall), ("Streaming:RegionTimeoutMs", total));
+        factory.CreateClient();
+
+        var options = factory.Services.GetRequiredService<StreamingTimeoutOptions>();
+        options.StallTimeoutMs.Should().Be(expectedStall);
+        options.TotalTimeoutMs.Should().Be(expectedTotal);
+    }
+
     private sealed class Host : WebApplicationFactory<Program>
     {
         private readonly string? interval;
+        private readonly (string Key, string? Value)[] extra;
 
-        public Host(string? interval) => this.interval = interval;
+        public Host(string? interval, params (string Key, string? Value)[] extra)
+        {
+            this.interval = interval;
+            this.extra = extra;
+        }
 
         // UseSetting: Program.cs reads the value while registering services.
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -42,6 +61,14 @@ public sealed class StreamingProgressConfigTests
             if (this.interval is not null)
             {
                 builder.UseSetting("Streaming:ProgressIntervalMs", this.interval);
+            }
+
+            foreach (var (key, value) in this.extra)
+            {
+                if (value is not null)
+                {
+                    builder.UseSetting(key, value);
+                }
             }
         }
     }

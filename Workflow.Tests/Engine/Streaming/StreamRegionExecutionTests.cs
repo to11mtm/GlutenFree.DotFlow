@@ -34,6 +34,31 @@ public class StreamRegionExecutionTests : TestKit
     private static IServiceProvider Services(params IWorkflowModule[] modules)
         => Services(null, modules);
 
+    private static IServiceProvider TimeoutServices(StreamingTimeoutOptions timeouts, params IWorkflowModule[] modules)
+    {
+        var registry = new InMemoryModuleRegistry(skipValidation: true);
+        foreach (var module in modules)
+        {
+            registry.RegisterModule(module);
+        }
+
+        return new ServiceCollection()
+            .AddSingleton<IModuleRegistry>(registry)
+            .AddSingleton(timeouts)
+            .AddSingleton(new StreamingProgressOptions(0))
+            .BuildServiceProvider();
+    }
+
+    /// <summary>Runs a definition to its end and returns WorkflowCompleted or WorkflowFailed.</summary>
+    private object RunToEnd(WorkflowDefinition definition, IServiceProvider services)
+    {
+        var executionId = Guid.NewGuid();
+        var parent = CreateTestProbe();
+        var executor = parent.ChildActorOf(WorkflowExecutor.Props(executionId, definition, new Dictionary<string, object?>(), services));
+        executor.Tell(new StartExecution(executionId));
+        return parent.FishForMessage(m => m is WorkflowCompleted or WorkflowFailed, TimeSpan.FromSeconds(15));
+    }
+
     private static IServiceProvider Services(StreamingProgressOptions? progress, params IWorkflowModule[] modules)
     {
         var registry = new InMemoryModuleRegistry(skipValidation: true);
@@ -258,6 +283,90 @@ public class StreamRegionExecutionTests : TestKit
         var first = ExpectMsg<StreamRegionProgress>(TimeSpan.FromSeconds(15));
         first.Completed.Should().BeTrue();
         first.ItemCounts["src"].Should().Be(10);
+    }
+
+    // ── Stage 7.5 (§9.2): region timeouts ────────────────────────────────────────────────────────
+
+    private static WorkflowDefinition SourceToCollect(NodeDefinition source)
+        => Definition([source, Node("collect", "test.stream.collect")], [new ConnectionDefinition("src", "items", "collect", "items")]);
+
+    private static NodeDefinition SourceWith(params (string Key, string Value)[] metadata)
+        => Node("src", "test.stream.source") with
+        {
+            Metadata = metadata.Aggregate(HashMap<string, string>.Empty, (m, kv) => m.AddOrUpdate(kv.Key, kv.Value)),
+        };
+
+    /// <summary>⏱️ Stage 7.5 — a region where nothing moves for the stall limit fails, saying how far it got.</summary>
+    [Fact]
+    public void AStalledRegion_FailsWithATimeout_ThatNamesTheCounts()
+    {
+        var services = TimeoutServices(new StreamingTimeoutOptions(StallTimeoutMs: 300), new FakeHangingSource(3, hangRuns: int.MaxValue), new FakeCollector());
+
+        var terminal = this.RunToEnd(SourceToCollect(Node("src", "test.stream.source")), services);
+
+        var error = terminal.Should().BeOfType<WorkflowFailed>().Which.Error;
+        error.Should().BeOfType<TimeoutException>();
+        error.Message.Should().Contain("no item moved through any stage").And.Contain("src 3");
+    }
+
+    /// <summary>⏱️ Stage 7.5 — slow but moving isn't a stall.</summary>
+    [Fact]
+    public void ASlowButMovingRegion_IsNotStalled()
+    {
+        var services = TimeoutServices(new StreamingTimeoutOptions(StallTimeoutMs: 400), new FakeSource(8, TimeSpan.FromMilliseconds(120)), new FakeCollector());
+
+        this.RunToEnd(SourceToCollect(Node("src", "test.stream.source")), services).Should().BeOfType<WorkflowCompleted>();
+    }
+
+    /// <summary>⏱️ Stage 7.5 — the overall limit stops a region that keeps moving but runs too long.</summary>
+    [Fact]
+    public void TheOverallLimit_StopsALongRegion()
+    {
+        var services = TimeoutServices(new StreamingTimeoutOptions(TotalTimeoutMs: 400), new FakeSource(40, TimeSpan.FromMilliseconds(50)), new FakeCollector());
+
+        var terminal = this.RunToEnd(SourceToCollect(Node("src", "test.stream.source")), services);
+
+        terminal.Should().BeOfType<WorkflowFailed>().Which.Error.Message.Should().Contain("overall limit");
+    }
+
+    /// <summary>⏱️ Stage 7.5 — the source node's metadata overrides the server: 0 turns a limit off for that region.</summary>
+    [Fact]
+    public void ASourceNodeOverride_OfZero_TurnsTheServerLimitOff()
+    {
+        var services = TimeoutServices(new StreamingTimeoutOptions(StallTimeoutMs: 150), new FakeSource(4, TimeSpan.FromMilliseconds(400)), new FakeCollector());
+
+        var terminal = this.RunToEnd(SourceToCollect(SourceWith((StreamingTimeoutOptions.StallMetadataKey, "0"))), services);
+
+        terminal.Should().BeOfType<WorkflowCompleted>();
+    }
+
+    /// <summary>⏱️ Stage 7.5 — with the server's limits off (the default), a region can still set its own.</summary>
+    [Fact]
+    public void ASourceNodeOverride_SetsALimit_WhenTheServerHasNone()
+    {
+        var services = TimeoutServices(new StreamingTimeoutOptions(), new FakeHangingSource(2, hangRuns: int.MaxValue), new FakeCollector());
+
+        var terminal = this.RunToEnd(SourceToCollect(SourceWith((StreamingTimeoutOptions.StallMetadataKey, "300"))), services);
+
+        terminal.Should().BeOfType<WorkflowFailed>().Which.Error.Should().BeOfType<TimeoutException>();
+    }
+
+    /// <summary>⏱️ Stage 7.5 — a timeout is a region failure, so the source node's retry re-runs the region.</summary>
+    [Fact]
+    public void ATimedOutRegion_IsRetried_LikeAnyRegionFailure()
+    {
+        var source = new FakeHangingSource(2, hangRuns: 1);
+        var services = TimeoutServices(new StreamingTimeoutOptions(StallTimeoutMs: 300), source, new FakeCollector());
+        var node = Node("src", "test.stream.source") with
+        {
+            ErrorHandling = new ErrorHandling(ErrorBehavior.Retry),
+            RetryPolicy = new RetryPolicy(MaxAttempts: 2, DelayMs: 10, BackoffMultiplier: 1.0, MaxDelayMs: 50),
+        };
+
+        var terminal = this.RunToEnd(SourceToCollect(node), services);
+
+        terminal.Should().BeOfType<WorkflowCompleted>();
+        source.Runs.Should().Be(2);
     }
 
     // ── Stage 7.7 (§9.5): regions inside construct bodies ─────────────────────────────────────────
@@ -582,6 +691,50 @@ public class StreamRegionExecutionTests : TestKit
             }
 
             return ModuleResult.Ok(new Dictionary<string, object?> { ["count"] = count });
+        }
+    }
+
+    /// <summary>
+    /// A source that emits <c>count</c> items and then, on its first <c>hangRuns</c> runs, waits
+    /// forever (until cancelled) instead of finishing.
+    /// </summary>
+    private sealed class FakeHangingSource : FakeStreamModule
+    {
+        private readonly int count;
+        private readonly int hangRuns;
+        private int runs;
+
+        public FakeHangingSource(int count, int hangRuns)
+        {
+            this.count = count;
+            this.hangRuns = hangRuns;
+        }
+
+        public int Runs => this.runs;
+
+        public override string ModuleId => "test.stream.source";
+
+        public override ModuleSchema Schema => new(
+            Arr<PortDefinition>.Empty,
+            Arr.create(PortDefinition.CreateStreaming("items", isRequired: false)),
+            Arr<ModulePropertyDefinition>.Empty);
+
+        public override async IAsyncEnumerable<StreamItem> ExecuteStreamAsync(
+            ModuleExecutionContext context,
+            IAsyncEnumerable<StreamItem> input,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var run = Interlocked.Increment(ref this.runs);
+            for (var i = 0; i < this.count; i++)
+            {
+                await Task.Yield();
+                yield return StreamItem.FromJson(JsonSerializer.SerializeToElement(new { n = i }), i);
+            }
+
+            if (run <= this.hangRuns)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
         }
     }
 

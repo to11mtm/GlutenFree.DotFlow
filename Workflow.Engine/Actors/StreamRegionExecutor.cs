@@ -55,6 +55,16 @@ public sealed class StreamRegionExecutor : ReceiveActor
     private ICancelable? progressTimer;
     private IReadOnlyDictionary<string, long>? lastSent;
 
+    // ⏱️ Stage 7.5 — stall / overall limits (off unless configured)~
+    private CancellationTokenSource? runCts;
+    private ICancelable? stallWatchdog;
+    private ICancelable? totalTimer;
+    private TimeSpan stallLimit;
+    private TimeSpan totalLimit;
+    private TimeSpan lastMovedAt;
+    private IReadOnlyDictionary<string, long>? lastWatched;
+    private string? timedOut;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="StreamRegionExecutor"/> class. 🌊.
     /// </summary>
@@ -85,6 +95,8 @@ public sealed class StreamRegionExecutor : ReceiveActor
         this.Receive<ExecuteStreamRegion>(_ => this.HandleExecute());
         this.Receive<RegionRunFinished>(this.HandleFinished);
         this.Receive<ProgressTick>(_ => this.PublishLiveProgress());
+        this.Receive<StallCheck>(_ => this.CheckStall());
+        this.Receive<TotalElapsed>(_ => this.TimeOut($"it ran longer than its overall limit of {Describe(this.totalLimit)}"));
     }
 
     /// <summary>
@@ -177,6 +189,24 @@ public sealed class StreamRegionExecutor : ReceiveActor
                 this.progressTimer = Context.System.Scheduler.ScheduleTellRepeatedlyCancelable(interval, interval, self, ProgressTick.Instance, self);
             }
 
+            // ⏱️ Stage 7.5 — the run gets its own token so a timeout can stop it; the limits come from
+            // the server's defaults, overridden by the region's source node~
+            this.runCts = CancellationTokenSource.CreateLinkedTokenSource(this.parentToken);
+            var sourceNode = this.definition.Nodes.FirstOrDefault(n => string.Equals(n.Id, order[0], StringComparison.Ordinal));
+            var (stall, total) = (this.serviceProvider.GetService<StreamingTimeoutOptions>() ?? new StreamingTimeoutOptions()).For(sourceNode?.Metadata);
+            if (stall is { } stallLimit)
+            {
+                this.stallLimit = stallLimit;
+                var every = TimeSpan.FromMilliseconds(Math.Clamp(stallLimit.TotalMilliseconds / 4, 25, 1000));
+                this.stallWatchdog = Context.System.Scheduler.ScheduleTellRepeatedlyCancelable(every, every, self, StallCheck.Instance, self);
+            }
+
+            if (total is { } totalLimit)
+            {
+                this.totalLimit = totalLimit;
+                this.totalTimer = Context.System.Scheduler.ScheduleTellOnceCancelable(totalLimit, self, TotalElapsed.Instance, self);
+            }
+
             // Binding (which can evaluate expressions) runs in the task, off this actor's thread~
             Task.Run(() => this.BindAndRunAsync(runner, stages))
                 .ContinueWith(
@@ -215,17 +245,71 @@ public sealed class StreamRegionExecutor : ReceiveActor
     private static bool SameCounts(IReadOnlyDictionary<string, long> a, IReadOnlyDictionary<string, long> b)
         => a.Count == b.Count && a.All(kv => b.TryGetValue(kv.Key, out var v) && v == kv.Value);
 
+    /// <summary>⏱️ Stage 7.5 — fails the region when no item has moved through any stage for the stall limit.</summary>
+    private void CheckStall()
+    {
+        var counts = this.liveCounts.Snapshot();
+        if (this.lastWatched is null || !SameCounts(this.lastWatched, counts))
+        {
+            this.lastWatched = counts;
+            this.lastMovedAt = this.elapsed.Elapsed;
+            return;
+        }
+
+        if (this.elapsed.Elapsed - this.lastMovedAt >= this.stallLimit)
+        {
+            this.TimeOut($"no item moved through any stage for {Describe(this.stallLimit)} (its stall limit)");
+        }
+    }
+
+    /// <summary>⏱️ Stage 7.5 — stops the run; <see cref="HandleFinished"/> then reports it as a timeout.</summary>
+    private void TimeOut(string reason)
+    {
+        if (this.timedOut is not null || this.runCts is null)
+        {
+            return;
+        }
+
+        var counts = this.liveCounts.Snapshot();
+        this.timedOut =
+            $"Streaming region {this.region.Index} timed out: {reason}. Items so far: "
+            + (counts.Count == 0 ? "none" : string.Join(", ", counts.Select(kv => $"{kv.Key} {kv.Value}")))
+            + $". Limits: {StreamingTimeoutOptions.StallMetadataKey} / {StreamingTimeoutOptions.TotalMetadataKey} on the region's source node, "
+            + "or Streaming:RegionStallTimeoutMs / Streaming:RegionTimeoutMs on the server.";
+        this.log.Warning("⏱️ {Message}", this.timedOut);
+        this.CancelTimers();
+        this.runCts.Cancel();
+    }
+
+    private static string Describe(TimeSpan limit)
+        => limit.TotalSeconds >= 1 ? $"{limit.TotalSeconds:0.#} s" : $"{limit.TotalMilliseconds:0} ms";
+
+    private void CancelTimers()
+    {
+        this.progressTimer?.Cancel();
+        this.stallWatchdog?.Cancel();
+        this.totalTimer?.Cancel();
+    }
+
     /// <inheritdoc/>
     protected override void PostStop()
     {
-        this.progressTimer?.Cancel();
+        this.CancelTimers();
+        this.runCts?.Dispose();
         base.PostStop();
     }
 
     private void HandleFinished(RegionRunFinished message)
     {
-        this.progressTimer?.Cancel(); // the final summary is published by WorkflowExecutor~
+        this.CancelTimers(); // the final summary is published by WorkflowExecutor~
         var parent = Context.Parent;
+
+        // ⏱️ Stage 7.5 — a run stopped by a timeout is a timeout, not a cancellation~
+        if (this.timedOut is not null && message.Error is not null)
+        {
+            this.Fail(parent, new TimeoutException(this.timedOut));
+            return;
+        }
 
         if (message.Error is not null)
         {
@@ -396,13 +480,13 @@ public sealed class StreamRegionExecutor : ReceiveActor
                 this.inputs);
 
             // A property that doesn't resolve keeps its raw value here (unlike the batch path)~
-            var bound = await binder.BindModulePropertiesAsync(context.Properties, stage.Module.Schema.Properties, bindingContext, this.parentToken).ConfigureAwait(false);
+            var bound = await binder.BindModulePropertiesAsync(context.Properties, stage.Module.Schema.Properties, bindingContext, this.RunToken).ConfigureAwait(false);
             stages.Add(bound.Success
                 ? stage with { Context = context with { Properties = new Dictionary<string, object?>(bound.BoundValues) } }
                 : stage);
         }
 
-        return await runner.RunAsync(new StreamRegionPlan(stages), this.parentToken, this.liveCounts).ConfigureAwait(false);
+        return await runner.RunAsync(new StreamRegionPlan(stages), this.RunToken, this.liveCounts).ConfigureAwait(false);
     }
 
     private ModuleExecutionContext BuildContext(
@@ -457,6 +541,20 @@ public sealed class StreamRegionExecutor : ReceiveActor
                 .ToDictionary(p => p.Name, p => ConvertJsonElement(p.Value)),
             _ => element.ToString(),
         };
+
+    private CancellationToken RunToken => this.runCts?.Token ?? this.parentToken;
+
+    /// <summary>⏱️ Stage 7.5 — time to check whether items are still moving.</summary>
+    private sealed class StallCheck
+    {
+        public static readonly StallCheck Instance = new();
+    }
+
+    /// <summary>⏱️ Stage 7.5 — the overall limit has passed.</summary>
+    private sealed class TotalElapsed
+    {
+        public static readonly TotalElapsed Instance = new();
+    }
 
     /// <summary>📡 Stage 7.6 — time to publish live progress.</summary>
     private sealed class ProgressTick

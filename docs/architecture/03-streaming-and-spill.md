@@ -267,11 +267,23 @@ Its recommendation is streaming as a second mode, at about 5–9 engineer-months
      `Completed = true`.
    - The designer's run mode and the execution detail page show the counts. See
      [realtime](../realtime.md#streaming-progress).
-2. **Regions have no timeout.**
-   - What the code does: batch nodes get `NodeExecutor`'s receive timeout (default 30 s). Neither
-     `StreamRegionExecutor` nor the runner sets one.
-   - Effect: a stalled source or sink hangs the run until it is cancelled. That may be intended
-     for long ETL, but it should be a knob.
+2. ~~**Regions have no timeout.**~~ **Fixed (Stage 7.5):** two opt-in limits, **off by default**:
+   - **Stall:** the region fails when no item moves through any stage for N. This catches a hung
+     source or sink without killing long healthy ETL.
+   - **Overall:** the region fails when it runs longer than N.
+
+   Where they're set:
+   - On the server: `Streaming:RegionStallTimeoutMs` and `Streaming:RegionTimeoutMs` (0 = off).
+   - Per region, on the region's **source node**: metadata `regionStallTimeoutMs` and
+     `regionTimeoutMs` (`0` = off for that region; blank = the server's setting). The designer edits
+     them in seconds, under "Streaming region limits".
+
+   A timeout is a region failure: the source node fails with a `TimeoutException` naming the limit
+   and the per-stage counts, so retry, continue, the on-error handler and try/catch apply.
+
+   ```jsonc
+   "Streaming": { "RegionStallTimeoutMs": 300000, "RegionTimeoutMs": 0 }
+   ```
 3. **Retrying a mid-pipeline node can stall the run.**
    - What the code does: when a *non-source* stage is blamed and its `OnErrorBehavior` is `Retry`,
      `RetryNode` calls `ExecuteNode` on it. That returns immediately, because only a region's

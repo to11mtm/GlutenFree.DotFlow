@@ -160,7 +160,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.2 | ✅ **fixed 2026-11-08** (conditional edges, `docs/conditional-edges.md`) — ~~**`ConnectionDefinition.Condition` / `Priority` are never read**~~, but the designer lets you set a condition (edge label), so it looks like it works | Low (UX: Medium) | 02 data-binding §10, item 4 | **Yes**: implement conditional edges (expression on the edge, evaluated after the source completes) vs. remove the field and its designer UI | 1–2 d |
 | 7.3 | ✅ **fixed 2026-11-09** (outbound HTTP policy, plan 06, `docs/outbound-http.md`) — ~~**§9.6 (modules) script HTTP has no host allowlist (SSRF)**~~ | Medium | plan 01 "Related" | **Yes**: allowlist shape (`ScriptHostCeilings` hosts / CIDR, default deny vs. allow), private-range blocking | ~1–2 d |
 | 7.4 | ✅ **fixed 2026-11-09** (signed packages, plan 07, `docs/module-signing.md`) — ~~**§9.5 (modules) strong-name tokens aren't authorship**: `RequireSigned` is satisfied by copying a public key~~ | Medium | plan 01 "Related" / 2.8.P2 | **Yes**: Authenticode / trusted-publisher design (bigger) vs. docs-only downgrade of what `RequireSigned` means | 2+ d |
-| 7.5 | **§9.2 (streaming) regions have no timeout** | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
+| 7.5 | ✅ **fixed 2026-11-09** (opt-in stall + overall limits, server default + per-region override) — ~~**§9.2 (streaming) regions have no timeout**~~ | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
 | 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
 | 7.7 | ✅ **fixed 2026-11-09** (`SubGraphExecutor` runs regions wholly inside a body) — ~~**§9.5 (streaming) no regions inside construct bodies**~~ | Low | plan 04 | No (parity work), but low priority | 1–2 d |
 | 7.8 | **§9.3 (streaming) mid-pipeline retry**: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
@@ -283,6 +283,45 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Stage 7.5 streaming region timeouts (§9.2 streaming)
+- Decided (asked; plan 04):
+  - Kind: a stall limit plus an optional overall limit.
+  - Default: **everything off** (opt-in).
+  - Where: server `Streaming:RegionStallTimeoutMs` / `RegionTimeoutMs`, plus a per-region override
+    in the source node's metadata (`regionStallTimeoutMs` / `regionTimeoutMs`; `0` = off), with a
+    designer field.
+  - On timeout: handled like any region failure (retryable).
+- Engine:
+  - `StreamingTimeoutOptions` (in `StreamRegionMessages.cs`; `For(metadata)` resolves the
+    override).
+  - `StreamRegionExecutor`:
+    - a linked `runCts` (binding and the runner use `RunToken`);
+    - a stall watchdog comparing the live counters (the 7.6 `StreamRegionCounters`);
+    - an overall one-shot timer.
+    - `TimeOut()` cancels the run; `HandleFinished` turns the cancellation into a `TimeoutException`
+      naming the limit, the per-stage counts and where to change it. The timers are cancelled on
+      finish and in `PostStop`.
+- API: Program.cs registers `StreamingTimeoutOptions` from configuration (0 = off).
+- Designer: `Designer/State/RegionTimeouts.cs` (`IsRegionSource`, seconds ↔ ms) and a
+  "Streaming region limits" section in `PropertiesPanel` (undoable `EditNodeMetadataCommand`).
+- Tests:
+  - `StreamRegionExecutionTests` +6: stall fails with the counts; slow but moving is OK; overall
+    limit; override `0` disables the server's limit; override sets a limit when the server has
+    none; a timeout is retried.
+  - `StreamingProgressConfigTests` +2.
+  - UI `Components/RegionLimitsPanelTests` (4).
+- Proof: 8/8 mutants killed:
+  - stall never fires;
+  - progress doesn't reset the clock;
+  - overall limit never armed;
+  - reported as a cancellation;
+  - source override ignored;
+  - server setting ignored;
+  - limits shown on non-source nodes;
+  - seconds not converted.
+- Docs: 03 §9 item 2, the findings table, plan 04.
+- Suites: unfiltered `dotnet test Workflow.Tests` 2001/2001; `Workflow.Tests.UI` 792/792.
+
 ### 2026-11-09 — Stage 7.4 part 3/3: dotflow-module CLI, docs
 - `Workflow.Modules/Packaging/ModulePackageBuilder.cs` builds a package from a folder:
   - it writes `contentHashes` for every file (except `module.json`, `signature.p7s` and the install

@@ -149,6 +149,25 @@ Planned lightly here; promote to a tested finding when scheduled.
 - **§9.2 regions have no timeout.** Batch nodes get `NodeExecutor`'s receive timeout; a region has
   none. Fix: a per-region timeout knob (default off or generous for long ETL) enforced around
   `StreamRegionRunner.RunAsync` via the linked CTS. Needs a design decision on the default.
+  **Decided 2026-11-09 (asked, Stage 7.5):**
+  - **Kind:** a **stall** timeout (fail when no item moves through any stage for N) plus an
+    optional **overall** wall-clock limit.
+  - **Default: everything off** (opt-in). No behaviour change unless configured.
+  - **Where:** the server defaults are `Streaming:RegionStallTimeoutMs` / `Streaming:RegionTimeoutMs`.
+    A workflow overrides them per region on the region's **source node**: metadata
+    `regionStallTimeoutMs` / `regionTimeoutMs`, where `0` means off for that region. The designer
+    has a field for them.
+  - **On timeout:** handled like any region failure. The source node fails with a
+    `TimeoutException` naming the limit and the per-stage counts, so retry, continue, the on-error
+    handler and try/catch apply.
+  - Alternatives: stall only; overall only; a default stall of 5 min (with or without a 1 h overall
+    limit); server-only or per-region-only settings; timeouts never retried.
+  - **Implemented 2026-11-09 (Stage 7.5):**
+    - `StreamingTimeoutOptions` (`For(sourceMetadata)` resolves the per-region override).
+    - `StreamRegionExecutor` runs a stall watchdog (`StallCheck`, every stall/4 clamped to
+      25 ms–1 s, comparing the live counters) and an overall timer (`TotalElapsed`). It cancels a
+      linked run token and reports `TimeoutException`.
+    - Designer: "Streaming region limits" on a region's source node (`RegionTimeouts`).
 - **§9.3 retrying a mid-pipeline stage.** `StreamRegionFailed` currently always blames the **source**
   (`Fail()` uses `SourceNodeIds.First()`), so a retry re-runs the whole region rather than stalling —
   the originally-feared stall doesn't occur, but stage-level blame is missing. Revisit if/when

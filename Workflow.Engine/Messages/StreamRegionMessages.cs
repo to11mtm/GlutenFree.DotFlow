@@ -86,6 +86,39 @@ public record StreamRegionProgress(
     bool Completed = true);
 
 /// <summary>
+/// ⏱️ Stage 7.5 — limits on how long a streaming region may run. Registered by the host from
+/// <c>Streaming:RegionStallTimeoutMs</c> / <c>Streaming:RegionTimeoutMs</c> (0 = off, the default);
+/// a region's source node can override either through its metadata (<c>0</c> = off for that region).
+/// </summary>
+/// <param name="StallTimeoutMs">Fail when no item moves through any stage for this long (0 = off).</param>
+/// <param name="TotalTimeoutMs">Fail when the region runs longer than this (0 = off).</param>
+public sealed record StreamingTimeoutOptions(int StallTimeoutMs = 0, int TotalTimeoutMs = 0)
+{
+    /// <summary>The source-node metadata key overriding the stall timeout (milliseconds; 0 = off).</summary>
+    public const string StallMetadataKey = "regionStallTimeoutMs";
+
+    /// <summary>The source-node metadata key overriding the overall timeout (milliseconds; 0 = off).</summary>
+    public const string TotalMetadataKey = "regionTimeoutMs";
+
+    /// <summary>The limits for a region whose source node carries <paramref name="sourceMetadata"/>.</summary>
+    /// <param name="sourceMetadata">The source node's metadata (null = none).</param>
+    /// <returns>The stall and overall limits (null = off).</returns>
+    public (TimeSpan? Stall, TimeSpan? Total) For(LanguageExt.HashMap<string, string>? sourceMetadata)
+    {
+        static TimeSpan? Ms(int value) => value > 0 ? TimeSpan.FromMilliseconds(value) : null;
+
+        int Pick(string key, int fallback)
+            => sourceMetadata is { } metadata
+               && metadata.Find(key).IfNoneUnsafe((string?)null) is { } raw
+               && int.TryParse(raw, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : fallback;
+
+        return (Ms(Pick(StallMetadataKey, this.StallTimeoutMs)), Ms(Pick(TotalMetadataKey, this.TotalTimeoutMs)));
+    }
+}
+
+/// <summary>
 /// 📡 Stage 7.6 — how often a running streaming region publishes live progress. Registered by the
 /// host from <c>Streaming:ProgressIntervalMs</c>; when absent, the default applies.
 /// </summary>

@@ -72,6 +72,27 @@
             }
         </div>
 
+        @* ⏱️ Stage 7.5 — a streaming region's time limits, set on its source node (off unless set). *@
+        @if (RegionTimeouts.IsRegionSource(Document, SelectedNode))
+        {
+            <div class="df-field" data-testid="region-limits">
+                <label class="df-label">Streaming region limits</label>
+                <label class="df-label">Stall limit (seconds)</label>
+                <input class="df-input" type="number" min="0" step="any" placeholder="server setting (off by default)" data-testid="region-stall"
+                       value="@RegionTimeouts.SecondsText(SelectedNode, RegionTimeouts.StallKey)"
+                       @onchange="e => SetRegionLimit(RegionTimeouts.StallKey, e.Value?.ToString())" />
+                <label class="df-label">Overall limit (seconds)</label>
+                <input class="df-input" type="number" min="0" step="any" placeholder="server setting (off by default)" data-testid="region-total"
+                       value="@RegionTimeouts.SecondsText(SelectedNode, RegionTimeouts.TotalKey)"
+                       @onchange="e => SetRegionLimit(RegionTimeouts.TotalKey, e.Value?.ToString())" />
+                <div class="df-field-help" data-testid="region-limits-help">
+                    The region fails when no item moves through any stage for the stall limit, or when it runs longer
+                    than the overall limit. It then fails like this node (retry and on-error apply). Leave blank for the
+                    server's setting; 0 turns a limit off for this region.
+                </div>
+            </div>
+        }
+
         @* 📤 G6 — live outputs strip: the node's current output ports (reflects merged/meta). *@
         <div class="df-field">
             <label class="df-label">Outputs</label>
@@ -778,6 +799,22 @@
         }
 
         this.Commands.Execute(new EditNodeErrorHandlingCommand(node.Id, node.ErrorHandling, NodeErrorHandling.Write(settings)));
+    }
+
+    /// <summary>⏱️ Stage 7.5 — sets (or clears) one of the region's limits on its source node (undoable).</summary>
+    private void SetRegionLimit(string key, string? seconds)
+    {
+        if (this.SelectedNode is not { } node || this.Commands is null)
+        {
+            return;
+        }
+
+        var before = node.Metadata.TryGetValue(key, out var existing) ? existing : null;
+        var after = RegionTimeouts.ToStored(seconds);
+        if (before != after)
+        {
+            this.Commands.Execute(new EditNodeMetadataCommand(node.Id, key, before, after));
+        }
     }
 
     private void OnErrorBehaviorChanged(ChangeEventArgs e)

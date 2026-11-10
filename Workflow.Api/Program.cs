@@ -361,6 +361,12 @@ builder.Services.AddWorkflowRateLimiting(builder.Configuration);
 // spill enabled fails loudly rather than landing scratch somewhere nobody provisioned~
 builder.Services.AddStreamingSpill(builder.Configuration);
 
+// ⏱️ Stage 7.5 — streaming region stall / overall limits (0 = off, the default; a region's source
+// node can override them)~
+builder.Services.AddSingleton(new Workflow.Engine.Messages.StreamingTimeoutOptions(
+    builder.Configuration.GetValue("Streaming:RegionStallTimeoutMs", 0),
+    builder.Configuration.GetValue("Streaming:RegionTimeoutMs", 0)));
+
 // 📡 Stage 7.6 — how often a running streaming region pushes live item counts (0 = final only)~
 builder.Services.AddSingleton(new Workflow.Engine.Messages.StreamingProgressOptions(
     builder.Configuration.GetValue("Streaming:ProgressIntervalMs", Workflow.Engine.Messages.StreamingProgressOptions.DefaultIntervalMs)));
