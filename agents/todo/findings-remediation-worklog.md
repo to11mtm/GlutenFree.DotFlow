@@ -186,7 +186,9 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   passed in the next full run and 5/5 alone. The failure message wasn't captured. It's timing-based
   (a 25 ms interval against 8 items × 150 ms), so it probably flakes under load. Capture the message
   if it recurs.
-- [ ] **Flaky UI test `MonitorTests.Monitor_RowOpen_NavigatesToDetail`.** Failed once in a full
+  *2026-11-09:* not reproduced in 25 back-to-back runs of the streaming test classes. Left open.
+  Capture the message next time.
+- [x] ✅ **hardened 2026-11-09** (click and check inside `WaitForAssertion`; 10/10, and still fails when Open does nothing) — **Flaky UI test `MonitorTests.Monitor_RowOpen_NavigatesToDetail`.** Failed once in a full
   UI run during Stage 7.2 ("nav.Uri … is too short") and passed on the re-run and alone. The
   navigation assertion probably races the click handler. Unrelated to 7.2.
 - [ ] **Rare test-host crash in `StreamRegionRunnerTests`.** Once during the §12.7 run:
@@ -194,6 +196,15 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   `CountingSource.ExecuteStreamAsync` (an async-iterator stub), which aborted the test run. It
   didn't reproduce on a re-run. Likely the stub's enumerator is used concurrently. Pre-existing and
   unrelated to §12.7.
+  *2026-11-09:* not reproduced in 25 runs.
+  - The exception comes from the compiler-generated async iterator's `ManualResetValueTaskSourceCore`
+    when `MoveNextAsync` / `DisposeAsync` overlap. The runner wraps each module's
+    `IAsyncEnumerable` in Akka's `Source.From(() => …)`, so the likely culprit is Akka.Streams'
+    async-enumerable source disposing the enumerator while a `MoveNextAsync` is still pending
+    during teardown (cancel or failure).
+  - If it recurs, or shows up in production: adapt module streams through a `Channel<T>` pump owned
+    by the runner (one reader, awaits the pending move before disposing) instead of
+    `Source.From(IAsyncEnumerable)`.
 - [x] ✅ **done 2026-11-09** (records written before the inputs are dropped) — **Completed body nodes have no inputs in history.** `SubGraphExecutor.HandleNodeCompleted`
   removes `_nodeInputs[nodeId]` before `QueuePersistNode`, so completed records from loop / branch /
   try bodies are written with `Inputs = null` (failed ones keep theirs). Top-level records keep
@@ -283,6 +294,15 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Follow-up: flaky tests
+- `MonitorTests.Monitor_RowOpen_NavigatesToDetail`: the handler navigates synchronously, so the
+  likely cause was a live re-render between finding the button and clicking it, which swallowed the
+  click. The test now clicks and checks inside `WaitForAssertion`, with the same assertion.
+  10/10 runs passed; with `Open` turned into a no-op it still fails.
+- Streaming flakes (`Region_PublishesLiveCounts_*` and the `StreamRegionRunnerTests` host crash):
+  not reproduced in 25 back-to-back runs. Analysis and a fix idea are in the follow-ups; left open.
+- UI suite 794/794.
+
 ### 2026-11-09 — Follow-up: node events from construct bodies (and region stages)
 - `SubGraphExecutor.PublishNodeEvent` puts the same messages on the EventStream as top-level nodes:
   - `NodeStateChanged(Pending → Running)` when a body node or region member starts;

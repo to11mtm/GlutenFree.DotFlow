@@ -80,10 +80,15 @@ public sealed class MonitorTests : TestContext
 
         var cut = this.RenderComponent<ExecutionMonitor>();
         cut.WaitForAssertion(() => cut.Find("[data-testid=row-open]"));
-        cut.Find("[data-testid=row-open]").Click();
 
+        // Flaked once under load ("nav.Uri … is too short"): a live re-render between finding the
+        // button and clicking it can swallow the click, so click and check together until it lands~
         var nav = this.Services.GetRequiredService<NavigationManager>();
-        nav.Uri.Should().EndWith($"/monitor/{id}");
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find("[data-testid=row-open]").Click();
+            nav.Uri.Should().EndWith($"/monitor/{id}");
+        });
     }
 
     [Fact]
