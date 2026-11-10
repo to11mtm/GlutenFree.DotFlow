@@ -741,10 +741,10 @@ public class SubGraphExecutor : ReceiveActor
             _nodeActors.Remove(nodeId);
         }
 
-        _nodeInputs.Remove(nodeId);
-
-        // Persist under the parent execution ID for history correlation (test 6)~
+        // Persist under the parent execution ID for history correlation (test 6) — before the
+        // captured inputs are dropped, so the record keeps them like a top-level one~
         QueuePersistNode(nodeId, message.Duration, NodeExecutionState.Completed);
+        _nodeInputs.Remove(nodeId);
 
         // §12.10: a construct nested in this body spawns its own actor instead of routing its
         // successors as a plain node; it fires its done port when it completes~ 🧩

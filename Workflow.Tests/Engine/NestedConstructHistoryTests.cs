@@ -56,6 +56,25 @@ public class NestedConstructHistoryTests : TestKit
     }
 
     /// <summary>
+    /// Follow-up (found during §10.6): a completed body node's history record keeps the inputs it
+    /// ran with, like a top-level one (they used to be dropped before the record was written).
+    /// </summary>
+    [Fact]
+    public void CompletedBodyRows_KeepTheirInputs()
+    {
+        var definition = Workflow(
+            new[] { Foreach("loop", "x", "y"), Node("first", "h.first"), Node("second", "h.second") },
+            new[] { Edge("loop", "loopBody", "first"), Edge("first", "output", "second") });
+
+        var rows = this.RunAndCollect(definition, "second", 2, new ForEachModule(), Pass("h.first"), Pass("h.second"));
+
+        rows.Should().OnlyContain(r => r.State == NodeExecutionState.Completed);
+        rows.Should().OnlyContain(
+            r => r.Inputs != null && r.Inputs.ContainsKey("input") && Equals(r.Inputs["input"], "ok"),
+            because: "the body node ran with first's output as its input");
+    }
+
+    /// <summary>
     /// foreach outer [1,2,3] → body: foreach inner [a,b] → body: leaf. The 6 leaf rows cover every
     /// (outer, inner) iteration pair; LoopId / LoopIteration name the innermost loop.
     /// </summary>

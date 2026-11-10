@@ -194,7 +194,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   `CountingSource.ExecuteStreamAsync` (an async-iterator stub), which aborted the test run. It
   didn't reproduce on a re-run. Likely the stub's enumerator is used concurrently. Pre-existing and
   unrelated to §12.7.
-- [ ] **Completed body nodes have no inputs in history.** `SubGraphExecutor.HandleNodeCompleted`
+- [x] ✅ **done 2026-11-09** (records written before the inputs are dropped) — **Completed body nodes have no inputs in history.** `SubGraphExecutor.HandleNodeCompleted`
   removes `_nodeInputs[nodeId]` before `QueuePersistNode`, so completed records from loop / branch /
   try bodies are written with `Inputs = null` (failed ones keep theirs). Top-level records keep
   inputs. Pre-existing; found during §10.6.
@@ -283,6 +283,14 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Follow-up: completed body nodes keep their inputs in history
+- `SubGraphExecutor.HandleNodeCompleted` now calls `QueuePersistNode` **before**
+  `_nodeInputs.Remove`, so completed records from loop / branch / try bodies carry their inputs,
+  like top-level ones. Failed records already did.
+- Test: `NestedConstructHistoryTests.CompletedBodyRows_KeepTheirInputs`. With the fix stashed it
+  fails; restored, it passes.
+- Suite: unfiltered `dotnet test Workflow.Tests` 2002/2002 (engine-only change; UI not affected).
+
 ### 2026-11-09 — Stage 7.5 streaming region timeouts (§9.2 streaming)
 - Decided (asked; plan 04):
   - Kind: a stall limit plus an optional overall limit.
