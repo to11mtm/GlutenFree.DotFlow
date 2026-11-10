@@ -1563,6 +1563,12 @@ public class WorkflowExecutor : ReceiveActor
         // The terminal stage's real outputs win over the item-count placeholder~
         _nodeOutputs[message.TerminalNodeId] = new Dictionary<string, object?>(message.Outputs);
 
+        // 📡 Each stage reports its completion like a batch node does (clients get NodeCompleted)~
+        foreach (var nodeId in message.NodeIds)
+        {
+            PublishTerminal(new NodeExecutionCompleted(nodeId, HashMap<string, object?>.Empty, _executionId, message.Duration));
+        }
+
         _log.Info(
             "🌊 Streaming region {RegionIndex} completed in {Duration}ms across {NodeCount} node(s)",
             message.RegionIndex,

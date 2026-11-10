@@ -285,6 +285,30 @@ public class StreamRegionExecutionTests : TestKit
         first.ItemCounts["src"].Should().Be(10);
     }
 
+    /// <summary>
+    /// 📡 Follow-up — every stage of a finished region reports its completion (clients get
+    /// NodeCompleted), at the top level and inside a loop body.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EveryStageOfAFinishedRegion_ReportsCompletion(bool insideALoop)
+    {
+        var probe = CreateTestProbe();
+        Sys.EventStream.Subscribe(probe, typeof(NodeExecutionCompleted));
+        var definition = insideALoop
+            ? Definition(
+                [Foreach("loop", 1), Node("src", "test.stream.source"), Node("collect", "test.stream.collect")],
+                [new ConnectionDefinition("loop", "loopBody", "src", "items"), new ConnectionDefinition("src", "items", "collect", "items")])
+            : SourceToCollect(Node("src", "test.stream.source"));
+
+        this.RunToEnd(definition, Services(new Workflow.Modules.Builtin.Flow.ForEachModule(), new FakeSource(3), new FakeCollector()))
+            .Should().BeOfType<WorkflowCompleted>();
+
+        var completed = probe.ReceiveWhile<object>(TimeSpan.FromMilliseconds(500), m => m).OfType<NodeExecutionCompleted>().Select(m => m.NodeId).ToList();
+        completed.Should().Contain("src").And.Contain("collect");
+    }
+
     // ── Stage 7.5 (§9.2): region timeouts ────────────────────────────────────────────────────────
 
     private static WorkflowDefinition SourceToCollect(NodeDefinition source)

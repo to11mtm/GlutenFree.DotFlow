@@ -99,6 +99,10 @@ omitted; fetch them via `GET /api/v1/executions/{id}` when needed.
 | `NodeFailed` | `executionId`, `nodeId`, `error`, `durationMs`, `timestamp` |
 | `ExecutionProgress` | `executionId`, `percentage`, `currentNode?`, `completedNodes`, `totalNodes`, `timestamp` |
 | `ExecutionSnapshot` | `executionId`, `state`, `progress`, `nodeStates`, `endTime?`, `error?` |
+
+`NodeStarted` / `NodeCompleted` / `NodeFailed` are also sent for nodes inside loop, parallel,
+try/catch and transaction bodies, once per iteration or branch. Every stage of a streaming region
+sends `NodeCompleted` when the region finishes.
 | `StreamProgress` | `executionId`, `regionIndex`, `itemCounts` (node id → items emitted), `elapsedMs`, `completed`, `timestamp` |
 
 ### Streaming progress

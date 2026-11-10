@@ -206,7 +206,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   `ExecutionFailed` with "Workflow execution was cancelled" — clients can only tell it apart by text.
   Add an `ExecutionCancelled` client event (bridge mapping + hub contract), e.g. publish a distinct
   message or map terminal `ExecutionStateChanged → Cancelled`. Update `ExecutionEventBridgeTests`.
-- [ ] **Node events from construct bodies.** Loop/branch body nodes run in `SubGraphExecutor`, which
+- [x] ✅ **done 2026-11-09** (body nodes and region stages publish node events) — **Node events from construct bodies.** Loop/branch body nodes run in `SubGraphExecutor`, which
   doesn't publish `NodeExecutionCompleted`/`Failed` (or `NodeStateChanged`/`NodeRetrying` for body
   retries), so clients see no per-node events inside bodies. Left out of Stage 3 to keep that change
   focused; `NodeFailureCore`'s `scheduleRetry` callback is the natural hook for retry events.
@@ -283,6 +283,26 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Follow-up: node events from construct bodies (and region stages)
+- `SubGraphExecutor.PublishNodeEvent` puts the same messages on the EventStream as top-level nodes:
+  - `NodeStateChanged(Pending → Running)` when a body node or region member starts;
+  - `NodeExecutionCompleted`, with outputs and variable updates stripped like the top level;
+  - `NodeExecutionFailed`, with the error redacted via `ExecutionSecrets`;
+  - `NodeRetrying` when a retry is scheduled.
+  These are not told to the construct parent. Only the real-time bridge subscribes, so nothing
+  double-counts.
+- Found on the way: **streaming region stages never sent `NodeCompleted`**, at the top level too
+  (completion only changed their state). Both executors now publish `NodeExecutionCompleted` for
+  every stage when a region finishes.
+- Tests:
+  - `Engine/BodyNodeEventsTests` (2): loop body started/completed ×3 with outputs stripped; a
+    failing body node reports retrying and failed ×2.
+  - `StreamRegionExecutionTests.EveryStageOfAFinishedRegion_ReportsCompletion` (top level and in a
+    loop).
+  - With both executors' changes stashed, all 4 fail; restored, they pass.
+- Docs: `docs/realtime.md` (body and region events).
+- Suites: unfiltered `dotnet test Workflow.Tests` 2009/2009; `Workflow.Tests.UI` 794/794.
+
 ### 2026-11-09 — Follow-up: dedicated ExecutionCancelled real-time event
 - Engine: `WorkflowFailed` gets an init-only `Cancelled` flag, set by
   `WorkflowExecutor.HandleCancelExecution` on both the message to the parent and the EventStream

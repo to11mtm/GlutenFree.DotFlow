@@ -502,6 +502,7 @@ public class SubGraphExecutor : ReceiveActor
         var nodeInputs = GatherNodeInputs(nodeId);
         _nodeInputs[nodeId] = new Dictionary<string, object?>(nodeInputs);
         _runningNodes.Add(nodeId);
+        PublishNodeEvent(new NodeStateChanged(nodeId, _parentExecutionId, NodeExecutionState.Pending, NodeExecutionState.Running, DateTimeOffset.UtcNow));
 
         var actorName = $"sgnode-{nodeId.Replace(".", "-")}";
         var nodeActor = Context.ActorOf(
@@ -568,6 +569,7 @@ public class SubGraphExecutor : ReceiveActor
             _failedNodes.Remove(memberId);
             _completedNodes.Remove(memberId);
             _runningNodes.Add(memberId);
+            PublishNodeEvent(new NodeStateChanged(memberId, _parentExecutionId, NodeExecutionState.Pending, NodeExecutionState.Running, DateTimeOffset.UtcNow));
         }
 
         var inputs = GatherNodeInputs(sourceNodeId);
@@ -745,6 +747,7 @@ public class SubGraphExecutor : ReceiveActor
         // captured inputs are dropped, so the record keeps them like a top-level one~
         QueuePersistNode(nodeId, message.Duration, NodeExecutionState.Completed);
         _nodeInputs.Remove(nodeId);
+        PublishNodeEvent(message with { Outputs = HashMap<string, object?>.Empty, VariableUpdates = null });
 
         // §12.10: a construct nested in this body spawns its own actor instead of routing its
         // successors as a plain node; it fires its done port when it completes~ 🧩
@@ -812,6 +815,7 @@ public class SubGraphExecutor : ReceiveActor
         foreach (var nodeId in message.NodeIds)
         {
             QueuePersistNode(nodeId, message.Duration, NodeExecutionState.Completed);
+            PublishNodeEvent(new NodeExecutionCompleted(nodeId, HashMap<string, object?>.Empty, _parentExecutionId, message.Duration));
         }
 
         _nodeInputs.Remove(message.NodeIds.FirstOrDefault() ?? string.Empty);
@@ -889,6 +893,7 @@ public class SubGraphExecutor : ReceiveActor
             message.Error.Message);
 
         QueuePersistNode(nodeId, message.Duration, NodeExecutionState.Failed, message.Error.Message);
+        PublishNodeEvent(new NodeExecutionFailed(nodeId, ExecutionSecrets.Error(ExecutionSecrets.For(_parentExecutionId), message.Error), _parentExecutionId, message.Duration));
         _failureCore.Handle(nodeId, message.Error);
     }
 
@@ -1010,6 +1015,7 @@ public class SubGraphExecutor : ReceiveActor
     private void ScheduleNodeRetry(NodeFailureCore.RetryDecision retry)
     {
         _retryAttempts[retry.NodeId] = retry.Attempt;
+        PublishNodeEvent(new NodeRetrying(retry.NodeId, _parentExecutionId, retry.Attempt, retry.MaxAttempts, retry.Error));
         _pendingRetries[retry.NodeId] = Context.System.Scheduler.ScheduleTellOnceCancelable(
             delay: retry.Delay,
             receiver: Self,
@@ -1072,6 +1078,13 @@ public class SubGraphExecutor : ReceiveActor
     }
 
     #endregion
+
+    /// <summary>
+    /// Follow-up: body nodes report started / completed / failed / retrying on the EventStream like
+    /// top-level ones (the real-time bridge turns them into NodeStarted / NodeCompleted / NodeFailed),
+    /// with outputs stripped and errors redacted. Not told to the parent: the construct doesn't want them~ 📡.
+    /// </summary>
+    private void PublishNodeEvent(object message) => Context.System.EventStream.Publish(message);
 
     #region Port-Aware Routing
 
