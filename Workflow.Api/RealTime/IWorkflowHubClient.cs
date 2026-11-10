@@ -30,6 +30,11 @@ public interface IWorkflowHubClient
     /// <returns>A task.</returns>
     Task ExecutionFailed(ExecutionFailedEvent e);
 
+    /// <summary>Pushed when a user cancels an execution (instead of <c>ExecutionFailed</c>)~ 🛑.</summary>
+    /// <param name="e">The event payload.</param>
+    /// <returns>A task.</returns>
+    Task ExecutionCancelled(ExecutionCancelledEvent e);
+
     /// <summary>Pushed when a node starts executing~ ⚡.</summary>
     /// <param name="e">The event payload.</param>
     /// <returns>A task.</returns>

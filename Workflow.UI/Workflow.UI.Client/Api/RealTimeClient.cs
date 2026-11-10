@@ -41,6 +41,9 @@ public sealed class RealTimeClient : IAsyncDisposable
     /// <summary>Raised when an execution fails~ 😿.</summary>
     public event Action<ExecutionFailedEvent>? ExecutionFailed;
 
+    /// <summary>Raised when a user cancels an execution~ 🛑.</summary>
+    public event Action<ExecutionCancelledEvent>? ExecutionCancelled;
+
     /// <summary>Raised when a node starts~ ⚡.</summary>
     public event Action<NodeStartedEvent>? NodeStarted;
 
@@ -183,6 +186,7 @@ public sealed class RealTimeClient : IAsyncDisposable
         conn.On<ExecutionStartedEvent>("ExecutionStarted", e => this.ExecutionStarted?.Invoke(e));
         conn.On<ExecutionCompletedEvent>("ExecutionCompleted", e => this.ExecutionCompleted?.Invoke(e));
         conn.On<ExecutionFailedEvent>("ExecutionFailed", e => this.ExecutionFailed?.Invoke(e));
+        conn.On<ExecutionCancelledEvent>("ExecutionCancelled", e => this.ExecutionCancelled?.Invoke(e));
         conn.On<NodeStartedEvent>("NodeStarted", e => this.NodeStarted?.Invoke(e));
         conn.On<NodeCompletedEvent>("NodeCompleted", e => this.NodeCompleted?.Invoke(e));
         conn.On<NodeFailedEvent>("NodeFailed", e => this.NodeFailed?.Invoke(e));

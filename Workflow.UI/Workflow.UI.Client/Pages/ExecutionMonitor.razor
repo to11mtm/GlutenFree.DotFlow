@@ -84,6 +84,7 @@
         this.RealTime.ExecutionProgress += this.OnProgress;
         this.RealTime.ExecutionCompleted += this.OnCompleted;
         this.RealTime.ExecutionFailed += this.OnFailed;
+        this.RealTime.ExecutionCancelled += this.OnCancelled;
 
         try
         {
@@ -104,6 +105,8 @@
     private void OnCompleted(Workflow.UI.Client.Api.Dtos.ExecutionCompletedEvent e) => this.Monitor.ApplyCompleted(e);
 
     private void OnFailed(Workflow.UI.Client.Api.Dtos.ExecutionFailedEvent e) => this.Monitor.ApplyFailed(e);
+
+    private void OnCancelled(Workflow.UI.Client.Api.Dtos.ExecutionCancelledEvent e) => this.Monitor.ApplyCancelled(e);
 
     private void OnMonitorChanged() => this.InvokeAsync(this.StateHasChanged);
 
@@ -164,6 +167,7 @@
         this.RealTime.ExecutionProgress -= this.OnProgress;
         this.RealTime.ExecutionCompleted -= this.OnCompleted;
         this.RealTime.ExecutionFailed -= this.OnFailed;
+        this.RealTime.ExecutionCancelled -= this.OnCancelled;
 
         try
         {

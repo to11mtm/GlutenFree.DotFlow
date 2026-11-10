@@ -93,6 +93,7 @@ omitted; fetch them via `GET /api/v1/executions/{id}` when needed.
 | `ExecutionStarted` | `executionId`, `workflowId?`, `timestamp` |
 | `ExecutionCompleted` | `executionId`, `workflowId?`, `durationMs`, `timestamp` |
 | `ExecutionFailed` | `executionId`, `workflowId?`, `error`, `durationMs`, `timestamp` |
+| `ExecutionCancelled` | `executionId`, `workflowId?`, `reason`, `durationMs`, `timestamp`. Sent when a user cancels a run, **instead of** `ExecutionFailed`. |
 | `NodeStarted` | `executionId`, `nodeId`, `timestamp` |
 | `NodeCompleted` | `executionId`, `nodeId`, `durationMs`, `timestamp` |
 | `NodeFailed` | `executionId`, `nodeId`, `error`, `durationMs`, `timestamp` |

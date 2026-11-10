@@ -119,4 +119,21 @@ public sealed class MonitorStateTests
 
         raised.Should().Be(1);
     }
+
+    /// <summary>Follow-up: an ExecutionCancelled event shows the run as Cancelled (not Failed).</summary>
+    [Fact]
+    public void Merge_Cancelled_ShowsTheRowAsCancelled()
+    {
+        var state = new MonitorState();
+        var id = Guid.NewGuid();
+        state.ApplyStarted(new ExecutionStartedEvent(id, null, T0));
+
+        state.ApplyCancelled(new ExecutionCancelledEvent(id, null, "Workflow execution was cancelled", 1500, T0.AddSeconds(2)));
+
+        var row = state.Find(id)!;
+        row.State.Should().Be("Cancelled");
+        row.DurationMs.Should().Be(1500);
+        row.Error.Should().BeNull();
+        row.IsRunning.Should().BeFalse();
+    }
 }

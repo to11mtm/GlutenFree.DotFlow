@@ -2084,8 +2084,8 @@ public class WorkflowExecutor : ReceiveActor
             _executionTimer.Elapsed,
             partialOutputs.Count > 0
                 ? Option<HashMap<string, object?>>.Some(partialOutputs.ToHashMap())
-                : Option<HashMap<string, object?>>.None));
-        PublishTerminal(new WorkflowFailed(_executionId, ExecutionSecrets.Error(Secrets, cancelled), _executionTimer.Elapsed, Option<HashMap<string, object?>>.None));
+                : Option<HashMap<string, object?>>.None) { Cancelled = true });
+        PublishTerminal(new WorkflowFailed(_executionId, ExecutionSecrets.Error(Secrets, cancelled), _executionTimer.Elapsed, Option<HashMap<string, object?>>.None) { Cancelled = true });
         StopWhenPersisted();
     }
 

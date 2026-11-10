@@ -202,7 +202,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   snapshots still hold secret values in plain text. This is pivot option "names + values, plus at
   rest" in plan 03 Finding D, and it overlaps the secrets-storage plan.
 
-- [ ] **Dedicated cancel event for real-time clients.** Since §12.1 a user cancel reaches SignalR as
+- [x] ✅ **done 2026-11-09** (`WorkflowFailed.Cancelled` → `ExecutionCancelled`) — **Dedicated cancel event for real-time clients.** Since §12.1 a user cancel reaches SignalR as
   `ExecutionFailed` with "Workflow execution was cancelled" — clients can only tell it apart by text.
   Add an `ExecutionCancelled` client event (bridge mapping + hub contract), e.g. publish a distinct
   message or map terminal `ExecutionStateChanged → Cancelled`. Update `ExecutionEventBridgeTests`.
@@ -283,6 +283,29 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-09 — Follow-up: dedicated ExecutionCancelled real-time event
+- Engine: `WorkflowFailed` gets an init-only `Cancelled` flag, set by
+  `WorkflowExecutor.HandleCancelExecution` on both the message to the parent and the EventStream
+  one. It's a property rather than a new message type, so existing subscribers (metrics, the
+  completion tracker) see the same terminal message as before.
+- API: `IWorkflowHubClient.ExecutionCancelled(ExecutionCancelledEvent(executionId, workflowId?,
+  reason, durationMs, timestamp))`. The bridge maps `WorkflowFailed { Cancelled: true }` to it
+  **instead of** `ExecutionFailed`.
+- UI:
+  - `RealTimeClient.ExecutionCancelled`.
+  - `MonitorState.ApplyCancelled` (the row shows Cancelled, no error), used by the monitor.
+  - Execution detail refreshes as "Cancelled".
+  - Designer run mode: `RunState.MarkCancelled`, now idempotent, so the user's own cancel plus the
+    event log it once.
+- Tests:
+  - `Engine/ExecutionCancelledEventTests` (2).
+  - `ExecutionEventBridgeTests.ExecutionCancelled_Broadcast_InsteadOfExecutionFailed`.
+  - UI: `MonitorStateTests.Merge_Cancelled_*`, `RunStateTests.MarkCancelled_Twice_LogsOnce`.
+- Proof: 4/4 mutants killed (engine doesn't mark it, bridge sends it as a failure, monitor shows
+  Failed, logged twice).
+- Docs: `docs/realtime.md` event catalog.
+- Suites: unfiltered `dotnet test Workflow.Tests` 2005/2005; `Workflow.Tests.UI` 794/794.
+
 ### 2026-11-09 — Follow-up: completed body nodes keep their inputs in history
 - `SubGraphExecutor.HandleNodeCompleted` now calls `QueuePersistNode` **before**
   `_nodeInputs.Remove`, so completed records from loop / branch / try bodies carry their inputs,

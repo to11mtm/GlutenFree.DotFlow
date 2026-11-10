@@ -179,6 +179,15 @@ public sealed class ExecutionEventBridge : IHostedService
                 break;
             }
 
+            case WorkflowFailed e when e.Cancelled:
+            {
+                // 🛑 A user cancel is its own event, so clients needn't parse the error text~
+                var wf = await this.ResolveWorkflowIdAsync(e.ExecutionId, ct).ConfigureAwait(false);
+                await this.BroadcastAsync(e.ExecutionId, wf, c => c.ExecutionCancelled(
+                    new ExecutionCancelledEvent(e.ExecutionId, wf, e.Error?.Message ?? "Execution cancelled", e.Duration.TotalMilliseconds, now))).ConfigureAwait(false);
+                break;
+            }
+
             case WorkflowFailed e:
             {
                 var wf = await this.ResolveWorkflowIdAsync(e.ExecutionId, ct).ConfigureAwait(false);

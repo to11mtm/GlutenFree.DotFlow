@@ -23,6 +23,9 @@ public sealed record ExecutionCompletedEvent(Guid ExecutionId, Guid? WorkflowId,
 /// <summary>😿 Execution failed.</summary>
 public sealed record ExecutionFailedEvent(Guid ExecutionId, Guid? WorkflowId, string Error, double DurationMs, DateTimeOffset Timestamp);
 
+/// <summary>🛑 Execution cancelled by a user.</summary>
+public sealed record ExecutionCancelledEvent(Guid ExecutionId, Guid? WorkflowId, string Reason, double DurationMs, DateTimeOffset Timestamp);
+
 /// <summary>⚡ Node started.</summary>
 public sealed record NodeStartedEvent(Guid ExecutionId, string NodeId, DateTimeOffset Timestamp);
 

@@ -145,6 +145,7 @@
         this.RealTime.NodeFailed += this.OnNodeFailed;
         this.RealTime.ExecutionCompleted += this.OnExecutionDone;
         this.RealTime.ExecutionFailed += this.OnExecutionFailed;
+        this.RealTime.ExecutionCancelled += this.OnExecutionCancelled;
 
         try
         {
@@ -212,6 +213,14 @@
         if (e.ExecutionId == this.runState.ExecutionId)
         {
             await this.RefreshTerminalAsync("Failed");
+        }
+    }
+
+    private async void OnExecutionCancelled(Workflow.UI.Client.Api.Dtos.ExecutionCancelledEvent e)
+    {
+        if (e.ExecutionId == this.runState.ExecutionId)
+        {
+            await this.RefreshTerminalAsync("Cancelled");
         }
     }
 
@@ -302,6 +311,7 @@
         this.RealTime.NodeFailed -= this.OnNodeFailed;
         this.RealTime.ExecutionCompleted -= this.OnExecutionDone;
         this.RealTime.ExecutionFailed -= this.OnExecutionFailed;
+        this.RealTime.ExecutionCancelled -= this.OnExecutionCancelled;
 
         try
         {

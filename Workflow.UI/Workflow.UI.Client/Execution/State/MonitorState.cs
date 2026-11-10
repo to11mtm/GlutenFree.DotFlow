@@ -174,6 +174,19 @@ public sealed class MonitorState
         }
     }
 
+    /// <summary>🛑 Merges an <c>ExecutionCancelled</c> event.</summary>
+    /// <param name="e">The event.</param>
+    public void ApplyCancelled(ExecutionCancelledEvent e)
+    {
+        var row = this.Upsert(e.ExecutionId);
+        row.WorkflowId = e.WorkflowId ?? row.WorkflowId;
+        row.State = "Cancelled";
+        row.CompletedAt = e.Timestamp;
+        row.DurationMs = e.DurationMs;
+        row.CurrentNode = null;
+        this.Raise();
+    }
+
     private MonitorRow Upsert(Guid executionId)
     {
         if (!this.rows.TryGetValue(executionId, out var row))

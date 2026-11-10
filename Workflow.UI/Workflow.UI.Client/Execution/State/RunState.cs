@@ -239,6 +239,11 @@ public sealed class RunState
     /// <summary>Marks the execution cancelled~ 🛑.</summary>
     public void MarkCancelled()
     {
+        if (this.Overall == "Cancelled")
+        {
+            return; // the user's own cancel, then the server's ExecutionCancelled event~
+        }
+
         this.Overall = "Cancelled";
         this.AddLog("execution cancelled");
         this.Raise();

@@ -60,6 +60,23 @@ public sealed class ExecutionEventBridgeTests
         e.Error.Should().Contain("boom");
     }
 
+    /// <summary>Follow-up — a user cancel reaches clients as ExecutionCancelled, and not also as ExecutionFailed.</summary>
+    [Fact]
+    public async Task ExecutionCancelled_Broadcast_InsteadOfExecutionFailed()
+    {
+        await using var ctx = await RealTimeFixture.ConnectAndSubscribeAsync();
+        var cancelled = ctx.On<ExecutionCancelledEvent>("ExecutionCancelled");
+        var failed = ctx.On<ExecutionFailedEvent>("ExecutionFailed");
+
+        ctx.Publish(new WorkflowFailed(ctx.ExecutionId, new OperationCanceledException("Workflow execution was cancelled"), TimeSpan.FromSeconds(2), Option<HashMap<string, object?>>.None) { Cancelled = true });
+
+        var e = await cancelled.WaitAsync(RealTimeFixture.Timeout);
+        e.ExecutionId.Should().Be(ctx.ExecutionId);
+        e.Reason.Should().Contain("cancelled");
+        e.DurationMs.Should().Be(2000);
+        (await Task.WhenAny(failed, Task.Delay(500))).Should().NotBe(failed, because: "a cancel isn't also reported as a failure");
+    }
+
     [Fact]
     public async Task NodeStarted_Broadcast()
     {

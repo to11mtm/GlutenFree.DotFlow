@@ -154,4 +154,17 @@ public sealed class RunStateTests
         run.StreamProgress(run.ExecutionId, 0, new Dictionary<string, long> { ["src"] = 1 }, 10, completed: false);
         run.ItemBadgeFor("src").Should().Be("1 item");
     }
+
+    /// <summary>Follow-up: the user's own cancel and the server's ExecutionCancelled event log it once.</summary>
+    [Fact]
+    public void MarkCancelled_Twice_LogsOnce()
+    {
+        var run = new RunState();
+
+        run.MarkCancelled();
+        run.MarkCancelled();
+
+        run.Overall.Should().Be("Cancelled");
+        run.Log.Count(l => l.Text == "execution cancelled").Should().Be(1);
+    }
 }

@@ -259,7 +259,15 @@ public record WorkflowFailed(
     Guid ExecutionId,
     Exception Error,
     TimeSpan Duration,
-    Option<HashMap<string, object?>> PartialOutputs) : IWorkflowMessage;
+    Option<HashMap<string, object?>> PartialOutputs) : IWorkflowMessage
+{
+    /// <summary>
+    /// Gets a value indicating whether the run ended because a user cancelled it (not because
+    /// something failed). Real-time clients get <c>ExecutionCancelled</c> instead of
+    /// <c>ExecutionFailed</c> for these.
+    /// </summary>
+    public bool Cancelled { get; init; }
+}
 
 #endregion
 

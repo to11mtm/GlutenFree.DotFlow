@@ -37,6 +37,14 @@ public sealed record ExecutionCompletedEvent(Guid ExecutionId, Guid? WorkflowId,
 /// <param name="Timestamp">When failure occurred.</param>
 public sealed record ExecutionFailedEvent(Guid ExecutionId, Guid? WorkflowId, string Error, double DurationMs, DateTimeOffset Timestamp);
 
+/// <summary>🛑 An execution was cancelled by a user (until this event, cancels arrived as <c>ExecutionFailed</c>).</summary>
+/// <param name="ExecutionId">The execution id.</param>
+/// <param name="WorkflowId">The workflow id, when known.</param>
+/// <param name="Reason">Why (e.g. "Workflow execution was cancelled").</param>
+/// <param name="DurationMs">How long it ran before it was cancelled, in milliseconds.</param>
+/// <param name="Timestamp">When it was cancelled.</param>
+public sealed record ExecutionCancelledEvent(Guid ExecutionId, Guid? WorkflowId, string Reason, double DurationMs, DateTimeOffset Timestamp);
+
 /// <summary>⚡ A node began executing.</summary>
 /// <param name="ExecutionId">The parent execution id.</param>
 /// <param name="NodeId">The node id.</param>

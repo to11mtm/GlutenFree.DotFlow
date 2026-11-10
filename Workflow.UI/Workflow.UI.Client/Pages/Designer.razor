@@ -918,6 +918,7 @@ else if (document is not null)
         RealTime.StreamProgress += e => this.runState?.StreamProgress(e.ExecutionId, e.RegionIndex, e.ItemCounts, e.ElapsedMs, e.Completed);
         RealTime.ExecutionCompleted += e => this.runState?.MarkCompleted(e.DurationMs);
         RealTime.ExecutionFailed += e => this.runState?.MarkFailed(e.Error, e.DurationMs);
+        RealTime.ExecutionCancelled += e => this.runState?.MarkCancelled();
         RealTime.Reconnecting += () => { this.reconnecting = true; this.InvokeAsync(this.StateHasChanged); };
         RealTime.Reconnected += () => { this.reconnecting = false; this.InvokeAsync(this.StateHasChanged); };
     }
