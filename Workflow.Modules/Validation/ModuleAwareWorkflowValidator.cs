@@ -43,6 +43,9 @@ using Workflow.Modules.Abstractions;
 /// </remarks>
 public sealed class ModuleAwareWorkflowValidator
 {
+    /// <summary>The port a module with no declared inputs is wired in by (the designer's default handle).</summary>
+    private const string ImplicitInputPortName = "input";
+
     private readonly WorkflowValidator inner;
     private readonly IModuleRegistry registry;
 
@@ -256,7 +259,13 @@ public sealed class ModuleAwareWorkflowValidator
                     .Select(p => p.Name)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                if (!inputPortNames.Contains(connection.TargetPortName))
+                // A module that declares no inputs (database execute/query, blob stores…) is wired in
+                // by its implicit 'input' port: the designer draws it (NodePorts.DefaultInputs) and the
+                // engine runs the edge as "run after"~
+                var implicitInput = inputPortNames.Count == 0
+                    && string.Equals(connection.TargetPortName, ImplicitInputPortName, StringComparison.OrdinalIgnoreCase);
+
+                if (!implicitInput && !inputPortNames.Contains(connection.TargetPortName))
                 {
                     errors.Add(new ValidationError(
                         "MA004",

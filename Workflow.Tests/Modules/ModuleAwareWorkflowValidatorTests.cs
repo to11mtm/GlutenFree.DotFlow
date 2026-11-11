@@ -326,6 +326,41 @@ public sealed class ModuleAwareWorkflowValidatorTests
     }
 
     /// <summary>
+    /// A module that declares no input ports (database execute/query, blob stores…) is still wired
+    /// in by its implicit 'input' port: the designer draws that handle (<c>NodePorts.DefaultInputs</c>)
+    /// and the engine runs the edge, so the validator must accept it rather than 422 the save.
+    /// </summary>
+    [Fact]
+    public void Validate_ImplicitInputPort_OnAModuleWithNoDeclaredInputs_ShouldPass()
+    {
+        var registry = BuildRegistry();
+        registry.RegisterModule(new Workflow.Modules.Database.Builtin.DatabaseExecuteModule());
+        var validator = new ModuleAwareWorkflowValidator(registry);
+        var workflow = TwoNodeWorkflow(sourcePort: "output", targetPort: "input", targetModule: "builtin.database.execute");
+
+        var result = validator.Validate(workflow);
+
+        result.Errors.Should().NotContain(e => e.Code == "MA004");
+    }
+
+    /// <summary>
+    /// The implicit port is only 'input': any other name into a module with no declared inputs is
+    /// still a typo (MA004).
+    /// </summary>
+    [Fact]
+    public void Validate_OtherPort_OnAModuleWithNoDeclaredInputs_ShouldProduceMA004Error()
+    {
+        var registry = BuildRegistry();
+        registry.RegisterModule(new Workflow.Modules.Database.Builtin.DatabaseExecuteModule());
+        var validator = new ModuleAwareWorkflowValidator(registry);
+        var workflow = TwoNodeWorkflow(sourcePort: "output", targetPort: "parameters", targetModule: "builtin.database.execute");
+
+        var result = validator.Validate(workflow);
+
+        result.Errors.Should().Contain(e => e.Code == "MA004" && e.NodeId == "node2");
+    }
+
+    /// <summary>
     /// A connection using an invalid target port name should produce MA004~ ❌
     /// </summary>
     [Fact]
