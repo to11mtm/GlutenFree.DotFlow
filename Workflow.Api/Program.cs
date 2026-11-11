@@ -228,7 +228,9 @@ builder.Services.Configure<ConnectionStoreOptions>(
 
 // 🔒 Data-Protection-backed connection-string encryption (replaces the no-op default from
 // AddDatabaseModules) so persisted connection strings are encrypted at rest~
-builder.Services.AddDataProtection();
+// 🔑 Plan 08 — where the Data Protection keys live: DataProtection:KeyStorage = PersistenceStore
+// (default, shared by every server) / Folder / Default (dangerous: lost on restart)~
+Workflow.Api.Security.DataProtectionKeys.AddDotFlowDataProtection(builder.Services, builder.Configuration);
 builder.Services.AddSingleton<IConnectionStringProtector, DataProtectionConnectionStringProtector>();
 
 // ☁️ Cloud storage module family (Phase 2.5.b)~ — S3 + Azure Blob modules.
@@ -376,6 +378,12 @@ var app = builder.Build();
 // 📢 Phase 5.1.6 (Q-D) — first of the three required spill warnings: startup, per-execution,
 // designer. Disabling spill encryption is allowed, never quiet~
 Workflow.Api.Streaming.SpillServiceCollectionExtensions.LogSpillConfiguration(app.Services);
+
+// 🔑 Plan 08 — say loudly when the keys that decrypt stored secrets can be lost~
+if (app.Services.GetService<Workflow.Api.Security.DataProtectionKeyStatus>() is { Warning: { } keyWarning })
+{
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Workflow.Api.Security").LogWarning("🔑 {Warning}", keyWarning);
+}
 // 📖 Phase 2.7.8 — Serve the OpenAPI document + UI (docs are useful in every environment)~
 app.UseSwagger();
 if (app.Environment.IsDevelopment())

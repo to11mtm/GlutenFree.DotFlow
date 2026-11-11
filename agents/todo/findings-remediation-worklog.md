@@ -209,8 +209,9 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   removes `_nodeInputs[nodeId]` before `QueuePersistNode`, so completed records from loop / branch /
   try bodies are written with `Inputs = null` (failed ones keep theirs). Top-level records keep
   inputs. Pre-existing; found during §10.6.
-- [ ] **Secrets at rest.** "Save for future runs" (workflow/global variable store) and the state
-  snapshots still hold secret values in plain text. This is pivot option "names + values, plus at
+- [ ] 🔄 **in progress** (plan 08; part 1/3 done: key storage) — **Secrets at rest.** "Save for future runs" (workflow/global variable store) and the state
+  snapshots still hold secret values in plain text. *(2026-11-11: snapshots are memory-only, so the
+  real exposure is the variable store; see plan 08.)* This is pivot option "names + values, plus at
   rest" in plan 03 Finding D, and it overlaps the secrets-storage plan.
 
 - [x] ✅ **done 2026-11-09** (`WorkflowFailed.Cancelled` → `ExecutionCancelled`) — **Dedicated cancel event for real-time clients.** Since §12.1 a user cancel reaches SignalR as
@@ -294,6 +295,37 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Secrets at rest, part 1/3: Data Protection key storage (plan 08)
+- Decided (asked in three rounds; plan 08, memorizer 6b5fce54):
+  - per-variable secret mode (Not secret / Secret / Follow workflow declarations; follow stays
+    secret once secret);
+  - encrypt with Data Protection now, with a secret-provider seam later;
+  - write-only values;
+  - who/when history with no old values, and a purge on marking secret, after confirmation;
+  - three clear key-storage options.
+- **My assumption, flagged:** the default key storage is `PersistenceStore`.
+- Found while scoping: state snapshots are memory-only (`InMemoryExecutionStateStore`, never read
+  back), so the real at-rest exposure is the variable store: plain text, every version kept, and
+  values returned to any reader.
+- `Workflow.Api/Security/DataProtectionKeys.cs`:
+  - `DataProtection:KeyStorage` = `PersistenceStore` (`BlobXmlRepository`: one XML key ring at
+    `settings/dataprotection-keys.xml`, merged on write; imports ASP.NET's default key folder the
+    first time, so values encrypted before the switch stay readable) / `Folder` (`KeysPath`,
+    required) / `Default` (warned as dangerous).
+  - `DataProtectionKeyStatus`: on `/api/v1/status` as `dataProtection`, and logged at startup
+    when it has a warning (Default, or a store that keeps blobs in memory).
+  - Replaces the bare `AddDataProtection()`. This also protects the already-encrypted DB
+    connection strings and spill.
+- Tests: `Api/DataProtectionKeyStorageTests` (6), including a second host on the same database
+  decrypting what the first encrypted, and the key ring being present in the store.
+- Proof: 5/5 mutants killed (keys not stored, in-memory not warned, folder unused, defaults not
+  called dangerous, legacy keys not imported). On this Windows machine the cross-server test alone
+  would pass with the defaults (a shared user profile), hence the extra blob assertion.
+- Docs: new `docs/secrets.md` (key options, upgrade note, backup advice) and a docs index entry.
+- Suite: unfiltered `dotnet test Workflow.Tests` 2029/2029 (no UI change).
+- Next: part 2 (encrypted write-only secret variables: metadata, store wrapper, API, engine
+  auto-mark, follow mode, purge contract), then part 3 (UI).
+
 ### 2026-11-10 — Stage 7.8 part 2/2: designer and execution detail
 - Designer On error panel, for a stage of a streaming region (`Designer/State/RegionStageErrors.cs`):
   - "Use the region's error handling (from '<source>')" on non-source stages. When ticked, the

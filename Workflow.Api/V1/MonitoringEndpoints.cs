@@ -133,6 +133,11 @@ public static class MonitoringEndpoints
 
             // 🌐 Stage 7.3 — so the designer can warn when outbound HTTP hasn't been set up~
             outboundHttp = OutboundHttpStatus(http.RequestServices.GetService<Workflow.Core.Http.IOutboundHttpPolicyProvider>()),
+
+            // 🔑 Plan 08 — where the keys that decrypt stored secrets live, and whether that's safe~
+            dataProtection = http.RequestServices.GetService<Workflow.Api.Security.DataProtectionKeyStatus>() is { } keys
+                ? new { keyStorage = keys.Storage.ToString(), location = keys.Location, warning = keys.Warning }
+                : null,
         };
 
         return Results.Ok(payload);
