@@ -1,8 +1,8 @@
-// <copyright file="JoinSkipFindingTests.cs" company="GlutenFree">
+﻿// <copyright file="JoinAfterSkippedBranchTests.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.Tests.Findings.Engine;
+namespace Workflow.Tests.Engine;
 
 using System;
 using System.Collections.Generic;
@@ -15,10 +15,12 @@ using LanguageExt;
 using Workflow.Core.Models;
 using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
+using Workflow.Tests.Findings;
 using Xunit;
 
 /// <summary>
-/// Finding 01 §12.6 — a join can be skipped even though one of its inputs completed.
+/// 01 §12.6 (refuted, kept as a regression guard) — a join still runs when one input completed and
+/// the other branch was skipped.
 /// </summary>
 /// <remarks>
 /// Graph: <c>branch</c> activates only "a"; "a" → <c>fast</c> → <c>join</c>; branch "b" →
@@ -28,8 +30,7 @@ using Xunit;
 /// running once its live predecessor arrives. The join SHOULD run.
 /// This is an in-memory actor test; stubs only.
 /// </remarks>
-[Trait("Category", FindingDefs.Category)]
-public sealed class JoinSkipFindingTests : TestKit
+public sealed class JoinAfterSkippedBranchTests : TestKit
 {
     [Fact]
     public void Join_WithOneCompletedInput_ShouldRun_NotBeSkipped()

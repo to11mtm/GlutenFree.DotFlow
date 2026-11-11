@@ -1,8 +1,8 @@
-// <copyright file="EngineFindingTests.cs" company="GlutenFree">
+﻿// <copyright file="LoopBodyPortRoutingTests.cs" company="GlutenFree">
 // Copyright (c) GlutenFree. All rights reserved.
 // </copyright>
 
-namespace Workflow.Tests.Findings.Engine;
+namespace Workflow.Tests.Engine;
 
 using System;
 using System.Collections.Generic;
@@ -16,21 +16,14 @@ using LanguageExt;
 using Workflow.Core.Models;
 using Workflow.Engine.Actors;
 using Workflow.Engine.Messages;
+using Workflow.Tests.Findings;
 using Xunit;
 
 /// <summary>
-/// Tests for the engine findings in <c>docs/architecture/01-execution-lifecycle.md §12</c> and
-/// the summary table in <c>docs/architecture/README.md</c>.
+/// A branch (port-activating) node inside a loop body routes by its active ports, like at the top
+/// level. Retired from the finding tests (01 §12.4) once fixed; the assertions are unchanged.
 /// </summary>
-/// <remarks>
-/// Each test asserts the behaviour the engine SHOULD have, so a failure confirms the finding is
-/// real and the test turns green once it is fixed. All are tagged
-/// <c>[Trait("Category","Finding")]</c> so CI can exclude them with
-/// <c>--filter Category!=Finding</c> until the fixes land.
-/// Safety: in-memory actors and stub modules only — no file, network, or process access.
-/// </remarks>
-[Trait("Category", FindingDefs.Category)]
-public sealed class EngineFindingTests : TestKit
+public sealed class LoopBodyPortRoutingTests : TestKit
 {
     private (IActorRef Executor, TestProbe Parent, Guid ExecutionId) StartRun(
         WorkflowDefinition definition,

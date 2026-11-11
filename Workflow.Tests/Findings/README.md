@@ -36,9 +36,9 @@ dotnet test Workflow.Tests --filter "Category=Finding&FullyQualifiedName~Finding
 
 | File | Findings | Kind |
 | --- | --- | --- |
-| `Engine/EngineFindingTests.cs` | 01 §12.2 stop, §12.3 cancel, §12.4 body retry + nesting, §12.5 stub module (§12.7 UseErrorHandler — **fixed, test retired**: now `Engine/ErrorHandlerTests`) | actor |
-| `Engine/RealtimeCompletionFindingTests.cs` | 01 §12.1 terminal/node events to SignalR | API + SignalR |
-| `Engine/JoinSkipFindingTests.cs` | 01 §12.6 join skipped with a completed input | actor |
+| ~~`Engine/EngineFindingTests.cs`~~ | 01 §12.2 stop, §12.3 cancel, §12.4 body retry + nesting, §12.5 stub module, §12.7 UseErrorHandler — **all fixed, file retired** (2026-11-11): the last test, loop-body port routing, is now `Engine/LoopBodyPortRoutingTests`; the others are in `Engine/ErrorHandlerTests`, `SubGraphParityTests` and friends | actor |
+| ~~`Engine/RealtimeCompletionFindingTests.cs`~~ | 01 §12.1 terminal/node events to SignalR — **fixed, file retired**: now `Api/RealTime/RealtimeCompletionTests` | API + SignalR |
+| ~~`Engine/JoinSkipFindingTests.cs`~~ | 01 §12.6 join skipped with a completed input — **refuted; kept as a regression guard**: now `Engine/JoinAfterSkippedBranchTests` | actor |
 | ~~`Engine/NestedConstructFindingTests.cs`~~ | §12.10 (plan 02 §G) constructs nested in a body run as plain nodes. **Fixed, file retired**: guards now in `Engine/NestedConstructTests` | actor + built-in modules |
 | ~~`Binding/BindingFindingTests.cs`~~ | 02 §10.1 non-adjacent refs, §10.2 shadowing — **both fixed, file retired**: now `Engine/UpstreamReferenceTests` and `Engine/VariableShadowingTests` | actor + binder |
 | ~~`Binding/SecretPersistenceFindingTests.cs`~~ | 02 §10.6 secrets in history — **fixed, file retired**: now `Engine/SecretRedactionTests` + `Engine/SecretRedactorTests` | actor + capturing repo |

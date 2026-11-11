@@ -284,9 +284,11 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 - [x] Stage 6 items either resolved or converted to tracked tickets with their decision recorded
   (all three resolved, 2026-11-08).
 - [x] `dotnet test Workflow.Tests` fully green. *2026-11-08: 1893/1893 unfiltered (finding tests included); UI 760/760.*
-- [ ] `docs/architecture/README.md#findings-at-a-glance` reflects reality (ideally empty or only
-  parked design-decisions remain). *2026-11-08: every row is now fixed, refuted or tracked in
-  Stage 7, and the §9.3 mid-pipeline row is corrected. Open until Stage 7 is fixed or parked.*
+- [x] `docs/architecture/README.md#findings-at-a-glance` reflects reality (ideally empty or only
+  parked design-decisions remain). *2026-11-11: every row is fixed or refuted; the only open note is
+  the Info row's Scheduled/Event triggers (7.10, out of scope: a feature, not a fix). No
+  `Category=Finding` tests remain: the last two were retired into `Engine/LoopBodyPortRoutingTests`
+  and `Engine/JoinAfterSkippedBranchTests`.*
 
 ---
 
@@ -295,6 +297,16 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Final cleanup: last finding tests retired, findings table final
+- Retired the last two `Category=Finding` tests into permanent tests (assertions unchanged, trait
+  removed): loop-body port routing (01 §12.4) → `Engine/LoopBodyPortRoutingTests`; join after a
+  skipped branch (01 §12.6, refuted, kept as a regression guard) → `Engine/JoinAfterSkippedBranchTests`.
+  `--filter Category=Finding` now matches nothing. `Findings/FindingStubs.cs` stays (shared stubs).
+- Findings table: the three fixed rows still marked "Low" (7.2 Condition/Priority, 7.5 timeouts,
+  7.6 progress) now read "—". §5 done criteria all ticked; 7.10 (Scheduled/Event triggers) stays
+  parked as a feature.
+- Follow-up still open: `examples/definitions/*.json` use retired module ids and non-GUID ids.
+
 ### 2026-11-11 — Secrets at rest, part 3/3: UI (plan 08)
 - Settings → Global variables (`GlobalVariablesPanel`):
   - each row gets its secret mode via `GET /{name}`; secrets show 🔒 with "set by / at", and
