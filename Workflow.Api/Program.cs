@@ -233,6 +233,13 @@ builder.Services.Configure<ConnectionStoreOptions>(
 Workflow.Api.Security.DataProtectionKeys.AddDotFlowDataProtection(builder.Services, builder.Configuration);
 builder.Services.AddSingleton<IConnectionStringProtector, DataProtectionConnectionStringProtector>();
 
+// 🔒 Plan 08 — which stored variables are secret (mode, follow-mode state, who/when trail)~
+builder.Services.AddSingleton(sp => new Workflow.Api.Variables.SecretVariableService(
+    sp.GetService<IBlobStore>(),
+    () => sp.GetService<Workflow.Persistence.Abstractions.IWorkflowRepository>()));
+builder.Services.AddSingleton<Workflow.Persistence.Abstractions.ISecretVariableCatalog>(sp => sp.GetRequiredService<Workflow.Api.Variables.SecretVariableService>());
+builder.Services.AddHostedService<Workflow.Api.Variables.SecretVariableHostedService>();
+
 // ☁️ Cloud storage module family (Phase 2.5.b)~ — S3 + Azure Blob modules.
 // CopilotNote: host-wired (not in AddWorkflowModules) — Workflow.Modules.Cloud references
 // Workflow.Modules, so the reverse call would be circular; same rule as AddDatabaseModules (D4)~
@@ -272,7 +279,11 @@ if (persistenceProvider is not null)
     // Repositories are resolved through the provider so late-init providers (like NATS) remain safe.
     builder.Services.AddSingleton(sp => sp.GetRequiredService<IPersistenceProvider>().Workflows);
     builder.Services.AddSingleton(sp => sp.GetRequiredService<IPersistenceProvider>().ExecutionHistory);
-    builder.Services.AddSingleton(sp => sp.GetRequiredService<IPersistenceProvider>().Variables);
+    // 🔒 Plan 08 — secret variables are stored encrypted, write-only, with no earlier values~
+    builder.Services.AddSingleton<IVariableStore>(sp => new Workflow.Api.Variables.SecretVariableStore(
+        sp.GetRequiredService<IPersistenceProvider>().Variables,
+        sp.GetRequiredService<Workflow.Api.Variables.SecretVariableService>(),
+        sp.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>()));
 
     // 🚀 Phase 2.7.2 — General execution service (start/status/cancel) — needs the repos above~
     builder.Services.AddSingleton<Workflow.Api.Execution.IWorkflowExecutionService, Workflow.Api.Execution.ActorWorkflowExecutionService>();

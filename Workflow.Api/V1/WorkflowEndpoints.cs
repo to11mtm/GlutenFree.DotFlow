@@ -129,6 +129,7 @@ public static class WorkflowEndpoints
 
         var id = await repo.CreateAsync(toCreate, ct).ConfigureAwait(false);
         var stored = await repo.GetByIdAsync(id, ct).ConfigureAwait(false);
+        await SecretVariablesAfterSaveAsync(http, stored, ct).ConfigureAwait(false);
         return Results.Created($"/api/v1/workflows/{id}", stored);
     }
 
@@ -167,6 +168,7 @@ public static class WorkflowEndpoints
 
         await repo.UpdateAsync(id, toUpdate, ct).ConfigureAwait(false);
         var updated = await repo.GetByIdAsync(id, ct).ConfigureAwait(false);
+        await SecretVariablesAfterSaveAsync(http, updated, ct).ConfigureAwait(false);
         return Results.Ok(updated);
     }
 
@@ -212,5 +214,34 @@ public static class WorkflowEndpoints
         var filter = new ExecutionFilter(States: new[] { ExecutionState.Pending, ExecutionState.Running, ExecutionState.Paused });
         var page = await history.GetExecutionsForWorkflowAsync(workflowId, filter, new Pagination(1, 1), ct).ConfigureAwait(false);
         return page.TotalCount > 0;
+    }
+
+    /// <summary>
+    /// 🔒 Plan 08 — after a workflow is saved: stored variables set to "follow workflow declarations"
+    /// that it now declares secret become secret (encrypted, earlier values erased; the designer asked
+    /// first, via <c>POST /api/v1/variables/secret-impact</c>).
+    /// </summary>
+    private static async Task SecretVariablesAfterSaveAsync(HttpContext http, Workflow.Core.Models.WorkflowDefinition? definition, CancellationToken ct)
+    {
+        if (definition is null
+            || http.RequestServices.GetService<Workflow.Api.Variables.SecretVariableService>() is not { } service)
+        {
+            return;
+        }
+
+        service.WorkflowsChanged();
+        if (http.RequestServices.GetService<Workflow.Persistence.Abstractions.IVariableStore>() is not Workflow.Api.Variables.SecretVariableStore store)
+        {
+            return;
+        }
+
+        var by = http.User.Identity?.Name ?? "anonymous";
+        foreach (var (scope, name) in service.FollowersTurnedSecretBy(definition))
+        {
+            if ((await service.ResolveAsync(scope, name, ct).ConfigureAwait(false)).BecameSecret)
+            {
+                await store.ConvertToSecretAsync(scope, name, $"{by} (saving workflow '{definition.Name}')", ct).ConfigureAwait(false);
+            }
+        }
     }
 }

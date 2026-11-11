@@ -66,14 +66,22 @@ public sealed class SecretRedactor
     /// <summary>Builds the redactor for a run: the declared secret names and their current values.</summary>
     /// <param name="definition">The workflow (declares which variables are secret).</param>
     /// <param name="variables">The run's variables as resolved (declared, stored, run inputs).</param>
+    /// <param name="storedSecretNames">
+    /// 🔒 Plan 08 — names of stored (global / workflow-scope) variables marked secret, hidden too even
+    /// when this workflow doesn't declare them.
+    /// </param>
     /// <returns>The redactor (<see cref="None"/> when nothing is secret).</returns>
-    public static SecretRedactor For(WorkflowDefinition definition, IEnumerable<KeyValuePair<string, object?>>? variables)
+    public static SecretRedactor For(
+        WorkflowDefinition definition,
+        IEnumerable<KeyValuePair<string, object?>>? variables,
+        IEnumerable<string>? storedSecretNames = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
 
         var secretNames = definition.Variables.Values
             .Where(v => v.IsSecret)
             .Select(v => v.Name)
+            .Concat(storedSecretNames ?? Enumerable.Empty<string>())
             .ToImmutableHashSet(StringComparer.OrdinalIgnoreCase);
         if (secretNames.IsEmpty)
         {

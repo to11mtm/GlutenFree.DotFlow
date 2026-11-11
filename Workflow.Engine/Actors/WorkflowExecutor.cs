@@ -699,6 +699,7 @@ public class WorkflowExecutor : ReceiveActor
     {
         var store = _variableStore!;
         var workflowId = _definition.Id;
+        var catalog = _serviceProvider.GetService(typeof(ISecretVariableCatalog)) as ISecretVariableCatalog;
 
         Task.Run(
             async () =>
@@ -707,7 +708,16 @@ public class WorkflowExecutor : ReceiveActor
                 {
                     var global = await store.GetAllVariablesAsync(VariableScope.Global).ConfigureAwait(false);
                     var scoped = await store.GetAllVariablesAsync(VariableScope.ForWorkflow(workflowId)).ConfigureAwait(false);
-                    return new VariablesHydrated(global, scoped, true);
+
+                    // 🔒 Plan 08 — stored variables marked secret are hidden in this run too~
+                    var secretNames = new List<string>();
+                    if (catalog is not null)
+                    {
+                        secretNames.AddRange(await catalog.SecretNamesAsync(VariableScope.Global).ConfigureAwait(false));
+                        secretNames.AddRange(await catalog.SecretNamesAsync(VariableScope.ForWorkflow(workflowId)).ConfigureAwait(false));
+                    }
+
+                    return new VariablesHydrated(global, scoped, true) { StoredSecretNames = secretNames };
                 }
                 catch (Exception ex)
                 {
@@ -728,7 +738,7 @@ public class WorkflowExecutor : ReceiveActor
                 message.Global,
                 message.WorkflowScoped);
             _context = _context with { Variables = _seededVariables.Variables };
-            ExecutionSecrets.Set(_executionId, SecretRedactor.For(_definition, ToPairs(_seededVariables.Variables)));
+            ExecutionSecrets.Set(_executionId, SecretRedactor.For(_definition, ToPairs(_seededVariables.Variables), message.StoredSecretNames));
         }
         else
         {
@@ -3217,7 +3227,11 @@ public class WorkflowExecutor : ReceiveActor
         IReadOnlyDictionary<string, object?>? Global,
         IReadOnlyDictionary<string, object?>? WorkflowScoped,
         bool Success,
-        string? Error = null);
+        string? Error = null)
+    {
+        /// <summary>🔒 Plan 08 — stored variables marked secret.</summary>
+        public IReadOnlyCollection<string> StoredSecretNames { get; init; } = Array.Empty<string>();
+    }
 
     #endregion
 }

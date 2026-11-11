@@ -209,7 +209,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   removes `_nodeInputs[nodeId]` before `QueuePersistNode`, so completed records from loop / branch /
   try bodies are written with `Inputs = null` (failed ones keep theirs). Top-level records keep
   inputs. Pre-existing; found during §10.6.
-- [ ] 🔄 **in progress** (plan 08; part 1/3 done: key storage) — **Secrets at rest.** "Save for future runs" (workflow/global variable store) and the state
+- [ ] 🔄 **in progress** (plan 08; parts 1–2 of 3 done: key storage, encrypted secret variables) — **Secrets at rest.** "Save for future runs" (workflow/global variable store) and the state
   snapshots still hold secret values in plain text. *(2026-11-11: snapshots are memory-only, so the
   real exposure is the variable store; see plan 08.)* This is pivot option "names + values, plus at
   rest" in plan 03 Finding D, and it overlaps the secrets-storage plan.
@@ -295,6 +295,42 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Secrets at rest, part 2/3: encrypted, write-only secret variables (plan 08)
+- `Workflow.Persistence/Abstractions/SecretVariables.cs`: `SecretVariableMode`
+  (None / Secret / FollowWorkflows) and `ISecretVariableCatalog` (the engine reads secret names).
+- `Workflow.Api/Variables/SecretVariableService.cs`:
+  - per-variable state (mode; `Sticky` for a follow variable that became secret; a who/when trail
+    of at most 50 entries) in blob `settings/secret-variables.json`, reloaded every minute;
+  - `ResolveAsync`, which turns a follow variable secret, permanently, when a workflow declares it
+    (workflow scope: that workflow; global: any, cached for 1 minute and refreshed on workflow
+    save);
+  - `FollowersTurnedSecretBy(definition)`.
+- `Workflow.Api/Variables/SecretVariableStore.cs` wraps the provider's `IVariableStore` (registered
+  as `IVariableStore`):
+  - secret writes are Data-Protection-encrypted (`dp:v1:`), and each write deletes the earlier
+    versions;
+  - reads decrypt;
+  - a workflow-scope write of a declared secret auto-marks it Secret;
+  - `ConvertToSecretAsync` (re-store encrypted, erase earlier versions, audit),
+    `ReplaceWithPlainAsync`, and the `Caller` set by the API.
+- API `VariableEndpoints`:
+  - list masks values (`••••••`), and get returns `value: null` plus `isSecret`, `secretMode`,
+    `lastSetBy` and `lastSetAt`; a secret's history is the who/when trail;
+  - `PUT /{name}/secret` (409 with `versions` unless `confirmPurge=true`; switching to None needs
+    the value); `SetVariableRequest.SecretMode`; `POST /secret-impact`.
+- `WorkflowEndpoints`: after create / update, `SecretVariablesAfterSaveAsync` converts follow
+  variables that the workflow now declares secret.
+- Engine: hydration also reads the catalog's secret names; `SecretRedactor.For(..., storedSecretNames)`.
+- Tests: `Api/V1/SecretVariableTests` (6).
+- Proof: 9/9 mutants killed (stored plain, earlier values kept, purge without confirmation, list
+  unmasked, no auto-mark, save doesn't convert followers, follow doesn't stay secret, runs ignore
+  stored secrets, secret made plain without a value).
+- Suite: unfiltered `dotnet test Workflow.Tests` 2035/2035.
+- Docs: `docs/secrets.md` "Secret variables at rest" (modes, rules, API, storage, the provider plan).
+- Next (part 3): Settings global variables panel and designer — mode selector with warnings,
+  masked values with who/when, confirmation dialogs (switch to secret; designer save that turns
+  followers secret, via `secret-impact`), and the key-storage status in Settings.
+
 ### 2026-11-11 — Secrets at rest, part 1/3: Data Protection key storage (plan 08)
 - Decided (asked in three rounds; plan 08, memorizer 6b5fce54):
   - per-variable secret mode (Not secret / Secret / Follow workflow declarations; follow stays
