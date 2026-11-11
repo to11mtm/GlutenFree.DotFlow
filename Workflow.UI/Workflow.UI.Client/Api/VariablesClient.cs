@@ -119,6 +119,45 @@ public sealed class VariablesClient
     /// <param name="scopeId">The workflow/execution id, for non-global scopes.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task.</returns>
+    /// <summary>🔒 Plan 08 — changes a variable's secret mode. A 409 means earlier values would be erased: retry with <paramref name="confirmPurge"/>.</summary>
+    /// <param name="name">The variable.</param>
+    /// <param name="mode"><c>None</c>, <c>Secret</c> or <c>FollowWorkflows</c>.</param>
+    /// <param name="value">A value to store with the change (required when a secret becomes None).</param>
+    /// <param name="confirmPurge">Whether the user confirmed erasing earlier values.</param>
+    /// <param name="scope">The scope.</param>
+    /// <param name="scopeId">The workflow, for workflow scope.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The variable as stored.</returns>
+    public Task<VariableDto> SetSecretModeAsync(
+        string name,
+        string mode,
+        JsonElement? value,
+        bool confirmPurge,
+        string scope = GlobalScope,
+        Guid? scopeId = null,
+        CancellationToken ct = default)
+        => ApiHttp.SendAsync<VariableDto>(
+            this.http,
+            new HttpRequestMessage(HttpMethod.Put, Url($"{name}/secret", scope, scopeId) + (confirmPurge ? "&confirmPurge=true" : string.Empty))
+            {
+                Content = JsonContent.Create(new { mode, value }, options: ApiHttp.Json),
+            },
+            ct);
+
+    /// <summary>🔒 Plan 08 — which stored variables saving a workflow (declaring these secrets) would turn secret.</summary>
+    /// <param name="workflowId">The workflow.</param>
+    /// <param name="secretNames">The variables it declares secret.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The affected stored variables.</returns>
+    public Task<List<SecretImpactDto>> SecretImpactAsync(Guid workflowId, IEnumerable<string> secretNames, CancellationToken ct = default)
+        => ApiHttp.SendAsync<List<SecretImpactDto>>(
+            this.http,
+            new HttpRequestMessage(HttpMethod.Post, "api/v1/variables/secret-impact")
+            {
+                Content = JsonContent.Create(new { workflowId, secretNames = secretNames.ToList() }, options: ApiHttp.Json),
+            },
+            ct);
+
     public Task DeleteAsync(
         string name,
         string scope = GlobalScope,

@@ -1,6 +1,6 @@
 # Plan 08 — Secret variables at rest (follow-up to §10.6)
 
-**Status:** decided 2026-11-10/11 (asked in three rounds); not implemented yet.
+**Status:** implemented 2026-11-11 in three commits (key storage; encrypted write-only secret variables; UI). User docs: `docs/secrets.md`. Decided 2026-11-10/11 (asked in three rounds).
 
 ## Where secrets sit at rest today
 

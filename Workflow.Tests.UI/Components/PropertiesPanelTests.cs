@@ -136,7 +136,8 @@ public sealed class PropertiesPanelTests : TestContext
 
         var list = cut.Find("[data-testid=token-list-url]");
         list.TextContent.Should().Contain("Globals").And.Contain("apiBaseUrl");
-        cut.Find("[data-testid=globals-warning-url]").TextContent.Should().Contain("Not for credentials yet");
+        // Plan 08 shipped secret support: the warning now says to mark credentials Secret~
+        cut.Find("[data-testid=globals-warning-url]").TextContent.Should().Contain("Mark credentials Secret");
     }
 
     [Fact]

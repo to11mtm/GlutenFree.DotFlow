@@ -47,6 +47,19 @@
         }
     </div>
 
+    @* 🔑 Plan 08 — where the keys that decrypt stored secrets live *@
+    @if (keys is { } k)
+    {
+        <div class="df-card df-field" data-testid="settings-keys">
+            <div class="df-label">Encryption keys</div>
+            <div class="df-field-help">Secrets (secret variables, connection strings, spill) are encrypted with these keys: @k.KeyStorage, @k.Location.</div>
+            @if (k.Warning is not null)
+            {
+                <div class="df-field-error" data-testid="settings-keys-warning">⚠ @k.Warning</div>
+            }
+        </div>
+    }
+
     @* 🌐 Stage 7.3 — outbound HTTP (SSRF) policy setup *@
     <div class="df-card df-field" data-testid="settings-outbound-http">
         <div class="df-label">Outbound HTTP</div>
@@ -74,8 +87,19 @@
     private string? status;
     private bool statusOk;
 
+    private Workflow.UI.Client.Api.KeyStorageStatus? keys;
+
     protected override async Task OnInitializedAsync()
     {
+        try
+        {
+            this.keys = await System.GetKeyStorageAsync();
+        }
+        catch (Exception)
+        {
+            this.keys = null; // older server or unreachable: no card~
+        }
+
         var savedToken = await Storage.GetAsync(TokenKey);
         var savedKey = await Storage.GetAsync(ApiKeyKey);
         if (!string.IsNullOrWhiteSpace(savedToken))

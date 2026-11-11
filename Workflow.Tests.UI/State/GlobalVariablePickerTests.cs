@@ -96,9 +96,11 @@ public class GlobalVariablePickerTests
     [Fact]
     public void TheInterimCredentialWarning_IsBlunt()
     {
-        // V3.5 / Q16 — globals shipped ahead of secret support. The warning must say plainly that
+
+
         // values are readable, not hint at it.
-        VariableTokens.GlobalsCredentialWarning.Should().Contain("Not for credentials yet");
+        // Plan 08 shipped secret support: the warning now says to mark credentials Secret~
+        VariableTokens.GlobalsCredentialWarning.Should().Contain("Mark credentials Secret");
         VariableTokens.GlobalsCredentialWarning.Should().Contain("plaintext");
     }
 }

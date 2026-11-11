@@ -24,7 +24,7 @@ public static class VariableTokens
     /// secrets workstream lands, so the warning is deliberately blunt~ 🔒.
     /// </summary>
     public const string GlobalsCredentialWarning =
-        "🔒 Not for credentials yet — global values are stored and readable in plaintext until secret support ships.";
+        "🔒 Mark credentials Secret: secret values are stored encrypted and can't be read back. Everything else is stored and readable in plaintext.";
 
     /// <summary>The picker group name for the node's own incoming value~ 🔌.</summary>
     public const string SelfInputCategory = "This node's input";

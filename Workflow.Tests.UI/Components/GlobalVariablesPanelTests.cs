@@ -48,7 +48,7 @@ public sealed class GlobalVariablesPanelTests : TestContext
         cut.Find("[data-testid=gv-row-retries]").TextContent.Should().Contain("3");
 
         // V3.5's warning belongs most on the write surface.
-        cut.Find("[data-testid=gv-warning]").TextContent.Should().Contain("Not for credentials yet");
+        cut.Find("[data-testid=gv-warning]").TextContent.Should().Contain("Mark credentials Secret");
     }
 
     [Fact]

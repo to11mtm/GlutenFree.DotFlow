@@ -209,7 +209,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   removes `_nodeInputs[nodeId]` before `QueuePersistNode`, so completed records from loop / branch /
   try bodies are written with `Inputs = null` (failed ones keep theirs). Top-level records keep
   inputs. Pre-existing; found during §10.6.
-- [ ] 🔄 **in progress** (plan 08; parts 1–2 of 3 done: key storage, encrypted secret variables) — **Secrets at rest.** "Save for future runs" (workflow/global variable store) and the state
+- [x] ✅ **done 2026-11-11** (plan 08, `docs/secrets.md`) — **Secrets at rest.** "Save for future runs" (workflow/global variable store) and the state
   snapshots still hold secret values in plain text. *(2026-11-11: snapshots are memory-only, so the
   real exposure is the variable store; see plan 08.)* This is pivot option "names + values, plus at
   rest" in plan 03 Finding D, and it overlaps the secrets-storage plan.
@@ -295,6 +295,30 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Secrets at rest, part 3/3: UI (plan 08)
+- Settings → Global variables (`GlobalVariablesPanel`):
+  - each row gets its secret mode via `GET /{name}`; secrets show 🔒 with "set by / at", and
+    follow-mode rows warn;
+  - the form has a mode select with per-option help, and editing a secret leaves the value box
+    empty (with a placeholder);
+  - a mode change goes through `SetSecretModeAsync`, and a 409 opens the purge confirmation
+    (`gv-purge-confirm`), which retries with `confirmPurge=true`;
+  - a secret's history shows who/when/what.
+- Designer save: when the workflow declares secrets, `POST /variables/secret-impact` runs first;
+  if it lists stored follow variables, `secret-impact-dialog` asks before saving.
+- Settings → Encryption keys card (`SystemClient.GetKeyStorageAsync`, from `/status`
+  `dataProtection`), with the warning.
+- **Spec change to existing tests (flagged):** `VariableTokens.GlobalsCredentialWarning` was the
+  interim "Not for credentials yet … until secret support ships". Secret support has shipped, so
+  it now says "Mark credentials Secret … Everything else is stored and readable in plaintext".
+  Three assertions of the old wording were updated (`GlobalVariablePickerTests`,
+  `PropertiesPanelTests`, `GlobalVariablesPanelTests`). The "plaintext" assertion is unchanged.
+- Tests: UI `Components/SecretVariablesUiTests` (5).
+- Proof: 6/6 mutants killed (secret row not shown as secret, purge without asking, secret put back
+  into the form, follow not warned, key warning hidden, designer doesn't ask).
+- Docs: `docs/secrets.md` "In the UI"; plan 08 marked implemented.
+- Suites: unfiltered `dotnet test Workflow.Tests` 2035/2035; `Workflow.Tests.UI` 807/807.
+
 ### 2026-11-11 — Secrets at rest, part 2/3: encrypted, write-only secret variables (plan 08)
 - `Workflow.Persistence/Abstractions/SecretVariables.cs`: `SecretVariableMode`
   (None / Secret / FollowWorkflows) and `ISecretVariableCatalog` (the engine reads secret names).

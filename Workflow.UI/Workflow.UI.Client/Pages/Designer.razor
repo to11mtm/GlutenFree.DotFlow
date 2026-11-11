@@ -149,6 +149,27 @@ else if (document is not null)
         </div>
     }
 
+    @if (secretImpact is { } impact)
+    {
+        <div class="df-modal-backdrop">
+            <div class="df-modal" data-testid="secret-impact-dialog">
+                <div class="df-label">Saving will make these stored variables secret</div>
+                <p>They follow workflow declarations, and this workflow declares them secret. Their values will be stored encrypted,
+                   can't be read back, and their earlier values will be erased.</p>
+                <ul>
+                    @foreach (var item in impact)
+                    {
+                        <li data-testid="secret-impact-@item.Name">@item.Name (@(item.Scope == "Global" ? "global variable" : "this workflow's stored variable"))</li>
+                    }
+                </ul>
+                <div class="df-row">
+                    <button class="df-btn df-btn--danger" data-testid="secret-impact-save" @onclick="ConfirmSecretImpact">Save and make them secret</button>
+                    <button class="df-btn" data-testid="secret-impact-cancel" @onclick="() => secretImpact = null">Cancel</button>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (showSaveDialog)
     {
         <div class="df-modal-backdrop" @onclick="() => showSaveDialog = false">
@@ -208,6 +229,10 @@ else if (document is not null)
 
     private bool showSaveDialog;
     private List<SaveIssue> saveIssues = new();
+
+    // 🔒 Plan 08 — stored "follow" variables this save would turn secret, awaiting confirmation~
+    private List<Workflow.UI.Client.Api.Dtos.SecretImpactDto>? secretImpact;
+    private bool secretImpactConfirmed;
 
     // Run mode.
     private RunState? runState;
@@ -1012,6 +1037,13 @@ else if (document is not null)
 
     // ─── Save pipeline (D5/D14/Q5) ───────────────────────────────────────────────
 
+    private async Task ConfirmSecretImpact()
+    {
+        this.secretImpact = null;
+        this.secretImpactConfirmed = true;
+        await this.Save();
+    }
+
     private async Task Save()
     {
         if (this.document is null || this.commands is null)
@@ -1043,6 +1075,31 @@ else if (document is not null)
         {
             Toasts.Warning("Server validation unavailable — saving with client checks only.");
         }
+
+        // 🔒 Plan 08 — saving can turn stored "follow workflow declarations" variables secret
+        // (encrypted, earlier values erased): ask first~
+        if (!this.secretImpactConfirmed)
+        {
+            var secretNames = WorkflowVariables.List(this.document).Where(v => v.IsSecret).Select(v => v.Name).ToList();
+            if (secretNames.Count > 0)
+            {
+                try
+                {
+                    var impact = await Variables.SecretImpactAsync(this.document.Id, secretNames);
+                    if (impact.Count > 0)
+                    {
+                        this.secretImpact = impact;
+                        return;
+                    }
+                }
+                catch (Exception)
+                {
+                    // the server can't tell: save as usual~
+                }
+            }
+        }
+
+        this.secretImpactConfirmed = false;
 
         // Stage 3: persist.
         try

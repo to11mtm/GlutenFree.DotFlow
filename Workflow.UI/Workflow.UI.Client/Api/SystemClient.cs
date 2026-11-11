@@ -60,6 +60,24 @@ public sealed class SystemClient
             !spill.TryGetProperty("encrypted", out var e) || e.ValueKind != JsonValueKind.False);
     }
 
+    /// <summary>🔑 Plan 08 — where the encryption keys live, or null when the server doesn't say.</summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The status, or null.</returns>
+    public async Task<KeyStorageStatus?> GetKeyStorageAsync(CancellationToken ct = default)
+    {
+        var doc = await ApiHttp.SendAsync<JsonElement>(
+            this.http, new HttpRequestMessage(HttpMethod.Get, "api/v1/status"), ct).ConfigureAwait(false);
+        if (!doc.TryGetProperty("dataProtection", out var keys) || keys.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return new KeyStorageStatus(
+            keys.TryGetProperty("keyStorage", out var s) ? s.GetString() ?? "Default" : "Default",
+            keys.TryGetProperty("location", out var l) ? l.GetString() ?? string.Empty : string.Empty,
+            keys.TryGetProperty("warning", out var w) && w.ValueKind == JsonValueKind.String ? w.GetString() : null);
+    }
+
     /// <summary>🌐 Stage 7.3 — the outbound HTTP channels nobody has configured (empty = all set up).</summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The unconfigured channels.</returns>
@@ -79,6 +97,12 @@ public sealed class SystemClient
             .ToList();
     }
 }
+
+/// <summary>🔑 Plan 08 — where the encryption keys live (they decrypt every stored secret), and whether that's safe.</summary>
+/// <param name="KeyStorage"><c>PersistenceStore</c>, <c>Folder</c> or <c>Default</c>.</param>
+/// <param name="Location">Where.</param>
+/// <param name="Warning">Why keys could be lost, or null.</param>
+public sealed record KeyStorageStatus(string KeyStorage, string Location, string? Warning);
 
 /// <summary>🌐 Stage 7.3 — an outbound HTTP channel nobody has configured (it runs fail-closed).</summary>
 /// <param name="Channel"><c>scripts</c> or <c>httpModule</c>.</param>

@@ -9,9 +9,8 @@ DotFlow keeps a few kinds of secret:
 This page covers how they're protected at rest. For how secret values are kept out of history,
 logs and live events, see [variables](variables.md); plan 03 §10.6 has the design notes.
 
-> **Status:** [plan 08](architecture/plans/08-secrets-at-rest.md) parts 1–2 (key storage, and
-> encrypted write-only secret variables in the server and API) are in place. The UI for them
-> (part 3) is next.
+> Design and decisions: [plan 08](architecture/plans/08-secrets-at-rest.md) (implemented
+> 2026-11-11).
 
 ---
 
@@ -71,6 +70,20 @@ Each stored variable has a **secret mode**:
 - **Saving a workflow** that declares a variable secret turns any stored "follow" variable of that
   name secret. The designer can ask the server first which ones that would be
   (`POST /api/v1/variables/secret-impact`).
+
+### In the UI
+
+- **Settings → Global variables:**
+  - each variable has a **Secret** setting (Not secret / Secret / Follow workflow declarations),
+    with an explanation of each option and a warning on Follow;
+  - a secret's row shows 🔒 and who set it when, never the value. Editing a secret leaves the value
+    box empty (type a new one to replace it);
+  - marking a variable secret opens a **confirmation dialog** saying how many earlier values will
+    be erased, and nothing is erased until you confirm;
+  - a secret's history lists who and when, never values.
+- **Designer:** saving a workflow that declares a variable secret first asks, in a dialog listing
+  them, if that would turn stored "follow" variables secret.
+- **Settings → Encryption keys** shows where the keys live, and the warning when they could be lost.
 
 ### API
 

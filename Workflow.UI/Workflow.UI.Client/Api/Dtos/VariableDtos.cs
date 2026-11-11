@@ -27,7 +27,29 @@ public sealed record VariableDto(
     string Scope,
     Guid? ScopeId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt)
+{
+    /// <summary>🔒 Plan 08 — gets a value indicating whether the variable is secret (its value is never returned).</summary>
+    public bool IsSecret { get; init; }
+
+    /// <summary>🔒 Plan 08 — gets the secret mode: <c>None</c>, <c>Secret</c> or <c>FollowWorkflows</c>.</summary>
+    public string SecretMode { get; init; } = "None";
+
+    /// <summary>🔒 Plan 08 — gets who last changed a secret.</summary>
+    public string? LastSetBy { get; init; }
+
+    /// <summary>🔒 Plan 08 — gets when a secret was last changed.</summary>
+    public DateTimeOffset? LastSetAt { get; init; }
+
+    /// <summary>🔒 Plan 08 — for a secret's history entry: what happened (no value).</summary>
+    public string? Change { get; init; }
+}
+
+/// <summary>🔒 Plan 08 — a stored variable that saving a workflow would turn secret.</summary>
+/// <param name="Name">The variable.</param>
+/// <param name="Scope"><c>Global</c> or <c>Workflow</c>.</param>
+/// <param name="ScopeId">The workflow, for workflow scope.</param>
+public sealed record SecretImpactDto(string Name, string Scope, Guid? ScopeId);
 
 /// <summary>🔧 Body for <c>PUT /api/v1/variables/{name}</c>~ 💾.</summary>
 /// <param name="Value">The value to store; a JSON null persists a present null-valued entry.</param>

@@ -52,14 +52,41 @@
                     <button class="df-btn df-btn--small df-btn--danger" data-testid="gv-delete-@name" disabled="@adminOnly"
                             title="Delete this variable and all its history" @onclick="() => Delete(name)">✕</button>
                 </div>
-                <div class="df-vars__default">= @value.GetRawText()</div>
+                @if (details.GetValueOrDefault(name) is { IsSecret: true } secret)
+                {
+                    @* 🔒 Plan 08 — write-only: never the value, only that it's set, by whom and when *@
+                    <div class="df-vars__default" data-testid="gv-secret-@name">
+                        🔒 secret@(secret.SecretMode == "FollowWorkflows" ? " (follows workflow declarations)" : string.Empty)
+                        @if (secret.LastSetBy is not null)
+                        {
+                            <span> · set by @secret.LastSetBy · @secret.LastSetAt?.ToString("u")</span>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="df-vars__default">= @value.GetRawText()</div>
+                    @if (details.GetValueOrDefault(name) is { SecretMode: "FollowWorkflows" })
+                    {
+                        <div class="df-field-help" data-testid="gv-follow-@name">
+                            ⚠ Follows workflow declarations: becomes secret (encrypted, earlier values erased) as soon as a workflow declares '@name' secret.
+                        </div>
+                    }
+                }
                 @if (historyFor == name)
                 {
                     <div class="df-token-list" data-testid="gv-history-list">
                         @foreach (var entry in history)
                         {
                             <div class="df-field-help">
-                                v@entry.Version · @entry.UpdatedAt.ToString("u") · @(entry.Value?.GetRawText() ?? "null")
+                                @if (entry.Change is not null)
+                                {
+                                    <span>@entry.UpdatedAt.ToString("u") · @entry.LastSetBy · @entry.Change</span>
+                                }
+                                else
+                                {
+                                    <span>@($"v{entry.Version} · {entry.UpdatedAt:u} · {entry.Value?.GetRawText() ?? "null"}")</span>
+                                }
                             </div>
                         }
                     </div>
@@ -77,8 +104,18 @@
                        value="@formName" @oninput="e => formName = e.Value?.ToString() ?? string.Empty" />
             </div>
             <div class="df-field">
+                <label class="df-label">Secret</label>
+                <select class="df-input" data-testid="gv-mode" value="@formMode" @onchange="OnModeChanged">
+                    <option value="None">Not secret: stored and shown as is</option>
+                    <option value="Secret">Secret: encrypted, never shown again</option>
+                    <option value="FollowWorkflows">Follow workflow declarations</option>
+                </select>
+                <div class="df-field-help" data-testid="gv-mode-help">@ModeHelp(formMode)</div>
+            </div>
+            <div class="df-field">
                 <label class="df-label">Value (JSON)</label>
                 <textarea class="df-textarea" data-testid="gv-value" spellcheck="false"
+                          placeholder="@(EditingSecret ? "Enter a new value: the current one can't be shown" : string.Empty)"
                           value="@formValue" @oninput="e => formValue = e.Value?.ToString()"></textarea>
                 <div class="df-field-help">
                     A JSON value — <code>"text"</code>, <code>42</code>, <code>true</code>, or an object.
@@ -94,10 +131,44 @@
             </div>
         </div>
     }
+
+    @if (pendingPurge is { } purge)
+    {
+        @* 🔒 Plan 08 — marking a variable secret erases its earlier values: ask first *@
+        <div class="df-modal-backdrop">
+            <div class="df-modal" data-testid="gv-purge-confirm">
+                <div class="df-label">Erase earlier values of '@purge.Name'?</div>
+                <p>@purge.Detail</p>
+                <p class="df-field-help">The current value is kept, encrypted. Earlier values can't be recovered.</p>
+                <div class="df-row">
+                    <button class="df-btn df-btn--danger" data-testid="gv-purge-yes" @onclick="ConfirmPurge">Erase and mark secret</button>
+                    <button class="df-btn" data-testid="gv-purge-no" @onclick="() => pendingPurge = null">Cancel</button>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
     private readonly Dictionary<string, JsonElement> variables = new(StringComparer.Ordinal);
+
+    // 🔒 Plan 08 — each variable's secret mode / who-when, and a mode change awaiting confirmation~
+    private readonly Dictionary<string, VariableDto> details = new(StringComparer.Ordinal);
+    private string formMode = "None";
+    private PendingPurge? pendingPurge;
+
+    private sealed record PendingPurge(string Name, string Mode, JsonElement? Value, string Detail);
+
+    private void OnModeChanged(ChangeEventArgs e) => this.formMode = e.Value?.ToString() ?? "None";
+
+    private bool EditingSecret => this.editingName is not null && this.details.GetValueOrDefault(this.editingName) is { IsSecret: true };
+
+    private static string ModeHelp(string mode) => mode switch
+    {
+        "Secret" => "Stored encrypted and write-only: nobody can read it back, only replace it. Its earlier values are erased (you'll be asked to confirm).",
+        "FollowWorkflows" => "⚠ Becomes secret as soon as any workflow declares a variable with this name secret, which can happen when someone edits a workflow. Once secret it stays secret.",
+        _ => "Stored in plain text and readable by anyone who can view variables, with its earlier values.",
+    };
     private List<VariableDto> history = new();
 
     private bool loading = true;
@@ -121,9 +192,26 @@
         {
             var all = await Variables.ListAsync();
             this.variables.Clear();
+            this.details.Clear();
             foreach (var (name, value) in all)
             {
                 this.variables[name] = value;
+            }
+
+            // 🔒 Plan 08 — the secret mode and who/when come with each variable's details~
+            foreach (var name in this.variables.Keys.ToList())
+            {
+                try
+                {
+                    if (await Variables.GetAsync(name) is { } detail)
+                    {
+                        this.details[name] = detail;
+                    }
+                }
+                catch (Exception)
+                {
+                    // best effort: the row still shows~
+                }
             }
         }
         catch (ApiException ex)
@@ -149,6 +237,7 @@
         this.formName = string.Empty;
         this.formValue = null;
         this.formError = null;
+        this.formMode = "None";
     }
 
     private void BeginEdit(string name, JsonElement value)
@@ -156,8 +245,10 @@
         this.editing = true;
         this.editingName = name;
         this.formName = name;
-        this.formValue = value.GetRawText();
         this.formError = null;
+        var detail = this.details.GetValueOrDefault(name);
+        this.formMode = detail?.SecretMode ?? "None";
+        this.formValue = detail is { IsSecret: true } ? null : value.GetRawText();
     }
 
     private async Task Save()
@@ -169,7 +260,20 @@
             return;
         }
 
-        if (JsonValues.TryParseJson(this.formValue) is not { } element)
+        JsonElement? element = null;
+        if (!string.IsNullOrWhiteSpace(this.formValue))
+        {
+            if (JsonValues.TryParseJson(this.formValue) is not { } parsed)
+            {
+                this.formError = "The value isn't valid JSON.";
+                return;
+            }
+
+            element = parsed;
+        }
+
+        var currentMode = this.editingName is not null ? this.details.GetValueOrDefault(name)?.SecretMode ?? "None" : "None";
+        if (element is null && (this.formMode == currentMode || this.editingName is null) && !this.EditingSecret)
         {
             this.formError = "The value isn't valid JSON.";
             return;
@@ -177,13 +281,58 @@
 
         try
         {
-            await Variables.SetAsync(name, element);
+            if (this.formMode != currentMode)
+            {
+                await this.ChangeMode(name, this.formMode, element, confirmPurge: false);
+                return;
+            }
+
+            if (element is not null)
+            {
+                await Variables.SetAsync(name, element);
+            }
+
             this.editing = false;
             Toasts.Success($"Saved '{name}'");
             await this.Reload();
         }
         catch (ApiException ex)
         {
+            this.HandleWriteFailure(ex);
+        }
+    }
+
+    /// <summary>🔒 Plan 08 — changes the mode; if that would erase earlier values, asks first.</summary>
+    private async Task ChangeMode(string name, string mode, JsonElement? value, bool confirmPurge)
+    {
+        try
+        {
+            await Variables.SetSecretModeAsync(name, mode, value, confirmPurge);
+            this.pendingPurge = null;
+            this.editing = false;
+            Toasts.Success($"Saved '{name}'");
+            await this.Reload();
+        }
+        catch (ApiException ex) when (ex.Error.StatusCode == 409)
+        {
+            this.pendingPurge = new PendingPurge(name, mode, value, ex.Error.Detail ?? ex.Error.Summarize());
+        }
+    }
+
+    private async Task ConfirmPurge()
+    {
+        if (this.pendingPurge is not { } purge)
+        {
+            return;
+        }
+
+        try
+        {
+            await this.ChangeMode(purge.Name, purge.Mode, purge.Value, confirmPurge: true);
+        }
+        catch (ApiException ex)
+        {
+            this.pendingPurge = null;
             this.HandleWriteFailure(ex);
         }
     }
