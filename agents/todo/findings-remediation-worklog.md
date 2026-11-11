@@ -163,7 +163,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.5 | ✅ **fixed 2026-11-09** (opt-in stall + overall limits, server default + per-region override) — ~~**§9.2 (streaming) regions have no timeout**~~ | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
 | 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
 | 7.7 | ✅ **fixed 2026-11-09** (`SubGraphExecutor` runs regions wholly inside a body) — ~~**§9.5 (streaming) no regions inside construct bodies**~~ | Low | plan 04 | No (parity work), but low priority | 1–2 d |
-| 7.8 | 🔄 **in progress** (stage-level blame, plan 04 §9.3; engine done, designer next) — **§9.3 (streaming) mid-pipeline retry**: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
+| 7.8 | ✅ **fixed 2026-11-10** (stage-level blame, plan 04 §9.3, `docs/error-handling.md` § streaming) — ~~**§9.3 (streaming) mid-pipeline retry**~~: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
 | 7.9 | ✅ **fixed 2026-11-09** (binding runs in the node's execution task) — ~~**Expression evaluation blocks the `NodeExecutor` thread** (`.GetAwaiter().GetResult()`)~~ | Low | 02 data-binding §10, item 5 | No | ~0.5 d |
 | 7.10 | **Scheduled and Event triggers have no runtime** | Info | 01 §12.8 | Feature, not a fix: out of scope for this effort | — |
 
@@ -294,6 +294,30 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-10 — Stage 7.8 part 2/2: designer and execution detail
+- Designer On error panel, for a stage of a streaming region (`Designer/State/RegionStageErrors.cs`):
+  - "Use the region's error handling (from '<source>')" on non-source stages. When ticked, the
+    stage's own controls are replaced by the source's setting, read-only, with a button that
+    selects the source.
+  - "After the region: run what follows / skip what follows", shown when the effective behaviour
+    is Continue or an error handler.
+  - Retry help per stage kind (per-item: the item is retried in place; otherwise the whole region
+    re-runs from the source).
+  - All edits are undoable `EditNodeMetadataCommand`s (`useRegionErrorHandling`,
+    `regionSkipWhatFollows`).
+- Skip reason: the API's `NodeExecutionRecordDto.SkipReason` (from the record's `skipReason`
+  metadata) and the UI DTO. The node inspector shows it (`node-skip-reason`), with a tooltip in the
+  list.
+- Tests:
+  - UI `Components/RegionStageErrorsPanelTests` (8).
+  - `Api/NodeRecordSkipReasonTests` (3).
+- Proof: 4/4 UI mutants killed. One API mutant survived, showing that the `JsonElement` branch in
+  the skip-reason mapping was redundant (`ToString()` already gives a JSON string's value), so I
+  removed the branch.
+- Docs: `docs/error-handling.md` "In a streaming region" (diagram, rules, alternatives); 03 §9
+  items 3 and 5; the findings table; plan 04.
+- Suites: unfiltered `dotnet test Workflow.Tests` 2023/2023; `Workflow.Tests.UI` 802/802.
+
 ### 2026-11-10 — Stage 7.8 part 1/2: streaming stage-level blame (engine)
 - Decided (asked in two rounds; plan 04 §9.3, memorizer ef9deb42):
   - blame the failed stage, using its own settings, with an opt-in "use the region's";

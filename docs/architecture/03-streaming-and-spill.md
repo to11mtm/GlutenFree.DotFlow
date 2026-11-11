@@ -284,19 +284,25 @@ Its recommendation is streaming as a second mode, at about 5–9 engineer-months
    ```jsonc
    "Streaming": { "RegionStallTimeoutMs": 300000, "RegionTimeoutMs": 0 }
    ```
-3. **Retrying a mid-pipeline node can stall the run.**
-   - What the code does: when a *non-source* stage is blamed and its `OnErrorBehavior` is `Retry`,
-     `RetryNode` calls `ExecuteNode` on it. That returns immediately, because only a region's
-     source dispatches.
-   - Effect: the node stays `Retrying` and the run never completes. Worth a test.
+3. ~~**Retrying a mid-pipeline node can stall the run.**~~ **Fixed (Stage 7.8), with stage-level
+   blame.** A failure is blamed on the stage that failed, and that stage's own error handling
+   applies. A stage can opt into the region's (source's) error handling instead.
+   - **Retry:** a per-item stage retries the failing item in place. Any other stage re-runs the
+     whole region from its source, so no stall.
+   - **Continue / error handler:** what follows the region runs by default; a stage can choose to
+     skip it instead.
+   - **States:** stages before the failed one complete; stages after it are skipped, with a
+     recorded reason.
+   - **Found on the way:** continue on a source used to hang the run. That's fixed too.
+   - See [error handling § streaming](../error-handling.md#in-a-streaming-region).
 4. **Pinned module versions are ignored inside regions.** `StreamRegionExecutor` calls
    `GetModule(moduleId)` without the version that `NodeExecutor` honours.
 5. ~~**No regions inside construct bodies.**~~ **Fixed (Stage 7.7):** `SubGraphExecutor` runs a
    region that lies wholly inside the body (loop iteration, parallel branch, try/catch body,
    transaction body) as one pipeline, the same way `WorkflowExecutor` does.
    - Region indices match the top level's.
-   - A failure blames the region's source; retry re-runs the whole region, and the other members
-     are skipped meanwhile.
+   - A failure is handled like a top-level region failure (Stage 7.8: blamed on the failed stage;
+     see item 3).
    - Every member gets a history record.
    - The final `StreamRegionProgress` is published.
    - A stream that would cross the body's boundary isn't a region inside the body. The designer

@@ -133,6 +133,9 @@ public record NodeExecutionRecordDto(
     string? LoopId,
     int? LoopIteration)
 {
+    /// <summary>🧯 Stage 7.8 — gets why the node was skipped, when it was (from the record's <c>skipReason</c> metadata).</summary>
+    public string? SkipReason { get; init; }
+
     /// <summary>Projects a <see cref="Workflow.Persistence.Models.NodeExecutionRecord"/> into the DTO~ 🌸.</summary>
     /// <param name="r">The node record.</param>
     /// <returns>The DTO.</returns>
@@ -147,5 +150,15 @@ public record NodeExecutionRecordDto(
             r.Outputs,
             r.Error,
             r.LoopId,
-            r.LoopIteration);
+            r.LoopIteration)
+        {
+            SkipReason = r.Metadata is { } metadata && metadata.TryGetValue("skipReason", out var reason)
+                ? reason switch
+                {
+                    string text => text,
+                    null => null,
+                    var other => other.ToString(),
+                }
+                : null,
+        };
 }

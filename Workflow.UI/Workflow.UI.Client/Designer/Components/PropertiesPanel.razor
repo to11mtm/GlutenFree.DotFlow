@@ -41,6 +41,26 @@
         @* 🚑 §12.7 — what happens when this node fails. Applied immediately (one undoable edit). *@
         <div class="df-field" data-testid="on-error">
             <label class="df-label">On error</label>
+            @{ var regionStage = RegionStageErrors.For(Document, SelectedNode); }
+            @if (regionStage is { IsSource: false } stage)
+            {
+                @* 🧯 Stage 7.8 — a stage's own settings apply; it can opt into the region's instead *@
+                <label class="df-label">
+                    <input type="checkbox" data-testid="on-error-use-region" checked="@RegionStageErrors.Flag(SelectedNode, RegionStageErrors.UseRegionKey)"
+                           @onchange="e => SetRegionFlag(RegionStageErrors.UseRegionKey, e.Value is true)" />
+                    Use the region's error handling (from '@stage.SourceName')
+                </label>
+            }
+            @if (regionStage is { IsSource: false } usesRegion && RegionStageErrors.Flag(SelectedNode, RegionStageErrors.UseRegionKey))
+            {
+                <div class="df-field-help" data-testid="on-error-region-summary">
+                    This stage uses <strong>@BehaviorLabel(RegionSourceSettings(usesRegion).Behavior)</strong>, set on
+                    <button type="button" class="df-btn df-btn--link" data-testid="on-error-region-source" @onclick="() => Selection.SelectNode(usesRegion.SourceId)">@usesRegion.SourceName</button>.
+                    Untick to give this stage its own.
+                </div>
+            }
+            else
+            {
             <select class="df-input" data-testid="on-error-behavior" @onchange="OnErrorBehaviorChanged">
                 @foreach (var (value, label) in NodeErrorHandling.Behaviors)
                 {
@@ -69,6 +89,27 @@
                     {{Variable.error}} (message, errorType, nodeId); this node's downstream is skipped and the
                     handler's own path continues. The handler doesn't run on its own. See docs/error-handling.md.
                 </div>
+            }
+            }
+            @if (regionStage is { } inRegion)
+            {
+                var effective = RegionStageErrors.Flag(SelectedNode, RegionStageErrors.UseRegionKey) && !inRegion.IsSource
+                    ? RegionSourceSettings(inRegion).Behavior
+                    : ErrorSettings.Behavior;
+                @if (effective == NodeErrorHandling.Retry)
+                {
+                    <div class="df-field-help" data-testid="on-error-region-retry">@RegionStageErrors.RetryHelp(inRegion)</div>
+                }
+                @if (effective is NodeErrorHandling.Continue or NodeErrorHandling.UseErrorHandler)
+                {
+                    <label class="df-label">After the region</label>
+                    <select class="df-input" data-testid="on-error-after-region"
+                            @onchange="e => SetRegionFlag(RegionStageErrors.SkipWhatFollowsKey, e.Value?.ToString() == RegionStageErrors.SkipWhatFollowsKey)">
+                        <option value="" selected="@(!RegionStageErrors.Flag(SelectedNode, RegionStageErrors.SkipWhatFollowsKey))">run what follows the region (its outputs are missing)</option>
+                        <option value="@RegionStageErrors.SkipWhatFollowsKey" selected="@RegionStageErrors.Flag(SelectedNode, RegionStageErrors.SkipWhatFollowsKey)">skip what follows the region</option>
+                    </select>
+                    <div class="df-field-help">The rest of this streaming region can't run once a stage fails; this chooses what happens after it.</div>
+                }
             }
         </div>
 
@@ -816,6 +857,29 @@
             this.Commands.Execute(new EditNodeMetadataCommand(node.Id, key, before, after));
         }
     }
+
+    /// <summary>🧯 Stage 7.8 — sets or clears a region-stage flag in the node's metadata (undoable).</summary>
+    private void SetRegionFlag(string key, bool on)
+    {
+        if (this.SelectedNode is not { } node || this.Commands is null)
+        {
+            return;
+        }
+
+        var before = node.Metadata.TryGetValue(key, out var existing) ? existing : null;
+        var after = on ? "true" : null;
+        if (before != after)
+        {
+            this.Commands.Execute(new EditNodeMetadataCommand(node.Id, key, before, after));
+        }
+    }
+
+    /// <summary>🧯 Stage 7.8 — the region source's on-error settings.</summary>
+    private NodeErrorHandling.Settings RegionSourceSettings(RegionStageErrors.Info info)
+        => NodeErrorHandling.Read(this.Document.FindNode(info.SourceId)?.ErrorHandling);
+
+    private static string BehaviorLabel(string behavior)
+        => NodeErrorHandling.Behaviors.FirstOrDefault(b => b.Value == behavior).Label ?? behavior;
 
     private void OnErrorBehaviorChanged(ChangeEventArgs e)
         => this.SetErrorSettings(this.ErrorSettings with { Behavior = e.Value?.ToString() ?? NodeErrorHandling.Fail });

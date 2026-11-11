@@ -145,6 +145,44 @@ any step fails, but keep going".
 
 ---
 
+## In a streaming region
+
+In a [streaming region](architecture/03-streaming-and-spill.md), the stages run as one pipeline,
+so a failure works a little differently. (Decided 2026-11-10, Stage 7.8; plan 04 §9.3.)
+
+```mermaid
+flowchart LR
+    S[source ✔ Completed] --> M[stage ✖ Failed] --> T[sink ⏭ Skipped<br/>'upstream stage failed'] --> N[what follows]
+```
+
+- **Blame:** the failure is reported against the **stage that failed**.
+  - Stages before it show **Completed**, with their item counts.
+  - Stages after it show **Skipped**. History and the execution detail say why: *"skipped:
+    upstream stage 'X' failed"*.
+- **Whose settings:** the failed stage's own *On error*. Tick **Use the region's error handling**
+  on a stage to use its source's settings instead. The panel then shows them read-only, with a link
+  to the source.
+- **Retry:**
+  - a **per-item** stage retries the **failing item in place**, with its retry policy and backoff,
+    while the stream keeps flowing. Its *on item error* (skip or fail) applies once the retries run
+    out, and the region isn't re-run on top of that;
+  - any **other stage, or the source,** retries by **re-running the whole region** from its source.
+    The attempts count against the stage that failed.
+- **Continue / Run an error handler:** the rest of the region can't run once a stage fails.
+  - By default **what follows the region runs**, with the region's outputs missing.
+  - Choose **After the region: skip what follows** on the stage to skip it instead.
+  - The error handler still runs either way.
+- A region timeout (Stage 7.5) is a failure of the region as a whole, so it's blamed on the
+  source.
+
+**Alternatives we didn't pick** (each is a small change in `RegionErrorHandling` or the executors'
+`HandleStreamRegionFailed`):
+- **Settings:** fall back to the source's when the stage has none, or always use the source's.
+- **Retry:** restart whole-stream stages in place with a replay buffer; always re-run the region;
+  or no retry for mid-pipeline stages.
+- **Continue:** skip what follows by default; or one region-wide choice on the source.
+- **States:** show every other stage as Skipped.
+
 ## Error handler or Try/Catch?
 
 | | Use error handler (per node) | Try/Catch (construct) |

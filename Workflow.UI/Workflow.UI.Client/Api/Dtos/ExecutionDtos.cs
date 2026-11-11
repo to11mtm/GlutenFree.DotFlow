@@ -98,4 +98,8 @@ public sealed record NodeExecutionRecordDto(
     Dictionary<string, JsonElement>? Outputs,
     string? Error,
     string? LoopId,
-    int? LoopIteration);
+    int? LoopIteration)
+{
+    /// <summary>🧯 Stage 7.8 — gets why the node was skipped, when it was (e.g. an earlier region stage failed).</summary>
+    public string? SkipReason { get; init; }
+}

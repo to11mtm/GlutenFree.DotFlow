@@ -201,6 +201,12 @@ Planned lightly here; promote to a tested finding when scheduled.
       no retry for mid stages.
     - **Continue:** skip the rest of the region by default; or a region-wide choice on the source.
     - **States:** all other stages shown as Skipped.
+  - **Implemented 2026-11-10 (Stage 7.8, two commits):**
+    - Runner: `StreamStageFailure` tags errors; `StreamStage.ItemRetry` retries items in place.
+    - `RegionErrorHandling` (keys, `Effective`, `Around`, `SkipReason`).
+    - Both executors: `HandleStreamRegionFailed`, `_regionStops` with `ContinueAfterRegionStop`,
+      and `RetryNode` mapped to the region's source.
+    - Designer On error panel for region stages; skip reason in the node inspector.
 - **§9.5 no regions inside construct bodies.** `SubGraphExecutor` doesn't run region detection, so
   streaming edges inside a loop/branch body run as batch. Ties to the "sub-graph parity" theme
   ([plan 02 §12.4](02-engine-lifecycle-remediation.md), [plan 03 §10.3](03-binding-and-variables-remediation.md)).

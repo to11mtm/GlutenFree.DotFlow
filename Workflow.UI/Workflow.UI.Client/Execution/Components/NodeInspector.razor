@@ -15,7 +15,7 @@
             <button type="button" class="df-nodeinspect__node @(node.NodeId == selected ? "df-nodeinspect__node--active" : "")"
                     data-testid="node-@node.NodeId" @onclick="() => Select(node.NodeId)">
                 <span>@IconFor(node.State)</span>
-                <span class="df-nodeinspect__name">@node.NodeId</span>
+                <span class="df-nodeinspect__name" title="@node.SkipReason">@node.NodeId</span>
                 @if (node.LoopIteration is { } it)
                 {
                     <span class="df-nodeinspect__loop">#@it</span>
@@ -45,6 +45,11 @@
                     <pre class="df-nodeinspect__json" data-testid="node-outputs">@Pretty(sel.Outputs)</pre>
                 </div>
             </div>
+            @if (sel.SkipReason is not null)
+            {
+                @* 🧯 Stage 7.8 — why a stage was skipped (e.g. an earlier stage of its streaming region failed) *@
+                <div class="df-nodeinspect__skip" data-testid="node-skip-reason">⏭ @sel.SkipReason</div>
+            }
             @if (sel.Error is not null)
             {
                 <div class="df-nodeinspect__error" data-testid="node-error">
