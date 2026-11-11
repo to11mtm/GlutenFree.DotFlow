@@ -57,7 +57,20 @@ public record StreamRegionFailed(
     int RegionIndex,
     IReadOnlyList<string> NodeIds,
     string FailedNodeId,
-    Exception Error);
+    Exception Error)
+{
+    /// <summary>🧯 Stage 7.8 — gets the region's stages in pipeline order (source first); empty = unknown.</summary>
+    public IReadOnlyList<string> ChainOrder { get; init; } = Array.Empty<string>();
+
+    /// <summary>🧯 Stage 7.8 — gets the items each stage had emitted when the region failed.</summary>
+    public IReadOnlyDictionary<string, long> ItemCounts { get; init; } = new Dictionary<string, long>();
+
+    /// <summary>
+    /// 🧯 Stage 7.8 — gets a value indicating whether a per-item stage already retried the failing item
+    /// in place until its policy ran out, so the region isn't re-run for another retry.
+    /// </summary>
+    public bool ItemRetriesExhausted { get; init; }
+}
 
 /// <summary>
 /// 📡 Published to the Akka <c>EventStream</c> when a streaming region finishes, carrying the

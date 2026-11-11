@@ -138,7 +138,7 @@ public sealed class StreamRegionExecutor : ReceiveActor
 
                 if (nodeDefinition is null)
                 {
-                    this.Fail(parent, new InvalidOperationException($"Node '{nodeId}' is missing from the definition."));
+                    this.Fail(parent, new InvalidOperationException($"Node '{nodeId}' is missing from the definition."), nodeId);
                     return;
                 }
 
@@ -147,7 +147,7 @@ public sealed class StreamRegionExecutor : ReceiveActor
                     this.serviceProvider.GetService<IModuleRegistry>(), nodeDefinition);
                 if (resolution.Module is null)
                 {
-                    this.Fail(parent, new InvalidOperationException(resolution.Error));
+                    this.Fail(parent, new InvalidOperationException(resolution.Error), nodeId);
                     return;
                 }
 
@@ -156,7 +156,8 @@ public sealed class StreamRegionExecutor : ReceiveActor
                     this.Fail(
                         parent,
                         new InvalidOperationException(
-                            $"Node '{nodeId}' uses module '{nodeDefinition.ModuleId}', which isn't a streaming module."));
+                            $"Node '{nodeId}' uses module '{nodeDefinition.ModuleId}', which isn't a streaming module."),
+                        nodeId);
                     return;
                 }
 
@@ -167,7 +168,10 @@ public sealed class StreamRegionExecutor : ReceiveActor
                     this.BufferCapacityFor(nodeId),
                     MaxWorkersFor(nodeDefinition, module),
                     OrderedFor(nodeDefinition),
-                    ItemErrorPolicyFor(nodeDefinition)));
+                    ItemErrorPolicyFor(nodeDefinition))
+                {
+                    ItemRetry = this.ItemRetryFor(nodeDefinition, module),
+                });
             }
 
             this.log.Info(
@@ -326,7 +330,8 @@ public sealed class StreamRegionExecutor : ReceiveActor
         {
             this.Fail(
                 parent,
-                failed.Exception ?? new InvalidOperationException(failed.ErrorMessage ?? "Streaming region failed."));
+                failed.Exception ?? new InvalidOperationException(failed.ErrorMessage ?? "Streaming region failed."),
+                terminalNodeId);
             return;
         }
 
@@ -392,17 +397,57 @@ public sealed class StreamRegionExecutor : ReceiveActor
                 },
         };
 
-    private void Fail(IActorRef parent, Exception error)
+    private void Fail(IActorRef parent, Exception error, string? blamedNodeId = null)
     {
-        this.log.Error(error, "❌ Streaming region {RegionIndex} failed: {Error}", this.region.Index, error.Message);
+        // 🧯 Stage 7.8 — blame the stage that failed: the runner tags its errors with the node. A
+        // region-wide failure (a timeout, an unknown cause) still falls back to the source~
+        var tagged = StreamStageFailure.Tagged(error);
+        var failedNodeId = StreamStageFailure.NodeOf(error) ?? blamedNodeId ?? this.region.SourceNodeIds.FirstOrDefault() ?? this.region.NodeIds[0];
+        var cause = tagged ?? error;
 
-        // Blame the source node when we can't tell which stage broke — it's the node the user
-        // dispatched, and the region is reported as a unit~
-        parent.Tell(new StreamRegionFailed(
-            this.region.Index,
-            this.region.NodeIds,
-            this.region.SourceNodeIds.FirstOrDefault() ?? this.region.NodeIds[0],
-            error));
+        this.log.Error(cause, "❌ Streaming region {RegionIndex} failed at stage {NodeId}: {Error}", this.region.Index, failedNodeId, cause.Message);
+
+        IReadOnlyList<string> order;
+        try
+        {
+            order = this.region.ChainOrder();
+        }
+        catch (InvalidOperationException)
+        {
+            order = this.region.NodeIds;
+        }
+
+        parent.Tell(new StreamRegionFailed(this.region.Index, this.region.NodeIds, failedNodeId, cause)
+        {
+            ChainOrder = order,
+            ItemCounts = this.liveCounts.Snapshot(),
+            ItemRetriesExhausted = StreamStageFailure.ItemRetriesExhausted(error),
+        });
+    }
+
+    /// <summary>
+    /// 🧯 Stage 7.8 — a per-item stage whose (effective) error handling retries gets in-place item
+    /// retry with that policy; other stages retry by re-running the region (the executor decides).
+    /// </summary>
+    private RetryPolicy? ItemRetryFor(NodeDefinition node, IStreamingWorkflowModule module)
+    {
+        if (module is not IStreamItemProcessor)
+        {
+            return null;
+        }
+
+        var source = this.region.SourceNodeIds.FirstOrDefault();
+        var effective = RegionErrorHandling.Effective(
+            node,
+            _ => source,
+            id => this.definition.Nodes.FirstOrDefault(n => string.Equals(n.Id, id, StringComparison.Ordinal)));
+        var handling = effective?.ErrorHandling ?? this.definition.ErrorHandling;
+        return handling?.OnErrorBehavior switch
+        {
+            ErrorBehavior.Retry => effective?.RetryPolicy ?? RetryPolicy.Default,
+            ErrorBehavior.UseErrorHandler when effective?.RetryPolicy is { } policy => policy,
+            _ => null,
+        };
     }
 
     private int BufferCapacityFor(string nodeId)

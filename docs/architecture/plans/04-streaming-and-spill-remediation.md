@@ -172,6 +172,35 @@ Planned lightly here; promote to a tested finding when scheduled.
   (`Fail()` uses `SourceNodeIds.First()`), so a retry re-runs the whole region rather than stalling —
   the originally-feared stall doesn't occur, but stage-level blame is missing. Revisit if/when
   per-stage blame is added; not urgent.
+  **Decided 2026-11-10 (asked in two rounds, Stage 7.8):**
+  - **Blame the stage that failed.** The runner tags each stage's errors with its node, and the
+    region failure names that stage, not the source.
+  - **Whose settings:** the failed stage's own error handling. A per-stage option, **"Use the
+    region's (source's) error handling"** (off by default), makes the stage use the source's
+    settings instead. The designer shows those settings read-only, with a link to the source.
+  - **Retry:**
+    - A **per-item** stage retries the failing item **in place**, with the stage's retry policy and
+      backoff, while the stream keeps flowing. The item's `onItemError` skip/fail applies after
+      the retries run out, and the region is not re-run on top of that.
+    - A **whole-stream** stage or the **source** retries by re-running the whole region from its
+      source, with attempts counted against the failed stage. This also fixes the feared stall:
+      `RetryNode` on a non-source member starts the region from its source.
+  - **Continue / on-error handler** on a failed stage:
+    - The region stops. The failed stage counts as done (no output), and later stages can't run.
+    - By default, **what follows the region runs**, with the region's outputs missing.
+    - A per-stage option, **"After the region: skip what follows"**, skips it instead.
+  - **States:**
+    - Stages **before** the failed one show Completed, with their item counts.
+    - The failed stage shows Failed.
+    - Stages **after** it show Skipped, with a recorded reason (e.g. *"skipped: upstream stage
+      'boom' failed"*) that history and the execution detail show.
+  - Alternatives not taken:
+    - **Settings:** the stage's own falling back to the source's; the source's only; the stage's
+      only (no option).
+    - **Retry:** whole-stream stages restarted in place with a replay buffer; region re-run only;
+      no retry for mid stages.
+    - **Continue:** skip the rest of the region by default; or a region-wide choice on the source.
+    - **States:** all other stages shown as Skipped.
 - **§9.5 no regions inside construct bodies.** `SubGraphExecutor` doesn't run region detection, so
   streaming edges inside a loop/branch body run as batch. Ties to the "sub-graph parity" theme
   ([plan 02 §12.4](02-engine-lifecycle-remediation.md), [plan 03 §10.3](03-binding-and-variables-remediation.md)).

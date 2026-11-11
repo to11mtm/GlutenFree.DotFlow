@@ -148,6 +148,12 @@ public class SubGraphExecutor : ReceiveActor
     /// <summary>🌊 Stage 7.7 — running region actors, with the region's source and start time.</summary>
     private readonly Dictionary<IActorRef, (string SourceNodeId, DateTimeOffset StartedAt)> _regionActors = new();
 
+    // 🧯 Stage 7.8 — a failed region stage → its region's last stage, until continue / handler / retry settles it~
+    private readonly Dictionary<string, string> _regionStops = new(StringComparer.Ordinal);
+
+    private NodeDefinition? FindNode(string nodeId)
+        => _definition.Nodes.Find(n => n.Id == nodeId).Match(Some: n => (NodeDefinition?)n, None: () => null);
+
     // ── Private persistence confirmation ────────────────────────────────────────────────────────
     private sealed record NodePersisted(string NodeId, bool Success);
 
@@ -206,9 +212,11 @@ public class SubGraphExecutor : ReceiveActor
         _outerOutputs = outerOutputs;
 
         _failureCore = new NodeFailureCore(
-            getNode: nodeId => _definition.Nodes.Find(n => n.Id == nodeId).Match(
-                Some: n => (NodeDefinition?)n,
-                None: () => null),
+            // 🧯 Stage 7.8 — a region stage may opt into its source's error handling~
+            getNode: nodeId => Workflow.Engine.Streaming.RegionErrorHandling.Effective(
+                FindNode(nodeId),
+                id => FindStreamRegion(id)?.SourceNodeIds.FirstOrDefault(),
+                FindNode),
             workflowErrorHandling: _definition.ErrorHandling,
             tryHandleWithBoundary: (_, _) => false,
             retryAttempts: nodeId => _retryAttempts.GetValueOrDefault(nodeId, 0),
@@ -851,21 +859,73 @@ public class SubGraphExecutor : ReceiveActor
         Context.Unwatch(Sender);
         Context.Stop(Sender);
 
-        foreach (var nodeId in message.NodeIds)
+        var failedNodeId = message.FailedNodeId;
+        var order = message.ChainOrder.Count > 0 ? message.ChainOrder : message.NodeIds;
+        var (before, after) = Workflow.Engine.Streaming.RegionErrorHandling.Around(order, failedNodeId);
+        var elapsed = DateTimeOffset.UtcNow - run.StartedAt;
+
+        // 🧯 Stage 7.8 — stages before the failed one did their part: Completed, with their counts~
+        foreach (var nodeId in before)
         {
-            if (string.Equals(nodeId, message.FailedNodeId, StringComparison.Ordinal))
+            _runningNodes.Remove(nodeId);
+            _completedNodes.Add(nodeId);
+            if (message.ItemCounts.TryGetValue(nodeId, out var itemCount))
             {
-                continue;
+                _nodeOutputs[nodeId] = new Dictionary<string, object?> { ["itemCount"] = itemCount };
             }
 
+            QueuePersistNode(nodeId, elapsed, NodeExecutionState.Completed);
+            PublishNodeEvent(new NodeExecutionCompleted(nodeId, HashMap<string, object?>.Empty, _parentExecutionId, elapsed));
+        }
+
+        // ...stages after it never got their items: Skipped, saying why~
+        var reason = Workflow.Engine.Streaming.RegionErrorHandling.SkipReason(failedNodeId);
+        foreach (var nodeId in after)
+        {
             _runningNodes.Remove(nodeId);
             if (!_completedNodes.Contains(nodeId) && _skippedNodes.Add(nodeId))
             {
-                QueuePersistNode(nodeId, TimeSpan.Zero, NodeExecutionState.Skipped);
+                QueuePersistNode(nodeId, TimeSpan.Zero, NodeExecutionState.Skipped, skipReason: reason);
             }
         }
 
-        HandleNodeFailed(new NodeExecutionFailed(message.FailedNodeId, message.Error, _parentExecutionId, DateTimeOffset.UtcNow - run.StartedAt));
+        _regionStops[failedNodeId] = order[^1];
+        if (message.ItemRetriesExhausted)
+        {
+            _retryAttempts[failedNodeId] = int.MaxValue / 2;
+        }
+
+        HandleNodeFailed(new NodeExecutionFailed(failedNodeId, message.Error, _parentExecutionId, elapsed));
+    }
+
+    /// <summary>
+    /// 🧯 Stage 7.8 — after continue / an error handler on a failed region stage: carry on from the
+    /// region's last stage — running what follows (the default), or skipping it when the stage says so.
+    /// </summary>
+    private void ContinueAfterRegionStop(string failedNodeId, string regionEnd)
+    {
+        if (IsComplete())
+        {
+            ReportSuccess();
+            return;
+        }
+
+        if (Workflow.Engine.Streaming.RegionErrorHandling.Flag(FindNode(failedNodeId), Workflow.Engine.Streaming.RegionErrorHandling.SkipWhatFollowsKey))
+        {
+            foreach (var successorId in _nodeSuccessors.GetValueOrDefault(regionEnd, new List<string>()))
+            {
+                TrySkipNodeDownstream(successorId);
+            }
+
+            if (IsComplete())
+            {
+                ReportSuccess();
+            }
+
+            return;
+        }
+
+        ExecuteReadySuccessors(regionEnd);
     }
 
     /// <summary>
@@ -965,6 +1025,14 @@ public class SubGraphExecutor : ReceiveActor
         // Start the handler BEFORE skipping downstream: skip propagation runs the completion check,
         // which must already see the handler path as running~
         _errorHandlers.Start(nodeId, handlerId, error);
+
+        // 🧯 Stage 7.8 — for a region stage, what follows the region runs unless the stage skips it~
+        if (_regionStops.Remove(nodeId, out var regionEnd))
+        {
+            ContinueAfterRegionStop(nodeId, regionEnd);
+            return;
+        }
+
         ExecuteReadySuccessors(nodeId, Arr.create(NoPortFires));
     }
 
@@ -1002,6 +1070,13 @@ public class SubGraphExecutor : ReceiveActor
         _failedNodes.Remove(nodeId);
         _completedNodes.Add(nodeId);
 
+        // 🧯 Stage 7.8 — a failed region stage carries on from the end of its region~
+        if (_regionStops.Remove(nodeId, out var regionEnd))
+        {
+            ContinueAfterRegionStop(nodeId, regionEnd);
+            return;
+        }
+
         if (IsComplete())
         {
             ReportSuccess();
@@ -1035,6 +1110,15 @@ public class SubGraphExecutor : ReceiveActor
             nodeId,
             message.Attempt,
             message.MaxAttempts);
+
+        // 🧯 Stage 7.8 — a region stage can't re-run alone: its region re-runs from the source~
+        _regionStops.Remove(nodeId);
+        if (FindStreamRegion(nodeId) is { } region
+            && region.SourceNodeIds.FirstOrDefault() is { } sourceId
+            && !string.Equals(sourceId, nodeId, StringComparison.Ordinal))
+        {
+            nodeId = sourceId;
+        }
 
         ExecuteNode(nodeId);
     }
@@ -1227,7 +1311,7 @@ public class SubGraphExecutor : ReceiveActor
         _variables.Apply(list);
     }
 
-    private void QueuePersistNode(string nodeId, TimeSpan duration, NodeExecutionState state, string? error = null)
+    private void QueuePersistNode(string nodeId, TimeSpan duration, NodeExecutionState state, string? error = null, string? skipReason = null)
     {
         if (_historyRepository == null)
         {
@@ -1264,6 +1348,11 @@ public class SubGraphExecutor : ReceiveActor
         if (_scopePath.Count > 0)
         {
             metadataDict["scopePath"] = _scopePath;
+        }
+
+        if (skipReason is not null)
+        {
+            metadataDict[Workflow.Engine.Streaming.RegionErrorHandling.SkipReasonKey] = skipReason;
         }
 
         IReadOnlyDictionary<string, object?>? metadata = metadataDict.Count > 0 ? metadataDict : null;

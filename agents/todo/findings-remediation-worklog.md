@@ -163,7 +163,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 | 7.5 | ✅ **fixed 2026-11-09** (opt-in stall + overall limits, server default + per-region override) — ~~**§9.2 (streaming) regions have no timeout**~~ | Low | plan 04 | **Yes**: default (off vs. generous) and where it's set | ~0.5–1 d |
 | 7.6 | ✅ **fixed 2026-11-09** (live + final `StreamProgress`, run-mode badges, execution detail table) — ~~**§9.1 (streaming) `StreamRegionProgress` not forwarded to SignalR**~~ | Low | plan 04 / Phase 5.1.5 | Client event contract (ties to the "node events from bodies" follow-up) | ~1 d |
 | 7.7 | ✅ **fixed 2026-11-09** (`SubGraphExecutor` runs regions wholly inside a body) — ~~**§9.5 (streaming) no regions inside construct bodies**~~ | Low | plan 04 | No (parity work), but low priority | 1–2 d |
-| 7.8 | **§9.3 (streaming) mid-pipeline retry**: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
+| 7.8 | 🔄 **in progress** (stage-level blame, plan 04 §9.3; engine done, designer next) — **§9.3 (streaming) mid-pipeline retry**: the feared stall **doesn't happen** (a failure blames the source, so retry re-runs the region); only stage-level blame is missing | Low | plan 04 | Not urgent | — |
 | 7.9 | ✅ **fixed 2026-11-09** (binding runs in the node's execution task) — ~~**Expression evaluation blocks the `NodeExecutor` thread** (`.GetAwaiter().GetResult()`)~~ | Low | 02 data-binding §10, item 5 | No | ~0.5 d |
 | 7.10 | **Scheduled and Event triggers have no runtime** | Info | 01 §12.8 | Feature, not a fix: out of scope for this effort | — |
 
@@ -294,6 +294,53 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-10 — Stage 7.8 part 1/2: streaming stage-level blame (engine)
+- Decided (asked in two rounds; plan 04 §9.3, memorizer ef9deb42):
+  - blame the failed stage, using its own settings, with an opt-in "use the region's";
+  - per-item stages retry the item in place, otherwise the region re-runs;
+  - continue / a handler run what follows by default, with an opt-in "skip it";
+  - stages before the failed one Completed, after it Skipped with a reason.
+- Runner:
+  - every stage's errors are tagged with its node (`StreamStageFailure.Tag`, in `Exception.Data`,
+    so callers still get the module's own exception type; an upstream tag wins);
+  - per-item stages retry the failing item in place (`StreamStage.ItemRetry`, backoff), then
+    `onItemError`; an exhausted retry is tagged.
+- `StreamRegionExecutor.Fail`:
+  - blames the tagged stage (setup errors blame their node; the terminal's failed result blames
+    the terminal; timeouts still blame the source);
+  - `StreamRegionFailed` gains `ChainOrder`, `ItemCounts` and `ItemRetriesExhausted`;
+  - `ItemRetryFor` gives per-item stages their effective retry policy.
+- Both executors:
+  - `RegionErrorHandling.Effective` is used for `NodeFailureCore.getNode` (opt-in
+    `useRegionErrorHandling`);
+  - on a region failure: stages before → Completed, with item counts, a history record and a
+    completion event; stages after → Skipped, with a history record whose `Metadata["skipReason"]`
+    is "skipped: upstream stage 'X' failed";
+  - `_regionStops` makes continue and the error handler carry on from the region's last stage
+    (`ContinueAfterRegionStop`: run what follows, or `regionSkipWhatFollows` → skip it);
+  - exhausted item retries pin the retry count so the region isn't re-run;
+  - `RetryNode` on a non-source stage re-runs the region from its source. This was the feared
+    stall, which happens once the stage, not the source, is blamed.
+  - Region re-runs clear the members' earlier state (top level).
+  - Top-level region completion now writes history records for every stage, like bodies already
+    did.
+- Found on the way: **continue on a streaming source hung the run** (dispatch went to the
+  already-skipped stages). Fixed by the same carry-on-from-the-end logic; covered by
+  `ContinueOnTheSource_RunsWhatFollows`.
+- Test setup change (assertions unchanged):
+  `StreamRegionExecutionTests.Region_InsideALoopBody_RetriesTheWholeRegion` had its retry policy
+  on the source while the `flaky` stage fails. The stage's own settings now apply, so the policy
+  moved to `flaky`.
+- Tests: `Engine/Streaming/StreamStageBlameTests` (11; 9 red before the change, one of them by
+  hanging).
+- Proof: 10/10 mutants killed (no tagging, no item retry, exhausted re-runs, stage retry not mapped
+  to the region, continue/handler not region-aware, skip option ignored, use-region option ignored,
+  no skip reason, body continue not region-aware, executor ignores the tag).
+- Suite: unfiltered `dotnet test Workflow.Tests` 2020/2020.
+- Next (part 2): designer On error panel for region stages ("use the region's" with the source's
+  settings read-only plus a link; "after the region: skip what follows"; retry help per stage
+  kind); skip reason on the execution detail page; docs.
+
 ### 2026-11-09 — Follow-up: flaky tests
 - `MonitorTests.Monitor_RowOpen_NavigatesToDetail`: the handler navigates synchronously, so the
   likely cause was a live re-render between finding the button and clicking it, which swallowed the

@@ -78,10 +78,11 @@ public sealed class StreamRegionRunner
         var errors = new List<StreamItemError>();
 
         var head = plan.Stages[0];
-        var source = Source.From(() => head.Module.ExecuteStreamAsync(
+        // 🧯 Stage 7.8 — every stage's errors carry its node id, so the region blames the stage that failed~
+        var source = Source.From(() => Attribute(head.NodeId, head.Module.ExecuteStreamAsync(
                 head.Context,
                 EmptyStream(),
-                cancellationToken))
+                cancellationToken)))
             .Select(item => Count(counters, head.NodeId, item));
 
         // Middle stages: each consumes the previous stage's output. The bounded buffer between them
@@ -96,10 +97,10 @@ public sealed class StreamRegionRunner
 
             source = stage.Module is IStreamItemProcessor processor
                 ? PerItemStage(upstream, stage, processor, counters, errors, cancellationToken)
-                : Source.From(() => stage.Module.ExecuteStreamAsync(
+                : Source.From(() => Attribute(stage.NodeId, stage.Module.ExecuteStreamAsync(
                         stage.Context,
                         upstream.RunAsAsyncEnumerable(this.materializer),
-                        cancellationToken))
+                        cancellationToken)))
                     .Select(item => Count(counters, stage.NodeId, item));
         }
 
@@ -112,9 +113,16 @@ public sealed class StreamRegionRunner
                 .Buffer(last.BufferCapacity, OverflowStrategy.Backpressure)
                 .RunAsAsyncEnumerable(this.materializer);
 
-            terminalResult = await terminal
-                .ExecuteTerminalAsync(last.Context, Count(counters, last.NodeId, upstream), cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                terminalResult = await terminal
+                    .ExecuteTerminalAsync(last.Context, Count(counters, last.NodeId, upstream), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && StreamStageFailure.NodeOf(ex) is null)
+            {
+                throw StreamStageFailure.Rethrow(StreamStageFailure.Tag(ex, last.NodeId));
+            }
         }
         else
         {
@@ -146,21 +154,37 @@ public sealed class StreamRegionRunner
     {
         async Task<IReadOnlyList<StreamItem>> Process(StreamItem item)
         {
-            try
+            for (var attempt = 1; ; attempt++)
             {
-                return await processor.ProcessAsync(item, stage.Context, cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException
-                                       && stage.OnItemError != StreamItemErrorPolicy.Fail)
-            {
-                // 🧯 'skip' drops the item — which, post-D25, needs no tombstone: contributing
-                // nothing at this slot leaves the order of everything else untouched.
-                lock (errors)
+                try
                 {
-                    errors.Add(new StreamItemError(stage.NodeId, item.Index, item.Offset, ex));
+                    return await processor.ProcessAsync(item, stage.Context, cancellationToken).ConfigureAwait(false);
                 }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // 🧯 Stage 7.8 — a per-item stage retries the failing item in place (the stream
+                    // keeps flowing), with the stage's retry policy and backoff~
+                    if (stage.ItemRetry is { } policy && attempt < policy.MaxAttempts)
+                    {
+                        var delayMs = Math.Min(policy.DelayMs * Math.Pow(policy.BackoffMultiplier, attempt - 1), policy.MaxDelayMs);
+                        await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, delayMs)), cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
 
-                return Array.Empty<StreamItem>();
+                    if (stage.OnItemError == StreamItemErrorPolicy.Fail)
+                    {
+                        throw StreamStageFailure.Rethrow(StreamStageFailure.Tag(ex, stage.NodeId, itemRetriesExhausted: stage.ItemRetry is not null));
+                    }
+
+                    // 🧯 'skip' drops the item — which, post-D25, needs no tombstone: contributing
+                    // nothing at this slot leaves the order of everything else untouched.
+                    lock (errors)
+                    {
+                        errors.Add(new StreamItemError(stage.NodeId, item.Index, item.Offset, ex));
+                    }
+
+                    return Array.Empty<StreamItem>();
+                }
             }
         }
 
@@ -188,6 +212,44 @@ public sealed class StreamRegionRunner
         {
             counters[nodeId].Increment();
             yield return item;
+        }
+    }
+
+    /// <summary>
+    /// 🧯 Stage 7.8 — passes a stage's items through, tagging anything the stage throws with its node
+    /// id. An error that already names a stage (it came from upstream) passes through unchanged.
+    /// </summary>
+    private static async IAsyncEnumerable<StreamItem> Attribute(
+        string nodeId,
+        IAsyncEnumerable<StreamItem> items,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var enumerator = items.GetAsyncEnumerator(cancellationToken);
+        try
+        {
+            while (true)
+            {
+                bool hasNext;
+                try
+                {
+                    hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException && StreamStageFailure.NodeOf(ex) is null)
+                {
+                    throw StreamStageFailure.Rethrow(StreamStageFailure.Tag(ex, nodeId));
+                }
+
+                if (!hasNext)
+                {
+                    yield break;
+                }
+
+                yield return enumerator.Current;
+            }
+        }
+        finally
+        {
+            await enumerator.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -263,7 +325,87 @@ public sealed record StreamStage(
     int BufferCapacity = StreamRegionRunner.DefaultBufferCapacity,
     int MaxWorkers = 1,
     bool Ordered = true,
-    StreamItemErrorPolicy OnItemError = StreamItemErrorPolicy.Fail);
+    StreamItemErrorPolicy OnItemError = StreamItemErrorPolicy.Fail)
+{
+    /// <summary>
+    /// 🧯 Stage 7.8 — for a per-item stage set to retry: how many times to try a failing item (in
+    /// place, with backoff) before its <see cref="OnItemError"/> applies. Null = no item retry.
+    /// </summary>
+    public Workflow.Core.Models.RetryPolicy? ItemRetry { get; init; }
+}
+
+/// <summary>
+/// 🧯 Stage 7.8 — tags a failure inside a streaming region with the stage (node) that failed, on the
+/// exception itself (<see cref="Exception.Data"/>), so callers still see the module's own exception.
+/// </summary>
+public static class StreamStageFailure
+{
+    private const string NodeKey = "DotFlow.StreamStage.NodeId";
+    private const string ExhaustedKey = "DotFlow.StreamStage.ItemRetriesExhausted";
+
+    /// <summary>Tags an exception with the stage that threw it (an existing tag wins: it came from upstream).</summary>
+    /// <param name="error">The exception.</param>
+    /// <param name="nodeId">The stage.</param>
+    /// <param name="itemRetriesExhausted">Whether a per-item stage already retried the item until its policy ran out.</param>
+    /// <returns>The same exception.</returns>
+    public static Exception Tag(Exception error, string nodeId, bool itemRetriesExhausted = false)
+    {
+        if (NodeOf(error) is null)
+        {
+            error.Data[NodeKey] = nodeId;
+            error.Data[ExhaustedKey] = itemRetriesExhausted;
+        }
+
+        return error;
+    }
+
+    /// <summary>Finds the tagged exception in a chain (Akka may wrap it).</summary>
+    /// <param name="error">The exception.</param>
+    /// <returns>The tagged exception, or null.</returns>
+    public static Exception? Tagged(Exception? error)
+    {
+        for (var current = error; current is not null; current = current.InnerException)
+        {
+            if (current.Data.Contains(NodeKey))
+            {
+                return current;
+            }
+
+            if (current is AggregateException aggregate)
+            {
+                foreach (var inner in aggregate.InnerExceptions)
+                {
+                    if (Tagged(inner) is { } found)
+                    {
+                        return found;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The stage an exception (chain) is tagged with, or null.</summary>
+    /// <param name="error">The exception.</param>
+    /// <returns>The node id, or null.</returns>
+    public static string? NodeOf(Exception? error) => Tagged(error)?.Data[NodeKey] as string;
+
+    /// <summary>Whether the tagged stage already retried the item in place until its policy ran out.</summary>
+    /// <param name="error">The exception.</param>
+    /// <returns>True when exhausted.</returns>
+    public static bool ItemRetriesExhausted(Exception? error) => Tagged(error)?.Data[ExhaustedKey] is true;
+
+    /// <summary>Rethrows the exception with its original stack trace.</summary>
+    /// <param name="error">The exception.</param>
+    /// <returns>Never returns.</returns>
+    [System.Diagnostics.CodeAnalysis.DoesNotReturn]
+    public static Exception Rethrow(Exception error)
+    {
+        System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error).Throw();
+        return error;
+    }
+}
 
 /// <summary>
 /// 🧯 What a stage does when processing one item throws.

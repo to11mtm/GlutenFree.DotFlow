@@ -502,13 +502,15 @@ public class StreamRegionExecutionTests : TestKit
     {
         var flaky = new FakeFlakyStage();
         var recorder = new FakeRecorder();
-        var src = Node("src", "test.stream.source") with
+        // Stage 7.8: a failure is blamed on the stage that failed (flaky) and its own settings apply,
+        // so the retry policy sits on it; a whole-stream stage's retry re-runs the region~
+        var flakyNode = Node("flaky", "test.stream.flaky") with
         {
             ErrorHandling = new ErrorHandling(ErrorBehavior.Retry),
             RetryPolicy = new RetryPolicy(MaxAttempts: 3, DelayMs: 10, BackoffMultiplier: 1.0, MaxDelayMs: 50),
         };
         var definition = Definition(
-            [Foreach("loop", 1), src, Node("flaky", "test.stream.flaky"), Node("collect", "test.stream.collect"), Node("rec", "test.record")],
+            [Foreach("loop", 1), Node("src", "test.stream.source"), flakyNode, Node("collect", "test.stream.collect"), Node("rec", "test.record")],
             [
                 new ConnectionDefinition("loop", "loopBody", "src", "items"),
                 new ConnectionDefinition("src", "items", "flaky", "items"),

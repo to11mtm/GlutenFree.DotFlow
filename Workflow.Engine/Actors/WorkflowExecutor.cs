@@ -150,6 +150,9 @@ public class WorkflowExecutor : ReceiveActor
     // schemas. Null until first needed; empty for the overwhelming majority of workflows.
     private IReadOnlyList<Workflow.Engine.Streaming.StreamRegion>? _streamRegions;
 
+    // 🧯 Stage 7.8 — a failed region stage → its region's last stage, until continue / handler / retry settles it~
+    private readonly Dictionary<string, string> _regionStops = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Stack of active error boundaries, innermost boundary at the top.
     /// Pushed by PushErrorBoundary messages (sent by TryCatch module in 2.2.4),
@@ -260,7 +263,11 @@ public class WorkflowExecutor : ReceiveActor
         BuildExecutionGraph();
 
         _failureCore = new NodeFailureCore(
-            getNode: GetNodeDefinition,
+            // 🧯 Stage 7.8 — a region stage may opt into its source's error handling~
+            getNode: nodeId => Workflow.Engine.Streaming.RegionErrorHandling.Effective(
+                GetNodeDefinition(nodeId),
+                id => FindStreamRegion(id)?.SourceNodeIds.FirstOrDefault(),
+                GetNodeDefinition),
             workflowErrorHandling: _definition.ErrorHandling,
             tryHandleWithBoundary: TryHandleWithBoundary,
             retryAttempts: nodeId => _nodeRetryAttempts.GetValueOrDefault(nodeId, 0),
@@ -1299,6 +1306,14 @@ public class WorkflowExecutor : ReceiveActor
         // Start the handler BEFORE skipping downstream: skip propagation runs the completion check,
         // which must already see the handler path as running~
         _errorHandlers.Start(nodeId, handlerId, error);
+
+        // 🧯 Stage 7.8 — for a region stage, what follows the region runs unless the stage skips it~
+        if (_regionStops.Remove(nodeId, out var regionEnd))
+        {
+            ContinueAfterRegionStop(nodeId, regionEnd);
+            return;
+        }
+
         ExecuteReadySuccessors(nodeId, Arr.create(NoPortFires));
     }
 
@@ -1339,6 +1354,14 @@ public class WorkflowExecutor : ReceiveActor
         // Remove from failed set to avoid double-counting in IsWorkflowComplete~ 🔄
         _failedNodes = _failedNodes.Remove(nodeId);
         _completedNodes = _completedNodes.Add(nodeId);
+
+        // 🧯 Stage 7.8 — a failed region stage carries on from the end of its region~
+        if (_regionStops.Remove(nodeId, out var regionEnd))
+        {
+            ContinueAfterRegionStop(nodeId, regionEnd);
+            return;
+        }
+
         if (IsWorkflowComplete())
         {
             // Complete with partial success
@@ -1496,8 +1519,12 @@ public class WorkflowExecutor : ReceiveActor
 
         // Every member is "running" for the region's lifetime — the monitor shows the whole
         // pipeline lighting up at once, which is what actually happens~ 📡
+        // (A re-run after a failure starts from clean: earlier results don't count twice.)
         foreach (var memberId in region.NodeIds)
         {
+            _completedNodes = _completedNodes.Remove(memberId);
+            _skippedNodes = _skippedNodes.Remove(memberId);
+            _failedNodes = _failedNodes.Remove(memberId);
             TransitionNodeState(memberId, NodeExecutionState.Running, now);
             _context = _context.WithNodeStarted(memberId, now);
             _runningNodes = _runningNodes.Add(memberId);
@@ -1563,6 +1590,12 @@ public class WorkflowExecutor : ReceiveActor
         // The terminal stage's real outputs win over the item-count placeholder~
         _nodeOutputs[message.TerminalNodeId] = new Dictionary<string, object?>(message.Outputs);
 
+        // 🧯 Stage 7.8 — every stage gets a history record, like a batch node~
+        foreach (var nodeId in message.NodeIds)
+        {
+            RecordRegionStage(nodeId, NodeExecutionState.Completed, message.Duration, null);
+        }
+
         // 📡 Each stage reports its completion like a batch node does (clients get NodeCompleted)~
         foreach (var nodeId in message.NodeIds)
         {
@@ -1609,30 +1642,105 @@ public class WorkflowExecutor : ReceiveActor
         Context.Unwatch(Sender);
 
         var now = DateTimeOffset.UtcNow;
+        var failedNodeId = message.FailedNodeId;
+        var order = message.ChainOrder.Count > 0 ? message.ChainOrder : message.NodeIds;
+        var (before, after) = Workflow.Engine.Streaming.RegionErrorHandling.Around(order, failedNodeId);
+        var elapsed = _context.NodeTimings.Find(failedNodeId).Bind(t => t.StartTime).Map(s => now - s).IfNone(TimeSpan.Zero);
 
-        // Members other than the blamed node didn't fail on their own — they stop because the
-        // pipeline stopped, so Skipped is the honest state for them~
-        foreach (var nodeId in message.NodeIds)
+        // 🧯 Stage 7.8 — stages before the failed one did their part: Completed, with their counts~
+        foreach (var nodeId in before)
         {
             _runningNodes = _runningNodes.Remove(nodeId);
+            _completedNodes = _completedNodes.Add(nodeId);
+            TransitionNodeState(nodeId, NodeExecutionState.Completed, now);
+            if (message.ItemCounts.TryGetValue(nodeId, out var itemCount))
+            {
+                _nodeOutputs[nodeId] = new Dictionary<string, object?> { ["itemCount"] = itemCount };
+            }
 
-            if (!string.Equals(nodeId, message.FailedNodeId, StringComparison.Ordinal)
-                && !_completedNodes.Contains(nodeId)
-                && !_skippedNodes.Contains(nodeId))
+            RecordRegionStage(nodeId, NodeExecutionState.Completed, elapsed, null);
+        }
+
+        // ...stages after it never got their items: Skipped, saying why~
+        var reason = Workflow.Engine.Streaming.RegionErrorHandling.SkipReason(failedNodeId);
+        foreach (var nodeId in after)
+        {
+            _runningNodes = _runningNodes.Remove(nodeId);
+            if (!_completedNodes.Contains(nodeId) && !_skippedNodes.Contains(nodeId))
             {
                 _skippedNodes = _skippedNodes.Add(nodeId);
                 TransitionNodeState(nodeId, NodeExecutionState.Skipped, now);
+                RecordRegionStage(nodeId, NodeExecutionState.Skipped, TimeSpan.Zero, reason);
             }
         }
 
         _log.Error(
             message.Error,
-            "🌊 Streaming region {RegionIndex} failed at node {NodeId}: {Error}",
+            "🌊 Streaming region {RegionIndex} failed at stage {NodeId}: {Error}",
             message.RegionIndex,
-            message.FailedNodeId,
+            failedNodeId,
             message.Error.Message);
 
-        HandleNodeFailure(message.FailedNodeId, message.Error);
+        // Continue / an error handler carry on from the region's last stage; a per-item stage that
+        // already retried the item in place doesn't get the region re-run on top~
+        _regionStops[failedNodeId] = order[^1];
+        if (message.ItemRetriesExhausted)
+        {
+            _nodeRetryAttempts[failedNodeId] = int.MaxValue / 2;
+        }
+
+        HandleNodeFailure(failedNodeId, message.Error);
+    }
+
+    /// <summary>
+    /// 🧯 Stage 7.8 — after continue / an error handler on a failed region stage: the rest of the
+    /// region can't run, so carry on from its last stage — running what follows (the default), or
+    /// skipping it when the stage says so (<c>regionSkipWhatFollows</c>).
+    /// </summary>
+    private void ContinueAfterRegionStop(string failedNodeId, string regionEnd)
+    {
+        if (IsWorkflowComplete())
+        {
+            CompleteWorkflow();
+            return;
+        }
+
+        if (Workflow.Engine.Streaming.RegionErrorHandling.Flag(GetNodeDefinition(failedNodeId), Workflow.Engine.Streaming.RegionErrorHandling.SkipWhatFollowsKey))
+        {
+            foreach (var successorId in _nodeSuccessors.GetValueOrDefault(regionEnd, new List<string>()))
+            {
+                _dispatchCore!.TrySkipNodeDownstream(successorId);
+            }
+
+            if (IsWorkflowComplete())
+            {
+                CompleteWorkflow();
+            }
+
+            return;
+        }
+
+        ExecuteReadySuccessors(regionEnd);
+    }
+
+    /// <summary>🧯 Stage 7.8 — a history record for a region stage (completed, or skipped with a reason).</summary>
+    private void RecordRegionStage(string nodeId, NodeExecutionState state, TimeSpan duration, string? skipReason)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var outputs = _nodeOutputs.TryGetValue(nodeId, out var captured) ? new Dictionary<string, object?>(captured) : null;
+        QueueRecordNodeExecution(new NodeExecutionRecord(
+            ExecutionId: _executionId,
+            NodeId: nodeId,
+            State: state,
+            StartedAt: now - duration,
+            CompletedAt: now,
+            Inputs: null,
+            Outputs: Secrets.Map(outputs),
+            Error: null,
+            Duration: duration,
+            LoopId: _loopContextStack.Count > 0 ? _loopContextStack.Peek().LoopId : null,
+            LoopIteration: _loopContextStack.Count > 0 ? _loopContextStack.Peek().Iteration : null,
+            Metadata: skipReason is null ? null : new Dictionary<string, object?> { [Workflow.Engine.Streaming.RegionErrorHandling.SkipReasonKey] = skipReason }));
     }
 
     /// <summary>
@@ -1948,6 +2056,15 @@ public class WorkflowExecutor : ReceiveActor
             Context.Unwatch(oldActor);
             Context.Stop(oldActor);
             _nodeActors.Remove(nodeId);
+        }
+
+        // 🧯 Stage 7.8 — a region stage can't re-run alone: its region re-runs from the source~
+        _regionStops.Remove(nodeId);
+        if (FindStreamRegion(nodeId) is { } region
+            && region.SourceNodeIds.FirstOrDefault() is { } sourceId
+            && !string.Equals(sourceId, nodeId, StringComparison.Ordinal))
+        {
+            nodeId = sourceId;
         }
 
         // Re-execute the node — this will create a fresh NodeExecutor actor~ 🚀
