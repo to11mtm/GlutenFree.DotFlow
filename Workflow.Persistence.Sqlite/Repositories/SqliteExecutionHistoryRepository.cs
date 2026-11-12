@@ -138,62 +138,35 @@ public sealed class SqliteExecutionHistoryRepository : IExecutionHistoryReposito
         await using var db = _factory.Create();
         var execIdStr = nodeRecord.ExecutionId.ToString();
 
-        // Check if a row already exists for this (execution_id, node_id) pair — upsert semantics~ 🌸
-        var existing = await db.ExecutionNodes
-            .FirstOrDefaultAsync(
-                n => n.ExecutionId == execIdStr && n.NodeId == nodeRecord.NodeId,
-                token: ct)
-            .ConfigureAwait(false);
-
-        if (existing is not null)
+        // Every record is its own row: a node runs once per loop iteration / branch and once per
+        // retry attempt, and each run keeps its own inputs, iteration and scope. (This used to upsert
+        // on (execution, node), so later runs overwrote earlier ones.) The engine writes one record
+        // per outcome — there is no separate "running" row to update~
+        var entity = new ExecutionNodeEntity
         {
-            await db.ExecutionNodes
-                .Where(n => n.Id == existing.Id)
-                .Set(n => n.State, nodeRecord.State.ToString())
-                .Set(n => n.CompletedAt, nodeRecord.CompletedAt?.ToString("O"))
-                .Set(n => n.Outputs, nodeRecord.Outputs is not null
-                    ? JsonSerializer.Serialize(nodeRecord.Outputs, JsonOptions)
-                    : null)
-                .Set(n => n.Error, nodeRecord.Error)
-                .Set(n => n.DurationMs, nodeRecord.Duration == default
-                    ? (long?)null
-                    : (long)nodeRecord.Duration.TotalMilliseconds)
-                // Phase 2.2.3-followup: persist loop/subgraph/metadata fields on update too~ 🗂️
-                .Set(n => n.LoopId, nodeRecord.LoopId)
-                .Set(n => n.LoopIteration, nodeRecord.LoopIteration)
-                .Set(n => n.SubGraphId, ExtractSubGraphId(nodeRecord))
-                .Set(n => n.MetadataJson, SerializeMetadata(nodeRecord))
-                .UpdateAsync(token: ct)
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            var entity = new ExecutionNodeEntity
-            {
-                ExecutionId = execIdStr,
-                NodeId = nodeRecord.NodeId,
-                State = nodeRecord.State.ToString(),
-                StartedAt = nodeRecord.StartedAt.ToString("O"),
-                CompletedAt = nodeRecord.CompletedAt?.ToString("O"),
-                Inputs = nodeRecord.Inputs is not null
-                    ? JsonSerializer.Serialize(nodeRecord.Inputs, JsonOptions)
-                    : null,
-                Outputs = nodeRecord.Outputs is not null
-                    ? JsonSerializer.Serialize(nodeRecord.Outputs, JsonOptions)
-                    : null,
-                Error = nodeRecord.Error,
-                DurationMs = nodeRecord.Duration == default
-                    ? null
-                    : (long)nodeRecord.Duration.TotalMilliseconds,
-                // Phase 2.2.3-followup: persist loop/subgraph/metadata fields~ 🗂️
-                LoopId = nodeRecord.LoopId,
-                LoopIteration = nodeRecord.LoopIteration,
-                SubGraphId = ExtractSubGraphId(nodeRecord),
-                MetadataJson = SerializeMetadata(nodeRecord),
-            };
+            ExecutionId = execIdStr,
+            NodeId = nodeRecord.NodeId,
+            State = nodeRecord.State.ToString(),
+            StartedAt = nodeRecord.StartedAt.ToString("O"),
+            CompletedAt = nodeRecord.CompletedAt?.ToString("O"),
+            Inputs = nodeRecord.Inputs is not null
+                ? JsonSerializer.Serialize(nodeRecord.Inputs, JsonOptions)
+                : null,
+            Outputs = nodeRecord.Outputs is not null
+                ? JsonSerializer.Serialize(nodeRecord.Outputs, JsonOptions)
+                : null,
+            Error = nodeRecord.Error,
+            DurationMs = nodeRecord.Duration == default
+                ? null
+                : (long)nodeRecord.Duration.TotalMilliseconds,
+            // Phase 2.2.3-followup: persist loop/subgraph/metadata fields~ 🗂️
+            LoopId = nodeRecord.LoopId,
+            LoopIteration = nodeRecord.LoopIteration,
+            SubGraphId = ExtractSubGraphId(nodeRecord),
+            MetadataJson = SerializeMetadata(nodeRecord),
+        };
 
-            await db.InsertAsync(entity, token: ct).ConfigureAwait(false);
-        }
+        await db.InsertAsync(entity, token: ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

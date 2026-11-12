@@ -10,15 +10,22 @@
         {
             <div class="df-empty" data-testid="nodes-empty">No node records.</div>
         }
-        @foreach (var node in Nodes)
+        @for (var i = 0; i < Nodes.Count; i++)
         {
-            <button type="button" class="df-nodeinspect__node @(node.NodeId == selected ? "df-nodeinspect__node--active" : "")"
-                    data-testid="node-@node.NodeId" @onclick="() => Select(node.NodeId)">
+            var row = i;
+            var node = Nodes[row];
+            @* A node has a row per run: per loop iteration / branch and per retry attempt. *@
+            <button type="button" class="df-nodeinspect__node @(row == SelectedRow ? "df-nodeinspect__node--active" : "")"
+                    data-testid="node-@node.NodeId" data-row="@row" @onclick="() => Select(row)">
                 <span>@IconFor(node.State)</span>
                 <span class="df-nodeinspect__name" title="@node.SkipReason">@node.NodeId</span>
                 @if (node.LoopIteration is { } it)
                 {
                     <span class="df-nodeinspect__loop">#@it</span>
+                }
+                @if (IsRetried(row))
+                {
+                    <span class="df-nodeinspect__retried" data-testid="node-retried" title="This attempt failed and the node was retried">↻ retried</span>
                 }
                 <span class="df-nodeinspect__dur">@Duration(node)</span>
             </button>
@@ -62,41 +69,46 @@
 </div>
 
 @code {
-    private string? selected;
+    private int? selectedRow;
 
     /// <summary>The node records to render.</summary>
     [Parameter, EditorRequired]
     public IReadOnlyList<NodeExecutionRecordDto> Nodes { get; set; } = System.Array.Empty<NodeExecutionRecordDto>();
 
-    /// <summary>Raised when a node is selected (for the parent, e.g. replay sync).</summary>
+    /// <summary>Raised when a node's row is selected, with its node id (for the parent, e.g. replay sync).</summary>
     [Parameter]
     public EventCallback<string> OnSelect { get; set; }
 
-    private NodeExecutionRecordDto? Current
-    {
-        get
-        {
-            if (this.Nodes.Count == 0)
-            {
-                return null;
-            }
+    private int SelectedRow => this.selectedRow is { } r && r < this.Nodes.Count ? r : 0;
 
-            return this.Nodes.FirstOrDefault(n => n.NodeId == this.selected) ?? this.Nodes[0];
-        }
-    }
+    private NodeExecutionRecordDto? Current => this.Nodes.Count == 0 ? null : this.Nodes[this.SelectedRow];
 
-    protected override void OnParametersSet()
+    private Task Select(int row)
     {
-        if (this.selected is null || this.Nodes.All(n => n.NodeId != this.selected))
-        {
-            this.selected = this.Nodes.Count > 0 ? this.Nodes[0].NodeId : null;
-        }
-    }
-
-    private Task Select(string nodeId)
-    {
-        this.selected = nodeId;
+        this.selectedRow = row;
+        var nodeId = this.Nodes[row].NodeId;
         return this.OnSelect.HasDelegate ? this.OnSelect.InvokeAsync(nodeId) : Task.CompletedTask;
+    }
+
+    /// <summary>A failed run with a later run of the same node in the same loop iteration was retried.</summary>
+    private bool IsRetried(int row)
+    {
+        var node = this.Nodes[row];
+        if (node.State != "Failed")
+        {
+            return false;
+        }
+
+        for (var later = row + 1; later < this.Nodes.Count; later++)
+        {
+            var other = this.Nodes[later];
+            if (other.NodeId == node.NodeId && other.LoopId == node.LoopId && other.LoopIteration == node.LoopIteration)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string Duration(NodeExecutionRecordDto n)

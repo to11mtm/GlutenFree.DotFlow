@@ -132,37 +132,24 @@ public sealed class PostgresExecutionHistoryRepository : IExecutionHistoryReposi
     {
         await using var db = _factory.Create();
 
-        var existing = await db.ExecutionNodes
-            .FirstOrDefaultAsync(n => n.ExecutionId == nodeRecord.ExecutionId && n.NodeId == nodeRecord.NodeId, token: ct)
-            .ConfigureAwait(false);
-
-        if (existing is not null)
+        // Every record is its own row: one per loop iteration / branch and per retry attempt (this
+        // used to upsert on (execution, node), so later runs overwrote earlier ones)~
+        await db.InsertAsync(new ExecutionNodeEntity
         {
-            await db.ExecutionNodes
-                .Where(n => n.Id == existing.Id)
-                .Set(n => n.State, nodeRecord.State.ToString())
-                .Set(n => n.CompletedAt, nodeRecord.CompletedAt)
-                .Set(n => n.Outputs, nodeRecord.Outputs is not null ? JsonSerializer.Serialize(nodeRecord.Outputs, JsonOptions) : null)
-                .Set(n => n.Error, nodeRecord.Error)
-                .Set(n => n.DurationMs, nodeRecord.Duration == default ? (long?)null : (long)nodeRecord.Duration.TotalMilliseconds)
-                .UpdateAsync(token: ct)
-                .ConfigureAwait(false);
-        }
-        else
-        {
-            await db.InsertAsync(new ExecutionNodeEntity
-            {
-                ExecutionId = nodeRecord.ExecutionId,
-                NodeId = nodeRecord.NodeId,
-                State = nodeRecord.State.ToString(),
-                StartedAt = nodeRecord.StartedAt,
-                CompletedAt = nodeRecord.CompletedAt,
-                Inputs = nodeRecord.Inputs is not null ? JsonSerializer.Serialize(nodeRecord.Inputs, JsonOptions) : null,
-                Outputs = nodeRecord.Outputs is not null ? JsonSerializer.Serialize(nodeRecord.Outputs, JsonOptions) : null,
-                Error = nodeRecord.Error,
-                DurationMs = nodeRecord.Duration == default ? null : (long)nodeRecord.Duration.TotalMilliseconds,
-            }, token: ct).ConfigureAwait(false);
-        }
+            ExecutionId = nodeRecord.ExecutionId,
+            NodeId = nodeRecord.NodeId,
+            State = nodeRecord.State.ToString(),
+            StartedAt = nodeRecord.StartedAt,
+            CompletedAt = nodeRecord.CompletedAt,
+            Inputs = nodeRecord.Inputs is not null ? JsonSerializer.Serialize(nodeRecord.Inputs, JsonOptions) : null,
+            Outputs = nodeRecord.Outputs is not null ? JsonSerializer.Serialize(nodeRecord.Outputs, JsonOptions) : null,
+            Error = nodeRecord.Error,
+            DurationMs = nodeRecord.Duration == default ? null : (long)nodeRecord.Duration.TotalMilliseconds,
+            LoopId = nodeRecord.LoopId,
+            LoopIteration = nodeRecord.LoopIteration,
+            SubGraphId = nodeRecord.Metadata?.TryGetValue("subGraphId", out var subGraphId) == true ? subGraphId?.ToString() : null,
+            Metadata = nodeRecord.Metadata is { Count: > 0 } ? JsonSerializer.Serialize(nodeRecord.Metadata, JsonOptions) : null,
+        }, token: ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -204,6 +191,9 @@ public sealed class PostgresExecutionHistoryRepository : IExecutionHistoryReposi
             Inputs: n.Inputs is not null ? JsonSerializer.Deserialize<Dictionary<string, object?>>(n.Inputs, JsonOptions) : null,
             Outputs: n.Outputs is not null ? JsonSerializer.Deserialize<Dictionary<string, object?>>(n.Outputs, JsonOptions) : null,
             Error: n.Error,
-            Duration: n.DurationMs.HasValue ? TimeSpan.FromMilliseconds(n.DurationMs.Value) : default);
+            Duration: n.DurationMs.HasValue ? TimeSpan.FromMilliseconds(n.DurationMs.Value) : default,
+            LoopId: n.LoopId,
+            LoopIteration: n.LoopIteration,
+            Metadata: n.Metadata is not null ? JsonSerializer.Deserialize<Dictionary<string, object?>>(n.Metadata, JsonOptions) : null);
 }
 

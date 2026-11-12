@@ -117,13 +117,13 @@ public sealed class SampleWorkflowDefinitionTests : IClassFixture<ExecutionEndpo
         var records = (nodes.ValueKind == JsonValueKind.Array ? nodes : nodes.GetProperty("items")).EnumerateArray().ToList();
         int Ran(string nodeId) => records.Count(r => r.GetProperty("nodeId").GetString() == nodeId && r.GetProperty("state").GetString() == "Completed");
 
-        // Items 1..5 with threshold 2: items above it take the parallel branch, the rest throw and are
-        // caught. (History keeps fewer body records than iterations here, so check each path ran
-        // rather than counting iterations — see the worklog follow-up.)
-        var trace = string.Join(", ", records.Select(r => $"{r.GetProperty("nodeId")}={r.GetProperty("state")}"));
-        Ran("persist_branch").Should().BeGreaterThan(0, "an item above the threshold takes the parallel branch: " + trace);
-        Ran("notify_branch").Should().BeGreaterThan(0, trace);
-        Ran("catch_handler").Should().BeGreaterThan(0, "an item at or below it throws and is caught: " + trace);
+        // Items 1..5 with threshold 2: 3, 4, 5 take the parallel branch; 1, 2 throw and are caught.
+        // History keeps a row per run, so the counts are exact.
+        var trace = string.Join(", ", records.Select(r => $"{r.GetProperty("nodeId")}#{r.GetProperty("loopIteration")}={r.GetProperty("state")}"));
+        Ran("persist_branch").Should().Be(3, "items above the threshold take the parallel branch: " + trace);
+        Ran("notify_branch").Should().Be(3, trace);
+        Ran("catch_handler").Should().Be(2, "items at or below it throw and are caught: " + trace);
+        Ran("finally_audit").Should().Be(5, "finally runs every iteration: " + trace);
         Ran("set_summary").Should().Be(1, "it runs after the loop's done port: " + trace);
         Ran("end").Should().Be(1, trace);
     }

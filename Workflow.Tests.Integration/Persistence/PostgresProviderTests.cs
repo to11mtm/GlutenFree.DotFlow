@@ -345,6 +345,48 @@ public sealed class PostgresProviderTests : IAsyncLifetime
         nodes[0].Duration.TotalMilliseconds.Should().BeApproximately(99, precision: 1);
     }
 
+    /// <summary>
+    /// A node that runs more than once in an execution — each loop iteration, each retry attempt —
+    /// keeps a row per run with that run's own inputs, iteration, scope metadata, state and error.
+    /// </summary>
+    [Fact]
+    public async Task Execution_RecordNode_SeveralRunsOfOneNode_KeepsARowPerRun()
+    {
+        var workflowId = await _provider.Workflows.CreateAsync(MakeWorkflow());
+        var execId = await _provider.ExecutionHistory.CreateExecutionAsync(
+            new ExecutionRecord(Guid.NewGuid(), workflowId, ExecutionState.Running, DateTimeOffset.UtcNow));
+        var t0 = DateTimeOffset.UtcNow;
+
+        NodeExecutionRecord Run(int iteration, NodeExecutionState state, int second, string? error = null)
+            => new(
+                ExecutionId: execId,
+                NodeId: "body",
+                State: state,
+                StartedAt: t0.AddSeconds(second),
+                CompletedAt: t0.AddSeconds(second),
+                Inputs: new Dictionary<string, object?> { ["item"] = $"item-{iteration}" },
+                Error: error,
+                Duration: TimeSpan.FromMilliseconds(5),
+                LoopId: "loop",
+                LoopIteration: iteration,
+                Metadata: new Dictionary<string, object?> { ["subGraphId"] = $"loop-iter-{iteration}", ["scopePath"] = $"loop#{iteration}" });
+
+        await _provider.ExecutionHistory.RecordNodeExecutionAsync(Run(1, NodeExecutionState.Completed, 1));
+        await _provider.ExecutionHistory.RecordNodeExecutionAsync(Run(2, NodeExecutionState.Failed, 2, "boom"));
+        await _provider.ExecutionHistory.RecordNodeExecutionAsync(Run(2, NodeExecutionState.Completed, 3));
+
+        var nodes = (await _provider.ExecutionHistory.GetNodeExecutionsAsync(execId)).OrderBy(n => n.StartedAt).ToList();
+
+        nodes.Should().HaveCount(3, "every run is its own row (each iteration, each retry attempt)");
+        nodes.Select(n => n.LoopIteration).Should().Equal(1, 2, 2);
+        nodes.Select(n => n.Inputs!["item"]?.ToString()).Should().Equal("item-1", "item-2", "item-2");
+        nodes.Select(n => n.State).Should().Equal(NodeExecutionState.Completed, NodeExecutionState.Failed, NodeExecutionState.Completed);
+        nodes[1].Error.Should().Be("boom", "the failed attempt keeps its error");
+        nodes.Should().OnlyContain(n => n.LoopId == "loop");
+        nodes.Select(n => n.Metadata!["scopePath"]?.ToString()).Should().Equal("loop#1", "loop#2", "loop#2");
+        nodes.Select(n => n.Metadata!["subGraphId"]?.ToString()).Should().Equal("loop-iter-1", "loop-iter-2", "loop-iter-2");
+    }
+
     [Fact]
     public async Task Execution_FilterByState_ShouldReturnOnlyMatching()
     {

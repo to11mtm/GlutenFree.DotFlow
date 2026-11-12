@@ -63,6 +63,26 @@ public class ExecutionNodeEntity
     [Column("duration_ms")]
     [Nullable]
     public long? DurationMs { get; set; }
+
+    /// <summary>Gets or sets the innermost loop's id (nullable, migration 4).</summary>
+    [Column("loop_id")]
+    [Nullable]
+    public string? LoopId { get; set; }
+
+    /// <summary>Gets or sets the innermost loop's 1-based iteration (nullable, migration 4).</summary>
+    [Column("loop_iteration")]
+    [Nullable]
+    public int? LoopIteration { get; set; }
+
+    /// <summary>Gets or sets the body sub-graph id (nullable, migration 4).</summary>
+    [Column("sub_graph_id")]
+    [Nullable]
+    public string? SubGraphId { get; set; }
+
+    /// <summary>Gets or sets the record's metadata (scope path, branch, skip reason…) as JSON (nullable, migration 4).</summary>
+    [Column("metadata", DataType = DataType.BinaryJson)]
+    [Nullable]
+    public string? Metadata { get; set; }
 }
 
 

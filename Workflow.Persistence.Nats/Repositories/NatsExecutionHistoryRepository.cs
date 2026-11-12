@@ -133,8 +133,10 @@ public sealed class NatsExecutionHistoryRepository : IExecutionHistoryRepository
     /// <inheritdoc/>
     public async Task RecordNodeExecutionAsync(NodeExecutionRecord nodeRecord, CancellationToken ct = default)
     {
-        // CopilotNote: Key = {executionId}:{nodeId} — this is an upsert (Put always wins)~ 🔄
-        var key = $"{nodeRecord.ExecutionId}-{nodeRecord.NodeId}";
+        // Every record is its own entry: one per loop iteration / branch and per retry attempt. The
+        // key used to be {executionId}-{nodeId}, so later runs overwrote earlier ones. The execution
+        // prefix is unchanged, so reads (and anything sweeping by execution) still find them~
+        var key = $"{nodeRecord.ExecutionId}-{nodeRecord.NodeId}-{Guid.NewGuid():N}";
 
         await _nodeStore.PutAsync(key, NatsJsonHelper.Serialize(nodeRecord), cancellationToken: ct)
             .ConfigureAwait(false);
@@ -179,7 +181,8 @@ public sealed class NatsExecutionHistoryRepository : IExecutionHistoryRepository
             }
         }
 
-        return result;
+        // Keys carry no order; return runs in the order they started, like the SQL stores~
+        return result.OrderBy(r => r.StartedAt).ToList();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

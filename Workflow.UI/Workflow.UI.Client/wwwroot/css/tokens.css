@@ -518,6 +518,7 @@ a.df-link:hover { text-decoration: underline; }
 .df-nodeinspect__node--active { background: var(--df-accent-weak); border-color: var(--df-border); }
 .df-nodeinspect__name { flex: 1; font-family: var(--df-mono); }
 .df-nodeinspect__loop { color: var(--df-text-dim); font-size: 0.7rem; }
+.df-nodeinspect__retried { color: var(--df-text-dim); font-size: 0.7rem; font-style: italic; }
 .df-nodeinspect__dur { color: var(--df-text-dim); font-size: 0.72rem; }
 .df-nodeinspect__detail { flex: 1; border: 1px solid var(--df-border); border-radius: var(--df-radius); padding: var(--df-space-3); background: var(--df-surface); }
 .df-nodeinspect__head { margin-bottom: var(--df-space-3); }

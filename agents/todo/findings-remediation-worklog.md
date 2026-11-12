@@ -260,7 +260,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
   uses retired module ids (`builtin.http`, `builtin.transform`, `builtin.database`); the other two
   have non-GUID ids. Found during the §9.4 audit. *Fixed 2026-11-11 with plan 09 (run-after edges),
   which fixing them uncovered. Guard: `Api/V1/SampleWorkflowDefinitionTests`.*
-- [ ] **Loop-body history looks collapsed under try/parallel.** Running the flow-control demo
+- [x] ✅ **fixed 2026-11-11** (row per run in every store; see the progress log) — **Loop-body history looks collapsed under try/parallel.** Running the flow-control demo
   (5 items), `/executions/{id}/nodes` has one `persist_branch` record (LoopIteration 5, yet its
   inputs say item 3 / index 2) though 3 items take that branch; `catch_handler` has 2. Records
   for body nodes nested in trycatch → parallel inside a foreach seem to overwrite each other or
@@ -304,6 +304,32 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Node history keeps a row per run (loop iterations, branches, retry attempts)
+- **Cause:** all three stores upserted node records on (execution, node):
+  - SQLite and Postgres did find-then-update; NATS used the key `{exec}-{node}`;
+  - so every run of a body node (each loop iteration) overwrote the last;
+  - the row kept the first run's inputs and the last run's state and iteration;
+  - it was timing-dependent: fire-and-forget writes that raced all inserted.
+- **Why the tests missed it:** the engine's history tests use in-memory fakes that append.
+- **Decided (asked):** a **row per attempt** — every outcome is its own row, so a failed attempt
+  keeps its error and the retry adds a row.
+  - The engine already writes one record per outcome (no "running" row), so appending is all
+    the stores needed.
+  - The status still uses the latest row per node.
+- **Postgres** also never stored `loop_id` / `loop_iteration` / `sub_graph_id` / metadata. Added
+  them (migration 4; SQLite had them since its migration 4).
+- **NATS** keys are `{exec}-{node}-{guid}`, and reads are ordered by start.
+- **UI:** `NodeInspector` selects per row (`data-row`), not per node id. A failed row followed by
+  another run of the same node and iteration is tagged "↻ retried".
+- **Tests** (all red before the fix):
+  - contract test `Execution_RecordNode_SeveralRunsOfOneNode_KeepsARowPerRun` in
+    `SqliteProviderTests`, `PostgresProviderTests` and `NatsProviderTests` (Docker);
+  - `Api/V1/LoopBodyHistoryTests`: a 150 ms foreach body over SQLite was 1 row, now 3;
+  - UI `Execution/Components/NodeInspectorRunsTests` (stash-proven);
+  - `SampleWorkflowDefinitionTests` asserts exact counts again: parallel ×3, catch ×2, finally ×5.
+- **Suites:** `Workflow.Tests` 2062/2062; `Workflow.Tests.UI` 825/825; Postgres + NATS provider
+  tests 75/75.
+
 ### 2026-11-11 — Run-after edges, part 3/3 (plan 09): samples + docs; stale samples fixed
 - `examples/definitions/*.json`: GUID ids, `PropertyType` names, `name`/`initialValue` (the
   ignored `defaultValue`), current module ids/ports, run-after edges where only ordering was meant,
