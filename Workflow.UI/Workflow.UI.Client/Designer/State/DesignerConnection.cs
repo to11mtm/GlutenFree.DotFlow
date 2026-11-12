@@ -35,6 +35,15 @@ public sealed class DesignerConnection
     /// </summary>
     public int? BufferCapacity { get; set; }
 
+    /// <summary>Gets or sets the edge kind: <c>"RunAfter"</c> (plan 09) or null for a data edge.</summary>
+    public string? Kind { get; set; }
+
+    /// <summary>Gets a value indicating whether this edge only sequences (no data, no target port).</summary>
+    public bool IsRunAfter => string.Equals(this.Kind, RunAfterKind, System.StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The wire value of a run-after edge's kind.</summary>
+    public const string RunAfterKind = "RunAfter";
+
     /// <summary>A stable identity key for selection/dedup: <c>src.port→tgt.port</c>~ 🔑.</summary>
     public string Key => $"{this.SourceNodeId}.{this.SourcePortName}→{this.TargetNodeId}.{this.TargetPortName}";
 
@@ -51,6 +60,7 @@ public sealed class DesignerConnection
             Condition = dto.Condition,
             Priority = dto.Priority,
             BufferCapacity = dto.BufferCapacity,
+            Kind = dto.Kind,
         };
 
     /// <summary>Projects this connection back to a wire DTO~ 📤.</summary>
@@ -63,7 +73,8 @@ public sealed class DesignerConnection
             this.TargetPortName,
             this.Condition,
             this.Priority,
-            this.BufferCapacity);
+            this.BufferCapacity,
+            this.Kind);
 
     /// <summary>Creates a clone~ 🧬.</summary>
     /// <returns>A cloned connection.</returns>
@@ -77,5 +88,6 @@ public sealed class DesignerConnection
             Condition = this.Condition,
             Priority = this.Priority,
             BufferCapacity = this.BufferCapacity,
+            Kind = this.Kind,
         };
 }

@@ -61,7 +61,9 @@ public static class StreamRegionDetector
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(schemaOf);
 
-        return IsStreamingPort(schemaOf(connection.SourceNodeId), connection.SourcePortName, isOutput: true)
+        // ⏭️ Plan 09 — a run-after edge carries no data, so it never streams~
+        return !connection.IsRunAfter
+               && IsStreamingPort(schemaOf(connection.SourceNodeId), connection.SourcePortName, isOutput: true)
                && IsStreamingPort(schemaOf(connection.TargetNodeId), connection.TargetPortName, isOutput: false);
     }
 

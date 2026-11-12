@@ -17,6 +17,9 @@ built yet.
 | [04 — Streaming & spill](04-streaming-and-spill-remediation.md) | pinned version in region (§9.4), spill cleanup w/o history (§9.6), + documented-only streaming items | Medium / Low |
 | [05 — Modules & plugins](05-modules-and-plugins-remediation.md) | active-exec count (§9.3), ValidateConfiguration (§9.4), package extra modules (§9.7) | Medium / Low |
 | [06 — Outbound HTTP policy](06-outbound-http-policy.md) | script/HTTP-module SSRF (04 §9.6, Stage 7.3): modes, channels, metadata switch, setup screen | Medium |
+| [07 — Module package signing](07-module-package-signing.md) | signed module packages, trusted publishers (Stage 7.4) | Medium |
+| [08 — Secrets at rest](08-secrets-at-rest.md) | encrypted write-only secret variables, Data Protection key storage | Medium |
+| [09 — Run-after edges](09-run-after-edges.md) | sequencing into modules without feeding data (found fixing the stale samples) | Medium |
 
 ## Coverage
 

@@ -74,6 +74,8 @@ public sealed class DesignerClipboard
                     TargetPortName = c.TargetPortName,
                     Condition = c.Condition,
                     Priority = c.Priority,
+                    BufferCapacity = c.BufferCapacity,
+                    Kind = c.Kind,
                 });
             }
         }

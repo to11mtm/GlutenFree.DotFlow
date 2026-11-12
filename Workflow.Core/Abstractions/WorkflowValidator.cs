@@ -143,7 +143,8 @@ public class WorkflowValidator
                     connection.SourceNodeId));
             }
 
-            if (string.IsNullOrWhiteSpace(connection.TargetPortName))
+            // ⏭️ Plan 09 — a run-after edge only sequences, so it has no target port~
+            if (!connection.IsRunAfter && string.IsNullOrWhiteSpace(connection.TargetPortName))
             {
                 _errors.Add(new ValidationError(
                     "WF009",

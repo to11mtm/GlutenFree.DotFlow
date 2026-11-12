@@ -622,6 +622,12 @@ public class SubGraphExecutor : ReceiveActor
 
         foreach (var conn in incomingConnections)
         {
+            // ⏭️ Plan 09 — a run-after edge only sequences: no data, no FanIn branch~
+            if (conn.IsRunAfter)
+            {
+                continue;
+            }
+
             // 🔀 Stage 7.2 — a false edge carries nothing (an empty payload keeps FanIn positions)~
             if (_inactiveEdges.Contains(conn) || !_nodeOutputs.TryGetValue(conn.SourceNodeId, out var sourceOutputs))
             {

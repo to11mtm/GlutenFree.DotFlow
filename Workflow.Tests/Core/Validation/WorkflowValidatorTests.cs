@@ -218,6 +218,28 @@ public class WorkflowValidatorTests
 	}
 
 	[Fact]
+	public void Validate_RunAfterEdge_HasNoTargetPort_AndIsValid()
+	{
+		// Plan 09 - a run-after edge only sequences, so it has no target port (WF009 is for data edges)
+		var workflow = new WorkflowDefinition(
+			Id: Guid.NewGuid(),
+			Name: "Test",
+			Description: null,
+			Version: new Version(1, 0, 0),
+			Nodes: Arr.create(
+				new NodeDefinition("node1", "mod", "Node 1", HashMap.empty<string, System.Text.Json.JsonElement>()),
+				new NodeDefinition("node2", "mod", "Node 2", HashMap.empty<string, System.Text.Json.JsonElement>())),
+			Connections: Arr.create(
+				new ConnectionDefinition("node1", "out", "node2", "", Kind: ConnectionKind.RunAfter)),
+			Variables: HashMap.empty<string, VariableDefinition>());
+
+		var result = _validator.Validate(workflow);
+
+		result.Errors.Should().NotContain(e => e.Code == "WF009");
+		result.IsValid.Should().BeTrue();
+	}
+
+	[Fact]
 	public void Validate_EmptyTargetPortName_ReturnsError()
 	{
 		// Arrange - Connection with empty target port

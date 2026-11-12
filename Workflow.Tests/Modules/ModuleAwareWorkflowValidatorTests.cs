@@ -344,6 +344,60 @@ public sealed class ModuleAwareWorkflowValidatorTests
     }
 
     /// <summary>
+    /// Plan 09 — a run-after edge has no target port, so MA004 doesn't apply, even into a module
+    /// whose declared inputs are all data ports (here the condition's 'condition').
+    /// </summary>
+    [Fact]
+    public void Validate_RunAfterEdge_IntoAModuleWithOnlyDataPorts_ShouldPass()
+    {
+        var registry = BuildRegistry();
+        registry.RegisterModule(new Workflow.Modules.Builtin.Flow.ConditionalModule());
+        var validator = new ModuleAwareWorkflowValidator(registry);
+        var workflow = TwoNodeWorkflow(sourcePort: "output", targetPort: string.Empty, targetModule: "builtin.condition") with
+        {
+            Connections = Arr.create(new ConnectionDefinition("node1", "output", "node2", string.Empty, Kind: ConnectionKind.RunAfter)),
+        };
+
+        var result = validator.Validate(workflow);
+
+        result.Errors.Should().NotContain(e => e.Code == "MA004" || e.Code == "WF009");
+    }
+
+    /// <summary>
+    /// A run-after edge's target port is ignored, even when a stale name is left on it.
+    /// </summary>
+    [Fact]
+    public void Validate_RunAfterEdge_WithAStaleTargetPort_ShouldPass()
+    {
+        var registry = BuildRegistry();
+        registry.RegisterModule(new Workflow.Modules.Builtin.Flow.ConditionalModule());
+        var validator = new ModuleAwareWorkflowValidator(registry);
+        var workflow = TwoNodeWorkflow(sourcePort: "output", targetPort: "bogus", targetModule: "builtin.condition") with
+        {
+            Connections = Arr.create(new ConnectionDefinition("node1", "output", "node2", "bogus", Kind: ConnectionKind.RunAfter)),
+        };
+
+        validator.Validate(workflow).Errors.Should().NotContain(e => e.Code == "MA004");
+    }
+
+    /// <summary>
+    /// Plan 09 Q2 — a legacy data edge into an undeclared 'input' port is read as run-after on any
+    /// module (stored workflows and engine tests use it), not only on modules with no inputs.
+    /// </summary>
+    [Fact]
+    public void Validate_LegacyInputEdge_IntoAModuleWithOnlyDataPorts_IsReadAsRunAfter()
+    {
+        var registry = BuildRegistry();
+        registry.RegisterModule(new Workflow.Modules.Builtin.Flow.ConditionalModule());
+        var validator = new ModuleAwareWorkflowValidator(registry);
+        var workflow = TwoNodeWorkflow(sourcePort: "output", targetPort: "input", targetModule: "builtin.condition");
+
+        var result = validator.Validate(workflow);
+
+        result.Errors.Should().NotContain(e => e.Code == "MA004");
+    }
+
+    /// <summary>
     /// The implicit port is only 'input': any other name into a module with no declared inputs is
     /// still a typo (MA004).
     /// </summary>

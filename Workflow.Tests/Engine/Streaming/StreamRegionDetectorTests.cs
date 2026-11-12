@@ -74,6 +74,18 @@ public class StreamRegionDetectorTests
     }
 
     [Fact]
+    public void RunAfterEdge_NeverStreams_EvenBetweenStreamingPorts()
+    {
+        // Plan 09 — a run-after edge carries no data, so it can't be a streaming edge (kept even if
+        // a stale target port name is left on it)~
+        var definition = Definition(
+            [Node("a"), Node("b")],
+            [new ConnectionDefinition("a", "items", "b", "items", Kind: ConnectionKind.RunAfter)]);
+
+        StreamRegionDetector.Regions(definition, Schemas()).Should().BeEmpty();
+    }
+
+    [Fact]
     public void SeparateChains_AreSeparateRegions()
     {
         var definition = Definition(

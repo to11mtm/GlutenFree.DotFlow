@@ -922,6 +922,13 @@ public class WorkflowExecutor : ReceiveActor
 
         foreach (var conn in incomingConnections)
         {
+            // ⏭️ Plan 09 — a run-after edge only sequences: no port value, no src.* copies, no FanIn
+            // branch (readiness and skip already went through _nodePredecessors)~
+            if (conn.IsRunAfter)
+            {
+                continue;
+            }
+
             // 🔀 Stage 7.2 — an edge whose condition was false (or lost on priority) carries nothing~
             if (_inactiveEdges.Contains(conn))
             {

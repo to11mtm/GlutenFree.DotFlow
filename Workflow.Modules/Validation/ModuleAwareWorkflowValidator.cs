@@ -43,7 +43,10 @@ using Workflow.Modules.Abstractions;
 /// </remarks>
 public sealed class ModuleAwareWorkflowValidator
 {
-    /// <summary>The port a module with no declared inputs is wired in by (the designer's default handle).</summary>
+    /// <summary>
+    /// The legacy "run after" port: a data edge into an undeclared <c>input</c> port is read as a
+    /// run-after edge on any module (plan 09 Q2; stored workflows and engine tests use it).
+    /// </summary>
     private const string ImplicitInputPortName = "input";
 
     private readonly WorkflowValidator inner;
@@ -251,19 +254,19 @@ public sealed class ModuleAwareWorkflowValidator
                 }
             }
 
-            // 🔍 Validate target port — must exist in target module's Inputs~
-            if (nodeModules.TryGetValue(connection.TargetNodeId, out var targetModule) &&
+            // 🔍 Validate target port — must exist in target module's Inputs (a run-after edge has
+            // none, plan 09)~
+            if (!connection.IsRunAfter &&
+                nodeModules.TryGetValue(connection.TargetNodeId, out var targetModule) &&
                 !string.IsNullOrWhiteSpace(connection.TargetPortName))
             {
                 var inputPortNames = targetModule.Schema.Inputs
                     .Select(p => p.Name)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                // A module that declares no inputs (database execute/query, blob stores…) is wired in
-                // by its implicit 'input' port: the designer draws it (NodePorts.DefaultInputs) and the
-                // engine runs the edge as "run after"~
-                var implicitInput = inputPortNames.Count == 0
-                    && string.Equals(connection.TargetPortName, ImplicitInputPortName, StringComparison.OrdinalIgnoreCase);
+                // A legacy edge into an undeclared 'input' port is read as run-after (plan 09 Q2):
+                // the engine has always run it, and the designer shows it as an "after" edge~
+                var implicitInput = string.Equals(connection.TargetPortName, ImplicitInputPortName, StringComparison.OrdinalIgnoreCase);
 
                 if (!implicitInput && !inputPortNames.Contains(connection.TargetPortName))
                 {

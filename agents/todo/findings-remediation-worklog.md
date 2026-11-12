@@ -297,6 +297,18 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Run-after edges, part 1/3 (plan 09): model, engine, validators, JSON, UI pass-through
+- Found while fixing the stale samples (new `Api/V1/SampleWorkflowDefinitionTests`, still red, lands
+  with part 3): ~30 modules declare only data inputs. The engine runs `→ input` edges into any of
+  them, but MA004 rejects them and the designer offers only data ports (Try → Condition fed the
+  condition's expression). First step `7c97e9d`: MA004 accepts `input` on modules with no inputs.
+- Decided (plan 09): a separate `ConnectionKind.RunAfter` edge; legacy `input` edges read as
+  run-after; FanIn waits without a branch; designer drop-on-body + inspector toggle.
+- Built: see plan 09 "As built (part 1)". 11/11 mutants killed.
+- Suites: `Workflow.Tests` (without the sample test) 2052/2052; `Workflow.Tests.UI` 810/810.
+- Next: part 2 (designer drawing/toggle, the UI's mirrored region detector, legacy edges shown as
+  run-after), part 3 (samples + docs).
+
 ### 2026-11-11 — Final cleanup: last finding tests retired, findings table final
 - Retired the last two `Category=Finding` tests into permanent tests (assertions unchanged, trait
   removed): loop-body port routing (01 §12.4) → `Engine/LoopBodyPortRoutingTests`; join after a

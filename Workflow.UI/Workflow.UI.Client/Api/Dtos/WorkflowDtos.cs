@@ -81,6 +81,10 @@ public sealed record PositionDto(double X, double Y);
 /// <param name="Condition">Optional runtime condition expression.</param>
 /// <param name="Priority">Ordering priority (lower first).</param>
 /// <param name="BufferCapacity">Optional bounded-channel capacity for a streaming connection (Phase 5.1). 🌊.</param>
+/// <param name="Kind">
+/// Plan 09 — <c>"RunAfter"</c> for a sequencing-only edge (no target port); null = a data edge.
+/// Omitted when null: the server's <c>ConnectionKind</c> doesn't accept null.
+/// </param>
 public sealed record ConnectionDto(
     string SourceNodeId,
     string SourcePortName,
@@ -88,7 +92,9 @@ public sealed record ConnectionDto(
     string TargetPortName,
     string? Condition = null,
     int Priority = 0,
-    int? BufferCapacity = null);
+    int? BufferCapacity = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? Kind = null);
 
 /// <summary>
 /// 📋 Phase 3.3.a.0 — Lightweight workflow list row (mirrors <c>WorkflowSummaryDto</c>)~ ✨.
