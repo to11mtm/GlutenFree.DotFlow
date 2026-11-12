@@ -1,6 +1,5 @@
 ﻿{
-  "$schema": "../../Workflow.Core/schema/workflow-definition.json",
-  "id": "b2c3d4e5-0001-0000-0000-http-demo-v1",
+  "id": "b2c3d4e5-0001-4000-8000-4770de000001",
   "name": "HTTP Integration Demo",
   "description": "Phase 2.3 showcase — a webhook trigger fans into a TryCatch + Parallel block that calls two external APIs (one with retry, one with bearer auth). On success both results are merged via SetVariable; on failure the catch handler logs an error and the finally block always writes an audit flag~ 🌐🪝💖",
   "version": "1.0.0",
@@ -54,7 +53,7 @@
       "moduleId": "builtin.http.request",
       "name": "Inventory API — GET with Retry",
       "properties": {
-        "url": "{{inventoryApiUrl}}/items/{{orderId}}",
+        "url": "{{Variable.inventoryApiUrl}}/items/{{Variable.orderId}}",
         "method": "GET",
         "timeoutSeconds": 10,
         "retryCount": 2,
@@ -69,11 +68,11 @@
       "moduleId": "builtin.http.request",
       "name": "Notification API — POST with Bearer Auth",
       "properties": {
-        "url": "{{notifyApiUrl}}/events",
+        "url": "{{Variable.notifyApiUrl}}/events",
         "method": "POST",
-        "body": { "event": "order.placed", "orderId": "{{orderId}}" },
+        "body": { "event": "order.placed", "orderId": "{{Variable.orderId}}" },
         "authType": "bearer",
-        "bearerToken": "{{notifyApiToken}}",
+        "bearerToken": "{{Variable.notifyApiToken}}",
         "timeoutSeconds": 10
       },
       "position": { "x": 760, "y": 420 }
@@ -83,7 +82,7 @@
       "moduleId": "builtin.log",
       "name": "Catch — Log API Failure",
       "properties": {
-        "message": "⚠️ API call failed: {{error.message}} (type: {{error.errorType}})~ 💔",
+        "message": "⚠️ API call failed: {{Variable.error.message}} (type: {{Variable.error.errorType}})~ 💔",
         "level": "Warning"
       },
       "position": { "x": 540, "y": 480 }
@@ -139,34 +138,40 @@
       "sourceNodeId": "error_boundary",
       "sourcePortName": "finally",
       "targetNodeId": "finally_audit",
-      "targetPortName": "input",
-      "comment": "Finally always runs → write audit flag~"
+      "targetPortName": "",
+      "kind": "RunAfter",
+      "comment": "Finally always runs → then write the audit flag (run after: no data)~"
     }
   ],
   "variables": {
     "inventoryApiUrl": {
-      "type": "string",
-      "defaultValue": "https://api.example.com/inventory",
+      "name": "inventoryApiUrl",
+      "type": "String",
+      "initialValue": "https://api.example.com/inventory",
       "description": "Base URL for the inventory API~ 🌐"
     },
     "notifyApiUrl": {
-      "type": "string",
-      "defaultValue": "https://api.example.com/notify",
+      "name": "notifyApiUrl",
+      "type": "String",
+      "initialValue": "https://api.example.com/notify",
       "description": "Base URL for the notification API~ 📨"
     },
     "notifyApiToken": {
-      "type": "string",
-      "defaultValue": "",
+      "name": "notifyApiToken",
+      "type": "String",
+      "isSecret": true,
       "description": "Bearer token for the notification API auth~ 🔐"
     },
     "orderId": {
-      "type": "string",
-      "defaultValue": "",
+      "name": "orderId",
+      "type": "String",
+      "initialValue": "",
       "description": "Order ID passed through from the webhook trigger payload~ 📦"
     },
     "audit": {
-      "type": "string",
-      "defaultValue": "",
+      "name": "audit",
+      "type": "String",
+      "initialValue": "",
       "description": "Set to 'done' by the finally block when the workflow completes regardless of success/failure~ 📋"
     }
   }

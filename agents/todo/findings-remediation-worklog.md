@@ -256,9 +256,16 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
     log.* Showing the full path in the API/UI is not done (only the innermost loop shows today).
   - [x] transaction nested in a loop body: structural SQLite tests (commit per iteration, rollback
     per iteration) + `loop#k/txn` history path. *Done 2026-10-11 — see Progress log.*
-- [ ] **Stale sample workflows.** `examples/definitions/*.json` don't load: `example-workflow.json`
+- [x] **Stale sample workflows.** `examples/definitions/*.json` don't load: `example-workflow.json`
   uses retired module ids (`builtin.http`, `builtin.transform`, `builtin.database`); the other two
-  have non-GUID ids. Found during the §9.4 audit.
+  have non-GUID ids. Found during the §9.4 audit. *Fixed 2026-11-11 with plan 09 (run-after edges),
+  which fixing them uncovered. Guard: `Api/V1/SampleWorkflowDefinitionTests`.*
+- [ ] **Loop-body history looks collapsed under try/parallel.** Running the flow-control demo
+  (5 items), `/executions/{id}/nodes` has one `persist_branch` record (LoopIteration 5, yet its
+  inputs say item 3 / index 2) though 3 items take that branch; `catch_handler` has 2. Records
+  for body nodes nested in trycatch → parallel inside a foreach seem to overwrite each other or
+  carry the wrong iteration. Not investigated; `SampleWorkflowDefinitionTests` checks each path
+  ran rather than counting. Found 2026-11-11.
 - [x] **API test flake: SQLite "table VersionInfo already exists".** *Fixed 2026-11-08.* Not one
   host migrating twice: the app's default `:memory:` normalized to a shared-cache `:memory:`, which
   is ONE database per process, so every default-config test host (plain
@@ -297,6 +304,24 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Run-after edges, part 3/3 (plan 09): samples + docs; stale samples fixed
+- `examples/definitions/*.json`: GUID ids, `PropertyType` names, `name`/`initialValue` (the
+  ignored `defaultValue`), current module ids/ports, run-after edges where only ordering was meant,
+  `{{Variable.x}}` templates, secret notify token, dead `$schema` removed.
+- `Api/V1/SampleWorkflowDefinitionTests` (8):
+  - every sample passes `POST /api/v1/workflows`;
+  - only model keys are used (plus `metadata` / `comment` as documentation);
+  - the flow-control demo runs to completion with both branches taken.
+- Proof:
+  - the create test was red before the fixes (422 unknown modules, 400 bad GUID / enum, MA004);
+  - stale `defaultValue` → key test red; a bare `{{error.x}}` → run test red;
+  - a data edge Try → `condition` port is not caught: the try port carries no value, so it
+    never overrode the expression here.
+- Docs: advanced-flow-control §6 "Data vs run-after edges", designer Connect bullet; plan 09
+  marked implemented.
+- New follow-up (§5 list): loop-body history looks collapsed under try/parallel.
+- Suites: `Workflow.Tests` 2060/2060 (unfiltered); `Workflow.Tests.UI` 824/824.
+
 ### 2026-11-11 — Run-after edges, part 2/3 (plan 09): designer
 - Drop a wire on a node's body → dotted "after" edge; the inspector's **Carries** select switches
   Data ↔ Run after (undoable, stays selected). Legacy `→ input` edges load as run-after. The UI

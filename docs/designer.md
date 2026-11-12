@@ -48,7 +48,10 @@ The landing page (`/`) lists workflows with search, and per-row **Open** / **▶
 - **Select:** click a node; Ctrl-click to multi-select; Shift-drag for a rubber-band.
 - **Move:** drag selected nodes (one undoable move per gesture).
 - **Connect:** drag from an **output** port to a compatible **input** port. Cycles,
-  self-connections, and duplicates are rejected with visual feedback.
+  self-connections, and duplicates are rejected with visual feedback. Drop the wire on a node's
+  **body** instead to draw a dotted **run after** edge: the node waits for that port but receives
+  no data (see [Data vs run-after edges](advanced-flow-control.md#6-data-edges-vs-run-after-edges-)).
+  Select an edge and use **Carries** in the inspector to switch between *Data → port* and *Run after*.
 - **Configure (right):** the **Properties** panel renders the right editor for each
   property (text, number, checkbox, dropdown, expression, JSON, code). `Code`/`Json` use
   the Monaco editor (with a plain-textarea fallback). **Apply** commits your edits.

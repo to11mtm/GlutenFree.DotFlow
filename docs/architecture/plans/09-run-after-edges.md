@@ -1,7 +1,7 @@
 # Plan 09 — "Run after" edges (sequencing without data)
 
-**Status:** decided 2026-11-11 (asked in two rounds). Parts 1 (model, engine, validators, JSON, UI
-pass-through) and 2 (designer) built 2026-11-11; part 3 (samples, docs) in progress. A **separate edge kind** (not an
+**Status:** decided 2026-11-11 (asked in two rounds). **Implemented** 2026-11-11 in three commits: model/engine/validators;
+designer; samples + docs. User docs: `docs/advanced-flow-control.md` §6, `docs/designer.md`. A **separate edge kind** (not an
 implicit `input` port on every module, and not "keep strict").
 
 ## Decisions
@@ -102,6 +102,20 @@ the condition's expression. The flow-control sample and the wiring example in
   port (`inptu`). Their assertions are otherwise unchanged.
 - Tests: UI `State/RunAfterEdgesTests` (10), `Components/RunAfterDesignerTests` (4). 14/14 mutants
   killed.
+
+## As built (part 3 — samples, docs)
+
+- `examples/definitions/*.json` load and are correct:
+  - GUID ids; `PropertyType` names; `name` + `initialValue` (was the ignored `defaultValue`);
+  - current module ids and ports, with run-after edges where only ordering was meant;
+  - `{{Variable.x}}` templates;
+  - the notify token is a secret with no value; the dead `$schema` link is removed.
+- `Api/V1/SampleWorkflowDefinitionTests`:
+  - every sample passes `POST /api/v1/workflows`;
+  - every key maps to a model property (`metadata` and connection `comment` are allowed as
+    documentation);
+  - the flow-control demo runs to completion with both branches taken.
+- Docs: "Data vs run-after edges" (advanced-flow-control §6), designer Connect bullet.
 
 ## Parts
 

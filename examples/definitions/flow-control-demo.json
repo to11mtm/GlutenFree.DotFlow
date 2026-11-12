@@ -1,6 +1,5 @@
 ﻿{
-  "$schema": "../../Workflow.Core/schema/workflow-definition.json",
-  "id": "a1b2c3d4-0000-0000-0000-flow-ctrl-demo",
+  "id": "a1b2c3d4-0000-4000-8000-f10c0d000001",
   "name": "Advanced Flow Control Demo",
   "description": "End-to-end Phase 2.2 showcase — composes ForEach + TryCatch + Condition + Parallel + Throw + Log + SetVariable into a single workflow that demonstrates every major control-flow primitive shipped in Phase 2.2~ 🌟💖",
   "version": "1.0.0",
@@ -21,7 +20,7 @@
   },
   "nodes": [
     { "id": "start", "moduleId": "builtin.log", "name": "Start — Announce Batch",
-      "properties": { "message": "🚀 Starting batch — threshold={{threshold}}", "level": "Information" },
+      "properties": { "message": "🚀 Starting batch — threshold={{Variable.threshold}}", "level": "Information" },
       "position": { "x": 100, "y": 300 } },
     { "id": "foreach", "moduleId": "builtin.loop.foreach", "name": "ForEach Item in Batch",
       "properties": { "collection": "[1, 2, 3, 4, 5]", "maxIterations": 100, "continueOnError": true },
@@ -45,7 +44,7 @@
       "properties": { "errorType": "BelowThreshold", "message": "Item is at or below threshold — skipped", "data": { "reason": "below_threshold" } },
       "position": { "x": 980, "y": 400 } },
     { "id": "catch_handler", "moduleId": "builtin.log", "name": "Catch — Log Skipped Item",
-      "properties": { "message": "⚠️ Item skipped: {{error.errorType}} — {{error.message}}", "level": "Warning" },
+      "properties": { "message": "⚠️ Item skipped: {{Variable.error.errorType}} — {{Variable.error.message}}", "level": "Warning" },
       "position": { "x": 760, "y": 480 } },
     { "id": "finally_audit", "moduleId": "builtin.log", "name": "Finally — Iteration Audit",
       "properties": { "message": "📋 Iteration done — continuing batch", "level": "Debug" },
@@ -54,25 +53,25 @@
       "properties": { "name": "summary", "value": "all items processed" },
       "position": { "x": 540, "y": 720 } },
     { "id": "end", "moduleId": "builtin.log", "name": "End — Emit Summary",
-      "properties": { "message": "🏁 Batch complete — summary={{summary}} last_processed={{last_processed}}", "level": "Information" },
+      "properties": { "message": "🏁 Batch complete — summary={{Variable.summary}} last_processed={{Variable.last_processed}}", "level": "Information" },
       "position": { "x": 320, "y": 720 } }
   ],
   "connections": [
-    { "sourceNodeId": "start",         "sourcePortName": "output",        "targetNodeId": "foreach",        "targetPortName": "input", "comment": "Start -> enter the foreach loop" },
+    { "sourceNodeId": "start",         "sourcePortName": "timestamp",     "targetNodeId": "foreach",        "targetPortName": "", "kind": "RunAfter", "comment": "Start -> then the foreach loop (run after: no data)" },
     { "sourceNodeId": "foreach",       "sourcePortName": "loopBody",      "targetNodeId": "trycatch",       "targetPortName": "input", "comment": "Per-iteration: enter the trycatch boundary (LoopExecutor injects item + index into body inputs)" },
-    { "sourceNodeId": "trycatch",      "sourcePortName": "try",           "targetNodeId": "condition",      "targetPortName": "input", "comment": "Try-body: evaluate the threshold condition" },
+    { "sourceNodeId": "trycatch",      "sourcePortName": "try",           "targetNodeId": "condition",      "targetPortName": "", "kind": "RunAfter", "comment": "Try-body: then evaluate the threshold condition (run after, so the try value does not replace the expression)" },
     { "sourceNodeId": "condition",     "sourcePortName": "true",          "targetNodeId": "parallel",       "targetPortName": "input", "comment": "Above threshold -> parallel fan-out" },
     { "sourceNodeId": "parallel",      "sourcePortName": "notify",        "targetNodeId": "notify_branch",  "targetPortName": "input", "comment": "Branch A — notification" },
-    { "sourceNodeId": "parallel",      "sourcePortName": "persist",       "targetNodeId": "persist_branch", "targetPortName": "input", "comment": "Branch B — persistence" },
-    { "sourceNodeId": "condition",     "sourcePortName": "false",         "targetNodeId": "throw_low",      "targetPortName": "input", "comment": "Below threshold -> throw (caught by enclosing trycatch)" },
+    { "sourceNodeId": "parallel",      "sourcePortName": "persist",       "targetNodeId": "persist_branch", "targetPortName": "", "kind": "RunAfter", "comment": "Branch B — persistence (run after)" },
+    { "sourceNodeId": "condition",     "sourcePortName": "false",         "targetNodeId": "throw_low",      "targetPortName": "", "kind": "RunAfter", "comment": "Below threshold -> throw (caught by enclosing trycatch; run after)" },
     { "sourceNodeId": "trycatch",      "sourcePortName": "catch",         "targetNodeId": "catch_handler",  "targetPortName": "input", "comment": "Catch — log the skipped item; iteration continues" },
     { "sourceNodeId": "trycatch",      "sourcePortName": "finally",       "targetNodeId": "finally_audit",  "targetPortName": "input", "comment": "Finally — runs whether try succeeded or catch handled" },
-    { "sourceNodeId": "foreach",       "sourcePortName": "done",          "targetNodeId": "set_summary",    "targetPortName": "input", "comment": "After all iterations finish -> write summary variable" },
+    { "sourceNodeId": "foreach",       "sourcePortName": "done",          "targetNodeId": "set_summary",    "targetPortName": "", "kind": "RunAfter", "comment": "After all iterations finish -> write summary variable (run after)" },
     { "sourceNodeId": "set_summary",   "sourcePortName": "previousValue", "targetNodeId": "end",            "targetPortName": "input", "comment": "Final log node" }
   ],
   "variables": {
-    "threshold":      { "type": "number", "defaultValue": 2, "description": "Items strictly greater than this value succeed via the parallel branch; items <= are thrown and caught~ 🎯" },
-    "last_processed": { "type": "string", "description": "Updated by the persist branch each time an item is accepted~" },
-    "summary":        { "type": "string", "description": "Set once the foreach loop completes all iterations~" }
+    "threshold":      { "name": "threshold", "type": "Int", "initialValue": 2, "description": "Items strictly greater than this value succeed via the parallel branch; items <= are thrown and caught~ 🎯" },
+    "last_processed": { "name": "last_processed", "type": "String", "description": "Updated by the persist branch each time an item is accepted~" },
+    "summary":        { "name": "summary", "type": "String", "description": "Set once the foreach loop completes all iterations~" }
   }
 }

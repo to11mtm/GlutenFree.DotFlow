@@ -81,6 +81,29 @@ Each loop iteration gets a fresh **variable subscope** (`loop:{loopId}:{iter}`) 
 
 Every sub-graph receives a `CancellationToken` linked to its parent's CTS. Cancel the parent → siblings observe the token cooperatively and wind down. **No hard-abort of in-flight nodes** — modules are expected to honour `CancellationToken`~ ✨
 
+### 6. Data Edges vs Run-After Edges ⏭️
+
+A connection is either:
+
+- **Data** (the default): the source port's value is delivered into a **port of the target**, e.g.
+  `condition.true → parallel.input`.
+- **Run after** (`"kind": "RunAfter"`, no target port): the target **waits for** the source port and
+  is **skipped with it**, like any edge, but **receives nothing**. Use it to order nodes whose inputs
+  are data ports you don't want to feed, e.g. *Try → Condition*. A data edge into the condition's
+  `condition` port would replace its expression with the incoming value.
+
+```jsonc
+{ "sourceNodeId": "trycatch", "sourcePortName": "try", "targetNodeId": "condition",
+  "targetPortName": "", "kind": "RunAfter" }
+```
+
+Everything that depends on the **source port** still applies: port routing (`true`/`false`, switch
+cases), try/catch/finally and loop bodies, edge conditions and priority. A run-after edge never
+streams, and a FanIn waits for it without adding a branch. To read the source's output, use
+`{{nodeId.port}}`. In the designer, **drop a wire on a node's body** (not a port) to draw one, or
+switch an edge in the inspector's **Carries** list. Older workflows that wired into an undeclared
+`input` port are read as run-after.
+
 ---
 
 ## 🚀 Start & End Markers
@@ -560,7 +583,7 @@ The structural backbone of recoverable workflows. Spawns a `TryCatchExecutorActo
 
 **Wiring example** (from `examples/definitions/flow-control-demo.json`):
 ```
-trycatch.try     ─→ condition
+trycatch.try     ┄→ condition       (run after — see Data vs run-after edges)
 trycatch.catch   ─→ catch_handler   (logs WorkflowError)
 trycatch.finally ─→ finally_audit   (cleanup, always runs)
 trycatch.done    ─→ next_step
