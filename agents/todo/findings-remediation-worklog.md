@@ -191,6 +191,12 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 - [x] ✅ **hardened 2026-11-09** (click and check inside `WaitForAssertion`; 10/10, and still fails when Open does nothing) — **Flaky UI test `MonitorTests.Monitor_RowOpen_NavigatesToDetail`.** Failed once in a full
   UI run during Stage 7.2 ("nav.Uri … is too short") and passed on the re-run and alone. The
   navigation assertion probably races the click handler. Unrelated to 7.2.
+- [ ] **Flaky test `HttpRetryTests.Retry_ExponentialBackoff_DelaysIncrease`.** It failed once in a
+  full run (2026-11-11, during the scope-path work, which doesn't touch HTTP) and passed 5/5 alone
+  and in the next full run. It's timing-based: the run must take more than 150 ms over 2 jittered
+  exponential backoffs from 100 ms, and the failed run took 174 ms in total. Polly's jitter can
+  likely bring the delays under 150 ms. Don't just lower the threshold (that weakens it). If it
+  recurs, assert on the computed delays, or pin the jitter.
 - [ ] **Rare test-host crash in `StreamRegionRunnerTests`.** Once during the §12.7 run:
   `ArgumentOutOfRangeException: An unexpected state object was encountered` from
   `CountingSource.ExecuteStreamAsync` (an async-iterator stub), which aborted the test run. It
@@ -304,6 +310,26 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Full scope path on node history (nested loops)
+- `/nodes` records carry `scope` (`ScopeStepDto[]`, outermost first) and `scopePath` (short form,
+  `outer#2/inner#1`). Both are read from the record's `scopePath` metadata: `ScopeStep`s in memory,
+  a JSON array from a store. `loopId` / `loopIteration` still name only the innermost loop.
+- Node inspector: the row badge shows the whole path (`#2 › #1`), the detail says
+  "in outer#2 › inner#1", and "↻ retried" now also requires the same scope path, so a failure in
+  outer#1 isn't "retried" by inner#1 of outer#2.
+- Tests:
+  - `Api/V1/LoopBodyHistoryTests.ANestedLoopBodyRow_SaysWhichOuterAndInnerIterationItRanIn`
+    (SQLite; nested loops wired outer → inner as a run-after edge);
+  - `Api/V1/NodeRecordScopeTests` (3);
+  - UI `NodeInspectorRunsTests.NestedLoopRows_*`.
+- Proof:
+  - 2/2 API mutants killed (ignore the stored JSON form; ignore the in-memory form);
+  - stashing the inspector change turns the UI test red.
+- Docs: execution-monitor (inspector + `/nodes`); plan 02's "not done" note updated.
+- Suites: `Workflow.Tests` 2066/2066 on the re-run. The first run had 1 failure,
+  `HttpRetryTests.Retry_ExponentialBackoff_DelaysIncrease`: timing-based, unrelated, 5/5 alone;
+  logged under follow-ups. `Workflow.Tests.UI` 826/826.
+
 ### 2026-11-11 — Node history keeps a row per run (loop iterations, branches, retry attempts)
 - **Cause:** all three stores upserted node records on (execution, node):
   - SQLite and Postgres did find-then-update; NATS used the key `{exec}-{node}`;

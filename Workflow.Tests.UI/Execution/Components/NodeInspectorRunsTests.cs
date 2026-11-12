@@ -65,4 +65,26 @@ public sealed class NodeInspectorRunsTests : TestContext
         retried.Should().ContainSingle("only iteration 2's failed attempt was followed by another run; iteration 3's failure was final");
         cut.Find("[data-row='1']").InnerHtml.Should().Contain("retried");
     }
+
+    [Fact]
+    public void NestedLoopRows_ShowTheirWholePath_AndOnlyARetryInTheSameRunCounts()
+    {
+        var nodes = new List<NodeExecutionRecordDto>
+        {
+            Run(1, "Failed", 1) with { LoopId = "inner", ScopePath = "outer#1/inner#1" },
+            Run(1, "Completed", 2) with { LoopId = "inner", ScopePath = "outer#2/inner#1" },
+            Run(1, "Failed", 3) with { LoopId = "inner", ScopePath = "outer#3/inner#1" },
+            Run(1, "Completed", 4) with { LoopId = "inner", ScopePath = "outer#3/inner#1" },
+        };
+
+        var cut = this.RenderComponent<NodeInspector>(p => p.Add(x => x.Nodes, nodes));
+
+        cut.FindAll("[data-testid=node-scope]").Select(e => e.TextContent)
+            .Should().Equal("#1 › #1", "#2 › #1", "#3 › #1", "#3 › #1");
+        cut.Find("[data-testid=node-detail-scope]").TextContent.Should().Contain("outer#1 › inner#1");
+
+        // Row 0 failed in outer#1; the next inner#1 row ran in outer#2, a different run — not a retry.
+        cut.Find("[data-row='0']").InnerHtml.Should().NotContain("retried");
+        cut.Find("[data-row='2']").InnerHtml.Should().Contain("retried", "outer#3/inner#1 ran again");
+    }
 }

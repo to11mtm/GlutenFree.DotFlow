@@ -19,7 +19,12 @@
                     data-testid="node-@node.NodeId" data-row="@row" @onclick="() => Select(row)">
                 <span>@IconFor(node.State)</span>
                 <span class="df-nodeinspect__name" title="@node.SkipReason">@node.NodeId</span>
-                @if (node.LoopIteration is { } it)
+                @if (node.ScopePath is { } path)
+                {
+                    @* the whole path: in nested loops the innermost #n alone repeats *@
+                    <span class="df-nodeinspect__loop" data-testid="node-scope">@ShortScope(path)</span>
+                }
+                else if (node.LoopIteration is { } it)
                 {
                     <span class="df-nodeinspect__loop">#@it</span>
                 }
@@ -37,7 +42,11 @@
         <div class="df-nodeinspect__detail" data-testid="node-detail">
             <div class="df-nodeinspect__head">
                 <strong>@sel.NodeId</strong> · @IconFor(sel.State) @sel.State · @Duration(sel)
-                @if (sel.LoopId is not null)
+                @if (sel.ScopePath is { } selPath)
+                {
+                    <span class="df-nodeinspect__loop" data-testid="node-detail-scope">in @selPath.Replace("/", " › ")</span>
+                }
+                else if (sel.LoopId is not null)
                 {
                     <span class="df-nodeinspect__loop">loop @sel.LoopId #@sel.LoopIteration</span>
                 }
@@ -90,6 +99,14 @@
         return this.OnSelect.HasDelegate ? this.OnSelect.InvokeAsync(nodeId) : Task.CompletedTask;
     }
 
+    /// <summary>The row badge: the iteration/branch part of each step (<c>outer#2/inner#1</c> → <c>#2 › #1</c>).</summary>
+    private static string ShortScope(string path)
+        => string.Join(" › ", path.Split('/').Select(step =>
+        {
+            var at = step.IndexOfAny(new[] { '#', '[', ':', '!' });
+            return at > 0 ? step[at..] : step;
+        }));
+
     /// <summary>A failed run with a later run of the same node in the same loop iteration was retried.</summary>
     private bool IsRetried(int row)
     {
@@ -102,7 +119,10 @@
         for (var later = row + 1; later < this.Nodes.Count; later++)
         {
             var other = this.Nodes[later];
-            if (other.NodeId == node.NodeId && other.LoopId == node.LoopId && other.LoopIteration == node.LoopIteration)
+            // Same node in the same run of its constructs (the scope path, when there is one, also
+            // tells outer iterations and parallel branches apart)~
+            if (other.NodeId == node.NodeId && other.ScopePath == node.ScopePath
+                && other.LoopId == node.LoopId && other.LoopIteration == node.LoopIteration)
             {
                 return true;
             }

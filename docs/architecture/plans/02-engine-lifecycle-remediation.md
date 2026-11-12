@@ -328,7 +328,9 @@ it never exercised this path.*
 > passes its own (via `ConstructSpawnCore`). `SubGraphExecutor.QueuePersistNode` writes the path to
 > `Metadata["scopePath"]` (outermost first, so a loop-in-loop leaf reads `outer#2/inner#1`) and the
 > innermost loop step to `LoopId` / `LoopIteration`, which the UI already shows. `subGraphId` keeps
-> its old format; no migration (`MetadataJson` takes any keys). Not done: showing the full path in
+> its old format; no migration (`MetadataJson` takes any keys). *(2026-11-11: the full path is now
+> on `/nodes` as `scope` / `scopePath` and shown in the node inspector; body node events landed in
+> f9006fa.)* Originally not done: showing the full path in
 > the API/UI, and live node events from bodies (separate follow-up). The outer body still accepts
 > `Push/PopLoopScope` and ignores them. Tests: `Workflow.Tests/Engine/NestedConstructHistoryTests`
 > (5 incl. transaction-in-loop, all red without the change).

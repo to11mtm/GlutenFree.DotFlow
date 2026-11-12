@@ -102,4 +102,11 @@ public sealed record NodeExecutionRecordDto(
 {
     /// <summary>🧯 Stage 7.8 — gets why the node was skipped, when it was (e.g. an earlier region stage failed).</summary>
     public string? SkipReason { get; init; }
+
+    /// <summary>
+    /// Gets the constructs a body node ran inside in short form, outermost first — e.g.
+    /// <c>outer#2/inner#1</c> or <c>par[1]/tc:catch</c>; null at top level. (The server also sends
+    /// the structured <c>scope</c>; the inspector only needs this.)
+    /// </summary>
+    public string? ScopePath { get; init; }
 }

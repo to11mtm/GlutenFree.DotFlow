@@ -56,9 +56,11 @@ Sort the RECENT list by **Started** or **Duration** (click again to flip directi
 `/monitor/{executionId}` shows a run's header (workflow, state, duration, cancel-if-running) and a
 **node inspector**: the list of nodes with per-node state + timing, and — for the selected node —
 its **inputs**, **outputs**, **error**, and loop iteration (from the persisted node records). A node
-has **a row per run**: one per loop iteration (`#n`) or branch, and one per retry attempt — a failed
+has **a row per run**: one per loop iteration or branch, and one per retry attempt — a failed
 attempt that was retried is tagged **↻ retried**, and each row opens that run's own inputs, outputs
-and error. For a
+and error. A body node's row shows **where** it ran: the whole path through its constructs, so in a
+loop inside a loop the rows read `#1 › #2`, `#2 › #1`… and the detail says *in outer#2 › inner#1*
+(also `par[1]` for a parallel branch, `tc:catch` for a try/catch branch). For a
 **running** execution it seeds from the live snapshot and updates as node events arrive; on
 completion it fetches the final records to fill in I/O.
 
@@ -89,7 +91,7 @@ The monitor uses the existing execution endpoints plus two read-only additions (
 | `GET /api/v1/executions?workflowId=…` | Workflow-scoped history (status/date filters) |
 | `GET /api/v1/executions/{id}` | Live status |
 | `GET /api/v1/executions/{id}/detail` 🆕 | Persisted execution record (renders after the run leaves memory) |
-| `GET /api/v1/executions/{id}/nodes` 🆕 | Persisted node records (state, timing, inputs, outputs, error, loop) — a record per run of a node (each loop iteration / branch, each retry attempt), ordered by start |
+| `GET /api/v1/executions/{id}/nodes` 🆕 | Persisted node records (state, timing, inputs, outputs, error, loop) — a record per run of a node (each loop iteration / branch, each retry attempt), ordered by start. Body nodes carry `scope` (the constructs they ran in, outermost first: `nodeId`, `kind`, `iteration` / `branchIndex` / `branch`) and `scopePath` (e.g. `outer#2/inner#1`); `loopId` / `loopIteration` name only the innermost loop |
 | `POST /api/v1/executions/{id}/cancel` | Cancel a running execution |
 | hub `SubscribeToAll` (admin) / `SubscribeToExecution` | Live event streams |
 

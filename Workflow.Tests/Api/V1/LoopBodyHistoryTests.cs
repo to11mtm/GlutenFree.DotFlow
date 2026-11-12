@@ -73,4 +73,55 @@ public sealed class LoopBodyHistoryTests : IClassFixture<ExecutionEndpointsTests
             "each row keeps its own iteration's inputs");
         body.Should().OnlyContain(r => r.GetProperty("state").GetString() == "Completed");
     }
+
+    [Fact]
+    public async Task ANestedLoopBodyRow_SaysWhichOuterAndInnerIterationItRanIn()
+    {
+        var client = this.factory.CreateClient();
+        var json = """
+            {
+              "name": "nested-history-NAME",
+              "version": "1.0.0",
+              "nodes": [
+                { "id": "outer", "moduleId": "builtin.loop.foreach", "name": "Outer", "properties": { "collection": ["a", "b"] } },
+                { "id": "inner", "moduleId": "builtin.loop.foreach", "name": "Inner", "properties": { "collection": ["x", "y"] } },
+                { "id": "body", "moduleId": "builtin.passthrough", "name": "Body", "properties": {} }
+              ],
+              "connections": [
+                { "sourceNodeId": "outer", "sourcePortName": "loopBody", "targetNodeId": "inner", "targetPortName": "collection", "kind": "RunAfter" },
+                { "sourceNodeId": "inner", "sourcePortName": "loopBody", "targetNodeId": "body", "targetPortName": "input" }
+              ],
+              "variables": {}
+            }
+            """.Replace("NAME", Guid.NewGuid().ToString("N"), StringComparison.Ordinal);
+        var create = await client.PostAsync("/api/v1/workflows", new StringContent(json, Encoding.UTF8, "application/json"));
+        create.StatusCode.Should().Be(HttpStatusCode.Created, await create.Content.ReadAsStringAsync());
+        var id = (await create.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var run = await client.PostAsJsonAsync($"/api/v1/workflows/{id}/execute/sync?timeoutSeconds=30", new { inputs = new { } });
+        var status = await run.Content.ReadFromJsonAsync<JsonElement>();
+        status.GetProperty("state").GetString().Should().Be("Completed", status.ToString());
+        var executionId = status.GetProperty("executionId").GetGuid();
+
+        JsonElement[] body = Array.Empty<JsonElement>();
+        for (var i = 0; i < 50 && body.Length < 4; i++)
+        {
+            var nodes = await client.GetFromJsonAsync<JsonElement>($"/api/v1/executions/{executionId}/nodes");
+            body = nodes.EnumerateArray().Where(r => r.GetProperty("nodeId").GetString() == "body").ToArray();
+            if (body.Length < 4)
+            {
+                await Task.Delay(100);
+            }
+        }
+
+        // The innermost loop alone (#1, #2, #1, #2) can't tell the four runs apart; the path can.
+        body.Select(r => r.GetProperty("scopePath").GetString()).Should().BeEquivalentTo(
+            new[] { "outer#1/inner#1", "outer#1/inner#2", "outer#2/inner#1", "outer#2/inner#2" });
+
+        var first = body.Single(r => r.GetProperty("scopePath").GetString() == "outer#2/inner#1");
+        var scope = first.GetProperty("scope").EnumerateArray().ToArray();
+        scope.Select(s => s.GetProperty("nodeId").GetString()).Should().Equal("outer", "inner");
+        scope.Select(s => s.GetProperty("kind").GetString()).Should().Equal("loop", "loop");
+        scope.Select(s => s.GetProperty("iteration").GetInt32()).Should().Equal(2, 1);
+    }
 }

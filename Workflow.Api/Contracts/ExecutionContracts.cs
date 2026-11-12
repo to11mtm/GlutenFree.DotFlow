@@ -136,6 +136,16 @@ public record NodeExecutionRecordDto(
     /// <summary>🧯 Stage 7.8 — gets why the node was skipped, when it was (from the record's <c>skipReason</c> metadata).</summary>
     public string? SkipReason { get; init; }
 
+    /// <summary>
+    /// Gets the constructs a body node ran inside, outermost first (each loop iteration, parallel
+    /// branch, try/catch branch…); null for a top-level node. <see cref="LoopId"/> /
+    /// <see cref="LoopIteration"/> only name the innermost loop.
+    /// </summary>
+    public IReadOnlyList<ScopeStepDto>? Scope { get; init; }
+
+    /// <summary>Gets <see cref="Scope"/> in short form, e.g. <c>outer#2/inner#1</c> or <c>par[1]/tc:catch</c>; null at top level.</summary>
+    public string? ScopePath { get; init; }
+
     /// <summary>Projects a <see cref="Workflow.Persistence.Models.NodeExecutionRecord"/> into the DTO~ 🌸.</summary>
     /// <param name="r">The node record.</param>
     /// <returns>The DTO.</returns>
@@ -160,5 +170,49 @@ public record NodeExecutionRecordDto(
                     var other => other.ToString(),
                 }
                 : null,
+            Scope = ScopeOf(r),
+            ScopePath = ScopeOf(r) is { } steps ? string.Join('/', steps.Select(s => s.ToStep().ToString())) : null,
         };
+
+    private static readonly System.Text.Json.JsonSerializerOptions StoredJson = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// The record's <c>scopePath</c> metadata: <see cref="Workflow.Engine.Models.ScopeStep"/>s when
+    /// written in memory, or a JSON array once read back from a store.
+    /// </summary>
+    private static IReadOnlyList<ScopeStepDto>? ScopeOf(Workflow.Persistence.Models.NodeExecutionRecord r)
+    {
+        if (r.Metadata is null || !r.Metadata.TryGetValue("scopePath", out var raw) || raw is null)
+        {
+            return null;
+        }
+
+        IReadOnlyList<Workflow.Engine.Models.ScopeStep>? steps = raw switch
+        {
+            IEnumerable<Workflow.Engine.Models.ScopeStep> list => list.ToList(),
+            System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Array } json
+                => System.Text.Json.JsonSerializer.Deserialize<List<Workflow.Engine.Models.ScopeStep>>(json, StoredJson),
+            _ => null,
+        };
+
+        return steps is { Count: > 0 } ? steps.Select(ScopeStepDto.From).ToList() : null;
+    }
+}
+
+/// <summary>One construct a body node ran inside (see <see cref="NodeExecutionRecordDto.Scope"/>).</summary>
+/// <param name="NodeId">The construct node.</param>
+/// <param name="Kind"><c>loop</c>, <c>parallel</c>, <c>trycatch</c>, <c>transaction</c> or <c>errorHandler</c>.</param>
+/// <param name="Iteration">Loop: the 1-based iteration.</param>
+/// <param name="BranchIndex">Parallel: the 0-based branch.</param>
+/// <param name="Branch">Try/catch: <c>try</c>, <c>catch</c> or <c>finally</c>.</param>
+public sealed record ScopeStepDto(string NodeId, string Kind, int? Iteration, int? BranchIndex, string? Branch)
+{
+    /// <summary>Projects an engine scope step.</summary>
+    /// <param name="s">The step.</param>
+    /// <returns>The DTO.</returns>
+    public static ScopeStepDto From(Workflow.Engine.Models.ScopeStep s) => new(s.NodeId, s.Kind, s.Iteration, s.BranchIndex, s.Branch);
+
+    /// <summary>Back to the engine step (for its short form).</summary>
+    /// <returns>The step.</returns>
+    public Workflow.Engine.Models.ScopeStep ToStep() => new(this.NodeId, this.Kind, this.Iteration, this.BranchIndex, this.Branch);
 }
