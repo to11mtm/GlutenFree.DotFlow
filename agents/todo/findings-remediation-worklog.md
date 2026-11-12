@@ -191,6 +191,11 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 - [x] ✅ **hardened 2026-11-09** (click and check inside `WaitForAssertion`; 10/10, and still fails when Open does nothing) — **Flaky UI test `MonitorTests.Monitor_RowOpen_NavigatesToDetail`.** Failed once in a full
   UI run during Stage 7.2 ("nav.Uri … is too short") and passed on the re-run and alone. The
   navigation assertion probably races the click handler. Unrelated to 7.2.
+- [ ] **ForEach / While don't validate `maxIterations`.** `ForEachModule` reads `maxIterations` with no
+  `ValidateConfiguration` check, so `-5` saves without a warning and goes straight into
+  `LoopRequest.MaxIterations`. It wasn't checked what the loop executor then does (probably runs 0
+  iterations silently). Found 2026-11-11 by a mutant the new sample-warnings test couldn't catch.
+  Small: warn on `< 1` (the save warns, the run blocks, per §9.4), plus a test.
 - [ ] **Flaky test `HttpRetryTests.Retry_ExponentialBackoff_DelaysIncrease`.** It failed once in a
   full run (2026-11-11, during the scope-path work, which doesn't touch HTTP) and passed 5/5 alone
   and in the next full run. It's timing-based: the run must take more than 150 ms over 2 jittered
@@ -310,6 +315,15 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Samples validate with no warnings
+- `SampleWorkflowDefinitionTests.EachSample_HasNoValidationWarnings` posts each sample to
+  `POST /api/v1/workflows/validate` (the designer's dry run, which includes the §9.4 module-config
+  check as warnings) and expects no issues. All three samples were already clean.
+- Proof: removing `extract_users.path` (required) and setting `fetch_users.method` = `FETCH` each
+  turn it red. A negative foreach `maxIterations` isn't caught, because the module doesn't validate
+  it (new follow-up).
+- Suites: `Workflow.Tests` 2069/2069.
+
 ### 2026-11-11 — Full scope path on node history (nested loops)
 - `/nodes` records carry `scope` (`ScopeStepDto[]`, outermost first) and `scopePath` (short form,
   `outer#2/inner#1`). Both are read from the record's `scopePath` metadata: `ScopeStep`s in memory,

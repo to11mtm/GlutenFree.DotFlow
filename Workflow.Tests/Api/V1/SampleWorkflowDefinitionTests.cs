@@ -69,6 +69,27 @@ public sealed class SampleWorkflowDefinitionTests : IClassFixture<ExecutionEndpo
         resp.StatusCode.Should().Be(HttpStatusCode.Created, $"{file} should load; the server said: {body}");
     }
 
+    /// <summary>
+    /// Create only fails on errors; module configuration problems (a missing required property, a
+    /// bad value) come back as warnings from the dry-run validator. A sample should have none.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Samples))]
+    public async Task EachSample_HasNoValidationWarnings(string file)
+    {
+        var json = await File.ReadAllTextAsync(Path.Combine(DefinitionsFolder(), file));
+        var client = this.factory.CreateClient();
+
+        var resp = await client.PostAsync("/api/v1/workflows/validate", new StringContent(json, Encoding.UTF8, "application/json"));
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK, await resp.Content.ReadAsStringAsync());
+        var result = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        var issues = result.GetProperty("issues").EnumerateArray()
+            .Select(i => $"{i.GetProperty("severity").GetString()} [{i.GetProperty("nodeId")}] {i.GetProperty("message").GetString()}")
+            .ToList();
+        issues.Should().BeEmpty($"{file} should validate cleanly");
+    }
+
     [Theory]
     [MemberData(nameof(Samples))]
     public async Task EachSample_UsesOnlyKeysTheModelReads(string file)

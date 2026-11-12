@@ -115,7 +115,8 @@ audit is the de-risking step.
   ValidateData set no property.
 - Probe (B1 wired in temporarily, run-time-shaped config): 0 rejections across the 1820-test
   suite. `examples/definitions/*.json` couldn't be checked — they're stale (non-GUID ids, retired
-  module ids).
+  module ids). *(2026-11-11: fixed with plan 09; `SampleWorkflowDefinitionTests` now asserts they
+  validate with no warnings.)*
 
 **Decided + fixed 2026-11-08.** Policy (asked): **warn on save, block on run**; `compiledAssemblyKey`
 checked **only at run**. `Workflow.Modules/Validation/ModuleConfigurationChecker` builds the config
