@@ -1,7 +1,7 @@
 # Plan 09 — "Run after" edges (sequencing without data)
 
-**Status:** decided 2026-11-11 (asked in two rounds). Part 1 (model, engine, validators, JSON, UI
-pass-through) built 2026-11-11; parts 2–3 in progress. A **separate edge kind** (not an
+**Status:** decided 2026-11-11 (asked in two rounds). Parts 1 (model, engine, validators, JSON, UI
+pass-through) and 2 (designer) built 2026-11-11; part 3 (samples, docs) in progress. A **separate edge kind** (not an
 implicit `input` port on every module, and not "keep strict").
 
 ## Decisions
@@ -80,6 +80,28 @@ the condition's expression. The flow-control sample and the wiring example in
 - Tests: `Engine/RunAfterEdgeTests` (5), `Api/V1/RunAfterEdgeApiTests` (5), validator tests (core 1,
   module-aware 4), `StreamRegionDetectorTests` (1), UI `State/RunAfterConnectionTests` (3). 11/11
   mutants killed.
+
+## As built (part 2 — designer)
+
+- `Designer/State/RunAfterEdges`: `Create`, `HitTestNodeBody`, `CanAdd` (no self, duplicate or
+  cycle), `IsUndeclaredInput`, `NormaliseLegacy` (run by `DesignerDocument.FromDto`; only when the
+  target's schema is known), `Anchor` (middle of the node's top edge).
+- Canvas: releasing a wire on a node's body creates a run-after edge. A wire into the default
+  `input` handle of a module with no inputs is run-after too. Both are undoable.
+- `EdgeLayer`: run-after edges are dotted (`2 4`), `data-edge-kind="RunAfter"`, labelled "after"
+  ("after · <condition>" with a condition).
+- Inspector: "To" shows "after (no data)". A **Carries** select (`conn-kind`) offers
+  "Data → <port>" for each declared input and "Run after (no data)". Switching is
+  `SetConnectionTargetCommand` (undoable); the edge stays selected under its new key
+  (`DesignerConnection.Key` ends `@after` for run-after).
+- `GraphValidator`: MA004 skips run-after edges and legacy `input` edges; the streaming shape rule
+  skips run-after. `StreamGraph.IsStreamingEdge` (the UI's mirror of the engine detector) is false
+  for run-after.
+- **Spec change (flagged):** two `PortValidationTests` asserted that a wire into an undeclared
+  `input` port is an error. Under Q2 that edge is a legacy run-after edge, so they now use a typo
+  port (`inptu`). Their assertions are otherwise unchanged.
+- Tests: UI `State/RunAfterEdgesTests` (10), `Components/RunAfterDesignerTests` (4). 14/14 mutants
+  killed.
 
 ## Parts
 

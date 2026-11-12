@@ -538,7 +538,23 @@
         </div>
         <div class="df-field">
             <label class="df-label">To</label>
-            <div class="df-props__conn" data-testid="conn-to">@NodeName(SelectedConnection.TargetNodeId) · @SelectedConnection.TargetPortName</div>
+            <div class="df-props__conn" data-testid="conn-to">@NodeName(SelectedConnection.TargetNodeId) · @(SelectedConnection.IsRunAfter ? "after (no data)" : SelectedConnection.TargetPortName)</div>
+        </div>
+        <div class="df-field">
+            <label class="df-label">Carries</label>
+            <select class="df-input" data-testid="conn-kind" value="@ConnectionTargetValue(SelectedConnection)" @onchange="OnConnectionTargetChanged">
+                @foreach (var port in TargetDataPorts(SelectedConnection))
+                {
+                    <option value="@port">Data → @port</option>
+                }
+                <option value="@RunAfterOption">Run after (no data)</option>
+            </select>
+            <div class="df-field-help" data-testid="conn-kind-help">
+                <b>Data</b> delivers the source port's value into a port of the target. <b>Run after</b> only
+                orders the nodes: the target waits for this edge (and is skipped with it) but receives nothing —
+                read the source's output with <code>{{@(SelectedConnection.SourceNodeId).@(SelectedConnection.SourcePortName)}}</code> if you need it.
+                Tip: drop a wire on a node's body to draw a run-after edge.
+            </div>
         </div>
         <div class="df-field">
             <label class="df-label">Condition (optional)</label>
@@ -1338,6 +1354,44 @@
                 this.Commands.Execute(new EditConnectionBufferCommand(conn.Key, conn.BufferCapacity, capacity));
             }
         }
+    }
+
+    /// <summary>⏭️ Plan 09 — the "Carries" option value for a run-after edge.</summary>
+    private const string RunAfterOption = "@after";
+
+    private static string ConnectionTargetValue(DesignerConnection c) => c.IsRunAfter ? RunAfterOption : c.TargetPortName;
+
+    /// <summary>The target's input ports a data edge could use (the current one first if undeclared).</summary>
+    private IReadOnlyList<string> TargetDataPorts(DesignerConnection c)
+    {
+        var ports = this.Document.FindNode(c.TargetNodeId) is { } target
+            ? NodePorts.Inputs(target).Where(p => !RunAfterEdges.IsUndeclaredInput(target, p)).ToList()
+            : new List<string>();
+        if (!c.IsRunAfter && !ports.Contains(c.TargetPortName))
+        {
+            ports.Insert(0, c.TargetPortName);
+        }
+
+        return ports;
+    }
+
+    private void OnConnectionTargetChanged(ChangeEventArgs e)
+    {
+        var conn = this.SelectedConnection;
+        var value = e.Value?.ToString() ?? string.Empty;
+        if (conn is null || value == ConnectionTargetValue(conn))
+        {
+            return;
+        }
+
+        var command = new SetConnectionTargetCommand(conn, runAfter: value == RunAfterOption, port: value);
+        if (this.Document.Connections.Any(c => c.Key == command.AfterKey))
+        {
+            return; // that edge already exists
+        }
+
+        this.Commands.Execute(command);
+        this.Selection.SelectConnection(command.AfterKey);
     }
 
     /// <summary>Whether the selected edge carries a stream (drives the buffer editor)~ 🌊.</summary>

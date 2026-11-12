@@ -43,16 +43,18 @@ public sealed class PortValidationTests
     [Fact]
     public void UndeclaredTargetPort_IsAnError_ListingValidPorts()
     {
+        // Plan 09 Q2: an undeclared 'input' port now reads as a legacy run-after edge, so a typo
+        // port name ('inptu') carries this rule.
         var doc = Doc(
             [Node("a", Schema(["input"], ["output"])), Node("b", Schema(["data"], ["output"]))],
-            [Conn("a", "output", "b", "input")]);
+            [Conn("a", "output", "b", "inptu")]);
 
         var issues = GraphValidator.ValidatePorts(doc);
 
         var issue = issues.Should().ContainSingle().Subject;
         issue.Severity.Should().Be(IssueSeverity.Error);
         issue.NodeId.Should().Be("b");
-        issue.Message.Should().Contain("input port 'input'").And.Contain("accepts: data");
+        issue.Message.Should().Contain("input port 'inptu'").And.Contain("accepts: data");
     }
 
     [Fact]
@@ -60,7 +62,7 @@ public sealed class PortValidationTests
     {
         var doc = Doc(
             [Node("a", Schema(["input"], ["output"])), Node("start", Schema([], ["value"]), "builtin.start")],
-            [Conn("a", "output", "start", "input")]);
+            [Conn("a", "output", "start", "inptu")]); // plan 09 Q2: 'input' itself reads as run-after
 
         var issues = GraphValidator.ValidatePorts(doc);
 

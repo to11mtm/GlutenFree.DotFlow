@@ -126,7 +126,9 @@ public static class StreamGraph
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(connection);
 
-        return IsStreamingPort(doc.FindNode(connection.SourceNodeId), connection.SourcePortName, isOutput: true)
+        // ⏭️ Plan 09 — a run-after edge carries no data, so it never streams (mirrors the engine)~
+        return !connection.IsRunAfter
+               && IsStreamingPort(doc.FindNode(connection.SourceNodeId), connection.SourcePortName, isOutput: true)
                && IsStreamingPort(doc.FindNode(connection.TargetNodeId), connection.TargetPortName, isOutput: false);
     }
 

@@ -297,6 +297,15 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — Run-after edges, part 2/3 (plan 09): designer
+- Drop a wire on a node's body → dotted "after" edge; the inspector's **Carries** select switches
+  Data ↔ Run after (undoable, stays selected). Legacy `→ input` edges load as run-after. The UI
+  validator and stream mirror skip run-after. Details: plan 09 "As built (part 2)".
+- **Spec change (flagged):** `PortValidationTests` `UndeclaredTargetPort_IsAnError_ListingValidPorts`
+  and `TargetWithNoDeclaredInputs_SaysSo` used `input` as the undeclared port, and Q2 makes that a
+  legacy run-after edge. They now use `inptu`; their assertions are otherwise unchanged.
+- Proof: 14/14 mutants killed. Suites: `Workflow.Tests.UI` 824/824.
+
 ### 2026-11-11 — Run-after edges, part 1/3 (plan 09): model, engine, validators, JSON, UI pass-through
 - Found while fixing the stale samples (new `Api/V1/SampleWorkflowDefinitionTests`, still red, lands
   with part 3): ~30 modules declare only data inputs. The engine runs `→ input` edges into any of

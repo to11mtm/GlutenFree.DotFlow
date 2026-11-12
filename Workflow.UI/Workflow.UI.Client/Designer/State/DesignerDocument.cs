@@ -93,6 +93,9 @@ public sealed class DesignerDocument
             doc.Connections.Add(DesignerConnection.FromDto(c));
         }
 
+        // ⏭️ Plan 09 Q2 — legacy `→ input` edges into a module without that port are run-after~
+        RunAfterEdges.NormaliseLegacy(doc);
+
         if (dto.Variables is not null)
         {
             foreach (var (k, v) in dto.Variables)

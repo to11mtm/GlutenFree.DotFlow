@@ -132,8 +132,11 @@ public static class GraphValidator
 
         foreach (var c in doc.Connections)
         {
-            // Target input port must be declared (MA004)~
-            if (doc.FindNode(c.TargetNodeId) is { Schema: { } targetSchema } target
+            // Target input port must be declared (MA004). A run-after edge has none, and a legacy
+            // edge into an undeclared 'input' port reads as run-after (plan 09)~
+            if (!c.IsRunAfter
+                && !string.Equals(c.TargetPortName, RunAfterEdges.LegacyInputPort, StringComparison.OrdinalIgnoreCase)
+                && doc.FindNode(c.TargetNodeId) is { Schema: { } targetSchema } target
                 && !string.IsNullOrWhiteSpace(c.TargetPortName))
             {
                 var declared = targetSchema.Inputs.Select(p => p.Name).ToList();
@@ -345,7 +348,8 @@ public static class GraphValidator
             var source = doc.FindNode(c.SourceNodeId);
             var target = doc.FindNode(c.TargetNodeId);
 
-            if (!StreamGraph.IsShapeMismatch(source, c.SourcePortName, target, c.TargetPortName))
+            // ⏭️ Plan 09 — a run-after edge carries nothing, so there is no shape to mismatch~
+            if (c.IsRunAfter || !StreamGraph.IsShapeMismatch(source, c.SourcePortName, target, c.TargetPortName))
             {
                 continue;
             }

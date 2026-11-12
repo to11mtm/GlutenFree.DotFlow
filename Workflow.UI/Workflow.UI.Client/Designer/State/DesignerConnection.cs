@@ -45,7 +45,7 @@ public sealed class DesignerConnection
     public const string RunAfterKind = "RunAfter";
 
     /// <summary>A stable identity key for selection/dedup: <c>src.port→tgt.port</c>~ 🔑.</summary>
-    public string Key => $"{this.SourceNodeId}.{this.SourcePortName}→{this.TargetNodeId}.{this.TargetPortName}";
+    public string Key => $"{this.SourceNodeId}.{this.SourcePortName}→{this.TargetNodeId}.{(this.IsRunAfter ? "@after" : this.TargetPortName)}";
 
     /// <summary>Builds a designer connection from a wire DTO~ 🏗️.</summary>
     /// <param name="dto">The connection DTO.</param>

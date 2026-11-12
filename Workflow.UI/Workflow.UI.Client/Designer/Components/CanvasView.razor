@@ -480,7 +480,18 @@
     {
         if (this.connecting)
         {
-            // Released over the background (not an input port) → cancel.
+            // ⏭️ Plan 09 — released on a node's body (not a port) → a "run after" edge; over the
+            // background → cancel.
+            if (this.connectSource is not null && this.Commands is not null)
+            {
+                var (vx, vy) = this.ViewportPoint(e.ClientX, e.ClientY, e.OffsetX, e.OffsetY);
+                var hit = RunAfterEdges.HitTestNodeBody(this.Document, CanvasGeometry.ScreenToCanvas(new Point(vx, vy), this.Transform));
+                if (hit is not null && RunAfterEdges.CanAdd(this.Document, this.connectSource.Id, this.connectSourcePort, hit.Id))
+                {
+                    this.Commands.Execute(new AddConnectionCommand(RunAfterEdges.Create(this.connectSource.Id, this.connectSourcePort, hit.Id)));
+                }
+            }
+
             this.CancelConnecting();
             return;
         }
@@ -600,7 +611,15 @@
             return;
         }
 
-        if (this.IsCompatibleInput(targetNode, inputPort))
+        if (RunAfterEdges.IsUndeclaredInput(targetNode, inputPort))
+        {
+            // ⏭️ Plan 09 — the default 'input' handle on a module with no inputs only sequences~
+            if (RunAfterEdges.CanAdd(this.Document, this.connectSource.Id, this.connectSourcePort, targetNode.Id))
+            {
+                this.Commands.Execute(new AddConnectionCommand(RunAfterEdges.Create(this.connectSource.Id, this.connectSourcePort, targetNode.Id)));
+            }
+        }
+        else if (this.IsCompatibleInput(targetNode, inputPort))
         {
             this.Commands.Execute(new AddConnectionCommand(new DesignerConnection
             {

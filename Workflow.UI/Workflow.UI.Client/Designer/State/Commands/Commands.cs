@@ -344,6 +344,54 @@ public sealed class EditConnectionBufferCommand : IDesignerCommand
     }
 }
 
+/// <summary>
+/// ⏭️ Plan 09 — switches a connection between a data edge into a port and a "run after" edge (no
+/// port, no data). The connection's key changes with it, so <see cref="AfterKey"/> is the new key~.
+/// </summary>
+public sealed class SetConnectionTargetCommand : IDesignerCommand
+{
+    private readonly string beforeKey;
+    private readonly (string? Kind, string Port) before;
+    private readonly (string? Kind, string Port) after;
+
+    /// <summary>Initializes a new instance of the <see cref="SetConnectionTargetCommand"/> class.</summary>
+    /// <param name="connection">The connection as it is now.</param>
+    /// <param name="runAfter">True to make it run-after; false for a data edge into <paramref name="port"/>.</param>
+    /// <param name="port">The target port for a data edge (ignored for run-after).</param>
+    public SetConnectionTargetCommand(DesignerConnection connection, bool runAfter, string port)
+    {
+        this.beforeKey = connection.Key;
+        this.before = (connection.Kind, connection.TargetPortName);
+        this.after = runAfter ? (DesignerConnection.RunAfterKind, string.Empty) : (null, port);
+        var probe = connection.Clone();
+        probe.Kind = this.after.Kind;
+        probe.TargetPortName = this.after.Port;
+        this.AfterKey = probe.Key;
+    }
+
+    /// <summary>Gets the connection's key after the change (select it again with this).</summary>
+    public string AfterKey { get; }
+
+    /// <inheritdoc/>
+    public string Description => "Change connection target";
+
+    /// <inheritdoc/>
+    public void Do(DesignerDocument document) => Set(document, this.beforeKey, this.after);
+
+    /// <inheritdoc/>
+    public void Undo(DesignerDocument document) => Set(document, this.AfterKey, this.before);
+
+    private static void Set(DesignerDocument document, string key, (string? Kind, string Port) target)
+    {
+        var conn = document.Connections.FirstOrDefault(c => c.Key == key);
+        if (conn is not null)
+        {
+            conn.Kind = target.Kind;
+            conn.TargetPortName = target.Port;
+        }
+    }
+}
+
 /// <summary>📝 Phase 3.3.b.3 — Edits workflow-level metadata (name/description/tags)~ ✨.</summary>
 public sealed class EditWorkflowMetaCommand : IDesignerCommand
 {
