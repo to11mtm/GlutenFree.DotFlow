@@ -191,7 +191,7 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 - [x] ✅ **hardened 2026-11-09** (click and check inside `WaitForAssertion`; 10/10, and still fails when Open does nothing) — **Flaky UI test `MonitorTests.Monitor_RowOpen_NavigatesToDetail`.** Failed once in a full
   UI run during Stage 7.2 ("nav.Uri … is too short") and passed on the re-run and alone. The
   navigation assertion probably races the click handler. Unrelated to 7.2.
-- [ ] **ForEach / While don't validate `maxIterations`.** `ForEachModule` reads `maxIterations` with no
+- [x] ✅ **fixed 2026-11-11** (`LoopIterationCap`, see the progress log) — **ForEach / While don't validate `maxIterations`.** `ForEachModule` reads `maxIterations` with no
   `ValidateConfiguration` check, so `-5` saves without a warning and goes straight into
   `LoopRequest.MaxIterations`. It wasn't checked what the loop executor then does (probably runs 0
   iterations silently). Found 2026-11-11 by a mutant the new sample-warnings test couldn't catch.
@@ -315,6 +315,22 @@ test first (§2 loop). Tracked here so nothing in the table is untracked (§5).
 Append one entry per working session. Keep it short: what you touched, test status, open decisions.
 
 ```
+### 2026-11-11 — ForEach / While validate `maxIterations` (≥ 1)
+- What actually happened before: a cap below 1 didn't run zero iterations silently. The loop
+  executor's guard (`_iterationCount >= MaxIterations`) failed the run before the first iteration
+  with "exceeded maxIterations limit of 0", even for an empty collection.
+- `Builtin/Flow/LoopIterationCap.Validate`, called by both modules' `ValidateConfiguration`, gives
+  `MAX_ITERATIONS_INVALID` on `maxIterations`. It accepts an absent value (default 1000) and a
+  template (checked at run). Per §9.4 this warns on save and blocks at submit.
+- Tests:
+  - `ForEachModuleTests` / `WhileModuleTests`: rejected for 0 and -5; fine when absent, 1, 1000
+    or templated;
+  - `ModuleConfigurationValidationTests.Save_ALoopCapBelowOne_Warns_AndRunningIsBlocked`;
+  - the sample-warnings test now catches a negative cap too.
+- Proof: stashing the fix leaves 5 tests red. Docs: the two `maxIterations` rows in
+  advanced-flow-control.
+- Suites: `Workflow.Tests` 2082/2082.
+
 ### 2026-11-11 — Samples validate with no warnings
 - `SampleWorkflowDefinitionTests.EachSample_HasNoValidationWarnings` posts each sample to
   `POST /api/v1/workflows/validate` (the designer's dry run, which includes the §9.4 module-config

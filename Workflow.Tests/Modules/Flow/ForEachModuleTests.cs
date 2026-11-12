@@ -31,6 +31,35 @@ public sealed class ForEachModuleTests
 {
     private readonly ForEachModule _module = new();
 
+    // ── maxIterations is validated (a cap below 1 used to fail the run with "exceeded maxIterations") ──
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void ValidateConfiguration_MaxIterationsBelowOne_IsRejected(int maxIterations)
+    {
+        var result = ((IWorkflowModule)this._module).ValidateConfiguration(new Dictionary<string, object?> { ["maxIterations"] = maxIterations });
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().ContainSingle(e => e.Code == "MAX_ITERATIONS_INVALID" && e.PropertyName == "maxIterations");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    [InlineData(1000)]
+    [InlineData("{{Variable.cap}}")]
+    public void ValidateConfiguration_AbsentPositiveOrTemplatedMaxIterations_IsFine(object? maxIterations)
+    {
+        var config = new Dictionary<string, object?>();
+        if (maxIterations is not null)
+        {
+            config["maxIterations"] = maxIterations;
+        }
+
+        ((IWorkflowModule)this._module).ValidateConfiguration(config).IsValid.Should().BeTrue();
+    }
+
     private static ModuleExecutionContext BuildContext(
         Dictionary<string, object?>? inputs = null,
         Dictionary<string, object?>? properties = null)

@@ -66,6 +66,18 @@ public sealed class ModuleConfigurationValidationTests : TestKit
     }
 
     [Fact]
+    public void Save_ALoopCapBelowOne_Warns_AndRunningIsBlocked()
+    {
+        var node = Node("loop", "builtin.loop.foreach", ("collection", new[] { 1, 2 }), ("maxIterations", 0));
+
+        var saved = Validate(node);
+        saved.IsValid.Should().BeTrue();
+        saved.Warnings.Should().ContainSingle(w => w.Code == "MAX_ITERATIONS_INVALID" && w.NodeId == "loop");
+
+        this.Submit(node).Should().BeOfType<Status.Failure>("a loop that can't run an iteration is blocked at run (§9.4)");
+    }
+
+    [Fact]
     public void Save_SchemaDefaultsAreApplied_LikeAtRunTime()
     {
         // ScriptModule's 'language' defaults to javascript, so omitting it is fine~
@@ -153,6 +165,7 @@ public sealed class ModuleConfigurationValidationTests : TestKit
         registry.RegisterModule(new ScriptModule());
         registry.RegisterModule(new SwitchModule());
         registry.RegisterModule(new TransformScriptModule());
+        registry.RegisterModule(new Workflow.Modules.Builtin.Flow.ForEachModule());
         return registry;
     }
 

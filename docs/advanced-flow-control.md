@@ -267,7 +267,7 @@ Iterates over `collection`, running a downstream sub-graph (the **loop body**) o
 | Property / Input | Type | Required | Notes |
 |---|---|---|---|
 | `collection` | `IEnumerable` / `JsonElement[]` / JSON string | **yes** | Auto-coerced; single value wrapped to `[value]` |
-| `maxIterations` | `int` | optional, default `1000` | Safety bound — exceeds = fail |
+| `maxIterations` | `int` | optional, default `1000`; at least 1 (saving warns, running is blocked) | Safety bound — exceeds = fail |
 | `continueOnError` | `bool` | optional, default `false` | Collect errors and continue vs short-circuit |
 
 | Output Port | Behaviour |
@@ -299,7 +299,7 @@ Like `foreach`, but iterates while a condition evaluates truthy (re-evaluated ea
 | Property / Input | Type | Required | Notes |
 |---|---|---|---|
 | `condition` | `bool` / `string` (expression) | **yes** | Re-evaluated before each iteration |
-| `maxIterations` | `int` | optional, default `1000` | Hard cap to prevent runaway loops |
+| `maxIterations` | `int` | optional, default `1000`; at least 1 (saving warns, running is blocked) | Hard cap to prevent runaway loops |
 | `continueOnError` | `bool` | optional, default `false` | Same as `foreach` |
 
 | Output Port | Behaviour |

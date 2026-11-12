@@ -79,6 +79,12 @@ public sealed class ForEachModule : IWorkflowModule
             new ModulePropertyDefinition("maxIterations", "Max Iterations", typeof(int), "Safety cap on iterations~ 🧯", false, null, PropertyEditorType.Number),
             new ModulePropertyDefinition("continueOnError", "Continue On Error", typeof(bool), "Keep iterating when a body iteration fails (default false)~ 🛟", false, false, PropertyEditorType.Boolean)));
 
+    // ── Validation ─────────────────────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public ValidationResult ValidateConfiguration(IReadOnlyDictionary<string, object?> configuration)
+        => LoopIterationCap.Validate(configuration);
+
     // ── Execution ──────────────────────────────────────────────────────────────────────
 
     /// <inheritdoc/>
